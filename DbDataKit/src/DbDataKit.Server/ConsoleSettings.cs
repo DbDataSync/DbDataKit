@@ -11,6 +11,9 @@ namespace DbDataKit.Server;
 /// <param name="PublicUrl">The address people open it at, when that is not the address it listens on (a container listens on every address; a gateway answers on a name of its own). A passkey is bound to this name and port, and an invitation link is made from it, so it has to be the one in the browser's address bar. Null: the address it listens on, or <c>localhost</c> on the same port where that is every address.</param>
 public sealed record ConsoleSettings(string Directory, Uri Listen, Uri? PublicUrl = null, Uri? AnnounceListen = null, StateSettings? State = null, IdentityHomeSettings? Home = null)
 {
+    /// <summary>Every address it listens on (<c>listen</c> as a list): <see cref="Listen"/> is the first, the one people are sent to. Empty: <see cref="Listen"/> alone.</summary>
+    public IReadOnlyList<Uri> ListenAll { get; init; } = [];
+
     /// <summary>
     /// The start skipped the folder step's check of the data folder's owner and access list (<c>--skip-folder-permissions-check</c>, or
     /// <c>startup.skip_folder_permissions_check: true</c> in the settings file): <c>/version</c> says so, and the console's posture page marks the server.

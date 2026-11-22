@@ -377,7 +377,23 @@ public static class GatewayConfiguration
         using (configuration as IDisposable)
         {
             _ = GatewayStateConfig.Resolve(configuration);
-            return configuration.GetSection(GatewayOptions.SectionName).Get<GatewayOptions>() ?? new GatewayOptions();
+            var section = configuration.GetSection(GatewayOptions.SectionName);
+            var options = section.Get<GatewayOptions>() ?? new GatewayOptions();
+            // the stock binder leaves a list empty when its setting is one address written without brackets (`listen: https://0.0.0.0:7821`)
+            void Single(string key, List<string> list)
+            {
+                if (list.Count == 0 && section.GetSection(key) is { Value: { Length: > 0 } one }) list.Add(one);
+            }
+            Single("Listen", options.Listen);
+            Single("Public:Listen", options.Public.Listen);
+            Single("Management:Listen", options.Management.Listen);
+            Single("Identity:Listen", options.Identity.Listen);
+            Single("Apps:Listen", options.Apps.Listen);
+            Single("Store:Listen", options.Store.Listen);
+            Single("Views:Listen", options.Views.Listen);
+            Single("Mcp:Listen", options.Mcp.Listen);
+            Single("Rest:Listen", options.Rest.Listen);
+            return options;
         }
     }
 

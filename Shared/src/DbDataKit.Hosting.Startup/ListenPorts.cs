@@ -19,22 +19,26 @@ public enum ListenSource
 }
 
 /// <summary>
-/// The address a server listens on, as <see cref="ListenPorts.Resolve"/> found it. When no port of the sub-block could be bound, <see cref="Address"/>
+/// The address a server listens on, as <c>ListenPorts.Resolve</c> found it. When no port of the sub-block could be bound, <see cref="Address"/>
 /// holds the sub-block's first port, so the host can still be built, and the ports step fails with the reason
 /// (<see cref="StartupPorts.BindAsync(StartupContext, ListenChoice, Func{CancellationToken, Task}, IEnumerable{int}?, CancellationToken)"/>).
 /// </summary>
 public sealed class ListenChoice
 {
-    internal ListenChoice(Uri address, ListenSource source, string settingsFile, StartupStepException? failure = null)
+    internal ListenChoice(Uri address, ListenSource source, string settingsFile, StartupStepException? failure = null, IReadOnlyList<Uri>? addresses = null)
     {
         Address = address;
+        Addresses = addresses is { Count: > 0 } ? addresses : [address];
         Source = source;
         SettingsFile = settingsFile;
         Failure = failure;
     }
 
-    /// <summary>The address the server listens on: <c>https://127.0.0.1:7841/</c>.</summary>
+    /// <summary>The address the server listens on, the first one when it listens on several: <c>https://127.0.0.1:7841/</c>. It is the one the server reports to the console.</summary>
     public Uri Address { get; }
+
+    /// <summary>Every address the server listens on: <see cref="Address"/> alone unless <c>--listen</c> or the <c>listen:</c> line named a list.</summary>
+    public IReadOnlyList<Uri> Addresses { get; }
 
     public ListenSource Source { get; }
 
@@ -46,6 +50,9 @@ public sealed class ListenChoice
 
     /// <summary>The port of <see cref="Address"/>.</summary>
     public int Port => Address.Port;
+
+    /// <summary>The ports of every address, for the ports step.</summary>
+    public IEnumerable<int> Ports => Addresses.Select(a => a.Port);
 }
 
 /// <summary>
@@ -71,10 +78,18 @@ public static partial class ListenPorts
     /// </summary>
     /// <exception cref="InvalidOperationException">The settings file's <c>listen:</c> line is not an https address; the message names the file.</exception>
     public static ListenChoice Resolve(SuiteService service, Uri? flag, string settingsFile, Uri defaultListen, IReadOnlyList<PortRange> excluded,
+        Func<IPAddress, int, bool>? canBind = null) =>
+        Resolve(service, flag is null ? null : [flag], settingsFile, defaultListen, excluded, canBind);
+
+    /// <summary>
+    /// <see cref="Resolve(SuiteService, Uri?, string, Uri, IReadOnlyList{PortRange}, Func{IPAddress, int, bool}?)"/> for a flag or a settings line that names
+    /// several addresses (the first is the one reported to the console); a port is chosen and pinned only when neither names any.
+    /// </summary>
+    public static ListenChoice Resolve(SuiteService service, IReadOnlyList<Uri>? flags, string settingsFile, Uri defaultListen, IReadOnlyList<PortRange> excluded,
         Func<IPAddress, int, bool>? canBind = null)
     {
-        if (flag is not null) return new ListenChoice(flag, ListenSource.Flag, settingsFile);
-        if (ReadPinned(settingsFile) is { } pinned) return new ListenChoice(pinned, ListenSource.Settings, settingsFile);
+        if (flags is { Count: > 0 }) return new ListenChoice(flags[0], ListenSource.Flag, settingsFile, addresses: flags);
+        if (ReadPinnedAll(settingsFile) is { Count: > 0 } pinned) return new ListenChoice(pinned[0], ListenSource.Settings, settingsFile, addresses: pinned);
         var block = service.Ports;
         var port = Choose(block, AddressOf(defaultListen), excluded, canBind);
         return port is { } free
@@ -129,9 +144,26 @@ public static partial class ListenPorts
         _ => IPAddress.Any,
     };
 
-    /// <summary>The <c>listen:</c> line of <paramref name="settingsFile"/>, or null when the file or the line is not there.</summary>
-    /// <exception cref="InvalidOperationException">The line is not an https address; the message names the file.</exception>
-    public static Uri? ReadPinned(string settingsFile)
+    /// <summary>The https addresses of a <c>--listen</c> flag: one, or several separated by a semicolon or a comma.</summary>
+    /// <exception cref="FormatException">An address is not an https address with a port; the message says why.</exception>
+    public static IReadOnlyList<Uri> ParseFlag(string text)
+    {
+        var urls = ListenUrl.ParseFlag(text);
+        if (urls.Count == 0) throw new FormatException("--listen is empty.");
+        if (urls.FirstOrDefault(u => !u.IsHttps) is { } plain) throw new FormatException($"--listen has {plain}; the server listens on https.");
+        return [.. urls.Select(u => u.ToUri())];
+    }
+
+    /// <summary>The first address of the <c>listen:</c> setting of <paramref name="settingsFile"/>, or null when the file or the setting is not there.</summary>
+    /// <exception cref="InvalidOperationException">The setting is not an https address; the message names the file.</exception>
+    public static Uri? ReadPinned(string settingsFile) => ReadPinnedAll(settingsFile)?[0];
+
+    /// <summary>
+    /// Every address of the <c>listen:</c> setting of <paramref name="settingsFile"/>: one address (<c>listen: https://127.0.0.1:7840</c>) or a list
+    /// (<c>listen: [https://127.0.0.1:7840, https://127.0.0.1:7841]</c>, or one <c>- address</c> line each); null when the file or the setting is not there.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">An address is not an https address with a port; the message names the file.</exception>
+    public static IReadOnlyList<Uri>? ReadPinnedAll(string settingsFile)
     {
         string text;
         try
@@ -147,10 +179,39 @@ public static partial class ListenPorts
 
         var line = ListenLine().Match(text);
         if (!line.Success) return null;
-        var value = line.Groups["value"].Value.Trim().Trim('"', '\'');
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var listen) || listen.Scheme != Uri.UriSchemeHttps || listen.IsDefaultPort && !value.Contains(":443", StringComparison.Ordinal))
-            throw new InvalidOperationException($"{settingsFile}: {SettingsKey} is '{value}'; write the https address the server listens on, with its port, such as https://127.0.0.1:7840.");
-        return listen;
+        var value = line.Groups["value"].Value.Trim();
+        List<string> items;
+        if (value.Length == 0)
+        {
+            items = [];
+            foreach (var next in text[(line.Index + line.Length)..].Split('\n'))
+            {
+                var trimmed = next.Trim('\r');
+                if (trimmed.Trim().Length == 0 || trimmed.TrimStart().StartsWith('#')) continue;
+                var item = BlockItem().Match(trimmed);
+                if (!item.Success) break;
+                items.Add(item.Groups["value"].Value);
+            }
+            if (items.Count == 0) return null;
+        }
+        else if (value.StartsWith('['))
+        {
+            if (!value.EndsWith(']')) throw new InvalidOperationException($"{settingsFile}: {SettingsKey} is '{value}'; write one https address, or a list on one line such as [https://127.0.0.1:7840, https://127.0.0.1:7841].");
+            items = [.. value[1..^1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+        }
+        else if (value.StartsWith('{'))
+            throw new InvalidOperationException($"{settingsFile}: {SettingsKey} is '{value}'; it is one https address or a list of them, such as https://127.0.0.1:7840 (the port is part of the address).");
+        else items = [value];
+
+        var addresses = new List<Uri>();
+        foreach (var item in items)
+        {
+            var written = item.Trim().Trim('"', '\'');
+            if (!ListenUrl.TryParse(written, out var parsed, out _) || !parsed!.IsHttps)
+                throw new InvalidOperationException($"{settingsFile}: {SettingsKey} is '{written}'; write the https address the server listens on, with its port, such as https://127.0.0.1:7840.");
+            addresses.Add(parsed.ToUri());
+        }
+        return addresses;
     }
 
     /// <summary>
@@ -193,6 +254,9 @@ public static partial class ListenPorts
             catch (UnauthorizedAccessException) when (DateTime.UtcNow < until) { Thread.Sleep(20); }
         }
     }
+
+    [GeneratedRegex(@"^[ \t]+-[ \t]*(?<value>[^#\r\n]*?)[ \t]*(?:#[^\r\n]*)?$", RegexOptions.CultureInvariant)]
+    private static partial Regex BlockItem();
 
     // a top-level line only: an indented "listen:" belongs to another section
     [GeneratedRegex(@"^listen:[ \t]*(?<value>[^#\r\n]*?)[ \t]*(?:#[^\r\n]*)?(?=\r?$)", RegexOptions.Multiline | RegexOptions.CultureInvariant)]

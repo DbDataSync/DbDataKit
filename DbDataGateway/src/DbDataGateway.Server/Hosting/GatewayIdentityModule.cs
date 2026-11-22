@@ -54,7 +54,7 @@ public sealed class GatewayIdentityModule(
     public static Uri PublicUrlOf(GatewayOptions options) =>
         !string.IsNullOrWhiteSpace(options.Identity.PublicUrl)
             ? new Uri(options.Identity.PublicUrl.TrimEnd('/') + "/")
-            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Identity.Port ?? options.Public.Port).Uri;
+            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", GatewayListeners.PortOf(options.Identity.Listen, options)).Uri;
 
     /// <summary>Where the first-run invitation is written while the home has nobody: <c>&lt;data directory&gt;/identity</c>.</summary>
     public static string DirectoryOf(GatewayOptions options) => Path.Combine(GatewayHost.ResolveDataDirectory(options), "identity");
@@ -73,7 +73,7 @@ public sealed class GatewayIdentityModule(
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
         builder.Logging.AddProvider(new ForwardingLoggerProvider(loggers));
-        var inProcess = ModuleListener.Configure(builder, current.Identity.Address, current.Identity.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Identity.Listen, (_, _) => certificate.Current);
         var directory = DirectoryOf(current);
         Directory.CreateDirectory(directory);
         // the upstreams people may sign in through besides a passkey (O06b)
@@ -96,7 +96,7 @@ public sealed class GatewayIdentityModule(
         _draining = false;
         // on the public listener the home keeps the paths it has: its provider endpoints, sign-in pages and the shared sign-in API
         ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Claims = context => IdentityHome.IsHomePath(context.Request.Path) });
-        _log.LogInformation("Identity home on {Address}:{Port}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", inProcess is null ? current.Identity.Address : current.Public.Address, current.Identity.Port ?? current.Public.Port, publicUrl.GetLeftPart(UriPartial.Authority),
+        _log.LogInformation("Identity home on {Address}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", string.Join(", ", inProcess is null ? current.Identity.Listen : current.Public.Listen), publicUrl.GetLeftPart(UriPartial.Authority),
             entra is null ? "" : ", through Entra ID", windows is null ? "" : ", with Windows");
     }
 

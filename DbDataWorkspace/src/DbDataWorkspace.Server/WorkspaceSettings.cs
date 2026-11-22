@@ -7,6 +7,9 @@ namespace DbDataWorkspace.Server;
 /// <param name="Listen">The address it listens on; HTTPS, and a name or address of this machine.</param>
 public sealed record WorkspaceSettings(string Directory, Uri Listen)
 {
+    /// <summary>Every address it listens on (<c>listen</c> as a list): <see cref="Listen"/> is the first, the one reported to the console. Empty: <see cref="Listen"/> alone.</summary>
+    public IReadOnlyList<Uri> ListenAll { get; init; } = [];
+
     /// <summary>
     /// The start skipped the folder step's check of the data folder's owner and access list (<c>--skip-folder-permissions-check</c>, or
     /// <c>startup.skip_folder_permissions_check: true</c> in the settings file): <c>/version</c> says so, and the console's posture page marks the server.

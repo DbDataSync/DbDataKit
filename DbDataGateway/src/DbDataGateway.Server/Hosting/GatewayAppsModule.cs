@@ -58,7 +58,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
         Certificates = new AppCertificates(bindings, () => certificate.Current, reference => secrets.ResolveSecret("Gateway:Apps:Addresses", reference), message => loggers.CreateLogger("Apps").LogWarning("{Problem}", message));
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Apps.Address, current.Apps.Port,
+        var inProcess = ModuleListener.Configure(builder, current.Apps.Listen,
             // by the name the client asks for (SNI): a custom domain's own certificate, the host's for everything else (plan 26 AP08)
             (_, name) => Certificates?.Select(name) ?? certificate.Current);
 
@@ -121,7 +121,7 @@ public sealed class GatewayAppsModule(IOptionsMonitor<GatewayOptions> options, S
     public static Uri PublicUrlOf(GatewayOptions options) =>
         !string.IsNullOrWhiteSpace(options.Apps.PublicUrl)
             ? new Uri(options.Apps.PublicUrl.TrimEnd('/') + "/")
-            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", options.Apps.Port ?? options.Public.Port).Uri;
+            : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", GatewayListeners.PortOf(options.Apps.Listen, options)).Uri;
 
     private static Uri HomeOf(GatewayOptions options) =>
         new((string.IsNullOrWhiteSpace(options.Apps.Home.Authority) ? GatewayIdentityModule.PublicUrlOf(options).AbsoluteUri : options.Apps.Home.Authority).TrimEnd('/'));

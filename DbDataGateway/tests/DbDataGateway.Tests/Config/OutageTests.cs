@@ -69,8 +69,8 @@ public sealed class OutageTests : IAsyncLifetime
         {
             identityPort = FreePort();
             app = GatewayHost.Build([
-                $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Management:Enabled=false",
-                "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=identity", "--Gateway:Identity:Address=127.0.0.1", $"--Gateway:Identity:Port={identityPort}",
+                $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0", "--Gateway:Management:Enabled=false",
+                "--Gateway:Modules:0=flightsql", "--Gateway:Modules:1=identity", $"--Gateway:Identity:Listen=https://127.0.0.1:{identityPort}",
                 $"--Gateway:Identity:PublicUrl=https://localhost:{identityPort}", "--Gateway:DefinitionPollSeconds=1",
             ]);
             try { await app.StartAsync(); return; }

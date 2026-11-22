@@ -125,6 +125,7 @@ public static class Cli
         var dataDirectory = GatewayConfigFile.ResolveDataDirectory(hostArgs);
         var service = DbDataKit.Hosting.Startup.SuiteServices.Gateway;
         Microsoft.AspNetCore.Builder.WebApplication? app = null;
+        ListenerChoice? choice = null;
         var result = await new DbDataKit.Hosting.Startup.StartupSequence(new DbDataKit.Hosting.Startup.StartupOptions
             {
                 Service = service,
@@ -147,12 +148,15 @@ public static class Cli
                 try { File.Delete(Path.Combine(dataDirectory, "start-failure.txt")); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 // reads the settings of the data folder (config/server.yaml), validates them and builds the server
-                app = GatewayHost.Build(hostArgs);
+                app = GatewayHost.Build(hostArgs, chooseListeners: o => choice = GatewayListeners.Choose(o, step.Options.ExcludedPorts()));
             })
             .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, (step, ct) =>
             {
+                if (choice?.Failure is { } noPort) throw noPort;
                 var options = app!.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
-                return DbDataKit.Hosting.Startup.StartupPorts.BindAsync(step, app.StartAsync, [options.Listen.Port, options.Management.Port], ct);
+                // every address of every listener is a port the start may be refused: the step names the one the host could not bind
+                var ports = GatewayListeners.Parsed([.. options.Public.Listen, .. options.Listen, .. options.Management.Listen, .. options.Identity.Listen, .. options.Apps.Listen, .. options.Store.Listen, .. options.Views.Listen, .. options.Mcp.Listen, .. options.Rest.Listen]).Select(u => u.Port).Where(p => p != 0);
+                return StartAndPinAsync(step, app, ports, choice, dataDirectory, ct);
             })
             .Step(DbDataKit.Hosting.Startup.StartupStep.Join, (_, ct) => Management.GatewayManagementHost.JoinAsync(app!, dataDirectory, ct))
             .RunAsync(context.Cancellation);
@@ -174,6 +178,13 @@ public static class Cli
             await app!.DisposeAsync();
         }
         return CliExit.Ok;
+    }
+
+    /// <summary>Starts the host (the ports step) and, once every listener is bound, writes the addresses that were chosen at this start to <c>server.yaml</c>, so the next start listens on the same ones.</summary>
+    private static async Task StartAndPinAsync(DbDataKit.Hosting.Startup.StartupContext step, Microsoft.AspNetCore.Builder.WebApplication app, IEnumerable<int> ports, ListenerChoice? choice, string dataDirectory, CancellationToken ct)
+    {
+        await DbDataKit.Hosting.Startup.StartupPorts.BindAsync(step, app.StartAsync, ports, ct);
+        if (choice is { Chosen.Count: > 0 }) GatewayListeners.Pin(GatewayConfigFile.PathIn(dataDirectory), choice.Chosen);
     }
 
     // ---- state ----

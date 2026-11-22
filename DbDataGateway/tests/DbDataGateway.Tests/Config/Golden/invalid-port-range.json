@@ -1,1 +1,1 @@
-{ "Gateway": { "Listen": { "Port": 70000 } } }
+{ "Gateway": { "Listen": "https://127.0.0.1:70000" } }

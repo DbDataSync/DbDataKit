@@ -49,7 +49,7 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Store.Address, current.Store.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Store.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         Map(app, ApiOf(options, state, secrets, models, servingCache));

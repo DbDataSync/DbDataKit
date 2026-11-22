@@ -6,15 +6,15 @@ Which pages and paths each service answers, who opens them, how they are set and
 
 | Listener | Default | What it answers |
 | --- | --- | --- |
-| Public | `public:` in `server.yaml`, address `0.0.0.0`, port 8817, the Gateway's certificate | the HTTP modules `identity`, `apps`, `store`, `views`, `feeds` and `mcp` that are in `modules:` and have no port of their own |
-| Flight SQL | `listen:` in `server.yaml`, address `0.0.0.0`, port 8815 | gRPC for Flight SQL clients. No HTML. |
-| Management | `management:` in `server.yaml`, address `127.0.0.1`, port 8816 | the API at `/api/v1/...` that the console and the command lines call. No HTML. |
+| Public | `public.listen` in `server.yaml`, every address, a free port of the block 7820 to 7839 until one is written; the Gateway's certificate | the HTTP modules `identity`, `apps`, `store`, `views`, `feeds` and `mcp` that are in `modules:` and have no `listen` of their own |
+| Flight SQL | `listen` in `server.yaml`, every address, a free port of the block until one is written | gRPC for Flight SQL clients. No HTML. |
+| Management | `management.listen` in `server.yaml`, the loopback address, a free port of the block until one is written | the API at `/api/v1/...` that the console and the command lines call. No HTML. |
 
 On the public listener:
 
 - `/health/live` answers `Healthy`. `/health`, `/health/ready` and `/version` are on the management listener.
 - A path that no module claims answers 404 with a JSON body. `/` is such a path, except at a name bound to an app instance (see "How an app instance is placed").
-- A module with a `port` of its own listens there and has no prefix; `https://gateway:9443/api/v1/models` answers and `https://gateway:8817/store/api/v1/models` is a 404.
+- A module with a `listen` of its own listens there and has no prefix; `https://gateway:9443/api/v1/models` answers and `https://gateway:7820/store/api/v1/models` is a 404.
 - A module hands its own application the request with the prefix moved to `PathBase`, so the paths below are the ones a client uses on the public listener.
 
 ## Identity

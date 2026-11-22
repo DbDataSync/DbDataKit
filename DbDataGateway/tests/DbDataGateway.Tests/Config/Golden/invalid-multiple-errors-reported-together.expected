@@ -1,2 +1,2 @@
-Gateway:Listen:Prot
-Gateway:Listen:Port
+Gateway:Management:Enabld
+Gateway:Management:LocalChannel

@@ -4,10 +4,10 @@ import type { Diagnostic, SettingsCheck, SettingsEdit, SettingsFields } from './
 export const MODULES = ['flightsql', 'identity', 'apps', 'store', 'views', 'feeds'] as const
 
 /** The fields of the form, by the setting path the Gateway edits and reports them under. */
-export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | 'telemetry.enabled' | 'telemetry.endpoint' | 'telemetry.protocol' | SemanticFieldKey
+export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | 'telemetry.enabled' | 'telemetry.endpoint' | 'telemetry.protocol' | SemanticFieldKey | ListenFieldKey
 
 /** The numbers of the `semantic:` section the form edits (plan 14a SL11); the hand-set models and the Analysis Services connections are edited in the text. */
-export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows' | 'rest.port' | 'rest.defaultLimit' | 'rest.maxRows'
+export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows' | 'rest.defaultLimit' | 'rest.maxRows'
 
 export interface SemanticNumber { key: SemanticFieldKey; label: string; hint: string; min: number; max: number; fallback: number }
 
@@ -16,11 +16,25 @@ export const SEMANTIC_NUMBERS: SemanticNumber[] = [
   { key: 'semantic.combine.memoryMb', label: 'Combine memory (MB)', hint: 'What one combine, the step that joins the results of several scans, may use.', min: 16, max: 1048576, fallback: 1024 },
   { key: 'semantic.combine.timeoutSeconds', label: 'Combine time (seconds)', hint: 'How long one combine may run.', min: 1, max: 86400, fallback: 60 },
   { key: 'semantic.combine.maxInputRows', label: 'Combine input rows', hint: 'Rows, over all the scans a combine loads, above which it is refused.', min: 1, max: 2000000000, fallback: 5000000 },
-  // the `rest:` section (plan 14a SL31): the listener of the feeds module, which is on when `modules` lists feeds
-  { key: 'rest.port', label: 'REST feeds own port', hint: 'A port of its own for the feeds module (saved queries and requests as JSON, CSV or Arrow), when `feeds` is among the modules. While you do not set it, the module answers under /feeds on the public listener. The box shows 8821 as a starting value; nothing is saved until you change it.', min: 1, max: 65535, fallback: 8821 },
+  // the `rest:` section (plan 14a SL31): the limits of the feeds module; its listener is the text field below
   { key: 'rest.defaultLimit', label: 'REST feeds default rows', hint: 'The rows a feed gives when the call does not say `limit`.', min: 1, max: 10000, fallback: 1000 },
   { key: 'rest.maxRows', label: 'REST feeds most rows', hint: 'The most a call may ask for with `limit` (paging is `limit` only).', min: 1, max: 10000, fallback: 10000 },
 ]
+
+/** The addresses of a listener of its own, edited as one text: an address such as `https://0.0.0.0:7824` (a list of addresses is edited in the text view). Empty means the default and saves nothing. */
+export type ListenFieldKey = 'rest.listen'
+
+export interface ListenField { key: ListenFieldKey; label: string; hint: string; placeholder: string }
+
+export const LISTEN_FIELDS: ListenField[] = [
+  { key: 'rest.listen', label: 'REST feeds own address', hint: 'An address of its own for the feeds module (saved queries and requests as JSON, CSV or Arrow), when `feeds` is among the modules. Empty: the module answers under its path on the public listener, and nothing is saved.', placeholder: 'https://0.0.0.0:7824' },
+]
+
+/** True when what was typed is an address with a scheme and a port, or empty (the default). The Gateway checks again. */
+export function listenText(text: string): boolean {
+  const t = text.trim()
+  return t === '' || /^https:\/\/(\*|\+|\[[0-9a-fA-F:.]+\]|[A-Za-z0-9._-]+):\d{1,5}$/.test(t)
+}
 
 /** The whole number a semantic field holds, or null when what was typed is not a whole number in the field's range (the Gateway checks again). */
 export function semanticNumber(field: SemanticNumber, text: string): number | null {
@@ -32,7 +46,7 @@ export function semanticNumber(field: SemanticNumber, text: string): number | nu
 /** The form field a diagnostic's key (`Views.CacheSeconds`, `Modules[1]`) belongs to, or null when it is not one of the form's: it is then listed with the file. */
 export function fieldOf(diagnostic: Pick<Diagnostic, 'key'>): FieldKey | null {
   const key = (diagnostic.key ?? '').replace(/\[\d+\]/g, '').toLowerCase()
-  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql', 'telemetry.enabled', 'telemetry.endpoint', 'telemetry.protocol', ...SEMANTIC_NUMBERS.map((f) => f.key)]
+  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql', 'telemetry.enabled', 'telemetry.endpoint', 'telemetry.protocol', ...SEMANTIC_NUMBERS.map((f) => f.key), ...LISTEN_FIELDS.map((f) => f.key)]
   return known.find((f) => f.toLowerCase() === key) ?? null
 }
 
@@ -82,7 +96,7 @@ export function toggleModule(current: string[], module: string, on: boolean): st
 /** The edit the Gateway makes to the draft for a change of one field (it edits the text, so the form and the YAML are one document). */
 export function editFor(field: FieldKey, value: string | number | boolean | string[]): SettingsEdit {
   if (field === 'modules') return { list: { modules: value as string[] } }
-  if (field === 'views.export.mode' || field === 'views.export.path' || field === 'telemetry.endpoint') return value === '' ? { remove: [field] } : { set: { [field]: value as string } }
+  if (field === 'views.export.mode' || field === 'views.export.path' || field === 'telemetry.endpoint' || field === 'rest.listen') return value === '' ? { remove: [field] } : { set: { [field]: value as string } }
   return { set: { [field]: value as number | boolean } }
 }
 
@@ -103,5 +117,7 @@ export const shown = (fields: SettingsFields | undefined) => ({
   telemetryEnabled: fields?.['telemetry.enabled'] ?? false,
   telemetryEndpoint: fields?.['telemetry.endpoint'] ?? '',
   telemetryProtocol: fields?.['telemetry.protocol'] ?? 'grpc',
+  // null: a list of addresses, which the text view edits
+  listen: Object.fromEntries(LISTEN_FIELDS.map((f) => [f.key, fields?.[f.key] === undefined ? '' : fields[f.key]])) as Record<ListenFieldKey, string | null>,
   semantic: Object.fromEntries(SEMANTIC_NUMBERS.map((f) => [f.key, fields?.[f.key] ?? f.fallback])) as Record<SemanticFieldKey, number>,
 })

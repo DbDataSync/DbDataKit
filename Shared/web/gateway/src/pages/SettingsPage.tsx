@@ -4,7 +4,7 @@ import { ApiError, Link, useIsAdmin } from '@dbdatakit/shell'
 import { gatewayApi } from '../api'
 import { GatewayShell } from '../GatewayShell'
 import { ExportComponentCard } from './ExportComponentCard'
-import { MODULES, SEMANTIC_NUMBERS, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type SemanticNumber } from '../settings'
+import { LISTEN_FIELDS, MODULES, SEMANTIC_NUMBERS, listenText, cacheSeconds, editFor, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule, type FieldKey, type ListenField, type SemanticNumber } from '../settings'
 import type { Diagnostic, SettingsCheck, SettingsWritten } from '../types'
 
 export interface SettingsViewProps {
@@ -50,6 +50,22 @@ function SemanticNumberField({ field, value, typed, disabled, items, onField, on
       <label htmlFor={id}>{field.label}</label>
       <input id={id} className="input" style={{ width: 130 }} inputMode="numeric" disabled={disabled} value={typed ?? String(value)} aria-invalid={problem ? true : undefined} data-testid={id}
         onChange={(e) => { onTyped(field.key, e.target.value); const n = semanticNumber(field, e.target.value); if (n !== null) onField(field.key, n) }} />
+      <span className="hint">{field.hint}</span>
+      {problem && <p className="hint" role="alert" data-testid={`${id}-problem`}>{problem}</p>}
+      <FieldErrors field={field.key} items={items} />
+    </div>
+  )
+}
+
+/** One address of a listener of its own: text, empty meaning the default (nothing is saved). A list of addresses is shown as such and edited in the text view. */
+function ListenTextField({ field, value, disabled, items, onField }: { field: ListenField; value: string | null; disabled: boolean; items: Diagnostic[] | undefined; onField: (field: FieldKey, value: string) => void }) {
+  const id = `settings-${field.key.replace(/\./g, '-')}`
+  const problem = value !== null && !listenText(value) ? 'An https address with its port, such as https://0.0.0.0:7824, or nothing.' : null
+  return (
+    <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+      <label htmlFor={id}>{field.label}</label>
+      <input id={id} className="input" style={{ width: 240 }} disabled={disabled || value === null} placeholder={value === null ? 'a list of addresses: edit the text' : field.placeholder} value={value ?? ''} aria-invalid={problem ? true : undefined} data-testid={id}
+        onChange={(e) => { if (listenText(e.target.value)) onField(field.key, e.target.value.trim()) }} />
       <span className="hint">{field.hint}</span>
       {problem && <p className="hint" role="alert" data-testid={`${id}-problem`}>{problem}</p>}
       <FieldErrors field={field.key} items={items} />
@@ -123,6 +139,7 @@ export function SettingsView(p: SettingsViewProps) {
                 <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-semantic">
                   <legend className="card-title">Semantic models</legend>
                   {SEMANTIC_NUMBERS.map((f) => <SemanticNumberField key={f.key} field={f} value={values.semantic[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} typed={p.semanticText?.[f.key]} onField={p.onField} onTyped={(k, t) => p.onSemanticText?.(k, t)} />)}
+                  {LISTEN_FIELDS.map((f) => <ListenTextField key={f.key} field={f} value={values.listen[f.key]} disabled={!p.allowed || !p.check} items={grouped.byField[f.key]} onField={p.onField} />)}
                   <p className="hint" data-testid="settings-semantic-text">The models set up by hand (catalog file and the data source of each source) and the Analysis Services connections (a secret reference, never a password) are edited in the server.yaml tab, under <span className="mono">semantic:</span>.</p>
                 </fieldset>
                 <fieldset style={{ border: 0, padding: 0, margin: '12px 0' }} data-testid="settings-telemetry">

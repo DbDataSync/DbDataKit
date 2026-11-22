@@ -55,6 +55,7 @@ public static class JsonSchemaGenerator
         foreach (var p in o.Properties)
         {
             var n = Node(p.Type);
+            if (p.ScalarOrList && p.Type is ListSchema) n["x-acceptsSingleValue"] = true;   // a lone value without brackets is a list of one
             if (p.Description != null) n["description"] = p.Description;
             if (p.Min != null) n[p.Type is ScalarSchema { Underlying: var u } && u == typeof(TimeSpan) ? "x-minSeconds" : "minimum"] = Num(p.Min.Value);
             if (p.Max != null) n[p.Type is ScalarSchema { Underlying: var u2 } && u2 == typeof(TimeSpan) ? "x-maxSeconds" : "maximum"] = Num(p.Max.Value);

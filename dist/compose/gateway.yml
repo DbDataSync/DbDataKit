@@ -3,7 +3,7 @@
 # the server announces its host name, which the console resolves on this network (so a server that gets a new IP address stays paired; its address is used when the name does not resolve). A server waits as pending until an administrator confirms it
 # (or in the web app); another server is another service with `environment: *announce`:
 #   docker compose -f dist/compose/gateway.yml exec console dotnet /app/dbdatakit.dll instance confirm dbdatagateway
-# The Gateway's management API is on by default and listens on the loopback address; here it listens on every address of the container (port 8816, not
+# The Gateway's management API is on by default and listens on the loopback address; here its `listen` is every address of the container (port 8816, not
 # published: only the console, on this network, reaches it) and the address the console is told to use is fixed in this file. The Flight port (8815) is published for clients.
 # Run from the repository root.
 name: dbdatakit-gateway
@@ -27,8 +27,7 @@ services:
     hostname: gateway
     environment:
       <<: *announce
-      DBDATAKIT_Gateway__Management__Address: 0.0.0.0
-      DBDATAKIT_Gateway__Management__Port: "8816"
+      DBDATAKIT_Gateway__Management__Listen: https://0.0.0.0:8816
       # the console reaches the management API here, by name, whatever address the container gets
       DBDATAKIT_ADVERTISE_URL: https://gateway:8816
       DBDATAKIT_INSTANCE_NAME: dbdatagateway

@@ -29,7 +29,7 @@ public sealed class GatewayFeedsModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Rest.Address, current.Rest.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Rest.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         feeds.Map(app);
         await app.StartAsync(cancellationToken);

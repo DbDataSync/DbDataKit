@@ -33,7 +33,7 @@ public sealed class GatewayViewsModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Views.Address, current.Views.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Views.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         views.Module.Map(app);
         await app.StartAsync(cancellationToken);

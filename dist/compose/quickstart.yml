@@ -22,8 +22,7 @@ services:
     hostname: gateway
     environment:
       <<: *announce
-      DBDATAKIT_Gateway__Management__Address: 0.0.0.0
-      DBDATAKIT_Gateway__Management__Port: "8816"
+      DBDATAKIT_Gateway__Management__Listen: https://0.0.0.0:8816
       DBDATAKIT_ADVERTISE_URL: https://gateway:8816
       DBDATAKIT_INSTANCE_NAME: dbdatagateway
     ports:

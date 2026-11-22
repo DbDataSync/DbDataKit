@@ -51,11 +51,12 @@ public static class ConsoleHost
             host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.SettingsPath);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
-        if (settings.AnnounceListen is { } announce && (announce.Scheme != Uri.UriSchemeHttp || announce.Port == settings.Listen.Port))
+        if (settings.AnnounceListen is { } announce && (announce.Scheme != Uri.UriSchemeHttp || (settings.ListenAll.Count > 0 ? settings.ListenAll : [settings.Listen]).Any(l => l.Port == announce.Port)))
             throw new ArgumentException("The announce address is a plain http address on a port of its own.", nameof(settings));
         builder.WebHost.ConfigureKestrel(o =>
         {
-            o.Listen(AddressOf(settings.Listen), settings.Listen.Port, listen => listen.UseHttps(certificate));
+            foreach (var each in settings.ListenAll.Count > 0 ? settings.ListenAll : [settings.Listen])
+                o.Listen(AddressOf(each), each.Port, listen => listen.UseHttps(certificate));
             if (settings.AnnounceListen is { } announce) o.Listen(AddressOf(announce), announce.Port);
         });
 

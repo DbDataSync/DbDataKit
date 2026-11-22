@@ -66,10 +66,11 @@ public static class WorkspaceServer
             host.Telemetry = DbDataKit.Telemetry.TelemetrySettings.Load(settings.ServerYaml);   // the telemetry: section; off unless it says enabled (plan 22a GP28)
             host.Version = Version;
         });
-        var address = settings.Listen.HostNameType == UriHostNameType.Dns && settings.Listen.Host != "localhost"
-            ? IPAddress.Any
-            : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
-        builder.WebHost.ConfigureKestrel(o => o.Listen(address, settings.Listen.Port, listen => listen.UseHttps(certificate)));
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            foreach (var each in settings.ListenAll.Count > 0 ? settings.ListenAll : [settings.Listen])
+                o.Listen(DbDataKit.Hosting.Startup.ListenPorts.AddressOf(each), each.Port, listen => listen.UseHttps(certificate));
+        });
         // its own state's retention and snapshot, in this process (plan 35 I1): the housekeeping: part of the state section
         builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(state, WorkspaceState.Modules, WorkspaceState.Scope, WorkspaceState.ServiceId,
             settings.State ?? WorkspaceState.Resolve(settings.Directory).Settings, settings.Directory));

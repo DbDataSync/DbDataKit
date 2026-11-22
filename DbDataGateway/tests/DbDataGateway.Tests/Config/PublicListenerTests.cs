@@ -82,7 +82,7 @@ public sealed class PublicListenerTests : IAsyncLifetime
 
     private async Task StartAsync(IEnumerable<string> modules, params string[] more)
     {
-        var args = new List<string> { $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:DefinitionPollSeconds=1", "--Gateway:Public:Address=127.0.0.1", $"--Gateway:Public:Port={publicPort}" };
+        var args = new List<string> { $"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Management:Enabled=false", "--Gateway:DefinitionPollSeconds=1", $"--Gateway:Public:Listen=https://127.0.0.1:{publicPort}" };
         args.AddRange(modules.Select((m, i) => $"--Gateway:Modules:{i}={m}"));
         args.AddRange(more);
         app = GatewayHost.Build([.. args]);
@@ -203,7 +203,7 @@ public sealed class PublicListenerTests : IAsyncLifetime
         publicPort = FreePort();
         var storePort = FreePort();
         while (storePort == publicPort) storePort = FreePort();
-        await StartAsync(["store", "feeds"], "--Gateway:Store:Address=127.0.0.1", $"--Gateway:Store:Port={storePort}");
+        await StartAsync(["store", "feeds"], $"--Gateway:Store:Listen=https://127.0.0.1:{storePort}");
         var token = Person();
         using var pub = Trusting($"https://localhost:{publicPort}");
         using var own = Trusting($"https://localhost:{storePort}");
@@ -240,10 +240,10 @@ public sealed class PublicListenerTests : IAsyncLifetime
         }
 
         // the public listener against the Flight port, and a module's own port against the public listener's
-        Assert.Contains(Load("listen: { address: 127.0.0.1, port: 9000 }\npublic: { port: 9000 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Port");
-        Assert.Contains(Load("public: { port: 9000 }\nstore: { port: 9000 }\nfeeds: { }\nmodules: [flightsql, store, feeds]\n"), d => d.KeyPath == "Store.Port" || d.KeyPath == "Public.Port");
+        Assert.Contains(Load("listen: https://127.0.0.1:9000\npublic: { listen: https://127.0.0.1:9000 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Listen");
+        Assert.Contains(Load("public: { listen: https://127.0.0.1:9000 }\nstore: { listen: https://127.0.0.1:9000 }\nfeeds: { }\nmodules: [flightsql, store, feeds]\n"), d => d.KeyPath == "Store.Listen" || d.KeyPath == "Public.Listen");
         // with every module on a port of its own the public listener is not used, so its port clashes with nothing
-        Assert.DoesNotContain(Load("listen: { address: 127.0.0.1, port: 9000 }\npublic: { port: 9000 }\nstore: { port: 9001 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Port");
+        Assert.DoesNotContain(Load("listen: https://127.0.0.1:9000\npublic: { listen: https://127.0.0.1:9002 }\nstore: { listen: https://127.0.0.1:9001 }\nmodules: [flightsql, store]\n"), d => d.KeyPath == "Public.Listen");
         Assert.DoesNotContain(Load("modules: [flightsql, store, feeds]\n"), d => d.KeyPath?.EndsWith(".Port", StringComparison.Ordinal) == true);
     }
 }

@@ -54,7 +54,7 @@ public sealed class PublicMounts
     }
 
     /// <summary>The address the public listener answers at on this machine (<c>https://localhost:8817</c>), without a path.</summary>
-    public static string AddressOf(GatewayOptions options) => $"https://localhost:{options.Public.Port}";
+    public static string AddressOf(GatewayOptions options) => $"https://localhost:{GatewayListeners.PublicPort(options)}";
 }
 
 /// <summary>
@@ -138,16 +138,17 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
     private WebApplication? _app;
 
     /// <summary>The modules that answer on the public listener rather than on a port of their own: the ones that are on and have no <c>port</c> set.</summary>
-    public static IReadOnlyList<string> MountedModules(GatewayOptions o) => [.. new (string Name, int? Port)[]
+    public static IReadOnlyList<string> MountedModules(GatewayOptions o) => [.. new (string Name, int Own)[]
     {
-        (GatewayModules.Identity, o.Identity.Port), (GatewayModules.Apps, o.Apps.Port), (GatewayModules.Store, o.Store.Port), (GatewayModules.Views, o.Views.Port),
-        (GatewayModules.Feeds, o.Rest.Port), (GatewayModules.Mcp, o.Mcp.Port),
-    }.Where(m => GatewayModules.Has(o, m.Name) && m.Port is null).Select(m => m.Name)];
+        (GatewayModules.Identity, o.Identity.Listen.Count), (GatewayModules.Apps, o.Apps.Listen.Count), (GatewayModules.Store, o.Store.Listen.Count), (GatewayModules.Views, o.Views.Listen.Count),
+        (GatewayModules.Feeds, o.Rest.Listen.Count), (GatewayModules.Mcp, o.Mcp.Listen.Count),
+    }.Where(m => GatewayModules.Has(o, m.Name) && m.Own == 0).Select(m => m.Name)];
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var current = options.CurrentValue;
-        if (MountedModules(current).Count == 0) return;
+        // no address, no listener: a Gateway built without the start sequence's choice of ports (a test) has none unless it is given one
+        if (current.Public.Listen.Count == 0) return;
         // the Flight listener loads the certificate when Kestrel starts, which is after the hosted services: this listener may be first
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
@@ -157,15 +158,16 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Public.Address), current.Public.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
+            foreach (var url in GatewayListeners.Parsed(current.Public.Listen))
+                kestrel.Listen(url.Address, url.Port, listen =>
                 {
-                    https.ServerCertificateSelector = (_, name) => mounts.Snapshot.Select(m => m.Certificate?.Invoke(name)).FirstOrDefault(c => c is not null) ?? certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    listen.Protocols = HttpProtocols.Http1AndHttp2;
+                    listen.UseHttps(https =>
+                    {
+                        https.ServerCertificateSelector = (_, name) => mounts.Snapshot.Select(m => m.Certificate?.Invoke(name)).FirstOrDefault(c => c is not null) ?? certificate.Current;
+                        https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    });
                 });
-            });
         });
         var app = builder.Build();
         app.Run(async context =>
@@ -203,13 +205,14 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
     }
 }
 
-/// <summary>What a module's web application listens on: a port of its own when its <c>port</c> is set, otherwise nothing, and the public listener forwards to it.</summary>
+/// <summary>What a module's web application listens on: the addresses of its own when its <c>listen</c> is set, otherwise nothing, and the public listener forwards to it.</summary>
 internal static class ModuleListener
 {
-    /// <summary>Configures <paramref name="builder"/> to listen on <paramref name="port"/> over HTTPS, or, with no port, to be forwarded to; returns the server to mount in that case, null when the module has a port of its own.</summary>
-    public static InProcessServer? Configure(WebApplicationBuilder builder, string address, int? port, Func<Microsoft.AspNetCore.Connections.ConnectionContext?, string?, X509Certificate2?> certificate)
+    /// <summary>Configures <paramref name="builder"/> to listen on <paramref name="listen"/> over HTTPS, or, with no port, to be forwarded to; returns the server to mount in that case, null when the module has addresses of its own.</summary>
+    public static InProcessServer? Configure(WebApplicationBuilder builder, IReadOnlyList<string> listen, Func<Microsoft.AspNetCore.Connections.ConnectionContext?, string?, X509Certificate2?> certificate)
     {
-        if (port is not { } own)
+        var urls = GatewayListeners.Parsed(listen).ToList();
+        if (urls.Count == 0)
         {
             var server = new InProcessServer();
             builder.Services.AddSingleton<IServer>(server);
@@ -218,15 +221,16 @@ internal static class ModuleListener
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(address), own, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
+            foreach (var url in urls)
+                kestrel.Listen(url.Address, url.Port, endpoint =>
                 {
-                    https.ServerCertificateSelector = certificate;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    endpoint.Protocols = HttpProtocols.Http1AndHttp2;
+                    endpoint.UseHttps(https =>
+                    {
+                        https.ServerCertificateSelector = certificate;
+                        https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    });
                 });
-            });
         });
         return null;
     }

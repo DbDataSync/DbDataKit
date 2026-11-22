@@ -49,7 +49,7 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Mcp.Address, current.Mcp.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Mcp.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         Map(app, server, approvals, endpoint: inProcess is null ? "/mcp" : "/");

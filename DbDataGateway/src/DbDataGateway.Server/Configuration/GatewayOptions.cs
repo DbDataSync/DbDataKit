@@ -76,7 +76,12 @@ public sealed class GatewayOptions
     /// <summary>The <c>feeds</c> module (plan 14a SL31, <c>rest:</c> in <c>server.yaml</c>): saved queries and semantic requests as JSON, CSV or Arrow IPC over HTTP on a listener of its own. Off unless <c>Modules</c> lists <c>feeds</c>.</summary>
     public RestModuleOptions Rest { get; set; } = new();
 
-    public ListenOptions Listen { get; set; } = new();
+    /// <summary>
+    /// Where Flight SQL listens: one address, or a list of them (<c>https://0.0.0.0:7821</c>; <c>http</c> only with <c>tls.mode: None</c>). Empty (the default): the first start takes a free port of the Gateway's block
+    /// and writes it here. A port of 0 lets the system choose one (tests).
+    /// </summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>The public HTTPS listener (<c>public:</c>): the one address end users reach the identity home, apps, store, views, feeds and MCP at, each under its path prefix. A module with a <c>port</c> of its own is not on it.</summary>
     public PublicListenerOptions Public { get; set; } = new();
@@ -260,11 +265,12 @@ public sealed class ManagementOptions
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Where it listens. The loopback address by default: a console on another machine needs an address that is reachable, chosen on purpose.</summary>
-    public string Address { get; set; } = "127.0.0.1";
-
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int Port { get; set; } = 8816;
+    /// <summary>
+    /// Where it listens: one https address, or a list of them (<c>https://127.0.0.1:7822</c>). Empty (the default): the first start takes a free port of the Gateway's block on the loopback address and writes it here.
+    /// A console on another machine needs an address that is reachable, chosen on purpose.
+    /// </summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>The local channel for <c>dbdatagateway config show</c> and the like on this machine: a named pipe on Windows and a Unix socket elsewhere, reachable only by the service's account and administrators. Off by default.</summary>
     public bool LocalChannel { get; set; }
@@ -282,12 +288,9 @@ public sealed class ManagementOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class AppsOptions
 {
-    /// <summary>Where it listens: every address by default, as the identity home, since end users open apps here.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>The https address people reach the apps host at, without a path. Empty: <c>https://&lt;the first TLS host name, or localhost&gt;:&lt;Port&gt;</c>. The home's redirect URI for it is this plus <c>/apps/-/callback</c>.</summary>
     public string? PublicUrl { get; set; }
@@ -333,12 +336,9 @@ public sealed class AppsOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class StoreModuleOptions
 {
-    /// <summary>Where it listens: every address by default, since apps and agents call it.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>Days without a write after which a preview's or channel's draft is removed with its writes (plan 21 CH07; <c>store.idleDays</c>). The store module and the apps host's previews write into the same drafts.</summary>
     [ConfigKey(Min = 1, Max = 3650)]
@@ -353,12 +353,9 @@ public sealed class StoreModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class McpModuleOptions
 {
-    /// <summary>Where it listens: every address by default, since agents call it.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>How long, in minutes, a step with an effect waits for a person before it is expired (never run).</summary>
     [ConfigKey(Min = 1, Max = 10080)]
@@ -372,12 +369,9 @@ public sealed class McpModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class RestModuleOptions
 {
-    /// <summary>Where it listens: every address by default, since report servers, scripts and people call it.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>How many rows a call gets when it does not say <c>limit</c>.</summary>
     [ConfigKey(Min = 1, Max = 10_000)]
@@ -392,12 +386,9 @@ public sealed class RestModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class ViewsModuleOptions
 {
-    /// <summary>Where it listens: every address by default, since people, apps and agents call it.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>How long, in seconds, the rows of a request are kept for the viewer who asked (their access and the request are the key). 0 turns the cache off.</summary>
     [ConfigKey(Min = 0, Max = 3600)]
@@ -483,12 +474,9 @@ public sealed class IdentityOptions
 {
     public bool Enabled { get; set; }
 
-    /// <summary>Where it listens: every address by default, as the Flight listener, since end users sign in here.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    /// <summary>The port of a listener of its own for this module. Empty (the default): the module has none and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int? Port { get; set; }
+    /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 
     /// <summary>
     /// The https address every console, app and browser reaches the home at (a balancer's name for a group), without a path. It is the token issuer and the origin passkeys are bound to, so it must not change once
@@ -593,20 +581,11 @@ public sealed class HostingOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class PublicListenerOptions
 {
-    /// <summary>Where it listens: every address, since end users and agents call it.</summary>
-    public string Address { get; set; } = "0.0.0.0";
-
-    [ConfigKey(Min = 1, Max = 65535)]
-    public int Port { get; set; } = 8817;
-}
-
-[ConfigSchema(Naming = KeyNaming.Verbatim)]
-public sealed class ListenOptions
-{
-    public string Address { get; set; } = "0.0.0.0";
-    [ConfigKey(Min = 0, Max = 65535)]
-    /// <summary>TCP port, 1-65535; 0 lets the operating system pick one (tests).</summary>
-    public int Port { get; set; } = 8815;
+    /// <summary>
+    /// Where it listens: one https address, or a list of them (<c>https://0.0.0.0:7820</c>). Empty (the default): the first start takes a free port of the Gateway's block on every address and writes it here.
+    /// </summary>
+    [ConfigKey(ScalarOrList = true)]
+    public List<string> Listen { get; set; } = [];
 }
 
 public enum TlsMode

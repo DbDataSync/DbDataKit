@@ -1,1 +1,1 @@
-{ "Gateway": { "Listen": { "Prot": 1, "Port": "x" }, "Tls": { "Mode": "File" } } }
+{ "Gateway": { "Management": { "Enabld": 1, "LocalChannel": "x" }, "Tls": { "Mode": "File" } } }
