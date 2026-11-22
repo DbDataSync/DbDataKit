@@ -260,8 +260,6 @@ cancels them.
 the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
 action (`docs/architecture.md`, "What runs where"); a new instance of a linked group gets the link with its join.
 
-**Publisher keys.** The Workspace's publisher key on a Gateway or a Runner is handed over by the console; the Workspace never pairs with a code.
-
 **Networks where a server cannot reach the console.** The console can start the pairing instead. It still generates the command for the remote machine,
 code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command
 prints. The console then connects to the server and pins it, with the same token scope and single use. Example: a Runner in a network that the console
