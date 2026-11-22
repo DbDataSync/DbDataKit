@@ -501,7 +501,8 @@ Recommendation: the default, so a person can set the service's settings (state, 
 ### INSTALLER-P52: the Gateway writes its starter settings at any start on a folder without `config` (default, awaiting the owner)
 
 Scenario: a developer runs `dbdatagateway server run` with `Gateway:DataDirectory` pointing at an empty folder. Built as the default: the folder step
-writes `config/server.yaml` holding `schemaVersion: 2` when the folder has no `config` folder, as the service's first start does, so the defaults are
+writes `config/server.yaml` holding `schemaVersion: 2` when the data folder exists and has no `config` folder, as the service's first start does (a
+data folder that is not there is not made for it), so the defaults are
 the current ones wherever the Gateway starts. Option B: write it only when the data folder is the machine's (`C:\ProgramData\DbDataKit\gateway`,
 `/var/lib/dbdatakit/gateway`), so a run on any other folder keeps schema version 1's defaults until a person writes the file. Recommendation: the
 default; one rule for every start is easier to explain.

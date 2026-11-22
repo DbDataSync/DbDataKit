@@ -148,8 +148,10 @@ public static class Cli
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 // the first start of a service writes its starter settings file, as the service's own account (the install makes only the data folder)
                 // Design: docs/install.md#a-service-owns-its-data
-                // a folder this account cannot write is not reported here: building the server opens it and says why, a settings error keeping its exit code
-                if (!Directory.Exists(GatewayConfigFile.DirectoryIn(dataDirectory)))
+                // only in a data folder that exists (the install made it, or the person who runs the server did): a start on a folder that is not there
+                // makes nothing before its settings are read. A folder this account cannot write is not reported here: building the server opens it
+                // and says why, a settings error keeping its exit code
+                if (Directory.Exists(dataDirectory) && !Directory.Exists(GatewayConfigFile.DirectoryIn(dataDirectory)))
                 {
                     try { GatewayConfigFile.EnsureStarter(dataDirectory); }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
