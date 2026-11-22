@@ -40,16 +40,14 @@ public sealed class GatewayViewsModule(IOptionsMonitor<GatewayOptions> options, 
         _app = app;
         if (inProcess is not null)
         {
-            views.Address = Address = PublicMounts.AddressOf(current) + PublicPrefix;
-            ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = GatewayModules.Views, Server = server, StripPrefix = PublicPrefix });
+            views.Address = Address = PublicMounts.AddressOf(current) + PublicPaths.Of(current, GatewayModules.Views);
+            ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = GatewayModules.Views, Server = server, Prefix = PublicPaths.Of(current, GatewayModules.Views) });
             return;
         }
         var bound = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>().Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses.FirstOrDefault();
         views.Address = Address = bound?.Replace("[::]", "localhost", StringComparison.Ordinal).Replace("0.0.0.0", "localhost", StringComparison.Ordinal).TrimEnd('/');
     }
 
-    /// <summary>The path prefix of the module on the public listener.</summary>
-    public const string PublicPrefix = "/views";
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {

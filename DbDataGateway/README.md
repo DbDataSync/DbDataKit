@@ -234,8 +234,8 @@ The gateway can serve the install's **identity home** (plan 20, O06): who people
   home's paths are a 404 there). TLS is required (a passkey needs a secure origin).
 * **Its address:** `identity.publicUrl` is the https address every console, app and browser reaches it at (a balancer's name for a group of gateways), without a path. It is the token issuer and the origin
   passkeys are bound to, so it must not change once people have signed in. Unset, it is `https://<the first tls.hostnames entry, or localhost>:<the port of identity.listen, or the public listener's>`.
-* **What it serves:** OpenID Connect discovery (`/.well-known/openid-configuration`), the provider (`/identity/authorize`, `token`, `userinfo`, `jwks`, `end-session`; authorization code with PKCE), the passkey
-  sign-in page (`/identity/sign-in`) and the invitation page (`/invite#<code>`).
+* **What it serves:** OpenID Connect discovery (`<issuer>/.well-known/openid-configuration`, the issuer being the public address with the home's path, `https://gateway:7820/identity`), the provider (`/identity/authorize`, `token`, `userinfo`, `jwks`, `end-session`; authorization code with PKCE), the passkey
+  sign-in page (`/identity/sign-in`) and the invitation page (`/identity/invite#<code>`). The path is `identity.path`; a home with a `listen` of its own has none.
 * **The first administrator:** while the home has nobody, a first-run invitation is written to `identity/FIRST-RUN.txt` in the data directory; open its link on the home's address and make a passkey.
 * **Administration, at the command line** (the server may be running or not; `--repo` names the data directory): `dbdatagateway identity invite --email <address> [--role admin|viewer]`, `identity user-list`,
   `identity client-add --name <name> --redirect <uri>` (a console or an app that signs people in through the home; the secret is shown once), `identity client-list`,

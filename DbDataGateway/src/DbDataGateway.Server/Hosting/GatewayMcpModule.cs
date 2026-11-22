@@ -56,11 +56,8 @@ public sealed class GatewayMcpModule(IOptionsMonitor<GatewayOptions> options, St
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
-        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, StripPrefix = PublicPrefix });
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Prefix = PublicPaths.Of(current, GatewayModules.Mcp) });
     }
-
-    /// <summary>The path prefix of the module on the public listener: the endpoint is <c>/mcp</c> there as on a port of its own.</summary>
-    public const string PublicPrefix = "/mcp";
 
     private void Map(WebApplication app, McpServer server, McpApprovals approvals, string endpoint)
     {

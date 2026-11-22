@@ -4,7 +4,7 @@ import type { Diagnostic, SettingsCheck, SettingsEdit, SettingsFields } from './
 export const MODULES = ['flightsql', 'identity', 'apps', 'store', 'views', 'feeds'] as const
 
 /** The fields of the form, by the setting path the Gateway edits and reports them under. */
-export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | 'telemetry.enabled' | 'telemetry.endpoint' | 'telemetry.protocol' | SemanticFieldKey | ListenFieldKey
+export type FieldKey = 'modules' | 'views.cacheSeconds' | 'views.export.mode' | 'views.export.path' | 'logSql' | 'telemetry.enabled' | 'telemetry.endpoint' | 'telemetry.protocol' | SemanticFieldKey | ListenFieldKey | PathFieldKey
 
 /** The numbers of the `semantic:` section the form edits (plan 14a SL11); the hand-set models and the Analysis Services connections are edited in the text. */
 export type SemanticFieldKey = 'semantic.level' | 'semantic.combine.memoryMb' | 'semantic.combine.timeoutSeconds' | 'semantic.combine.maxInputRows' | 'rest.defaultLimit' | 'rest.maxRows'
@@ -30,6 +30,26 @@ export const LISTEN_FIELDS: ListenField[] = [
   { key: 'rest.listen', label: 'REST feeds own address', hint: 'An address of its own for the feeds module (saved queries and requests as JSON, CSV or Arrow), when `feeds` is among the modules. Empty: the module answers under its path on the public listener, and nothing is saved.', placeholder: 'https://0.0.0.0:7824' },
 ]
 
+/** The path each module answers under on the public listener; an empty box is the default and saves nothing. */
+export type PathFieldKey = 'identity.path' | 'apps.path' | 'store.path' | 'views.path' | 'rest.path' | 'mcp.path'
+
+export interface PathField { key: PathFieldKey; label: string; fallback: string }
+
+export const PATH_FIELDS: PathField[] = [
+  { key: 'identity.path', label: 'Identity path', fallback: '/identity' },
+  { key: 'apps.path', label: 'Apps path', fallback: '/apps' },
+  { key: 'store.path', label: 'Store path', fallback: '/store' },
+  { key: 'views.path', label: 'Views path', fallback: '/views' },
+  { key: 'rest.path', label: 'REST feeds path', fallback: '/feeds' },
+  { key: 'mcp.path', label: 'MCP path', fallback: '/mcp' },
+]
+
+/** True when what was typed is a path of one or more segments with no slash at the end, or empty (the default). The Gateway checks again. */
+export function pathText(text: string): boolean {
+  const t = text.trim()
+  return t === '' || /^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/.test(t)
+}
+
 /** True when what was typed is an address with a scheme and a port, or empty (the default). The Gateway checks again. */
 export function listenText(text: string): boolean {
   const t = text.trim()
@@ -46,7 +66,7 @@ export function semanticNumber(field: SemanticNumber, text: string): number | nu
 /** The form field a diagnostic's key (`Views.CacheSeconds`, `Modules[1]`) belongs to, or null when it is not one of the form's: it is then listed with the file. */
 export function fieldOf(diagnostic: Pick<Diagnostic, 'key'>): FieldKey | null {
   const key = (diagnostic.key ?? '').replace(/\[\d+\]/g, '').toLowerCase()
-  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql', 'telemetry.enabled', 'telemetry.endpoint', 'telemetry.protocol', ...SEMANTIC_NUMBERS.map((f) => f.key), ...LISTEN_FIELDS.map((f) => f.key)]
+  const known: FieldKey[] = ['modules', 'views.cacheSeconds', 'views.export.mode', 'views.export.path', 'logSql', 'telemetry.enabled', 'telemetry.endpoint', 'telemetry.protocol', ...SEMANTIC_NUMBERS.map((f) => f.key), ...LISTEN_FIELDS.map((f) => f.key), ...PATH_FIELDS.map((f) => f.key)]
   return known.find((f) => f.toLowerCase() === key) ?? null
 }
 
@@ -96,7 +116,7 @@ export function toggleModule(current: string[], module: string, on: boolean): st
 /** The edit the Gateway makes to the draft for a change of one field (it edits the text, so the form and the YAML are one document). */
 export function editFor(field: FieldKey, value: string | number | boolean | string[]): SettingsEdit {
   if (field === 'modules') return { list: { modules: value as string[] } }
-  if (field === 'views.export.mode' || field === 'views.export.path' || field === 'telemetry.endpoint' || field === 'rest.listen') return value === '' ? { remove: [field] } : { set: { [field]: value as string } }
+  if (field === 'views.export.mode' || field === 'views.export.path' || field === 'telemetry.endpoint' || field === 'rest.listen' || (PATH_FIELDS as PathField[]).some((f) => f.key === field)) return value === '' ? { remove: [field] } : { set: { [field]: value as string } }
   return { set: { [field]: value as number | boolean } }
 }
 
@@ -119,5 +139,7 @@ export const shown = (fields: SettingsFields | undefined) => ({
   telemetryProtocol: fields?.['telemetry.protocol'] ?? 'grpc',
   // null: a list of addresses, which the text view edits
   listen: Object.fromEntries(LISTEN_FIELDS.map((f) => [f.key, fields?.[f.key] === undefined ? '' : fields[f.key]])) as Record<ListenFieldKey, string | null>,
+  // the default shows as an empty box
+  paths: Object.fromEntries(PATH_FIELDS.map((f) => [f.key, fields?.[f.key] && fields[f.key] !== f.fallback ? fields[f.key] : ''])) as Record<PathFieldKey, string>,
   semantic: Object.fromEntries(SEMANTIC_NUMBERS.map((f) => [f.key, fields?.[f.key] ?? f.fallback])) as Record<SemanticFieldKey, number>,
 })

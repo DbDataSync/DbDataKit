@@ -14,7 +14,8 @@ public sealed record AppResponse(int Status, string ContentType, IReadOnlyDictio
 /// </summary>
 public sealed class AppSite(AppInstanceStore instances, Func<string, AppEgress>? approvedEgress = null, string channel = DefinitionStore.Production, ViewsRuntime? views = null, IViewDocumentChecker? documents = null)
 {
-    public const string BasePath = "/apps/";
+    /// <summary>The path an instance is under, as the browser addresses it: <c>/apps/</c> unless the host is mounted under another prefix.</summary>
+    public static string BasePath => AppsPaths.BasePath;
 
     /// <summary>The folder under an instance that holds its bundle; the instance's own address is the shell page that frames it.</summary>
     public const string BundleFolder = "_app/";

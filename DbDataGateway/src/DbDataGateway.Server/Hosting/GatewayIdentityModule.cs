@@ -50,11 +50,21 @@ public sealed class GatewayIdentityModule(
 
     private volatile bool _draining;
 
-    /// <summary>The address people reach the home at: the setting, or the first TLS host name (localhost when there is none) on the module's port.</summary>
-    public static Uri PublicUrlOf(GatewayOptions options) =>
-        !string.IsNullOrWhiteSpace(options.Identity.PublicUrl)
+    /// <summary>
+    /// The address people reach the home at, which is its issuer: the setting (an address without a path), or the first TLS host name (localhost when there is none) on the module's port, and the home's path on the public listener
+    /// (<c>https://gateway:7820/identity</c>; <c>identity.path</c> moves it). A home with a <c>listen</c> of its own has no path.
+    /// </summary>
+    public static Uri PublicUrlOf(GatewayOptions options)
+    {
+        var origin = !string.IsNullOrWhiteSpace(options.Identity.PublicUrl)
             ? new Uri(options.Identity.PublicUrl.TrimEnd('/') + "/")
             : new UriBuilder(Uri.UriSchemeHttps, options.Tls.Hostnames.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "localhost", GatewayListeners.PortOf(options.Identity.Listen, options)).Uri;
+        return PublicPaths.Of(options, GatewayModules.Identity) is { Length: > 0 } prefix ? new Uri(origin.GetLeftPart(UriPartial.Authority) + prefix + "/") : origin;
+    }
+
+    /// <summary>The home's own path for one of the browser's under its prefix: the pages and the provider's endpoints are the home's <c>/identity/...</c>, the sign-in API, the invitations and the discovery document its root paths.</summary>
+    internal static string HomePath(string rest) =>
+        rest.StartsWith("/.well-known/", StringComparison.Ordinal) || rest == "/invite" || rest.StartsWith("/api/", StringComparison.Ordinal) ? rest : "/identity" + rest;
 
     /// <summary>Where the first-run invitation is written while the home has nobody: <c>&lt;data directory&gt;/identity</c>.</summary>
     public static string DirectoryOf(GatewayOptions options) => Path.Combine(GatewayHost.ResolveDataDirectory(options), "identity");
@@ -90,12 +100,12 @@ public sealed class GatewayIdentityModule(
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy")).AllowAnonymous();
         app.MapIdentityHome(line => _log.LogWarning("{Problem}", line));
-        app.MapFallback(() => Results.Text("The identity home of this DbDataGateway. Its endpoints are under /.well-known/openid-configuration and /identity/.", "text/plain")).AllowAnonymous();
+        app.MapFallback(() => Results.Text("The identity home of this DbDataGateway. Its discovery document is at /.well-known/openid-configuration under this address's path.", "text/plain")).AllowAnonymous();
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
-        // on the public listener the home keeps the paths it has: its provider endpoints, sign-in pages and the shared sign-in API
-        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Claims = context => IdentityHome.IsHomePath(context.Request.Path) });
+        // on the public listener the home is under its prefix: the provider's endpoints, the sign-in pages, the invitation page and the shared sign-in API
+        ModuleListener.Mount(mounts, inProcess, host => new PublicMount { Name = Name, Server = host, Prefix = PublicPaths.Of(current, GatewayModules.Identity), Inner = HomePath });
         _log.LogInformation("Identity home on {Address}; its issuer is {Issuer}; sign-in with a passkey{Entra}{Windows}.", string.Join(", ", inProcess is null ? current.Identity.Listen : current.Public.Listen), publicUrl.GetLeftPart(UriPartial.Authority),
             entra is null ? "" : ", through Entra ID", windows is null ? "" : ", with Windows");
     }

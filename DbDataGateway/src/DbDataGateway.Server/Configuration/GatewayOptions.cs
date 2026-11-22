@@ -288,6 +288,9 @@ public sealed class ManagementOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class AppsOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/apps</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/apps";
+
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
     [ConfigKey(ScalarOrList = true)]
     public List<string> Listen { get; set; } = [];
@@ -336,6 +339,9 @@ public sealed class AppsOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class StoreModuleOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/store</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/store";
+
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
     [ConfigKey(ScalarOrList = true)]
     public List<string> Listen { get; set; } = [];
@@ -353,6 +359,9 @@ public sealed class StoreModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class McpModuleOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/mcp</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/mcp";
+
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
     [ConfigKey(ScalarOrList = true)]
     public List<string> Listen { get; set; } = [];
@@ -369,6 +378,9 @@ public sealed class McpModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class RestModuleOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/feeds</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/feeds";
+
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
     [ConfigKey(ScalarOrList = true)]
     public List<string> Listen { get; set; } = [];
@@ -386,6 +398,9 @@ public sealed class RestModuleOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class ViewsModuleOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/views</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/views";
+
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>
     [ConfigKey(ScalarOrList = true)]
     public List<string> Listen { get; set; } = [];
@@ -472,6 +487,9 @@ public sealed class AppsHomeOptions
 [ConfigSchema(Naming = KeyNaming.Verbatim)]
 public sealed class IdentityOptions
 {
+    /// <summary>The path this module answers under on the public listener: <c>/identity</c> unless the administrator sets another (one or more segments, no trailing slash). A module with a <c>listen</c> of its own has no prefix.</summary>
+    public string Path { get; set; } = "/identity";
+
     public bool Enabled { get; set; }
 
     /// <summary>Where it listens: one https address, or a list of them, written as Kestrel writes them (<c>https://0.0.0.0:8818</c>). Empty (the default): the module has no listener of its own and answers on the public listener (<c>public:</c>) under its path prefix.</summary>

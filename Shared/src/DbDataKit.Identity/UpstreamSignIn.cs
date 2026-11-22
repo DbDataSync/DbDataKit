@@ -55,7 +55,7 @@ public static class UpstreamSignIn
         services.AddSingleton(sp => new ExternalSignIns(sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<HomeDirectory>()));
         if (options.Entra is { } entra)
         {
-            var redirect = new Uri(options.PublicUrl, EntraCallbackPath).AbsoluteUri;
+            var redirect = options.EndpointBase + EntraCallbackPath["/identity".Length..];
             // the attempts are in the state, so the tenant may send the browser back to any instance of the home's group
             services.AddSingleton(sp => new EntraClient(new OpenIdClient(new OpenIdClientOptions(entra.Authority, entra.ClientId, entra.ClientSecret, redirect), entra.Http?.Invoke() ?? new HttpClient(),
                 sp.GetService<TimeProvider>(), new StateOpenIdAttempts(sp.GetRequiredService<IOneTimeValues>(), "upstream:entra"))));
@@ -70,7 +70,7 @@ public static class UpstreamSignIn
             var client = app.Services.GetRequiredService<EntraClient>().Client;
             open.MapGet(EntraPath, async (HttpContext context, string? returnUrl) =>
             {
-                try { return Results.Redirect((await client.BeginAsync(SafeReturn(returnUrl), context.RequestAborted)).AbsoluteUri); }
+                try { return Results.Redirect((await client.BeginAsync(SafeReturn(returnUrl, options), context.RequestAborted)).AbsoluteUri); }
                 catch (OpenIdClientException ex) { return Refused(options, log, $"Microsoft Entra ID could not be reached: {ex.Message}"); }
             });
             open.MapGet(EntraCallbackPath, async (HttpContext context, string? state, string? code, string? error, string? error_description) =>
@@ -78,7 +78,7 @@ public static class UpstreamSignIn
                 HomeSignIn signedIn;
                 try { signedIn = await client.CompleteAsync(state, code, error, context.RequestAborted); }
                 catch (OpenIdClientException ex) { return Refused(options, log, $"Microsoft Entra ID did not sign you in. {ex.Message}"); }
-                return Finish(context, options, log, ExternalSignIns.FromOpenId(ExternalSources.Entra, signedIn.Identity, entra.TrustEmail), SafeReturn(signedIn.ReturnUrl));
+                return Finish(context, options, log, ExternalSignIns.FromOpenId(ExternalSources.Entra, signedIn.Identity, entra.TrustEmail), SafeReturn(signedIn.ReturnUrl, options));
             });
         }
         if (options.Windows is not null)
@@ -86,7 +86,7 @@ public static class UpstreamSignIn
             // not in the open group: its policy is the one that runs Negotiate, and an open group's AllowAnonymous would skip it
             app.MapGet(WindowsPath, (HttpContext context, string? returnUrl) =>
                 FromNegotiate(context.User) is { } identity
-                    ? Finish(context, options, log, identity, SafeReturn(returnUrl))
+                    ? Finish(context, options, log, identity, SafeReturn(returnUrl, options))
                     : Refused(options, log, "Windows did not say who you are."))
                 .RequireAuthorization(new AuthorizationPolicyBuilder(NegotiateDefaults.AuthenticationScheme).RequireAuthenticatedUser().Build());
         }
@@ -140,7 +140,7 @@ public static class UpstreamSignIn
             HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = context.Request.IsHttps, Expires = session.ExpiresAtUtc, Path = "/",
         });
         log.LogInformation("{User} signed in at the identity home through {Source}.", user.Id, identity.Source);
-        return Results.Redirect(IdentityHome.SignInPath + (returnUrl is null ? "" : "?returnUrl=" + Uri.EscapeDataString(returnUrl)));
+        return Results.Redirect(options.SignInUrl + (returnUrl is null ? "" : "?returnUrl=" + Uri.EscapeDataString(returnUrl)));
     }
 
     /// <summary>The sign-in page again, saying why; nobody is signed in.</summary>
@@ -151,6 +151,6 @@ public static class UpstreamSignIn
     }
 
     /// <summary>Only an address under <c>/identity/</c> of the home is returned to (the provider's authorize request); anything else is dropped.</summary>
-    internal static string? SafeReturn(string? returnUrl) =>
-        returnUrl is { Length: > 0 } r && r.StartsWith("/identity/", StringComparison.Ordinal) && !r.StartsWith("//", StringComparison.Ordinal) && !r.Contains('\\') ? r : null;
+    internal static string? SafeReturn(string? returnUrl, IdentityHomeOptions options) =>
+        returnUrl is { Length: > 0 } r && r.StartsWith(options.ProviderPrefix + "/", StringComparison.Ordinal) && !r.StartsWith("//", StringComparison.Ordinal) && !r.Contains('\\') ? r : null;
 }

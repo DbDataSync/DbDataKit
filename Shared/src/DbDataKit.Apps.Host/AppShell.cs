@@ -31,7 +31,11 @@ public static class AppShell
     /// <summary>The longest route the shell takes from a frame or an address; a longer one is dropped.</summary>
     public const int MaximumRoute = 512;
 
+    /// <summary>The shell script's own route.</summary>
     public const string ScriptPath = "/apps/-/shell.js";
+
+    /// <summary>The tag that loads the script, with the prefix the host is reached under for the script to build its calls from.</summary>
+    private static string ScriptTag => $"<script src=\"{AppsPaths.Prefix}/-/shell.js\" data-base=\"{AppsPaths.Prefix}\"></script>";
 
     /// <summary>
     /// The token broker's side in the page (plan 26 section 3): a frame asks with <c>postMessage({dbdata: "app/1", type: "token.request", id})</c> and gets <c>{type: "token", id, token, expiresIn, audience}</c> or <c>{type: "error", id, message}</c>.
@@ -41,6 +45,9 @@ public static class AppShell
 
     private const string ScriptTemplate = """
         (function () {
+          var script = document.currentScript;
+          // the path the host is reached under (apps.path), which the page's tag names
+          var BASE = script && script.getAttribute("data-base") || "/apps";
           var route = null;
           function valid(p) { return typeof p === "string" && p.length <= 512 && p.charAt(0) === "/" && p.charAt(1) !== "/" && !/[\u0000-\u001f\u007f]/.test(p); }
           function fromAddress() { var h = decodeURIComponent(location.hash.slice(1)); return valid(h) ? h : null; }
@@ -147,7 +154,7 @@ public static class AppShell
             frame.setAttribute("data-instance", instance); frame.setAttribute("data-route", path);
             if (source.getAttribute("data-theme")) frame.setAttribute("data-theme", source.getAttribute("data-theme"));
             frame.setAttribute("sandbox", "allow-scripts allow-forms allow-popups");
-            frame.setAttribute("src", "/apps/" + encodeURIComponent(instance) + "/_app/");
+            frame.setAttribute("src", BASE + "/" + encodeURIComponent(instance) + "/_app/");
             sheet.appendChild(head); sheet.appendChild(frame);
             if (modal) box.appendChild(scrim);
             box.appendChild(sheet);
@@ -179,7 +186,7 @@ public static class AppShell
             }
             if (m.type === "surface.open") { openSurface(frame, m); return; }
             if (m.type === "storage" && typeof m.id === "string") {
-              fetch("/apps/" + encodeURIComponent(instance) + "/_storage", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1", "Content-Type": "application/json" },
+              fetch(BASE + "/" + encodeURIComponent(instance) + "/_storage", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1", "Content-Type": "application/json" },
                 body: JSON.stringify({ op: m.op, scope: m.scope, key: m.key, value: m.value, ifVersion: m.ifVersion, prefix: m.prefix }) })
                 .then(function (r) { return r.json().then(function (b) { return r.ok ? b : Promise.reject(new Error(b.message || ("The host refused the call (" + r.status + ")."))); }); })
                 .then(function (b) { var reply = { dbdata: "app/1", id: m.id, type: "storage.result", result: b }; frame.contentWindow.postMessage(reply, "*"); })
@@ -188,7 +195,7 @@ public static class AppShell
             }
             if (m.type !== "token.request" || typeof m.id !== "string") return;
             function reply(body) { body.dbdata = "app/1"; body.id = m.id; frame.contentWindow.postMessage(body, "*"); }
-            fetch("/apps/" + encodeURIComponent(instance) + "/_token", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1" } })
+            fetch(BASE + "/" + encodeURIComponent(instance) + "/_token", { method: "POST", credentials: "same-origin", headers: { "X-DbData-Shell": "1" } })
               .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("The host refused a token (" + r.status + ").")); })
               .then(function (t) { reply({ type: "token", token: t.token, expiresIn: t.expiresIn, audience: t.audience }); })
               .catch(function (e) { reply({ type: "error", message: String(e.message || e) }); });
@@ -262,7 +269,7 @@ public static class AppShell
             </head><body>
             {{bar}}
             {{content}}
-            <script src="{{ScriptPath}}"></script>
+            {{ScriptTag}}
             </body></html>
             """;
     }
@@ -310,7 +317,7 @@ public static class AppShell
             {{content}}
             </main>{{SlotFrame(look, "aside")}}</div>
             {{footer}}
-            <script src="{{ScriptPath}}"></script>
+            {{ScriptTag}}
             </body></html>
             """;
     }

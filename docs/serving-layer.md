@@ -51,11 +51,11 @@ Health per module is on the host's `/health` and `/health/ready`: each of `fligh
 
 Every page and path by module is in [hosted-pages.md](hosted-pages.md).
 
-End users and agents reach the Gateway's HTTP modules on one HTTPS port, the public listener, which routes by path. Flight SQL and the management API keep ports of their own.
+End users and agents reach the Gateway's HTTP modules on one HTTPS port, the public listener, which routes by path. Flight SQL and the management API keep ports of their own. The table gives the default path of each module; the administrator sets each one with the module's `path` setting (`identity.path`, `apps.path`, `store.path`, `views.path`, `rest.path`, `mcp.path`), and `/` answers 404 on the listener.
 
 | Module | Paths on the public listener |
 | --- | --- |
-| `identity` | `/.well-known/openid-configuration`, `/identity/...`, `/invite`, `/api/auth/...`, `/api/invites`, `/api/users` (the paths the home has on a port of its own) |
+| `identity` | `/identity/...`: the sign-in page, `/identity/invite`, the provider's endpoints, `/identity/.well-known/openid-configuration`, `/identity/api/auth/...`, `/identity/api/invites`, `/identity/api/users`, `/identity/api/access-tokens` |
 | `apps` | `/apps/<instance>/...`, and every path of a name bound to an instance (a subdomain or a custom domain) |
 | `store` | `/store/api/v1/models/...` |
 | `views` | `/views/api/v1/...` |
@@ -66,9 +66,9 @@ The listener is set by `public.listen` in `server.yaml`: an address such as `htt
 
 A module with a `listen` of its own (`store: { listen: https://127.0.0.1:9443 }`) listens there and is not on the public listener: `https://gateway:9443/api/v1/models` answers and `https://gateway:7820/store/api/v1/models` is a 404. The public listener starts in every case, so a Gateway whose modules all have a `listen` of their own still answers `/health/live` on it.
 
-Example, with `modules: [identity, store, feeds]`, no module `listen` and the public listener on 7820: an OData client reads `https://gateway:7820/feeds/api/v1/queries/sales/orders`, a script reads `https://gateway:7820/store/api/v1/models`, and the identity home's issuer is `https://gateway:7820`.
+Example, with `modules: [identity, store, feeds]`, no module `listen` and the public listener on 7820: an OData client reads `https://gateway:7820/feeds/api/v1/queries/sales/orders`, a script reads `https://gateway:7820/store/api/v1/models`, and the identity home's issuer is `https://gateway:7820/identity`.
 
-Each module is still a web application of its own with its own pipeline and sign-in; the listener hands it the request with the prefix moved to `PathBase`, so a module never sees another module's paths. The identity home's issuer and the apps host's redirect address are the public listener's address unless `identity.publicUrl` or `apps.publicUrl` says otherwise. The listener's ports are checked against every other port of the Gateway at start (`public.listen` in the diagnostics).
+Each module is still a web application of its own with its own pipeline and sign-in; the listener hands it the request with the prefix moved to `PathBase`, so a module never sees another module's paths. The identity home's issuer is the public listener's address and the home's path, and the apps host's redirect address is the listener's address and the apps path, unless `identity.publicUrl` or `apps.publicUrl` says another address. The listener's ports are checked against every other port of the Gateway at start (`public.listen` in the diagnostics).
 
 ## What keeps working when a back-end is down
 

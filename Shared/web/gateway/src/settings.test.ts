@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Diagnostic, SettingsCheck } from './types'
-import { MODULES, SEMANTIC_NUMBERS, listenText, cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule } from './settings'
+import { MODULES, PATH_FIELDS, SEMANTIC_NUMBERS, listenText, pathText, cacheSeconds, editFor, fieldOf, groupDiagnostics, placeOf, restartText, saveState, semanticNumber, shown, toggleModule } from './settings'
 
 const diag = (key: string | null, severity = 'error', line = 3): Diagnostic => ({ code: 'DBP-1', severity, key, file: '/x/config/server.yaml', line, column: 1, message: 'wrong', fix: null })
 const check = (over: Partial<SettingsCheck> = {}): SettingsCheck => ({ valid: true, diagnostics: [], fields: {}, changed: ['logSql'], restart_keys: [], problems: [], ...over })
@@ -82,7 +82,7 @@ describe('the form', () => {
 
   it('shows the values the draft sets, with the defaults when the check has not answered', () => {
     const { semantic: defaults, ...rest } = shown(undefined)
-    expect(rest).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', listen: { 'rest.listen': '' }, logSql: true, telemetryEnabled: false, telemetryEndpoint: '', telemetryProtocol: 'grpc' })
+    expect(rest).toEqual({ modules: [], cacheSeconds: 30, exportMode: '', exportPath: '', listen: { 'rest.listen': '' }, paths: { 'identity.path': '', 'apps.path': '', 'store.path': '', 'views.path': '', 'rest.path': '', 'mcp.path': '' }, logSql: true, telemetryEnabled: false, telemetryEndpoint: '', telemetryProtocol: 'grpc' })
     expect(defaults['semantic.level']).toBe(5)
     expect(shown({ modules: ['flightsql'], 'views.cacheSeconds': 5, 'views.export.mode': 'system', 'views.export.path': '/opt/chrome', logSql: false })).toMatchObject({ modules: ['flightsql'], cacheSeconds: 5, exportMode: 'system', exportPath: '/opt/chrome', logSql: false })
   })
@@ -101,6 +101,17 @@ describe('the semantic section', () => {
     expect(editFor('rest.listen', 'https://0.0.0.0:7824')).toEqual({ set: { 'rest.listen': 'https://0.0.0.0:7824' } })
     expect(editFor('rest.maxRows', 500)).toEqual({ set: { 'rest.maxRows': 500 } })
     expect(toggleModule(['flightsql'], 'feeds', true)).toEqual(['flightsql', 'feeds'])
+  })
+
+  it('has a box per module path, an empty box meaning the default and saving nothing', () => {
+    expect(PATH_FIELDS.map((f) => f.fallback)).toEqual(['/identity', '/apps', '/store', '/views', '/feeds', '/mcp'])
+    expect(pathText('')).toBe(true)
+    expect(pathText('/data/store')).toBe(true)
+    for (const bad of ['store', '/store/', '/', '//x', '/a b']) expect(pathText(bad), bad).toBe(false)
+    expect(editFor('store.path', '')).toEqual({ remove: ['store.path'] })
+    expect(editFor('store.path', '/warehouse')).toEqual({ set: { 'store.path': '/warehouse' } })
+    expect(fieldOf(diag('Store.Path'))).toBe('store.path')
+    expect(shown({ 'store.path': '/store', 'apps.path': '/programs' }).paths).toMatchObject({ 'store.path': '', 'apps.path': '/programs' })
   })
 
   const level = SEMANTIC_NUMBERS[0]

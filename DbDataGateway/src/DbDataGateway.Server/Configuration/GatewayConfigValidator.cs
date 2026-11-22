@@ -33,6 +33,7 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
         ValidateMcp(o, cx);
         ValidateRest(o, cx);
         ValidatePorts(o, cx);
+        ValidatePaths(o, cx);
         ValidateCompression(o.Compression, "Compression", cx);
         ValidateDataSources(o, cx);
         ValidateJwt(o, cx);
@@ -178,6 +179,40 @@ public sealed class GatewayConfigValidator(IReadOnlyList<string>? sourcesWithout
                         cx.Error(listeners[i].Key, $"{listeners[i].Subject} has its own port; it is {listeners[j].Possessive} here.", $"Choose another port than {listeners[i].Port}.");
                     break;
                 }
+    }
+
+    /// <summary>
+    /// The path of each module on the public listener (<c>identity.path</c> and the others): one or more segments, no trailing slash, and no two modules on the same path or one inside the other. A module with a <c>listen</c> of its own has no path.
+    /// </summary>
+    private static void ValidatePaths(GatewayOptions o, IConfigValidationContext cx)
+    {
+        var mounted = new List<(string Key, string Module, string Path)>();
+        void Add(string module, string key, string path, IReadOnlyList<string> listen)
+        {
+            if (!GatewayModules.Has(o, module) || listen.Count > 0) return;
+            if (!PublicPaths.IsPrefix(path))
+            {
+                cx.Error(key, $"`{path}` is not a path: a module's path starts with a slash, has no slash at the end and is made of letters, digits and - . _ ~.", $"Write it as /{module} or another path such as /{module}-v2.");
+                return;
+            }
+            mounted.Add((key, module, path));
+        }
+        Add(GatewayModules.Identity, "Identity.Path", o.Identity.Path, o.Identity.Listen);
+        Add(GatewayModules.Apps, "Apps.Path", o.Apps.Path, o.Apps.Listen);
+        Add(GatewayModules.Store, "Store.Path", o.Store.Path, o.Store.Listen);
+        Add(GatewayModules.Views, "Views.Path", o.Views.Path, o.Views.Listen);
+        Add(GatewayModules.Mcp, "Mcp.Path", o.Mcp.Path, o.Mcp.Listen);
+        Add(GatewayModules.Feeds, "Rest.Path", o.Rest.Path, o.Rest.Listen);
+        for (var i = 0; i < mounted.Count; i++)
+            for (var j = 0; j < i; j++)
+            {
+                var (a, b) = (mounted[i].Path, mounted[j].Path);
+                if (a == b || a.StartsWith(b + "/", StringComparison.Ordinal) || b.StartsWith(a + "/", StringComparison.Ordinal))
+                {
+                    cx.Error(mounted[i].Key, $"The {mounted[i].Module} module's path `{a}` is the same as, or inside, the path `{b}` of the {mounted[j].Module} module.", "Give each module a path of its own.");
+                    break;
+                }
+            }
     }
 
     private static void ValidateRest(GatewayOptions o, IConfigValidationContext cx)
