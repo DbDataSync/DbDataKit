@@ -58,7 +58,9 @@ public static class WorkspaceService
         [
             new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
                 "Binaries; the service can read and run them but not change them."),
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)]),
+            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
+            // Design: docs/install.md#a-service-owns-its-data
+            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
                 "The server's identity, paired clients, certificate, projects and workspaces; Users have no access."),
         ]);
 
@@ -87,7 +89,15 @@ public static class WorkspaceService
         Description = SuiteServices.Workspace.Description,
         ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{WorkspaceSettings.ServiceName}",
         WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // DynamicUser: no account to manage; the state directory /var/lib/dbdatakit/workspace is created and owned by systemd.
+        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/workspace and /var/log/dbdatakit/dbdataworkspace for it
+        // at each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
+        // Design: docs/install.md#a-service-owns-its-data
+        DynamicUser = false,
+        User = SuiteServices.Workspace.LinuxUser,
+        Group = SuiteServices.LinuxGroup,
         StateDirectories = [$"dbdatakit/{WorkspaceSettings.ServiceName}"],
+        StateDirectoryMode = "0700",
+        LogsDirectories = [$"dbdatakit/{SuiteServices.Workspace.LogFolder}"],
+        LogsDirectoryMode = "0700",
     };
 }

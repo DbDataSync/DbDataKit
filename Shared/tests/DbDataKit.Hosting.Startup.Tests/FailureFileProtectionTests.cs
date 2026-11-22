@@ -92,8 +92,8 @@ public sealed class FailureFileProtectionTests : StartupTestBase
     [Fact]
     public void A_failure_file_another_account_owns_is_not_written_and_the_reason_goes_elsewhere()
     {
-        Directory.CreateDirectory(Logs);
-        var path = Path.Combine(Logs, "startup-failure-dbdatarunner.txt");
+        var path = SuiteServices.Runner.FailureFileIn(Logs);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "left by another account");
         var file = new StartupFailureFile(Logs, SuiteServices.Runner, Unreported.Add) { IsOwned = p => p != path };
 

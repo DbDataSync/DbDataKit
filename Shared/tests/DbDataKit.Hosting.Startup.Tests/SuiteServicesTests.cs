@@ -21,6 +21,19 @@ public sealed class SuiteServicesTests
     }
 
     [Fact]
+    public void The_failure_file_is_in_the_shared_logs_folder_on_windows_and_in_the_services_own_folder_elsewhere()
+    {
+        // systemd makes /var/log/dbdatakit/<program> for the service's user (LogsDirectory=); only root can create a file in /var/log/dbdatakit itself
+        var logs = Path.Combine(Path.GetTempPath(), "logs");
+        Assert.Equal(OperatingSystem.IsWindows()
+                ? Path.Combine(logs, "startup-failure-dbdatagateway.txt")
+                : Path.Combine(logs, "dbdatagateway", "startup-failure-dbdatagateway.txt"),
+            SuiteServices.Gateway.FailureFileIn(logs));
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal("/var/log/dbdatakit/dbdatarunner/startup-failure-dbdatarunner.txt", SuiteServices.Runner.FailureFileIn(SuiteServices.MachineLogsRoot));
+    }
+
+    [Fact]
     public void The_descriptions_are_the_ones_the_service_manager_shows()
     {
         // docs/install.md, "Service names, accounts and descriptions"; dist/tests/test_dist.py checks that page against this file too

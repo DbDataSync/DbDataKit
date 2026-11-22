@@ -22,11 +22,21 @@ public sealed record SuiteService(string Program, string WindowsName, string Des
     /// <summary>The account the service runs as on this operating system.</summary>
     public string Account => OperatingSystem.IsWindows() ? WindowsAccount : LinuxUser;
 
-    /// <summary>The name of the file a start of this service leaves in the shared logs folder: <c>startup-failure-dbdatagateway.txt</c>.</summary>
+    /// <summary>The name of the file a start of this service leaves: <c>startup-failure-dbdatagateway.txt</c>.</summary>
     public string FailureFileName => $"startup-failure-{Program}.txt";
 
     /// <summary>The service's own folder of logs under the shared logs folder: <c>dbdatagateway</c>.</summary>
     public string LogFolder => Program;
+
+    /// <summary>
+    /// The failure file of this service under the logs folder <paramref name="logsRoot"/>. On Windows it is in the shared folder
+    /// (<c>C:\ProgramData\DbDataKit\logs\startup-failure-dbdatagateway.txt</c>); on Linux and macOS in the service's own folder, which systemd makes for
+    /// the service's user (<c>/var/log/dbdatakit/dbdatagateway/startup-failure-dbdatagateway.txt</c>), since only root can create a file in
+    /// <c>/var/log/dbdatakit</c>.
+    /// Design: docs/install.md#logs-and-the-startup-failure-file
+    /// </summary>
+    public string FailureFileIn(string logsRoot) =>
+        OperatingSystem.IsWindows() ? Path.Combine(logsRoot, FailureFileName) : Path.Combine(logsRoot, LogFolder, FailureFileName);
 
     /// <summary>
     /// The service's settings file, relative to its data folder: <c>settings.yaml</c> for the console, <c>config/server.yaml</c> for the Gateway,

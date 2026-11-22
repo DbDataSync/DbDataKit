@@ -5,7 +5,7 @@ using DbDataKit.Security.Acl;
 namespace DbDataKit.Hosting.Startup;
 
 /// <summary>
-/// <c>startup-failure-&lt;program&gt;.txt</c> in the shared logs folder, and the service's own logs subfolder beside it. While the server starts, the
+/// <c>startup-failure-&lt;program&gt;.txt</c> in the shared logs folder (on Linux in the service's own logs subfolder), and that subfolder. While the server starts, the
 /// file holds one line, rewritten as each step begins ("starting since 2026-11-17T09:12:03Z, step: certificate, not finished"), so a process that is
 /// killed says how far it got. A start that succeeds deletes it; a start that fails writes the full reason. Only the service's account, SYSTEM and
 /// Administrators can open it (on Linux the file is mode 0600), so one service never reads another's.
@@ -25,7 +25,7 @@ public sealed class StartupFailureFile
         LogsRoot = logsRoot;
         Service = service;
         _unreportable = unreportable;
-        FilePath = Path.Combine(logsRoot, service.FailureFileName);
+        FilePath = service.FailureFileIn(logsRoot);
         LogFolder = Path.Combine(logsRoot, service.LogFolder);
     }
 
@@ -33,7 +33,7 @@ public sealed class StartupFailureFile
 
     public SuiteService Service { get; }
 
-    /// <summary>The failure file: <c>C:\ProgramData\DbDataKit\logs\startup-failure-dbdatagateway.txt</c>.</summary>
+    /// <summary>The failure file: <c>C:\ProgramData\DbDataKit\logs\startup-failure-dbdatagateway.txt</c>, on Linux in the service's own logs folder (<see cref="SuiteService.FailureFileIn"/>).</summary>
     public string FilePath { get; }
 
     /// <summary>The service's own logs subfolder: <c>C:\ProgramData\DbDataKit\logs\dbdatagateway</c>.</summary>
@@ -95,7 +95,7 @@ public sealed class StartupFailureFile
     /// </summary>
     public static string DescribeLastStart(string logsRoot, SuiteService service)
     {
-        var path = Path.Combine(logsRoot, service.FailureFileName);
+        var path = service.FailureFileIn(logsRoot);
         if (!File.Exists(path)) return $"Startup-failure file: none ({path}): the last start finished, or the service has not started on this data folder.";
         string text;
         try

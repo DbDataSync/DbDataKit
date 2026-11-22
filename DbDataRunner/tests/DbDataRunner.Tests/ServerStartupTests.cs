@@ -34,7 +34,7 @@ public sealed class ServerStartupTests : IDisposable
 
     public ServerStartupTests() => _ = TaskHostBesideTheTests.Value;
 
-    private string FailureFile => Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Runner, _directory), SuiteServices.Runner.FailureFileName);
+    private string FailureFile => SuiteServices.Runner.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Runner, _directory));
 
     public void Dispose()
     {
