@@ -29,7 +29,7 @@ abandoned; a release is proven in a browser. How channels work is `docs/publishi
 
 ## Needs from other subjects
 
-- INSTALLER-16: console-made trust between the Workspace and a Runner.
+- INSTALLER-16: the console's key trusted by the Runner groups it manages.
 - AUTHORING-1: the operations package published from the Workspace.
 
 ## Proposed decisions
