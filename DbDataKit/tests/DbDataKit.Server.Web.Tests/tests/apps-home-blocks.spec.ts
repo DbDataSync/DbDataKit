@@ -109,9 +109,9 @@ test.beforeAll(async () => {
   const settings = path.join(gatewayDirectory, 'config', 'server.yaml')
   fs.writeFileSync(settings, [
     'schemaVersion: 2', 'tls: { mode: selfSigned, hostnames: [localhost] }', 'modules: [identity, apps]', 'definitionPollSeconds: 1',
-    `management: { enabled: true, address: 127.0.0.1, port: ${managementPort} }`,
-    `identity: { address: 127.0.0.1, port: ${homePort}, publicUrl: '${homeUrl}' }`,
-    `apps: { address: 127.0.0.1, port: ${appsPort}, home: { clientId: '__CLIENT__' } }`, '',
+    `management: { enabled: true, listen: https://127.0.0.1:${managementPort} }`,
+    `identity: { listen: https://127.0.0.1:${homePort}, publicUrl: '${homeUrl}' }`,
+    `apps: { listen: https://127.0.0.1:${appsPort}, home: { clientId: '__CLIENT__' } }`, '',
   ].join('\n'))
   const registered = run(['identity', 'client-add', '--name', 'Apps host', '--public', '--redirect', `${appsUrl}/apps/-/callback`])
   fs.writeFileSync(settings, fs.readFileSync(settings, 'utf8').replace('__CLIENT__', registered.client_id))
