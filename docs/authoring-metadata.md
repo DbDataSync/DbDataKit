@@ -72,7 +72,8 @@ and schemas of a connection (empty ones too), foreign keys and that record of wh
 
 **Refresh on request, with the difference shown.** Nothing refreshes by itself. **Refresh** on a connection or on one table reads again in the channel the
 cache says it came from; the Designer shows what changed (columns added, removed, retyped) before the cache is replaced, and the draft's check then names
-every mapping or model the change touches.
+every mapping or model the change touches. The screen makes that comparison itself, against the cache as it holds it, unsaved
+edits included; the read answers only the new entry, and nothing of the draft is sent with the request.
 
 **A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
 model's descriptor.
