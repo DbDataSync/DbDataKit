@@ -21,6 +21,7 @@ of it too (plan 28 section 6a): keep the engine there and only the host here. Do
 | `RunnerContracts.cs` (in `DbDataKit.Runner`), `RunnerSignatures.cs` (in `DbDataKit.Runner.Api`) | the .NET, kit and protocol contracts and the newer `package/1` keys (`launch.runtime`, `runtime`) a publish and staging are checked against; the signature seam (`IVersionSignatureVerifier`, not built) |
 | `RunnerState.cs`, `RunnerSettings.cs` | the modules the state is built from and how it is opened; the directory, the listen address, the channels |
 | `RunnerTaskHost.cs` (in `DbDataKit.Runner`) | finds the task host beside the program |
+| `RunnerMetadataApi.cs` (in `DbDataKit.Runner.Api`), `BuiltInPackages.cs` (in `DbDataKit.Runner`), `DbDataKit.Runner.Metadata` | the built-in package `dbdatakit-metadata` (`discover`, `describe`): its route, its manifest, its jobs; the server's targets publish it into `builtin/dbdatakit-metadata/` beside the program |
 | `RunnerService.cs` | the `service` and `cert` nouns |
 
 ## Rules

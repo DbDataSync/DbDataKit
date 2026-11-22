@@ -43,6 +43,7 @@ public sealed class RunnerHarness : IAsyncDisposable
             InstanceHeartbeat = TimeSpan.FromSeconds(1),
             Channels = channels ?? ["dev"],
             TaskHostPath = ServerBuild.TaskHost,
+            BuiltinDirectory = Path.Combine(ServerBuild.Directory, DbDataKit.Runner.BuiltInPackages.Folder),
             MaxArtifactBytes = maxArtifactBytes ?? RunnerPublishing.DefaultMaxArtifactBytes,
             Secrets = new DbDataKit.Secrets.SecretResolverChain([new DbDataKit.Secrets.EnvSecretProvider(k => k == "DBDATAKIT_SECRET_SHOP_HOOK" ? WebhookSecret : null)]),
             InstanceLeaseOverride = lease,

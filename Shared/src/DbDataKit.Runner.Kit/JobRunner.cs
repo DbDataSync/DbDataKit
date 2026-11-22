@@ -75,7 +75,7 @@ public static class JobRunner
     /// The run itself, the same over every <see cref="IRunBackend"/>: records the start, binds input, progress and slots, runs the job, classifies what it threw, and ends the run (the checkpoint moves in the
     /// transaction that finishes the run record). The log line that summarizes the run is written before the run ends, because a remote run's token stops working when it does.
     /// </summary>
-    internal static async Task<RunResult> ExecuteAsync(Type jobType, IRunBackend backend, RunSettings settings, SlotOpener? slotOpener, object? input, CancellationToken ct)
+    internal static async Task<RunResult> ExecuteAsync(Type jobType, IRunBackend backend, RunSettings settings, SlotOpener? slotOpener, object? input, CancellationToken ct, SlotRoleOpener? roleOpener = null)
     {
         CheckJobType(jobType);
         var identity = backend.Identity;
@@ -91,7 +91,7 @@ public static class JobRunner
         if (settings.DryRun) backend.Log("Information", "This is a dry run: the job reads what it reads and nothing is written or sent; the lines \"Dry run, would\" list what would have been. Progress is not saved.", RunFacade.DryRunItem);
         var binder = new ProgressBinder(backend, layout);
         context.Progress = binder;
-        BindSlots(slots, slotOpener);
+        BindSlots(slots, slotOpener, roleOpener);
         job.Bind(inputValue, progress, slots, context);
 
         TaskEnd end;
@@ -162,9 +162,10 @@ public static class JobRunner
         }
     }
 
-    private static void BindSlots(Slots slots, SlotOpener? opener)
+    private static void BindSlots(Slots slots, SlotOpener? opener, SlotRoleOpener? roleOpener)
     {
         slots.Opener = opener ?? ((slot, _, _) => throw new InvalidOperationException($"The slot '{slot}' cannot be opened: this run has no connection binding (RunnerEnvironment.SlotOpener)."));
+        slots.RoleOpener = roleOpener;
         foreach (var property in slots.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
             if (typeof(SlotBase).IsAssignableFrom(property.PropertyType) && property.GetValue(slots) is SlotBase slot) slot.Owner = slots;
         foreach (var field in slots.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
