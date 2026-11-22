@@ -9,7 +9,8 @@ connection at all. It applies to every kind of project; what a sync project chec
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
-([below](#the-built-in-package-dbdatakit-metadata)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
+([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -88,7 +89,51 @@ PostgreSQL, MySQL, MariaDB and Oracle.
 
 A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged in that channel.
 
-The Workspace waits up to 10 seconds for the answer; after that it shows the run's link and takes the answer when the run ends.
+### How a screen asks for a read
+
+A Workspace screen asks the console, and the console asks the Runner. The Workspace server only tells the console which package the project
+becomes and whether the person may read it. It never calls the Runner and never sees the login.
+
+The console has three routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
+
+| Route | What the console does |
+| --- | --- |
+| `GET .../channels?runner=&connection=` | lists the channels of the project's package on that Runner, whether each binds the connection's slot, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
+| `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
+| `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
+
+For each call, the console first asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person. The answer says
+whether the person may read the project and which package the project becomes on a Runner. The Workspace server's refusal is passed on with its own
+words. An app or a Store project is not read this way: its kind makes no single package of tasks.
+
+The slot is the one the package makes of the connection's name: lower-case, with every character other than a letter, a digit or `_` turned into `_`
+(`CRM-db` is read through the slot `crm_db`). A Build project's connection names already are slot names.
+
+The console then starts the read on the Runner as the person (`on_behalf_of`). The token it sends carries the person's roles on that Runner, so a
+person who holds only the viewer role there is refused (403, the operator role is needed). A read in `prod` goes ahead: the screen warns before it
+asks.
+
+What `POST .../read` answers:
+
+- The read finished within 10 seconds: 200, `"state": "done"`, and `cache`, the text of a `catalog-cache/2` file with that one connection, recorded as
+  read from the Runner (its name in the console) and the channel. The console checks it with the cache's strict reader first.
+- The read is still going: 202, `"state": "running"`, the run's id and `link`, the run's page in the console. The screen asks
+  `GET .../read/{run}` until the state changes.
+- The read failed: 422, `"state": "failed"`, and the Runner's reason in `error`.
+
+Example: Ana reads the table `dbo.accounts` of the connection `crm` in `dev`.
+
+```
+POST /api/workspace-catalog/ws-1/crm-to-dw/read
+{"runner": "runners-eu", "channel": "dev", "connection": "crm", "schema": "dbo", "table": "accounts"}
+
+200 {"state": "done", "run_id": "01a2...", "link": "/servers/runners-eu/runs?run=01a2...", "channel": "dev", "production": false,
+     "connection": "crm", "tables": 1, "columns": 4,
+     "cache": "schema: catalog-cache/2\ngenerated_at: '2026-11-22T10:00:04Z'\nconnections:\n  'crm':\n    engine: 'sqlserver'\n    read: {server: 'runners-eu', product: 'runner', channel: 'dev', at: '2026-11-22T10:00:04Z'}\n..."}
+```
+
+The screen compares the new entry with the cache it holds and shows the difference before it replaces the entry
+([Refresh on request](#the-catalog-cache)).
 
 ## Before anything is published: Set up for development
 
