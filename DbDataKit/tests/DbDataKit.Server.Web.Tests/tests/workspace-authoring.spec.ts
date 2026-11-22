@@ -72,6 +72,9 @@ async function storeFlow(page: Page, fake: FakeWorkspace) {
 async function syncFlow(page: Page, fake: FakeWorkspace) {
   await page.goto(`/servers/${SERVER}`)
   await makeProject(page, 'plant', 'sync', 'sync-edit')
+  // a sync draft opens on its Designer; the set's overview and the forms are the Files area's
+  await expect(page.getByTestId('wsp-page')).toHaveAttribute('data-area', 'designer')
+  await page.getByTestId('wsp-nav-files').click()
   await expect(page.getByTestId('wsp-sync-set')).toBeVisible()
   await expect(page.locator('[data-testid="wsp-sync-replication"]')).toHaveCount(1)
   await expect(page.locator('[data-testid="wsp-sync-connection"]')).toHaveCount(2)

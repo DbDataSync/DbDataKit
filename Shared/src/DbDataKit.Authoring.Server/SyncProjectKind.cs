@@ -18,7 +18,7 @@ public sealed class SyncTool(string? executable = null, TimeSpan? timeout = null
 /// The <c>sync</c> kind (plan 33 SC22a): a Sync replication set authored as files in a git workspace, in the layout Sync's own repository keeps (<c>config/replications/&lt;name&gt;/task.yaml</c>, <c>table-mappings/</c>, <c>config/connections/</c>, the
 /// <c>config/scripts/</c> and <c>libraries/</c> a replication uses), so a Sync repository on this machine is hosted in place with <c>project add</c>. The Workspace does not reference Sync (a product is not a shared library). A draft is checked in two steps:
 /// first by this class, which refuses what must never reach git (a password in a connection file, anything under <c>secrets/</c>) whatever the program says, then by <c>dbdatasync package publish --to runner --check --json</c>, which reads every file with the
-/// strict readers the engine itself uses, offline and writing nothing, and refuses what would fail at the first run (a bad schedule, a mapping with no column cache). The program runs with a cleared environment in the draft's folder, a time limit and no
+/// strict readers the engine itself uses, offline and writing nothing, and refuses what would fail at the first run (a bad schedule, a mapping with no column cache). After the program, the mappings are read against the draft's catalog cache in process (<see cref="SyncOfflineCheck"/>), as warnings. The program runs with a cleared environment in the draft's folder, a time limit and no
 /// secret store of a Sync server in reach. The same program writes the package (<see cref="ProduceAsync"/>, SC22b).
 /// </summary>
 public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
@@ -149,10 +149,12 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
         {
             try { using var document = JsonDocument.Parse(result.Output); }
             catch (JsonException) { found.Add(new("error", "DBD-WS-SYNC-FAILED", $"dbdatasync did not answer with a document (exit code {result.Exit}): {result.Error.Trim()}")); }
+            found.AddRange(SyncOfflineCheck.Check(root));
             return found;
         }
         var said = FindingsOf(root, result.Error, "DBD-WS-SYNC");
         found.AddRange(said.Count > 0 ? said : [new("error", "DBD-WS-SYNC-FAILED", $"dbdatasync stopped with exit code {result.Exit}: {result.Error.Trim()}")]);
+        found.AddRange(SyncOfflineCheck.Check(root));
         return found;
     }
 

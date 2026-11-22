@@ -163,6 +163,11 @@ too (so a picker can offer a schema that has no table yet), and its tables and v
 keys, and foreign keys with the table and columns they reference. A connection whose databases were not read (a Gateway's answer) has `databases: []` and
 tables without a database.
 
+The tables are one flat list, each naming its database and schema, beside the `databases` list that holds every schema, the empty ones included; tables
+are not nested under their databases and schemas. Every reader (Build's import, Sync's provisioning plan, the pickers) works on a list of tables, and a
+diff of the file stays one line per table; what matters is that each table knows its database, so `crm.dbo.orders` and `crm_archive.dbo.orders` are two
+entries that never merge. Unique keys are kept, since `discover` answers them and the cache records what it answers.
+
 ```yaml
 schema: catalog-cache/2
 generated_at: 2026-11-18T10:00:04Z
@@ -188,11 +193,15 @@ The strict reader (`DbDataKit.Catalog.Cache`, and its twin `catalogCache.ts` in 
 a key that would carry a row, a value or a statistic of values (`rows`, `sample`, `min`, `distinct`...) or a login is refused by name, and a value that
 looks like a password, a connection string, an address with a login or a secret reference is refused wherever it stands. A table names a listed database
 and one of its schemas when the connection lists databases. A file of `catalog-cache/1` is refused naming the file: it is deleted and each connection
-refreshed, which writes it again as format 2.
+refreshed, which writes it again as format 2. It is never converted, and a refresh of one connection is refused too while the file is format 1, so
+nothing is dropped silently: Ana opens a draft with a format-1 cache of `crm` and `dw` and presses Refresh on `crm`; the refresh says the file is
+format 1 and to delete it, and she deletes it and refreshes both. The draft's check, the Catalog tab, `provisioning plan --from-cache` and
+`import --from-cache` refuse it the same way.
 
 **Refresh on request, with the difference shown.** Nothing refreshes by itself. **Refresh** on a connection or on one table reads again in the channel the
 cache says it came from; the Designer shows what changed (columns added, removed, retyped) before the cache is replaced, and the draft's check then names
-every mapping or model the change touches.
+every mapping or model the change touches. The screen makes that comparison itself, against the cache as it holds it, unsaved
+edits included; the read answers only the new entry, and nothing of the draft is sent with the request.
 
 **A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
 model's descriptor.
@@ -282,6 +291,22 @@ for dev**.
 | types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
+
+**The offline findings.** The Workspace runs the offline checks in its own process when it checks a draft, after Sync's own check of the files. It
+reads every table mapping against `catalog-cache.yaml` and the connection files, and reports each finding on the mapping's file and line. Example: the
+mapping `orders` maps the column `shipped_on`, and the cache's `crm.dbo.orders` has no such column. The Check tab then shows "The source column
+'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml (read from runners-eu, channel dev at 2026-11-18T10:00:00Z)" on that line of
+`config/replications/orders/table-mappings/orders.yaml`. Refresh the connection, or correct the mapping.
+
+What is left unchecked offline, and what the check says:
+
+- The draft has no `catalog-cache.yaml`: the check says so once and does not check the mappings against the databases' shape.
+- The cache has errors: they are reported with the file, and the mappings are not checked against it.
+- A connection has no entry in the cache: the check names the connection once and leaves the mappings on it unchecked.
+- A source filter the lexer of the source's dialect cannot read (a string that is not closed, a `;`, a subquery, parentheses that do not match): the
+  filter is reported as not checked offline. A filter that can be read has each name that stands for a column compared with the cached table.
+- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types and keys are compared once the cache
+  holds it.
 
 **The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
 

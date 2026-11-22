@@ -39,7 +39,7 @@ export const pagesUnder: Record<string, Record<string, PageUnder>> = {
     '*': { under: '/', from: 'any address the runner\'s screens do not know (it goes to Tasks)' },
   },
   workspace: {
-    '/:project/:id': { under: '/', from: 'Workspaces (a workspace of a project)' },
+    '/:project/:id/*': { under: '/', from: 'Workspaces (a workspace of a project: its Files and its Designer)' },
     '*': { under: '/', from: 'any address the Workspace\'s screens do not know (it goes to Workspaces)' },
   },
   identityHome: {
