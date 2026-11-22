@@ -11,38 +11,52 @@ client and on Server.
 
 Every program of the suite needs the .NET 10 runtime installed on the machine; the four services need ASP.NET Core with it.
 
+What an administrator sets up and checks so that each service's files stay its own is in [install-hardening.md](install-hardening.md).
+
 ## A service owns its data
 
 The install only registers the service and creates its top folder with its access list. Everything inside (subfolders, keys, certificate, state, the
 configuration repository, logs) is created at first start by the service's own account. An admin command that needs a service's data goes through the
-service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped. The install gives the top folder the Administrators group as owner on every Windows edition (a workstation would otherwise make the administrator who ran it the owner) and grants the service's account Modify on it.
+service's local API (a named pipe or Unix socket); opening the files directly is a recovery mode, allowed only while the service is stopped.
+
+On Windows, `service install` (which the MSI, `install.ps1 -InstallService` and the `dbdatakit-full` Scoop package run) creates the top folder, gives
+it the Administrators group as owner and grants the service's account Modify on it, with inheritance from the parent cut. Without the explicit owner,
+a Windows client would make the administrator who ran the install the owner, and Windows Server the Administrators group. The `logs` folder beside the
+top folders is made by the first service that starts ("Logs and the startup-failure file").
+
+Example: right after `dbdatagateway service install`, `C:\ProgramData\DbDataKit\gateway` is empty and owned by `BUILTIN\Administrators`. At its first
+start the Gateway writes `config\server.yaml` (only `schemaVersion: 2`), its keys, its certificate and its state there, each owned by
+`NT SERVICE\DbDataGateway`.
+
+On Linux, `install.sh --system` makes a system user for the service, named as the program (`dbdatagateway`), in the group `dbdatakit`, and writes the
+service's unit to `/etc/systemd/system/<program>.service`. The unit runs as that user. At each start systemd makes the service's data folder
+(`StateDirectory=`, `/var/lib/dbdatakit/gateway`) and logs folder (`LogsDirectory=`, `/var/log/dbdatakit/dbdatagateway`), owned by that user with mode
+`0700`. The install itself makes nothing under `/var/lib/dbdatakit` or `/var/log/dbdatakit`. Running `install.sh --system` again changes no user,
+group or unit that is already right.
+
+```
+$ sudo ./install.sh --system
+Installing DbDataGateway 2026.11.21.1200 to /opt/dbdatagateway
+Made the system group dbdatakit.
+Made the system user dbdatagateway in the group dbdatakit.
+Wrote the unit /etc/systemd/system/dbdatagateway.service: the service runs as dbdatagateway.
+```
 
 Example: `dbdatagateway secret set warehouse` with the service running asks the service to store the value; no file in its folder is touched by the
 administrator's account. With the service stopped, `secret set --recovery` writes the file and gives it the service's account as owner.
 
 ## The Gateway's configuration repository
 
-The Gateway keeps its settings in a git repository, the `config` folder of its data folder. Git refuses a repository whose folder another account owns,
-so a folder an elevated install made on a Windows client (owned by the administrator who ran it) stopped the service at start with LibGit2Sharp's
-`repository path '.../gateway/config' is not owned by current user`, although the folder's access list gave the service's account Modify. This is built
-today, before the services create their own data (above):
+The Gateway keeps its settings in a git repository, the `config` folder of its data folder, which it makes at its first start. Git refuses a repository
+whose folder another account owns. When git refuses `config` for its owner, the Gateway does not start: the start-failure file names the folder, its
+owner, the account the Gateway runs as and the fix. This happens when another account made the folder, for example an administrator's command run
+before the service first started, or a folder copied from another machine.
 
-- When git refuses the repository for its owner and the service's account can write both the folder and its `.git`, the Gateway allows that one folder
-  the way git allows one, a `safe.directory` entry in git settings of the Gateway's own, and opens it. The ownership check stays on: no other folder is
-  allowed, and it is never switched off for the process. The Gateway's git settings include the account's earlier global ones, so a `safe.directory`
-  an administrator already set there for the account (`*` among them) still applies: that was the machine's choice. Those settings are the file
-  `<data>/git/.gitconfig` in the Gateway's data folder (`C:\ProgramData\DbDataKit\gateway\git\.gitconfig`), written at start and made the process's
-  global git settings. The file and the allow list are temporary: once the services create their own data folders (above), the service owns `config`,
-  git never refuses it, and the Gateway no longer writes the file; the change that makes the services create their folders removes both.
-- When the account cannot write the folder, the start fails with a message that names the folder, its owner, the account and the fix, written to the
-  start-failure file like any failed start.
-
-Example: on a workstation, `scoop install -g dbdatakit-full` as `CONTOSO\ada` leaves `C:\ProgramData\DbDataKit\gateway\config` owned by `CONTOSO\ada`;
-`NT SERVICE\DbDataGateway` can write it, so the service starts with that one folder allowed. Had the
-folder's access list not let the service write, the start-failure file would say: `The configuration repository 'C:\ProgramData\DbDataKit\gateway\config'
-cannot be opened: '...\config' is owned by CONTOSO\ada, and NT SERVICE\DbDataGateway, the account this runs as, cannot write to it, so git refuses the
-repository. As an administrator, make NT SERVICE\DbDataGateway the owner of the folder (icacls "...\config" /setowner "NT SERVICE\DbDataGateway" /T /C)
-or give it Modify access to the folder, then start it again.`
+Example: `C:\ProgramData\DbDataKit\gateway\config` is owned by `CONTOSO\ada`. The start-failure file says: `The configuration repository
+'C:\ProgramData\DbDataKit\gateway\config' cannot be opened: 'C:\ProgramData\DbDataKit\gateway\config' is owned by CONTOSO\ada, and
+NT SERVICE\DbDataGateway, the account this runs as, does not own it, so git refuses the repository. As an administrator, make NT SERVICE\DbDataGateway
+the owner of the folder and what is in it (icacls "C:\ProgramData\DbDataKit\gateway\config" /setowner "NT SERVICE\DbDataGateway" /T /C), then start
+it again.`
 
 ## One startup sequence
 

@@ -20,7 +20,7 @@ public static class GatewayConfigFile
     /// <summary>The settings file of earlier releases; finding one stops the server with a message that names it.</summary>
     public const string LegacyFileName = "appsettings.json";
 
-    /// <summary>What <c>service install</c> writes when the data directory has no settings file: only the opt-in to the current defaults.</summary>
+    /// <summary>What the server writes at its first start on a data directory with no <c>config</c> folder: only the opt-in to the current defaults.</summary>
     public const string Starter = "schemaVersion: 2\n";
 
     public static string DirectoryIn(string dataDirectory) => Path.Combine(dataDirectory, DirectoryName);

@@ -10,88 +10,44 @@ public class GitRepositoryOwnershipTests
     private static LibGit2SharpException NotOwned(string path) => new($"repository path '{path.Replace('\\', '/')}' is not owned by current user");
 
     [Fact]
-    public void A_repository_another_account_owns_and_this_one_can_write_is_opened_with_only_its_folder_allowed()
+    public void A_repository_another_account_owns_fails_naming_the_folder_its_owner_the_account_and_the_fix()
     {
         using var repo = new Repo();
-        var allowed = new List<string>();
         var opens = 0;
-        var ownership = new GitRepositoryOwnership(Path.Combine(repo.Root, "home"))
+        var ownership = new GitRepositoryOwnership
         {
-            CanWrite = _ => true,
             OwnerOf = _ => @"CONTOSO\ada",
-            Account = @"NT SERVICE\dbdatagateway",
-            Allow = allowed.AddRange,
+            Account = @"NT SERVICE\DbDataGateway",
         };
 
-        var service = ownership.Open(repo.Root, root =>
-        {
-            // refused until its folder is allowed, as libgit2 does for a folder another account owns
-            opens++;
-            if (!allowed.Contains(GitRepositoryOwnership.SafeDirectoryPath(root))) throw NotOwned(root);
-            return new GitCommitService(root);
-        });
+        var error = Assert.Throws<GitRepositoryOwnershipException>(() => ownership.Open(repo.Root, root => { opens++; throw NotOwned(root); }));
 
-        Assert.Equal(repo.Root, service.RepositoryRoot);
-        Assert.Equal(2, opens);
-        Assert.Equal([GitRepositoryOwnership.SafeDirectoryPath(repo.Root)], allowed.Distinct());   // that folder and nothing else
-    }
-
-    [Fact]
-    public void A_repository_this_account_cannot_write_fails_naming_the_folder_its_owner_the_account_and_the_fix()
-    {
-        using var repo = new Repo();
-        var allowed = new List<string>();
-        var gitFolder = Path.Combine(repo.Root, ".git");
-        var ownership = new GitRepositoryOwnership(Path.Combine(repo.Root, "home"))
-        {
-            CanWrite = folder => folder != gitFolder,
-            OwnerOf = _ => @"CONTOSO\ada",
-            Account = @"NT SERVICE\dbdatagateway",
-            Allow = allowed.AddRange,
-        };
-
-        var error = Assert.Throws<GitRepositoryOwnershipException>(() => ownership.Open(repo.Root, root => throw NotOwned(root)));
-
+        Assert.Equal(1, opens);                                               // nothing is allowed and nothing is tried again
         Assert.Contains($"'{repo.Root}'", error.Message);
-        Assert.Contains($"'{gitFolder}' is owned by CONTOSO\\ada", error.Message);
-        Assert.Contains(@"NT SERVICE\dbdatagateway, the account this runs as, cannot write to it", error.Message);
-        Assert.Contains(OperatingSystem.IsWindows() ? "/setowner \"NT SERVICE\\dbdatagateway\"" : "chown -R", error.Message);
+        Assert.Contains("is owned by CONTOSO\\ada", error.Message);
+        Assert.Contains(@"NT SERVICE\DbDataGateway, the account this runs as, does not own it", error.Message);
+        Assert.Contains(OperatingSystem.IsWindows() ? "/setowner \"NT SERVICE\\DbDataGateway\"" : "chown -R", error.Message);
         Assert.IsType<LibGit2SharpException>(error.InnerException);
-        Assert.Empty(allowed);                                                // nothing is allowed for a folder it cannot write
     }
 
     [Fact]
-    public void Another_error_of_git_is_not_taken_for_an_owner_and_allows_nothing()
+    public void Another_error_of_git_is_not_taken_for_an_owner()
     {
         using var repo = new Repo();
-        var allowed = new List<string>();
-        var ownership = new GitRepositoryOwnership(Path.Combine(repo.Root, "home")) { CanWrite = _ => true, Allow = allowed.AddRange };
+        var ownership = new GitRepositoryOwnership();
 
         var error = Assert.Throws<LibGit2SharpException>(() => ownership.Open(repo.Root, _ => throw new LibGit2SharpException("the index is locked")));
 
         Assert.Equal("the index is locked", error.Message);
-        Assert.Empty(allowed);
     }
 
     [Fact]
-    public void The_path_git_refused_is_read_from_its_message_and_allowed_beside_the_folder()
+    public void The_path_git_refused_is_read_from_its_message()
     {
         Assert.Equal("C:/ProgramData/DbDataKit/gateway/config",
             GitRepositoryOwnership.RefusedPath(new LibGit2SharpException("repository path 'C:/ProgramData/DbDataKit/gateway/config' is not owned by current user")));
         Assert.Null(GitRepositoryOwnership.RefusedPath(new LibGit2SharpException("the index is locked")));
         Assert.True(GitRepositoryOwnership.IsNotOwned(new InvalidOperationException("wrapped", NotOwned("/srv/config"))));
-    }
-
-    [Fact]
-    public void The_settings_file_includes_the_earlier_global_file_first_and_lists_each_allowed_folder()
-    {
-        var text = GitSafeDirectory.Text(@"C:\Users\ada\.gitconfig", ["C:/ProgramData/DbDataKit/gateway/config"]);
-
-        var include = text.IndexOf("[include]\n\tpath = \"C:/Users/ada/.gitconfig\"", StringComparison.Ordinal);
-        var safe = text.IndexOf("[safe]\n\tdirectory = \"C:/ProgramData/DbDataKit/gateway/config\"", StringComparison.Ordinal);
-        Assert.True(include >= 0 && safe > include, text);                    // an empty entry in the earlier file cannot clear the folder
-        Assert.DoesNotContain("directory = \"*\"", text);
-        Assert.DoesNotContain("[include]", GitSafeDirectory.Text(null, ["/srv/config"]));
     }
 }
 
@@ -103,23 +59,21 @@ public sealed class Libgit2GlobalSettings
 }
 
 [Collection(Libgit2GlobalSettings.Name)]
-public class GitSafeDirectoryLibgit2Tests
+public class GitRepositoryOwnershipLibgit2Tests
 {
     /// <summary>
-    /// libgit2 itself: a repository whose folder another user owns is refused, opened once allowed, and a second such repository stays refused. Needs a
-    /// second owner, which only root (or passwordless sudo, as on the hosted Linux runner) can give; Windows needs the restore privilege for it and is
-    /// checked on a workstation. The global, XDG, system and ProgramData git settings point at an empty folder while it runs, so an allow list of the
-    /// machine (a <c>safe.directory</c> in the runner image's git settings) cannot open the folder the test expects refused.
+    /// libgit2 itself: a repository whose folder another user owns is refused, and the open fails in words; nothing is allowed, so a second open is
+    /// refused too. Needs a second owner, which only root (or passwordless sudo, as on the hosted Linux runner) can give; Windows needs the restore
+    /// privilege for it and is checked by the Windows install test. The global, XDG, system and ProgramData git settings point at an empty folder while
+    /// it runs, so an allow list of the machine (a <c>safe.directory</c> in the runner image's git settings) cannot open the folder.
     /// </summary>
     [Fact]
-    public void Libgit2_opens_the_allowed_folder_another_user_owns_and_still_refuses_any_other()
+    public void Libgit2_refuses_a_folder_another_user_owns_and_the_open_says_so()
     {
         if (OperatingSystem.IsWindows()) Assert.Skip("giving a folder to another owner needs the restore privilege on Windows");
         if (!CanChown()) Assert.Skip("needs root or passwordless sudo to give a folder to another user");
 
-        using var allowedRepo = new Repo();
-        using var otherRepo = new Repo();
-        var home = Directory.CreateTempSubdirectory("dbdata-git-home-").FullName;
+        using var repo = new Repo();
         var empty = Directory.CreateTempSubdirectory("dbdata-git-empty-").FullName;
         // the levels libgit2 keeps a search path for (the repository's own and the worktree's have none)
         ConfigurationLevel[] levels = [ConfigurationLevel.Global, ConfigurationLevel.Xdg, ConfigurationLevel.System, ConfigurationLevel.ProgramData];
@@ -127,19 +81,18 @@ public class GitSafeDirectoryLibgit2Tests
         try
         {
             foreach (var level in levels) GlobalSettings.SetConfigSearchPaths(level, empty);
-            foreach (var root in new[] { allowedRepo.Root, otherRepo.Root }) GiveAway(root);
-            Assert.True(GitRepositoryOwnership.IsNotOwned(Assert.ThrowsAny<LibGit2SharpException>(() => new Repository(allowedRepo.Root))));
+            GiveAway(repo.Root);
 
-            var service = new GitRepositoryOwnership(home).Open(allowedRepo.Root);
+            var error = Assert.Throws<GitRepositoryOwnershipException>(() => new GitRepositoryOwnership().Open(repo.Root));
 
-            Assert.Empty(service.GetHistory(""));
-            using (new Repository(allowedRepo.Root)) { }
-            Assert.True(GitRepositoryOwnership.IsNotOwned(Assert.ThrowsAny<LibGit2SharpException>(() => new Repository(otherRepo.Root))));
+            Assert.Contains($"'{repo.Root}'", error.Message);
+            Assert.Contains("is owned by", error.Message);
+            Assert.True(GitRepositoryOwnership.IsNotOwned(Assert.ThrowsAny<LibGit2SharpException>(() => new Repository(repo.Root))));
         }
         finally
         {
             foreach (var (level, paths) in saved) GlobalSettings.SetConfigSearchPaths(level, paths);
-            foreach (var root in new[] { allowedRepo.Root, otherRepo.Root }) TakeBack(root);
+            TakeBack(repo.Root);
         }
     }
 

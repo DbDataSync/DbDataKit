@@ -449,10 +449,17 @@ jobs:
   suite-install-windows:
     # The whole single-server install on a real Windows machine (plan 33 SC14), from this dry run's packages: Scoop installs the dbdatakit-full manifest, every member's service starts and answers
     # its health check, the console lists each as ready, an update and an uninstall keep their promises (dist/tests/suite-scoop-e2e.ps1). Written without a Windows machine: its first run is its proof.
+    # Two legs: `server`, the hosted runner as it is (Windows Server: an elevated administrator's new objects are owned by the Administrators group), and
+    # `workstation`, with the owner a Windows client gives them (the user who ran the install; the script's -WorkstationOwner).
     if: ${{ inputs.dry_run && !cancelled() && needs.verify.result == 'success' }}
     needs: [guard, verify]
     runs-on: windows-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        owner: [server, workstation]
+    name: suite-install-windows (${{ matrix.owner }})
     steps:
       - uses: actions/checkout@v7
       - name: The .NET 10 runtime for every account (the services do not read the runner's per-user install)
@@ -468,9 +475,32 @@ jobs:
           path: release
       - name: Install, repeat, update and uninstall the suite with Scoop
         shell: pwsh
-        run: ./dist/tests/suite-scoop-e2e.ps1 -Packages "$PWD\release" -Version "${{ needs.guard.outputs.version }}"
+        run: ./dist/tests/suite-scoop-e2e.ps1 -Packages "$PWD\release" -Version "${{ needs.guard.outputs.version }}" -WorkstationOwner:${{ matrix.owner == 'workstation' && '$true' || '$false' }}
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: suite-install-logs
+          name: suite-install-logs-${{ matrix.owner }}
           path: ${{ runner.temp }}/suite-scoop/logs/*.txt
+
+  suite-install-linux:
+    # The four services on a real Linux machine with systemd, from this dry run's packages: each product's install.sh --system makes the service's system
+    # user in the group dbdatakit and its unit, a second run changes nothing, each service starts as its own user and owns everything in its folders, and a
+    # failed start leaves its reason in /var/log/dbdatakit/<program>/ (dist/tests/suite-systemd-e2e.sh).
+    if: ${{ inputs.dry_run && !cancelled() && needs.verify.result == 'success' }}
+    needs: [guard, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: The .NET 10 runtime where the services find it (the units hide /home, so the runner's own install is not enough)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          sudo bash "$RUNNER_TEMP/dotnet-install.sh" --runtime aspnetcore --channel 10.0 --install-dir /usr/share/dotnet
+          sudo mkdir -p /etc/dotnet && echo /usr/share/dotnet | sudo tee /etc/dotnet/install_location > /dev/null
+          ls /usr/share/dotnet/shared/Microsoft.AspNetCore.App | grep -q '^10\.' || { echo "::error::the ASP.NET Core 10 runtime was not installed"; exit 1; }
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release
+      - name: Install, start and check the four services with install.sh --system
+        run: dist/tests/suite-systemd-e2e.sh "$PWD/release" "${{ needs.guard.outputs.version }}"
