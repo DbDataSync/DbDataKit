@@ -92,13 +92,8 @@ test.describe.serial('adding a server by the command the console makes', () => {
     runner.stdout!.on('data', (chunk) => { runnerOutput += chunk })
     runner.stderr!.on('data', (chunk) => { runnerOutput += chunk })
     await expect.poll(() => answers(`${runnerUrl}/health/live`), { timeout: 90_000, message: `the Runner did not start:\n${runnerOutput}` }).toBe(true)
-<<<<<<< HEAD
-    // the join step comes after the ports step, so the listener answers a moment before the request is spent
-    await expect.poll(() => fs.existsSync(path.join(runnerDirectory, 'join-request.yaml')), { timeout: 30_000, message: `the join request is still there:\n${runnerOutput}` }).toBe(false)
-=======
     // /health/live answers once the listener is up (the Ports step); the request is deleted at the end of the Join step, after the console's callback, so wait for it
     await expect.poll(() => fs.existsSync(path.join(runnerDirectory, 'join-request.yaml')), { timeout: 60_000, message: `the join request is still there:\n${runnerOutput}` }).toBe(false)
->>>>>>> origin/main
 
     // the token is spent: it leaves the waiting list without a reload
     await expect(waitingRows).toHaveCount(0, { timeout: 30_000 })

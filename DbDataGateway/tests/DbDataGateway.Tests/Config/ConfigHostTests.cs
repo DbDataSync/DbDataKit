@@ -324,13 +324,8 @@ public sealed class ConfigStartupTests
         {
             File.SetUnixFileMode(dir, (UnixFileMode)0x1FF);
         }
-<<<<<<< HEAD
-        string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
-        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir));
-=======
         string[] run = ["server", "run", $"--Gateway:DataDirectory={dir}", "--Gateway:Listen=http://127.0.0.1:0", "--Gateway:Public:Listen=https://127.0.0.1:0", "--Gateway:Tls:Mode=None", "--Gateway:Management:Enabled=false"];
-        var file = Path.Combine(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir), SuiteServices.Gateway.FailureFileName);
->>>>>>> origin/main
+        var file = SuiteServices.Gateway.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Gateway, dir));
 
         var error = new StringWriter();
         Assert.Equal(1, await Cli.RunAsync(run, new DbDataKit.Cli.CliContext(TextWriter.Null, error, TextReader.Null)));
