@@ -20,7 +20,7 @@ $db = Join-Path $tmp 'interop.duckdb'
 & $Python (Join-Path $PSScriptRoot 'seed.py') $db
 
 $env:DBDATAKIT_DATA_GATEWAY = $tmp
-$env:DBDATAKIT_Gateway__Listen__Port = "$Port"
+$env:DBDATAKIT_Gateway__Listen = "https://127.0.0.1:$Port"
 $env:DBDATAKIT_Gateway__DataSources__duck__Provider = 'duckdb'
 $env:DBDATAKIT_Gateway__DataSources__duck__ConnectionString = "Data Source=$db"
 $env:DBDATAKIT_Gateway__DataSources__duck__AllowWrites = 'true'

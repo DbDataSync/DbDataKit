@@ -29,7 +29,7 @@ public static partial class StartupPorts
     }
 
     /// <summary>
-    /// The ports step of a server whose address was resolved by <see cref="ListenPorts.Resolve"/>: fails as <see cref="StartupStepException.NoFreePort"/>
+    /// The ports step of a server whose address was resolved by <c>ListenPorts.Resolve</c>: fails as <see cref="StartupStepException.NoFreePort"/>
     /// when no port of the sub-block could be chosen; otherwise runs <paramref name="start"/> as <see cref="BindAsync(StartupContext, Func{CancellationToken, Task}, IEnumerable{int}, CancellationToken)"/>
     /// does, and once the server listens on a port it chose, writes that port to its settings file (<see cref="ListenPorts.Pin"/>), so the next start
     /// listens on the same one. <paramref name="otherPorts"/> are the server's other listeners (the console's announce port), named when one cannot be bound.
@@ -38,7 +38,7 @@ public static partial class StartupPorts
         CancellationToken cancellationToken = default)
     {
         if (listen.Failure is { } failure) throw failure;
-        await context.BindAsync(start, [listen.Port, .. otherPorts ?? []], cancellationToken).ConfigureAwait(false);
+        await context.BindAsync(start, [.. listen.Ports, .. otherPorts ?? []], cancellationToken).ConfigureAwait(false);
         if (listen.Source != ListenSource.Chosen) return;
         try
         {

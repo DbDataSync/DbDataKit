@@ -49,18 +49,16 @@ public sealed class GatewayStoreModule(IOptionsMonitor<GatewayOptions> options, 
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = ["--hostBuilder:reloadConfigOnChange=false"], ContentRootPath = AppContext.BaseDirectory });
         builder.Logging.ClearProviders();
-        var inProcess = ModuleListener.Configure(builder, current.Store.Address, current.Store.Port, (_, _) => certificate.Current);
+        var inProcess = ModuleListener.Configure(builder, current.Store.Listen, (_, _) => certificate.Current);
         var app = builder.Build();
         app.MapGet("/health/live", () => Results.Text("Healthy"));
         Map(app, ApiOf(options, state, secrets, models, servingCache));
         await app.StartAsync(cancellationToken);
         _app = app;
         _draining = false;
-        ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = Name, Server = server, StripPrefix = PublicPrefix });
+        ModuleListener.Mount(mounts, inProcess, server => new PublicMount { Name = Name, Server = server, Prefix = PublicPaths.Of(current, GatewayModules.Store) });
     }
 
-    /// <summary>The path prefix of the module on the public listener.</summary>
-    public const string PublicPrefix = "/store";
 
     /// <summary>The group's store for this instance: what the module's listener and the apps host's data calls answer with.</summary>
     /// <remarks>With <paramref name="cache"/>, a write to the data clears what this Gateway's result cache holds of the entity (plan 24a UC13, the Store's share): the entity's table is named as lineage names it (<c>GatewayLineageGraph.DatasetIdentity</c>),

@@ -31,12 +31,13 @@ public sealed class ManagementDefaultTests : IDisposable
         http.SendAsync(new HttpRequestMessage(HttpMethod.Get, uri) { Version = HttpVersion.Version20, VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher });
 
     [Fact]
-    public void The_default_options_have_the_management_api_on_for_this_machine_on_8816()
+    public void The_default_options_have_the_management_api_on_with_no_address_until_the_first_start_chooses_one()
     {
         var options = new GatewayOptions();
         Assert.True(options.Management.Enabled);
-        Assert.Equal("127.0.0.1", options.Management.Address);
-        Assert.Equal(8816, options.Management.Port);
+        Assert.Empty(options.Management.Listen);
+        Assert.Empty(options.Listen);
+        Assert.Empty(options.Public.Listen);
         Assert.Equal(TlsMode.SelfSigned, options.Tls.Mode);
         Assert.False(options.Management.LocalChannel);
     }
@@ -46,7 +47,7 @@ public sealed class ManagementDefaultTests : IDisposable
     {
         // only the ports are chosen (the Flight port and a free management port, so a parallel test cannot hold 8816); nothing says the management API is on
         var managementPort = FreePort();
-        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", $"--Gateway:Management:Port={managementPort}"]);
+        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}"]);
         await app.StartAsync();
         var flight = new Uri(app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First(a => !a.Contains($":{managementPort}")));
         var management = new Uri($"https://127.0.0.1:{managementPort}");
@@ -64,7 +65,7 @@ public sealed class ManagementDefaultTests : IDisposable
     public async Task With_management_disabled_nothing_listens_on_the_management_port()
     {
         var managementPort = FreePort();
-        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0", "--Gateway:Management:Enabled=false", $"--Gateway:Management:Port={managementPort}"]);
+        await using var app = GatewayHost.Build([$"--Gateway:DataDirectory={dataDirectory}", "--Gateway:Listen=https://127.0.0.1:0", "--Gateway:Management:Enabled=false", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}"]);
         await app.StartAsync();
         var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses;
         Assert.DoesNotContain(addresses, a => a.Contains($":{managementPort}"));
@@ -76,7 +77,7 @@ public sealed class ManagementDefaultTests : IDisposable
     [Fact]
     public void Tls_none_with_the_management_api_on_by_default_is_refused_naming_both_fixes()
     {
-        using var file = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: { address: 127.0.0.1 }\n"));   // says nothing about management
+        using var file = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: http://127.0.0.1:9000\n"));   // says nothing about management
         var load = ConfigTestSupport.LoadDirectory(file.Directory);
         Assert.False(load.Ok);
         var text = ConfigTestSupport.Format(load);
@@ -84,7 +85,7 @@ public sealed class ManagementDefaultTests : IDisposable
         Assert.Contains("SelfSigned, File or Store", text);
         Assert.Contains("management.enabled: false", text);
 
-        using var off = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: { address: 127.0.0.1 }\nmanagement: { enabled: false }\n"));
+        using var off = TempConfig.Create(("server.yaml", "tls: { mode: none }\nlisten: http://127.0.0.1:9000\nmanagement: { enabled: false }\n"));
         Assert.True(ConfigTestSupport.LoadDirectory(off.Directory).Ok);
     }
 

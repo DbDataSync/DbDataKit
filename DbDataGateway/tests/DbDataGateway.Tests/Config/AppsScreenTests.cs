@@ -49,8 +49,8 @@ public sealed class AppsScreenTests : IAsyncLifetime
         {
             managementPort = FreePort();
             app = GatewayHost.Build([
-                $"--Gateway:DataDirectory={DataDirectory}", "--Gateway:Listen:Address=127.0.0.1", "--Gateway:Listen:Port=0",
-                "--Gateway:Management:Enabled=true", "--Gateway:Management:Address=127.0.0.1", $"--Gateway:Management:Port={managementPort}", "--Gateway:Management:LocalChannel=false",
+                $"--Gateway:DataDirectory={DataDirectory}", "--Gateway:Listen=https://127.0.0.1:0",
+                "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{managementPort}", "--Gateway:Management:LocalChannel=false",
             ]);
             try { await app.StartAsync(); break; }
             catch (IOException ex) when (attempt < 5 && ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase)) { await app.DisposeAsync(); }

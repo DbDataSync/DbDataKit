@@ -127,16 +127,36 @@ listen: https://127.0.0.1:7841
 
 `health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
 `dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
-own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise. The Gateway's listeners still use the fixed ports 8815 (Flight SQL), 8816 (management) and 8817 (the public listener)
-today; the paragraphs below describe how they will take theirs from 7820 to 7839.
+own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise.
 
 Example: on a workstation with WSL, 7840 is inside a reserved range; the Runner takes 7841, pins it, and the console's Servers page shows
 `https://host:7841`.
 
-**The Gateway's listeners are consistent, not fixed.** Every listener of a Gateway (the public HTTPS listener, Flight SQL, management, and later the
-PostgreSQL wire listener) takes a free value of the Gateway's sub-block at the first start of its group's first instance, and pins it. No listener is
-special: Flight SQL has no fixed default, because an HTTPS address serving apps has the same need (a client set once keeps working), and both get it the
-same way. When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
+**The `listen` setting.** Every service and every listener of the Gateway has one setting, `listen`: an address written the way Kestrel writes it, with its
+scheme, address and port, or a list of addresses.
+
+```yaml
+listen: https://127.0.0.1:7841                       # one address
+listen: [https://0.0.0.0:7841, https://127.0.0.1:9443]   # a list: the server listens on each
+```
+
+- The address is `https://0.0.0.0:7841`, `https://127.0.0.1:9443`, `https://[::1]:9443`, `https://localhost:7800` or `https://*:7841`. A bare port, a
+  host name with no port or an address with a path is refused, naming the file and the setting.
+- `https` uses the service's certificate. The Gateway's Flight SQL listener is the one that takes `http`, and only when `tls.mode` is `None`.
+- A list and a single address mean the same thing in every file, on the command line (`--listen https://127.0.0.1:7841;https://127.0.0.1:9443`) and in an
+  environment variable. The first address of a list is the one a server reports to the console.
+- A file with `port` or `address` in place of `listen` is refused naming the file and the setting; there is no other spelling.
+
+**The Gateway's listeners.** A Gateway has three listeners by default: the public HTTPS listener (`public.listen`), Flight SQL (`listen`) and the management
+API (`management.listen`, on the loopback address). None has a fixed port. A listener with no `listen` takes the first free port of the Gateway's block, 7820 to
+7839, at the first start, in that order, and the Gateway writes it to `config/server.yaml` once it listens on it. A Gateway started with no settings therefore listens
+on 7820, 7821 and 7822, or the next free ports, and on the same three after every restart. A module (`apps`, `identity`, `store`, `views`, `feeds`, `mcp`)
+has a `listen` of its own only when the administrator writes one (`apps.listen`, `rest.listen` for feeds); without it the module answers on the public listener.
+
+The ports step of the start checks every address of every listener. A port that another program holds, or that Windows excludes, fails the step, and the failure file
+names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815` in the image).
+
+When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
 configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a
 group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
 

@@ -26,8 +26,7 @@ public sealed class GatewayTelemetryTests : IAsyncLifetime
         _capture = TelemetryCapture.Start();
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:Listen:Address"] = "127.0.0.1",
-            ["Gateway:Listen:Port"] = "0",
+            ["Gateway:Listen"] = "http://127.0.0.1:0",
             ["Gateway:Tls:Mode"] = "None",
             ["Gateway:Management:Enabled"] = "false",
             ["Gateway:DataDirectory"] = _dir,

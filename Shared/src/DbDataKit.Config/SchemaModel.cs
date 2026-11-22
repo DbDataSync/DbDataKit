@@ -44,6 +44,7 @@ public sealed class PropertySchema
     public double? Max { get; init; }
     public string? Pattern { get; init; }
     public string? Description { get; init; }
+    public bool ScalarOrList { get; init; }
     public bool Secret { get; init; }
     public string? DeprecatedMessage { get; init; }
     public string? DeprecatedSince { get; init; }
@@ -171,6 +172,7 @@ public static class SchemaModel
                 Max = key != null && !double.IsNaN(key.Max) ? key.Max : null,
                 Pattern = key?.Pattern,
                 Description = key?.Description,
+                ScalarOrList = key?.ScalarOrList ?? false,
                 Secret = p.GetCustomAttribute<SecretAttribute>() != null,
                 DeprecatedMessage = dep?.Message,
                 DeprecatedSince = dep?.Since,

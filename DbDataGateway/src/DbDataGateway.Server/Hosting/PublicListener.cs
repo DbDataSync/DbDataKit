@@ -13,8 +13,8 @@ namespace DbDataGateway.Server.Hosting;
 
 /// <summary>
 /// One module on the public listener: the web application the module built (reached through its <see cref="InProcessServer"/>, not through a port) and which requests are its.
-/// A module with a <see cref="StripPrefix"/> (<c>/store</c>) answers the paths under it as if they began at the root, with the prefix in <c>PathBase</c>; a module with <see cref="Claims"/> (the identity home, the apps host)
-/// keeps the paths it already has and says itself which requests are its.
+/// A module with a <see cref="Prefix"/> (<c>/store</c>, set by the administrator) answers the paths under it as if they began at the root, with the prefix in <c>PathBase</c>, or at the path <see cref="Inner"/> makes of them (the identity home);
+/// a module with <see cref="Claims"/> (the apps host) says itself which requests are its and takes the path as it is.
 /// </summary>
 public sealed class PublicMount
 {
@@ -22,8 +22,11 @@ public sealed class PublicMount
 
     public required InProcessServer Server { get; init; }
 
-    /// <summary>The path prefix the module is under; the prefix moves into <c>PathBase</c> for the module.</summary>
-    public string? StripPrefix { get; init; }
+    /// <summary>The path prefix the module is under on this listener; the prefix moves into <c>PathBase</c> for the module.</summary>
+    public string? Prefix { get; init; }
+
+    /// <summary>The path the module has for what follows the prefix (<c>/sign-in</c>, or empty for the prefix itself); null: that path as it is, <c>/</c> for none.</summary>
+    public Func<string, string>? Inner { get; init; }
 
     /// <summary>Which requests are the module's, for a module that keeps the paths it has.</summary>
     public Func<HttpContext, bool>? Claims { get; init; }
@@ -32,7 +35,35 @@ public sealed class PublicMount
     public Func<string?, X509Certificate2?>? Certificate { get; init; }
 
     internal bool Matches(HttpContext context) =>
-        StripPrefix is { } prefix ? context.Request.Path.StartsWithSegments(prefix) : Claims?.Invoke(context) == true;
+        Prefix is { } prefix && context.Request.Path.StartsWithSegments(prefix) || Claims?.Invoke(context) == true;
+}
+
+/// <summary>
+/// The path each module answers under on the public listener, as the administrator set it (<c>identity.path</c>, <c>apps.path</c>, <c>store.path</c>, <c>views.path</c>, <c>rest.path</c> for feeds, <c>mcp.path</c>). A module with a <c>listen</c> of its own
+/// has no prefix: it answers at the root of that listener.
+/// </summary>
+public static class PublicPaths
+{
+    /// <summary>The prefix of <paramref name="module"/> on the public listener, <c>/store</c> and the like; empty for a module with a <c>listen</c> of its own.</summary>
+    public static string Of(GatewayOptions o, string module) => module switch
+    {
+        GatewayModules.Identity => o.Identity.Listen.Count == 0 ? Clean(o.Identity.Path) : "",
+        GatewayModules.Apps => o.Apps.Listen.Count == 0 ? Clean(o.Apps.Path) : "",
+        GatewayModules.Store => o.Store.Listen.Count == 0 ? Clean(o.Store.Path) : "",
+        GatewayModules.Views => o.Views.Listen.Count == 0 ? Clean(o.Views.Path) : "",
+        GatewayModules.Mcp => o.Mcp.Listen.Count == 0 ? Clean(o.Mcp.Path) : "",
+        GatewayModules.Feeds => o.Rest.Listen.Count == 0 ? Clean(o.Rest.Path) : "",
+        _ => "",
+    };
+
+    /// <summary>The apps host's prefix as the browser uses it: the setting when the host is on the public listener, <c>/apps</c> when it has an address of its own.</summary>
+    public static string Apps(GatewayOptions o) => Of(o, GatewayModules.Apps) is { Length: > 0 } p ? p : DbDataKit.Apps.AppsPaths.Default;
+
+    private static string Clean(string path) => "/" + path.Trim().Trim('/');
+
+    /// <summary>Whether <paramref name="path"/> is a prefix: <c>/</c> and one or more segments of letters, digits and <c>-._~</c>, no trailing slash.</summary>
+    public static bool IsPrefix(string? path) => path is { Length: > 1 } && path[0] == '/' && path[^1] != '/' && !path.Contains("//", StringComparison.Ordinal)
+        && path.All(c => char.IsAsciiLetterOrDigit(c) || c is '/' or '-' or '.' or '_' or '~');
 }
 
 /// <summary>The modules mounted on the public listener. A module adds itself when it starts and removes itself when it stops; a request for a path nobody is mounted at is a 404.</summary>
@@ -54,7 +85,7 @@ public sealed class PublicMounts
     }
 
     /// <summary>The address the public listener answers at on this machine (<c>https://localhost:8817</c>), without a path.</summary>
-    public static string AddressOf(GatewayOptions options) => $"https://localhost:{options.Public.Port}";
+    public static string AddressOf(GatewayOptions options) => $"https://localhost:{GatewayListeners.PublicPort(options)}";
 }
 
 /// <summary>
@@ -96,7 +127,7 @@ public sealed class InProcessServer : IServer
         typeof(IEndpointFeature), typeof(IRouteValuesFeature), typeof(IHttpRequestFeature), typeof(IRequestBodyPipeFeature), typeof(IHttpActivityFeature),
     ];
 
-    public Task ForwardAsync(HttpContext context, string? stripPrefix)
+    public Task ForwardAsync(HttpContext context, string? stripPrefix, Func<string, string>? inner = null)
     {
         var handler = _handler ?? throw new InvalidOperationException("The module is not running.");
         var features = new FeatureCollection();
@@ -108,7 +139,7 @@ public sealed class InProcessServer : IServer
         if (stripPrefix is not null && path.StartsWithSegments(stripPrefix, out var rest))
         {
             pathBase = pathBase.Add(new PathString(path.Value![..stripPrefix.Length]));
-            path = rest.HasValue ? rest : new PathString("/");
+            path = inner is null ? (rest.HasValue ? rest : new PathString("/")) : new PathString(inner(rest.Value ?? ""));
         }
         features.Set<IHttpRequestFeature>(new ForwardedRequest(request, pathBase.Value ?? "", path.Value ?? ""));
         return handler(features);
@@ -138,16 +169,17 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
     private WebApplication? _app;
 
     /// <summary>The modules that answer on the public listener rather than on a port of their own: the ones that are on and have no <c>port</c> set.</summary>
-    public static IReadOnlyList<string> MountedModules(GatewayOptions o) => [.. new (string Name, int? Port)[]
+    public static IReadOnlyList<string> MountedModules(GatewayOptions o) => [.. new (string Name, int Own)[]
     {
-        (GatewayModules.Identity, o.Identity.Port), (GatewayModules.Apps, o.Apps.Port), (GatewayModules.Store, o.Store.Port), (GatewayModules.Views, o.Views.Port),
-        (GatewayModules.Feeds, o.Rest.Port), (GatewayModules.Mcp, o.Mcp.Port),
-    }.Where(m => GatewayModules.Has(o, m.Name) && m.Port is null).Select(m => m.Name)];
+        (GatewayModules.Identity, o.Identity.Listen.Count), (GatewayModules.Apps, o.Apps.Listen.Count), (GatewayModules.Store, o.Store.Listen.Count), (GatewayModules.Views, o.Views.Listen.Count),
+        (GatewayModules.Feeds, o.Rest.Listen.Count), (GatewayModules.Mcp, o.Mcp.Listen.Count),
+    }.Where(m => GatewayModules.Has(o, m.Name) && m.Own == 0).Select(m => m.Name)];
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var current = options.CurrentValue;
-        if (MountedModules(current).Count == 0) return;
+        // no address, no listener: a Gateway built without the start sequence's choice of ports (a test) has none unless it is given one
+        if (current.Public.Listen.Count == 0) return;
         // the Flight listener loads the certificate when Kestrel starts, which is after the hosted services: this listener may be first
         if (certificate.Current is null)
             certificate.Set(CertificateProvider.Load(current, GatewayHost.ResolveDataDirectory(current), loggers.CreateLogger("Tls"), secrets: secrets, group: group));
@@ -157,15 +189,16 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(current.Public.Address), current.Public.Port, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
+            foreach (var url in GatewayListeners.Parsed(current.Public.Listen))
+                kestrel.Listen(url.Address, url.Port, listen =>
                 {
-                    https.ServerCertificateSelector = (_, name) => mounts.Snapshot.Select(m => m.Certificate?.Invoke(name)).FirstOrDefault(c => c is not null) ?? certificate.Current;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    listen.Protocols = HttpProtocols.Http1AndHttp2;
+                    listen.UseHttps(https =>
+                    {
+                        https.ServerCertificateSelector = (_, name) => mounts.Snapshot.Select(m => m.Certificate?.Invoke(name)).FirstOrDefault(c => c is not null) ?? certificate.Current;
+                        https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    });
                 });
-            });
         });
         var app = builder.Build();
         app.Run(async context =>
@@ -178,7 +211,7 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
             foreach (var mount in mounts.Snapshot)
                 if (mount.Matches(context))
                 {
-                    await mount.Server.ForwardAsync(context, mount.StripPrefix);
+                    await mount.Server.ForwardAsync(context, mount.Prefix is { } p && context.Request.Path.StartsWithSegments(p) ? p : null, mount.Inner);
                     return;
                 }
             await Results.Json(new { error = "There is nothing at this path: a module that is not on, or a path no module serves.", code = "not_found" }, statusCode: StatusCodes.Status404NotFound).ExecuteAsync(context);
@@ -203,13 +236,14 @@ public sealed class PublicListener(IOptionsMonitor<GatewayOptions> options, Publ
     }
 }
 
-/// <summary>What a module's web application listens on: a port of its own when its <c>port</c> is set, otherwise nothing, and the public listener forwards to it.</summary>
+/// <summary>What a module's web application listens on: the addresses of its own when its <c>listen</c> is set, otherwise nothing, and the public listener forwards to it.</summary>
 internal static class ModuleListener
 {
-    /// <summary>Configures <paramref name="builder"/> to listen on <paramref name="port"/> over HTTPS, or, with no port, to be forwarded to; returns the server to mount in that case, null when the module has a port of its own.</summary>
-    public static InProcessServer? Configure(WebApplicationBuilder builder, string address, int? port, Func<Microsoft.AspNetCore.Connections.ConnectionContext?, string?, X509Certificate2?> certificate)
+    /// <summary>Configures <paramref name="builder"/> to listen on <paramref name="listen"/> over HTTPS, or, with no port, to be forwarded to; returns the server to mount in that case, null when the module has addresses of its own.</summary>
+    public static InProcessServer? Configure(WebApplicationBuilder builder, IReadOnlyList<string> listen, Func<Microsoft.AspNetCore.Connections.ConnectionContext?, string?, X509Certificate2?> certificate)
     {
-        if (port is not { } own)
+        var urls = GatewayListeners.Parsed(listen).ToList();
+        if (urls.Count == 0)
         {
             var server = new InProcessServer();
             builder.Services.AddSingleton<IServer>(server);
@@ -218,15 +252,16 @@ internal static class ModuleListener
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Parse(address), own, listen =>
-            {
-                listen.Protocols = HttpProtocols.Http1AndHttp2;
-                listen.UseHttps(https =>
+            foreach (var url in urls)
+                kestrel.Listen(url.Address, url.Port, endpoint =>
                 {
-                    https.ServerCertificateSelector = certificate;
-                    https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    endpoint.Protocols = HttpProtocols.Http1AndHttp2;
+                    endpoint.UseHttps(https =>
+                    {
+                        https.ServerCertificateSelector = certificate;
+                        https.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    });
                 });
-            });
         });
         return null;
     }

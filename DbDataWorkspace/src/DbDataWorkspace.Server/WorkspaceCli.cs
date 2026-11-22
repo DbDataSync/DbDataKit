@@ -114,11 +114,15 @@ public static class WorkspaceCli
             await context.Error.WriteLineAsync($"Unexpected: {string.Join(' ', parsed.Unknown.Concat(parsed.Words))}. Usage: server run [--repo <server directory>] [--listen https://<address>:<port>] [--state-engine sqlite|mssql|postgres --state-connection <connection string>] [--skip-folder-permissions-check].");
             return CliExit.Usage;
         }
-        Uri? listenFlag = null;
-        if (parsed.Get("listen") is { } listenText && (!Uri.TryCreate(listenText, UriKind.Absolute, out listenFlag) || listenFlag.Scheme != Uri.UriSchemeHttps))
+        IReadOnlyList<Uri>? listenFlag = null;
+        if (parsed.Get("listen") is { } listenText)
         {
-            await context.Error.WriteLineAsync("--listen is an https address, such as https://127.0.0.1:7860.");
-            return CliExit.Usage;
+            try { listenFlag = ListenPorts.ParseFlag(listenText); }
+            catch (FormatException e)
+            {
+                await context.Error.WriteLineAsync($"--listen is an https address or a list of them, such as https://127.0.0.1:7860. {e.Message}");
+                return CliExit.Usage;
+            }
         }
 
         // every step of the start is reported the same way in every server: the step that failed and why, in the startup-failure file, and a non-zero exit
@@ -148,14 +152,14 @@ public static class WorkspaceCli
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
                     (state, sources) = WorkspaceState.Resolve(directory, environment, parsed.Get("state-engine"), parsed.Get("state-connection"));
                     // --listen, else the port pinned in server.yaml, else a free port of the Workspace's sub-block (pinned once the server listens on it)
-                    listen = ListenPorts.Resolve(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
+                    listen = ListenPorts.ResolveAll(service, listenFlag, Path.Combine(directory, "server.yaml"), new Uri(WorkspaceSettings.DefaultListen), step.Options.ExcludedPorts());
                 }
                 catch (InvalidOperationException)
                 {
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new WorkspaceSettings(directory, listen.Address) { State = state, StateSources = sources, SkipFolderPermissionsCheck = skip.IsOn };
+                settings = new WorkspaceSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = state, StateSources = sources, SkipFolderPermissionsCheck = skip.IsOn };
                 step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })

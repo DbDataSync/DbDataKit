@@ -104,10 +104,11 @@ public static class RunnerServer
         });
         // stopping waits for the running tasks to take their cancellation, and then for the processes to go
         builder.Services.Configure<HostOptions>(h => h.ShutdownTimeout = TimeSpan.FromTicks(Math.Max(h.ShutdownTimeout.Ticks, (settings.CancellationGrace + TimeSpan.FromSeconds(30)).Ticks)));
-        var address = settings.Listen.HostNameType == UriHostNameType.Dns && settings.Listen.Host != "localhost"
-            ? IPAddress.Any
-            : settings.Listen.Host == "localhost" ? IPAddress.Loopback : IPAddress.Parse(settings.Listen.Host);
-        builder.WebHost.ConfigureKestrel(o => o.Listen(address, settings.Listen.Port, listen => listen.UseHttps(certificate)));
+        builder.WebHost.ConfigureKestrel(o =>
+        {
+            foreach (var each in settings.ListenAll.Count > 0 ? settings.ListenAll : [settings.Listen])
+                o.Listen(DbDataKit.Hosting.Startup.ListenPorts.AddressOf(each), each.Port, listen => listen.UseHttps(certificate));
+        });
 
         // the joins this server is waiting on, which the console's callback confirms during the join step of its start
         builder.Services.AddSingleton<PendingJoins>();

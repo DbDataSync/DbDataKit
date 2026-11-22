@@ -98,8 +98,8 @@ public sealed class AppsSemanticRouteTests : IAsyncLifetime
         var settings = new Dictionary<string, string?>
         {
             ["Gateway:DataDirectory"] = dataDirectory, ["Gateway:Management:Enabled"] = "false", ["Gateway:Modules:0"] = "apps", ["Gateway:Modules:1"] = "identity",
-            ["Gateway:Apps:Address"] = "127.0.0.1", ["Gateway:Apps:Port"] = appsPort.ToString(), ["Gateway:Apps:Home:ClientId"] = client.ClientId,
-            ["Gateway:Identity:Address"] = "127.0.0.1", ["Gateway:Identity:Port"] = identityPort.ToString(), ["Gateway:Identity:PublicUrl"] = $"https://localhost:{identityPort}",
+            ["Gateway:Apps:Listen"] = $"https://127.0.0.1:{appsPort}", ["Gateway:Apps:Home:ClientId"] = client.ClientId,
+            ["Gateway:Identity:Listen"] = $"https://127.0.0.1:{identityPort}", ["Gateway:Identity:PublicUrl"] = $"https://localhost:{identityPort}",
             ["Gateway:DataSources:warehouse:Provider"] = "duckdb", ["Gateway:DataSources:warehouse:ConnectionString"] = $"Data Source={warehouse}",
             ["Gateway:DataSources:other:Provider"] = "duckdb", ["Gateway:DataSources:other:ConnectionString"] = "Data Source=:memory:",
             ["Gateway:Semantic:Models:0:Catalog"] = Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"),

@@ -72,8 +72,8 @@ public sealed class McpModuleTests : IAsyncLifetime
         }
         var settings = new Dictionary<string, string?>
         {
-            ["Gateway:DataDirectory"] = dataDirectory, ["Gateway:Management:Enabled"] = "false", ["Gateway:Modules:0"] = "mcp", ["Gateway:Listen:Port"] = "0",
-            ["Gateway:Mcp:Address"] = "127.0.0.1", ["Gateway:Mcp:Port"] = port.ToString(), ["Gateway:Mcp:ApprovalMinutes"] = minutes,
+            ["Gateway:DataDirectory"] = dataDirectory, ["Gateway:Management:Enabled"] = "false", ["Gateway:Modules:0"] = "mcp", ["Gateway:Listen"] = "https://127.0.0.1:0",
+            ["Gateway:Mcp:Listen"] = $"https://127.0.0.1:{port}", ["Gateway:Mcp:ApprovalMinutes"] = minutes,
             ["Gateway:DataSources:warehouse:Provider"] = "duckdb", ["Gateway:DataSources:warehouse:ConnectionString"] = $"Data Source={warehouse}",
             ["Gateway:DataSources:other:Provider"] = "duckdb", ["Gateway:DataSources:other:ConnectionString"] = "Data Source=:memory:",
             ["Gateway:Semantic:Models:0:Catalog"] = Path.Combine(AppContext.BaseDirectory, "semantic", "catalog.yaml"),

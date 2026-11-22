@@ -108,6 +108,13 @@ public static class GatewayConfig
             return new GatewayConfigLoad(null, diags, Result(null));
         }
 
+        // a listener's `port` and `address` are gone (`listen` is the one setting): refused naming the file and the setting, before the binder calls the key unknown
+        if (section == GatewayOptions.SectionName && GatewayRetiredListeners.Find(configuration) is { } oldListener)
+        {
+            diags.Add(oldListener);
+            return new GatewayConfigLoad(null, diags, Result(null));
+        }
+
         var bound = new ConfigBinder(Catalog, tree.FileOf).Bind<GatewayOptions>(root, section);
         var value = bound.Value;
         diags.AddRange(bound.Diagnostics);
