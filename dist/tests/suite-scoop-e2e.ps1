@@ -328,10 +328,10 @@ try {
   $install = Native 'install' { scoop install -g $manifest }
   Assert ($install.Code -eq 0) 'scoop install -g succeeded'
   ReportOwners 'after install'
-  # The Gateway allows its configuration repository when git refuses it for its owner: the file below exists only then (docs/install.md, "The Gateway's configuration repository")
-  $gatewayGit = Join-Path $data 'gateway\git\.gitconfig'
-  if (Test-Path $gatewayGit) { Write-Host "   the Gateway allowed a configuration repository another account owns: $gatewayGit"; Get-Content $gatewayGit | Out-Host }
-  else { Write-Host "   the Gateway opened its configuration repository with no allowance (no $gatewayGit)" }
+  # the Gateway made its configuration repository itself at its first start and never writes git settings of its own (docs/install.md, "The Gateway's configuration repository")
+  Assert (-not (Test-Path (Join-Path $data 'gateway\git\.gitconfig'))) 'the Gateway wrote no git settings file'
+  $configOwner = (Get-Acl -LiteralPath (Join-Path $data 'gateway\config')).Owner
+  Assert ($configOwner -eq 'NT SERVICE\DbDataGateway') "the Gateway's configuration repository is owned by NT SERVICE\DbDataGateway (found $configOwner)"
   AssertEveryMemberRunsPairedAndHealthy 'after install'
   AssertServicesAreNamedAsTheTableSays 'after install'
   AssertAdminCommandsWork 'after install'
