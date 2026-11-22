@@ -54,7 +54,7 @@ internal sealed class LiveImportCatalog(ReadSession read, string engine) : IImpo
 }
 
 /// <summary>
-/// The catalog cache of a project (<c>catalog-cache.yaml</c>, format <c>catalog-cache/1</c>, <see cref="CatalogCache"/>) as a catalog: per schema, the tables and views of one connection with their columns (the type text the database gave, nullability, whether the column is part of the primary key).
+/// The catalog cache of a project (<c>catalog-cache.yaml</c>, format <c>catalog-cache/2</c>, <see cref="CatalogCache"/>) as a catalog: per schema, the tables and views of one connection with their columns (the type text the database gave, nullability, whether the column is part of the primary key).
 /// <b>It has no indexes and no foreign keys</b>, so a descriptor made from it has none and says so (a note); the key's order is the order of the columns, which is what the cache holds; a type is read from its text (<see cref="Shape"/>), by the engine's own spelling.
 /// </summary>
 internal sealed class CachedImportCatalog(CacheConnection connection, string engine) : IImportCatalog

@@ -67,6 +67,11 @@ release moves the entries into its notes and empties this file.
   server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
   The Gateway's listeners keep 8815 to 8822 for now.
 
+- **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
+  and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
+  `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
+  connection (the Catalog tab), then commit the new file.
+
 ## Tasks that change table structure start only from the console
 
 - **A task with `capabilities: [ddl]` runs only on the console's signed approval.** A package task that creates, alters or drops tables can declare the capability `ddl`; it must then have no schedule and no trigger but `manual`. The Runner refuses a run of it from its own screens, `tasks run` and any paired client that does not carry the console's approval (403, audited as `runner.task.run`), and its task page shows no Run now button. The console starts it with `POST api/runner-runs/<server>/<package>/<channel>/<task>` after a person approves the exact statements. A dry run needs no approval. Packages that do not declare `ddl` are unchanged. A Runner older than this release ignores the capability, so upgrade the Runner before relying on it.
