@@ -66,6 +66,13 @@ A kind registers its Designer with `registerDesigner` (a `Navigation` and a `Pag
 
 The page's chrome has **Enabled** (it takes effect on a Runner when the set is published), **Save settings** (it saves `task.yaml`) and **Delete**, which asks twice and then removes the replication's folder from the draft. Each change on the page is an unsaved edit of the file it belongs to, written as a change of that value only, so comments and keys the page does not show stay in the file. **Create mappings** writes one file per ticked table, named `schema.table`: the columns of the same name are paired, the mapping states no key of its own (the source's key is used), and no target type is written (the target's types are inferred when it is provisioned). A target table the catalog cache does not have gets every source column, and the overview says so.
 
+The schedule on the Overview keeps only the settings of the mode it shows, because Sync reads one set of settings for each mode:
+
+- **Continuous**: the replication runs every `frequencySeconds`, and its worker stops after `idleTimeoutSeconds` without a changed row.
+- **Periodic**: the replication runs on `cronExpression`.
+
+Switching the mode removes the other mode's settings from `task.yaml`. Switching to Periodic writes the cron expression the replication had, or `*/15 * * * *`. Switching to Continuous writes `frequencySeconds: 60` and no idle timeout. Example: the replication `orders` runs Continuous with `frequencySeconds: 60` and `idleTimeoutSeconds: 120`. Ana switches it to Periodic, and `task.yaml` now has `cronExpression: "*/15 * * * *"` and neither of the other two. When she switches it back to Continuous, the file has `frequencySeconds: 60` and no cron expression, and she types the idle timeout of 120 again if she wants it.
+
 The screens read the catalog cache as the draft holds it and do not read a database. A connection the cache has nothing for shows a line saying so, and its pickers are empty until its catalog is read into the cache. The Overview's other sub-tabs, a mapping's other tabs and the tab Quality Checks are not in the Designer yet: their keys are edited in Files.
 
 Example: on the replication `orders`, Ana picks the target `dw` and the database `warehouse` on the Overview, opens Table Mappings, ticks `dbo.customers` and `dbo.invoices` and clicks **Create 2 mappings**. Two files appear under `config/replications/orders/table-mappings/` marked not saved; `dbo.invoices` has no key in the source, so on its Column Mapping tab she ticks `invoice_no` under Primary key, presses **Save mapping**, then **Save** in the chrome for the rest.

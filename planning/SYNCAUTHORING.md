@@ -190,14 +190,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 
 ## Proposed decisions
 
-### SYNCAUTHORING-P10: what the Schedule card does to the other mode's fields (default, awaiting the owner)
-
-Scenario: Ana's replication runs Continuous every 60 seconds with an idle timeout of 120. On the Overview she switches the mode to Periodic. Option A
-(built, the default): the card removes `frequencySeconds` and `idleTimeoutSeconds` from `task.yaml` and fills `cronExpression` with `*/15 * * * *`
-(or the one it had), since Sync reads exactly one of them for a mode; switching back puts `frequencySeconds: 60` and removes the cron. Option B (the
-old Sync screen): only `mode` changes and the other fields stay in the file, so switching back restores 120 but the file carries a setting its mode
-ignores. Recommendation: A.
-
 ### SYNCAUTHORING-P11: when a mapping's editor writes its column cache and suggests column pairs (default, awaiting the owner)
 
 Scenario: Ana opens the saved mapping `dbo.orders`, whose `columnMappings` is empty, then picks `dbo.order_lines` as its source table. Built (the
