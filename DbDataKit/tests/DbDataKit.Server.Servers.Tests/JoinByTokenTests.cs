@@ -108,7 +108,7 @@ public sealed class JoinByTokenTests
             File.WriteAllText(Path.Combine(gatewayDirectory, "config", "gateway", "auth.yaml"), "jwt:\n  signingKey: servers-e2e-signing-key-0123456789abcdef\n  audience: api://servers-e2e\n");
             await RealProcess.RunAsync(Programs.Gateway, [.. await InviteAsync(cli, consoleDirectory, consoleUrl, "gateway"), "--repo", gatewayDirectory]);
             var management = Programs.FreePort();
-            var gateway = RealProcess.Start(Programs.Gateway, ["server", "run", $"--Gateway:DataDirectory={gatewayDirectory}", $"--Gateway:Listen=https://127.0.0.1:{Programs.FreePort()}",
+            var gateway = RealProcess.Start(Programs.Gateway, ["server", "run", $"--Gateway:DataDirectory={gatewayDirectory}", $"--Gateway:Listen=https://127.0.0.1:{Programs.FreePort()}", $"--Gateway:Public:Listen=https://127.0.0.1:{Programs.FreePort()}",
                 "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{management}", "--Gateway:Management:LocalChannel=false"]);
             started.Add(gateway);
             var gatewayListed = await ListedAsync(registry, i => i.Url.Port == management, gateway);

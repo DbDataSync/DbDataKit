@@ -36,7 +36,7 @@ public sealed class ConnectionsAcrossServersTests : IAsyncLifetime
         foreach (var (name, text) in sources) File.WriteAllText(Path.Combine(directory, "config", "connections", name + ".yaml"), text);
         var management = Programs.FreePort();
         var code = Programs.CodeIn(await RealProcess.RunAsync(gateway, "server", "pair", "--repo", directory, "--max-role", "admin"));
-        var process = RealProcess.Start(gateway, ["server", "run", $"--Gateway:DataDirectory={directory}", $"--Gateway:Listen=https://127.0.0.1:{Programs.FreePort()}",
+        var process = RealProcess.Start(gateway, ["server", "run", $"--Gateway:DataDirectory={directory}", $"--Gateway:Listen=https://127.0.0.1:{Programs.FreePort()}", $"--Gateway:Public:Listen=https://127.0.0.1:{Programs.FreePort()}",
             "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{management}", "--Gateway:Management:LocalChannel=false"], environment: environment);
         started.Add(process);
         return (code, new Uri($"https://127.0.0.1:{management}"), process);

@@ -82,6 +82,10 @@ Scenario: `dbdatakit identity run` on port 7819. Built as the default: its issue
 
 Scenario: `apps: { path: /programs }` and an instance bound to `notes.example.com`. Built as the default: `https://notes.example.com/programs/-/callback` is the host's callback at that name, and `/apps/...` at that name is still read as the host's own paths in two places (the shared script and the callback), so `https://notes.example.com/apps/-/callback` also answers. Option B: refuse `/apps/...` at a bound name when the path is another. Recommendation: B, with a test, in the task that decides the bound names' paths (APPHOSTING-4).
 
+### ENDPOINTS-P23: two Gateways that start at the same moment can pick the same default port (awaiting the owner)
+
+Scenario: an administrator starts two Gateways on one machine, each with its own data directory and no `public.listen`, from one script (`dbdatagateway server run --Gateway:DataDirectory=/srv/a &` and the same for `/srv/b`). Each picks the first free port of its block (7820) and writes it down, but binds it a moment later, so both pick 7820, and the second stops with `Port 7820 cannot be bound`. Found when the console's two-Gateway server test failed this way; the test now gives each Gateway its own `--Gateway:Public:Listen`, which hides it, so nothing tests the case itself. Option A (recommendation): the pick takes a machine-wide lock until the listener is bound, or the pick binds the port itself and hands the socket on, so a second start sees 7820 taken and picks 7823. Option B: leave it; the guide says that Gateways on one machine name their public listener, as every Gateway of a group already does. Awaiting the owner.
+
 ## Open designs
 
 ### The layout and settings of the public listener
