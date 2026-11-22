@@ -29,10 +29,10 @@ public sealed class QueryCatalogDescriptorTests
     [Fact]
     public void CatalogQuery_WithNoMetadataQueriesBlock_FailsNamingWhatIsMissing()
     {
-        var descriptor = DriverDescriptorReader.Deserialize(BaseYaml);
+        var descriptor = DriverDescriptors.Deserialize(BaseYaml);
 
         var ex = Assert.Throws<NotSupportedException>(
-            () => DriverDescriptorReader.ToSpec(descriptor, new StubDbProviderFactory()));
+            () => DriverDescriptors.ToSpec(descriptor, new StubDbProviderFactory()));
 
         Assert.Contains("fake.query", ex.Message);
         Assert.Contains("metadataQueries", ex.Message);
@@ -47,9 +47,9 @@ public sealed class QueryCatalogDescriptorTests
               tableQuery: "SELECT table_name, table_schema FROM sys.tables"
               columnQuery: "SELECT column_name, data_type FROM sys.columns WHERE table_schema = {{schema}} AND table_name = {{table}}"
             """;
-        var descriptor = DriverDescriptorReader.Deserialize(yaml);
+        var descriptor = DriverDescriptors.Deserialize(yaml);
 
-        var spec = DriverDescriptorReader.ToSpec(descriptor, new StubDbProviderFactory());
+        var spec = DriverDescriptors.ToSpec(descriptor, new StubDbProviderFactory());
 
         Assert.IsType<QueryCatalog>(spec.Catalog);
     }
@@ -57,10 +57,10 @@ public sealed class QueryCatalogDescriptorTests
     [Fact]
     public void AnUnknownCatalogStrategy_FailsNamingWhatIsSupported()
     {
-        var descriptor = DriverDescriptorReader.Deserialize(BaseYaml.Replace("catalog: query", "catalog: nonsense"));
+        var descriptor = DriverDescriptors.Deserialize(BaseYaml.Replace("catalog: query", "catalog: nonsense"));
 
         var ex = Assert.Throws<NotSupportedException>(
-            () => DriverDescriptorReader.ToSpec(descriptor, new StubDbProviderFactory()));
+            () => DriverDescriptors.ToSpec(descriptor, new StubDbProviderFactory()));
 
         Assert.Contains("nonsense", ex.Message);
         Assert.Contains("default", ex.Message);

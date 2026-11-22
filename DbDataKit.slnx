@@ -282,6 +282,11 @@
     <Project Path="Shared/tests/DbDataKit.ReportCatalogs.Tests/DbDataKit.ReportCatalogs.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Views.Hosting.Tests/DbDataKit.Views.Hosting.Tests.csproj" />
     <Project Path="Shared/tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Sync.Core.Tests/DbDataKit.Sync.Core.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Sync.Drivers.Abstractions.Tests/DbDataKit.Sync.Drivers.Abstractions.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Sync.Drivers.Generic.Tests/DbDataKit.Sync.Drivers.Generic.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Sync.Drivers.Descriptor.Tests/DbDataKit.Sync.Drivers.Descriptor.Tests.csproj" />
+    <Project Path="Shared/tests/DbDataKit.Sync.Scripting.Abstractions.Tests/DbDataKit.Sync.Scripting.Abstractions.Tests.csproj" />
   </Folder>
   <Folder Name="/DbDataGateway/src/">
     <Project Path="DbDataGateway/src/DbDataGateway.Core/DbDataGateway.Core.csproj" />
@@ -334,8 +339,6 @@
   </Folder>
   <Folder Name="/DbDataSync/tests/">
     <Project Path="DbDataSync/tests/DbDataSync.Cli.Tests/DbDataSync.Cli.Tests.csproj" />
-    <Project Path="DbDataSync/tests/DbDataSync.Core.Tests/DbDataSync.Core.Tests.csproj" />
-    <Project Path="DbDataSync/tests/DbDataSync.Drivers.Abstractions.Tests/DbDataSync.Drivers.Abstractions.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Drivers.ArrowFlightSql.Tests/DbDataSync.Drivers.ArrowFlightSql.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Drivers.Descriptor.Tests/DbDataSync.Drivers.Descriptor.Tests.csproj" />
     <Project Path="DbDataSync/tests/DbDataSync.Drivers.DuckDb.Tests/DbDataSync.Drivers.DuckDb.Tests.csproj" />

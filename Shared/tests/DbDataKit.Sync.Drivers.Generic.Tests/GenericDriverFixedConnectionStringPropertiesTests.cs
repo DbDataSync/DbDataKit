@@ -20,7 +20,7 @@ public sealed class GenericDriverFixedConnectionStringPropertiesTests
 {
     private sealed class StubDbConnection : DbConnection
     {
-        public override string ConnectionString { get; set; } = "";
+        [System.Diagnostics.CodeAnalysis.AllowNull] public override string ConnectionString { get; set; } = "";
         public override string Database => "";
         public override string DataSource => "";
         public override string ServerVersion => "";

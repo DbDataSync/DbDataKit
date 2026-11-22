@@ -251,5 +251,10 @@
     <Project Path="tests/DbDataKit.ReportCatalogs.Tests/DbDataKit.ReportCatalogs.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Hosting.Tests/DbDataKit.Views.Hosting.Tests.csproj" />
     <Project Path="tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Core.Tests/DbDataKit.Sync.Core.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Abstractions.Tests/DbDataKit.Sync.Drivers.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Generic.Tests/DbDataKit.Sync.Drivers.Generic.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Descriptor.Tests/DbDataKit.Sync.Drivers.Descriptor.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Scripting.Abstractions.Tests/DbDataKit.Sync.Scripting.Abstractions.Tests.csproj" />
   </Folder>
 </Solution>

@@ -28,13 +28,13 @@ public sealed class CommandTimeoutChokepointTests
     /// </summary>
     private static readonly string[] InScope =
     [
-        "DbDataSync.Core/Sql",
-        "DbDataSync.Drivers.Generic",
-        "DbDataSync.Drivers.MsSql",
-        "DbDataSync.Drivers.Postgres",
-        "DbDataSync.Scripting",
-        "DbDataSync.TaskRunner",
-        "DbDataSync.Verification",
+        "Shared/src/DbDataKit.Sync.Core/Sql",
+        "Shared/src/DbDataKit.Sync.Drivers.Generic",
+        "DbDataSync/src/DbDataSync.Drivers.MsSql",
+        "DbDataSync/src/DbDataSync.Drivers.Postgres",
+        "DbDataSync/src/DbDataSync.Scripting",
+        "DbDataSync/src/DbDataSync.TaskRunner",
+        "DbDataSync/src/DbDataSync.Verification",
     ];
 
     /// <summary>
@@ -51,16 +51,16 @@ public sealed class CommandTimeoutChokepointTests
     [Fact]
     public void EverySourceOrTargetCommandGoesThroughCreateTimedCommand()
     {
-        var src = Path.Combine(RepositoryRoot(), "src");
+        var root = RepositoryRoot();
 
         var offenders = InScope
-            .SelectMany(area => Directory.EnumerateFiles(Path.Combine(src, area), "*.cs", SearchOption.AllDirectories))
+            .SelectMany(area => Directory.EnumerateFiles(Path.Combine(root, area), "*.cs", SearchOption.AllDirectories))
             // bin/obj hold generated and copied sources that are not what anybody edits.
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                 && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Where(path => !Exempt.Contains(Path.GetFileName(path)))
             .Where(path => File.ReadAllText(path).Contains(".CreateCommand()", StringComparison.Ordinal))
-            .Select(path => Path.GetRelativePath(src, path))
+            .Select(path => Path.GetRelativePath(root, path))
             .Order()
             .ToList();
 
@@ -70,11 +70,12 @@ public sealed class CommandTimeoutChokepointTests
             + $"CreateTimedCommand() instead:{Environment.NewLine}  {string.Join($"{Environment.NewLine}  ", offenders)}");
     }
 
-    /// <summary>Walks up from the test binary to the directory holding the solution file.</summary>
+    /// <summary>Walks up from the test binary to the root of the repository (the folder holding <c>DbDataKit.slnx</c>): the scanned folders are
+    /// the shared Sync libraries under <c>Shared/src</c> and Sync's own drivers and engine under <c>DbDataSync/src</c>.</summary>
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataSync.slnf")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DbDataKit.slnx")))
             directory = directory.Parent;
 
         Assert.NotNull(directory);

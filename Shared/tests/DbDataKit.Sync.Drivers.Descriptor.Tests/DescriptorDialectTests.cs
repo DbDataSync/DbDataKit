@@ -37,14 +37,14 @@ public sealed class DescriptorDialectTests
 
     private static DescriptorDialect Dialect(string yaml = MySqlGenericYaml)
     {
-        var descriptor = DriverDescriptorReader.Deserialize(yaml);
+        var descriptor = DriverDescriptors.Deserialize(yaml);
         return new DescriptorDialect(descriptor.Dialect, descriptor.TypeMap);
     }
 
     [Fact]
     public void ParsesTheWholeDescriptor()
     {
-        var descriptor = DriverDescriptorReader.Deserialize(MySqlGenericYaml);
+        var descriptor = DriverDescriptors.Deserialize(MySqlGenericYaml);
 
         Assert.Equal("mysql.generic", descriptor.Id);
         Assert.Equal("MySQL / MariaDB (generic)", descriptor.DisplayName);
