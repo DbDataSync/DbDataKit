@@ -20,8 +20,7 @@ public sealed class ListenerPinningTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ }
+        TempTree.Delete(_dir);
     }
 
     private string Settings => GatewayConfigFile.PathIn(_dir);
@@ -141,7 +140,7 @@ public sealed class ListenerPinningTests : IDisposable
             }
             finally
             {
-                try { Directory.Delete(dir, true); } catch (IOException) { }
+                TempTree.Delete(dir);
             }
         }
     }
