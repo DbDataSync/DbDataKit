@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The types keep their namespace (DbDataSync.Drivers.Generic): DbDataSync's project of the same name forwards to this assembly. -->
+  <PropertyGroup>
+    <PackageId>DbDataKit.Sync.Drivers.Generic</PackageId>
+    <Description>The readers, staging providers and writers Sync's SQL drivers share, the driver a driver.yaml describes, and the rules by which a mapping's target table is planned and its natural key derived.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572;CS1587</NoWarn>   <!-- doc comments on positional record parameters, and param tags of only some parameters -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Sync.Core\DbDataKit.Sync.Core.csproj" />
+    <ProjectReference Include="..\DbDataKit.Sync.Drivers.Abstractions\DbDataKit.Sync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Sync.Scripting.Abstractions\DbDataKit.Sync.Scripting.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />   <!-- the catalog readers -->
+    <ProjectReference Include="..\DbDataKit.Metadata.Abstractions\DbDataKit.Metadata.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />   <!-- the batch contracts the shared bulk writers take -->
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The types keep their namespace (DbDataSync.Drivers.Abstractions): DbDataSync.Drivers.Abstractions, the package a compiled driver references,
+       forwards to this assembly, so a driver built against it still loads. -->
+  <PropertyGroup>
+    <PackageId>DbDataKit.Sync.Drivers.Abstractions</PackageId>
+    <Description>The contract of a Sync driver (IDriver, its readers, staging providers and writers, its capabilities) and the registry of the drivers a process knows (DriverRegistry).</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572;CS1587</NoWarn>   <!-- doc comments on positional record parameters, and param tags of only some parameters -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Sync.Core\DbDataKit.Sync.Core.csproj" />
+  </ItemGroup>
+</Project>

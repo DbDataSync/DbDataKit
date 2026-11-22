@@ -65,11 +65,14 @@ dotnet test --filter "Category=Integration"    # needs the engines from step 1 a
 ## Repository layout
 
 - `src/DbDataSync.Cli` — the `dbdatasync` command line.
-- `src/DbDataSync.Core` — config models, git-backed config store, secrets.
+- `../Shared/src/DbDataKit.Sync.Core` — config models, git-backed config store, secrets. It is a shared library because the Workspace reads a
+  sync project with it too. `src/DbDataSync.Core` forwards to it, so code built against `DbDataSync.Core` still runs. The other libraries in
+  `../Shared/src/DbDataKit.Sync.*` (`Drivers.Abstractions`, `Drivers.Generic`, `Drivers.Descriptor`, `Scripting.Abstractions`, `Provisioning`)
+  have a forwarding project of the same name under `src/` too. Their tests are in `../Shared/tests/DbDataKit.Sync.*.Tests`.
 - `src/DbDataSync.State` — the engine's records (drain requests, batches, positions) kept in a Runner's state.
 - `src/DbDataSync.Scripting` — the script compiler and host, and the script test, schema browsing and opener of a configured connection a program composes.
-- `src/DbDataSync.Drivers.Abstractions` — the driver interfaces and capability discovery.
-- `src/DbDataSync.Drivers.Generic` — the engine-neutral implementations every driver gets for free: a
+- `../Shared/src/DbDataKit.Sync.Drivers.Abstractions` — the driver interfaces and capability discovery.
+- `../Shared/src/DbDataKit.Sync.Drivers.Generic` — the engine-neutral implementations every driver gets for free: a
   SQL dialect, a watermark reader, a batch-reload reader, a batched-insert staging provider and a
   delete/insert writer. A new engine's driver is a dialect, a connection factory and a catalog.
 - `src/DbDataSync.Drivers.MsSql` — SQL Server, with its own faster implementations (Change Tracking

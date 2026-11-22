@@ -2,22 +2,17 @@ using System.Reflection;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
 using DbDataSync.Libraries;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace DbDataSync.Drivers.Descriptor;
 
-/// <summary>Parses <c>driver.yaml</c> and stands up the <see cref="IDriver"/> it describes.</summary>
+/// <summary>Parses <c>driver.yaml</c> and stands up the <see cref="IDriver"/> it describes. Reading a descriptor is <see cref="DriverDescriptors"/>, a
+/// shared library, so a tool that reads only a descriptor's dialect, type map and capabilities loads no library; standing the driver up is here, beside
+/// the library registry that holds its provider.</summary>
 public static class DriverDescriptorReader
 {
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
-        .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .WithTypeConverter(new TypeMapEntryYamlConverter())
-        .Build();
+    public static DriverDescriptorYaml Read(string path) => DriverDescriptors.Read(path);
 
-    public static DriverDescriptorYaml Read(string path) => Deserialize(File.ReadAllText(path));
-
-    public static DriverDescriptorYaml Deserialize(string yaml) => Deserializer.Deserialize<DriverDescriptorYaml>(yaml);
+    public static DriverDescriptorYaml Deserialize(string yaml) => DriverDescriptors.Deserialize(yaml);
 
     /// <summary>
     /// Phase 168V. <see cref="DriverDescriptorYaml.Base"/> omitted (the common case) builds a
@@ -39,7 +34,7 @@ public static class DriverDescriptorReader
     public static IDriver BuildDriver(DriverDescriptorYaml descriptor, LibraryRegistry libraries, string repoRoot)
     {
         if (descriptor.Base is null)
-            return new GenericDriver(ToSpec(descriptor, libraries.GetFactory(descriptor.Library)));
+            return new GenericDriver(DriverDescriptors.ToSpec(descriptor, libraries.GetFactory(descriptor.Library)));
 
         var type = Type.GetType(descriptor.Base)
             ?? throw new NotSupportedException(
@@ -55,33 +50,7 @@ public static class DriverDescriptorReader
         return (IDriver)method.Invoke(null, [descriptor, repoRoot])!;
     }
 
-    /// <summary>Everything a <see cref="GenericDriver"/> needs except the library's factory itself —
-    /// separate from <see cref="BuildDriver"/> so a caller that already has a resolved factory (or wants
-    /// to inspect the spec before constructing) still can.</summary>
-    public static GenericDriverSpec ToSpec(DriverDescriptorYaml descriptor, System.Data.Common.DbProviderFactory factory)
-    {
-        var dialect = new DescriptorDialect(descriptor.Dialect, descriptor.TypeMap);
-        var catalog = DescriptorCatalogResolution.Resolve(
-            descriptor.Id, descriptor.Dialect.Catalog, descriptor.MetadataQueries?.TableQuery,
-            descriptor.MetadataQueries?.ColumnQuery, @default: new InformationSchemaQueries(dialect));
-
-        var keys = descriptor.Dialect.ConnectionStringKeys is { } k
-            ? new GenericConnectionStringKeys(k.Host, k.Port, k.Database, k.Username, k.Password, k.ConnectTimeout, k.IntegratedSecurity)
-            : new GenericConnectionStringKeys();
-
-        return new GenericDriverSpec(
-            descriptor.Id,
-            dialect,
-            factory,
-            catalog,
-            Readers: descriptor.Capabilities.Readers,
-            Staging: descriptor.Capabilities.Staging,
-            Writers: descriptor.Capabilities.Writers,
-            ConnectionStringKeys: keys,
-            DefaultDatabase: descriptor.Dialect.DefaultDatabase,
-            DefaultPort: descriptor.Dialect.DefaultPort,
-            DisplayName: descriptor.DisplayName,
-            TestQuery: descriptor.TestQuery,
-            FixedConnectionStringProperties: descriptor.Dialect.FixedProperties);
-    }
+    /// <inheritdoc cref="DriverDescriptors.ToSpec"/>
+    public static GenericDriverSpec ToSpec(DriverDescriptorYaml descriptor, System.Data.Common.DbProviderFactory factory) =>
+        DriverDescriptors.ToSpec(descriptor, factory);
 }
