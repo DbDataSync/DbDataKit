@@ -32,7 +32,7 @@ public sealed class WorkspaceSyncProvisioningTests
     private static Task<(HttpResponseMessage Response, JsonNode? Body)> Plan(WorkspaceHarness server, string id, string json) =>
         server.AsAda(HttpMethod.Post, $"/api/v1/projects/orders-set/workspaces/{id}/provisioning-plan", json);
 
-    private const string Cache = "schema: catalog-cache/1\ngenerated_at: 2026-11-12T10:00:00Z\nsource: {server: prod-gateway, product: gateway}\nconnections:\n  target-db:\n    engine: postgres\n    tables:\n      - schema: public\n        name: other\n        kind: table\n        columns:\n          - {name: x, type: integer, nullable: false}\n";
+    private const string Cache = "schema: catalog-cache/2\ngenerated_at: 2026-11-12T10:00:00Z\nconnections:\n  target-db:\n    engine: postgres\n    read: {server: prod-gateway, product: gateway, at: 2026-11-12T10:00:00Z}\n    databases: []\n    tables:\n      - schema: public\n        name: other\n        kind: table\n        columns:\n          - {name: x, type: integer, nullable: false}\n";
 
     [Fact]
     public async Task The_plan_comes_back_as_the_tool_printed_it_and_the_program_was_asked_for_the_cache_on_a_copy()
