@@ -17,7 +17,7 @@ snapshot's age; one documented drill restores all four services, and CI runs it.
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| BACKUPRESTORE-1 | One backup set: the console sets one location and passes it to every paired server; each snapshots into its own subfolder; Monitoring shows each snapshot's age | INSTALLER-12 | M | servers suite: after one interval the four subfolders hold a snapshot and Monitoring lists their ages |
+| BACKUPRESTORE-1 | One backup set: the console sets one location and passes it to every paired server; each snapshots into its own subfolder; Monitoring shows each snapshot's age | none | M | servers suite: after one interval the four subfolders hold a snapshot and Monitoring lists their ages |
 | BACKUPRESTORE-2 | The console backs up the keys file once (the console's and the group keys it holds) under one passphrase | BACKUPRESTORE-1, INSTALLER-15 | S | a key backup restores on a new console and opens the groups' secrets |
 | BACKUPRESTORE-3 | The recovery page on the console, the `health` lines (no backup in N days), and the CI drill that restores all four services from one set | BACKUPRESTORE-1 | M | the drill in the servers suite: four services restored from one set serve their published definitions and runs; Playwright of the recovery page |
 | BACKUPRESTORE-4 | `git.remote` on Workspace projects (one remote per project) with its `health` line; then the Gateway's and the console's configuration repositories | none | M | a commit in a project is pushed to a test remote; a failing push shows on the health line and the commit stands |
@@ -26,7 +26,6 @@ snapshot's age; one documented drill restores all four services, and CI runs it.
 
 ## Needs from other subjects
 
-- INSTALLER-12: servers joined to the console (the console tells each where to snapshot).
 - INSTALLER-15: the console holds every group key.
 
 ## Proposed decisions

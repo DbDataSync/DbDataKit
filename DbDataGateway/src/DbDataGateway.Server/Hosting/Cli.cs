@@ -42,6 +42,13 @@ public static class Cli
     [
         ServerNoun.Create(RunServerAsync).With([.. PairingVerbs.Create(PairingFilesOf).Select(WarnWhenManagementIsOff)]),
         ServiceNoun(),
+        DbDataKit.Web.Trust.JoinPairCommand.Create(new DbDataKit.Web.Trust.PairCommandOptions(Program,
+            args => args.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : GatewayConfigFile.ResolveDataDirectory(),
+            async _ =>
+            {
+                var (registered, problem) = await DbDataKit.Hosting.Cli.ServiceRestarter.RestartAsync(GatewayHost.RegistrationName, DbDataKit.Hosting.Startup.SuiteServices.Gateway.Program);
+                return new DbDataKit.Web.Trust.ServiceRestartResult(registered, problem);
+            })),
         CertNoun(),
         SecretNoun(),
         IdentityCommand.Noun(),
@@ -147,6 +154,7 @@ public static class Cli
                 var options = app!.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
                 return DbDataKit.Hosting.Startup.StartupPorts.BindAsync(step, app.StartAsync, [options.Listen.Port, options.Management.Port], ct);
             })
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Join, (_, ct) => Management.GatewayManagementHost.JoinAsync(app!, dataDirectory, ct))
             .RunAsync(context.Cancellation);
         if (!result.Succeeded)
         {

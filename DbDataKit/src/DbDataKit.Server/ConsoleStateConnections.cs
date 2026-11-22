@@ -119,7 +119,7 @@ public sealed partial class ConsoleStateConnections(string directory, EncryptedF
 
     /// <summary>What <c>state test</c> finds on this connection, run by the shared library with the console's own modules: connect, the registry readable or empty, the rights to create the tables, the engine version and the features.</summary>
     public StateConnectionReport Test(StateConnection connection) =>
-        StateConnectionCheck.Run(TargetOf(connection), "dbdatakit", "the console", ConsoleState.Modules, StateScope.Install, forMove: false);
+        StateConnectionCheck.Run(TargetOf(connection), "dbdatakit", "the console", ConsoleState.Modules, ConsoleState.Scope, forMove: false);
 
     /// <summary>A short, comparable identity of a database as a connection string names it: engine, server, port and database. Passwords and references never take part.</summary>
     public static string IdentityOf(string? engine, string? connection, string? sqlitePath = null)

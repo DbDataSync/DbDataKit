@@ -17,13 +17,15 @@ public static partial class StateLogins
 
     /// <summary>The login's name for a service and a group. A service is named by its program (<c>dbdatagateway</c>) without the <c>dbdata</c> in front; the console's program, <c>dbdatakit</c>, is <c>console</c>.</summary>
     /// <param name="service">The service name the process records (<see cref="StateScope.Service"/>); null or empty: <paramref name="program"/>.</param>
-    /// <param name="group">The group; null or empty: the login is the service's alone (the console).</param>
+    /// <param name="group">The group; null or empty: the login is the service's alone. The console's login never names one.</param>
     /// <param name="program">The command's name, used when the scope names no service.</param>
     public static string Name(string? service, string? group, string program)
     {
         var name = Slug(string.IsNullOrWhiteSpace(service) ? program : service);
         if (name.StartsWith("dbdata", StringComparison.Ordinal)) name = name["dbdata".Length..];
         if (name is "" or "kit") name = "console";
+        // the console is never one of a group's instances: the group its own modules are kept under (its join tokens) does not name another login
+        if (name == "console") return Prefix + name;
         return Prefix + name + (string.IsNullOrWhiteSpace(group) ? "" : "_" + Slug(group));
     }
 

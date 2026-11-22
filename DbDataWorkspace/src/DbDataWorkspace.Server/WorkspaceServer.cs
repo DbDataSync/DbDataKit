@@ -31,6 +31,21 @@ public static class WorkspaceServer
 
     public static X509Certificate2 Certificate(string directory) => DirectoryCertificate.Load(directory);
 
+    private sealed record JoinTarget(StateDatabase State, IPairedClientStore Clients, string InstanceId, string Fingerprint);
+
+    /// <summary>The join step of the start: joins the console a <c>join-request.yaml</c> in the server's directory names, while the server listens, so it answers the console's callback.</summary>
+    public static async Task JoinAsync(WebApplication app, WorkspaceSettings settings, CancellationToken ct)
+    {
+        var target = app.Services.GetRequiredService<JoinTarget>();
+        try
+        {
+            await ServerJoin.RunAsync(settings.Directory,
+                () => new JoiningServer("workspace", target.InstanceId, Dns.GetHostName(), ServerJoin.AddressFor(settings.Listen), target.Fingerprint, ConsoleSigningKey.Generate()),
+                app.Services.GetRequiredService<PendingJoins>(), target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct);
+        }
+        catch (ServerJoinException ex) { throw DbDataKit.Hosting.Startup.StartupStepException.JoinFailed(ex.Console, ex.Answer, ex.Message, ex); }
+    }
+
     public static WebApplication Build(WorkspaceSettings settings, X509Certificate2 certificate, Action<string> log)
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataWorkspace server listens on HTTPS only.", nameof(settings));
@@ -59,6 +74,10 @@ public static class WorkspaceServer
         builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(state, WorkspaceState.Modules, WorkspaceState.Scope, WorkspaceState.ServiceId,
             settings.State ?? WorkspaceState.Resolve(settings.Directory).Settings, settings.Directory));
 
+        // what the join step of the start needs: the joins this server waits on (the console's callback confirms them) and where the joined console is kept
+        builder.Services.AddSingleton<PendingJoins>();
+        builder.Services.AddSingleton(new JoinTarget(state, clients, instanceId, fingerprint));
+
         var app = builder.Build();
         app.UseManagementApiVersion();
         app.UseDbDataPipeline();
@@ -66,6 +85,7 @@ public static class WorkspaceServer
         app.MapPairing(new PairingService(instanceId, fingerprint, clients, files.Codes()));
         app.AnnounceToConsole("dbdataworkspace", instanceId, settings.Listen.Port, clients, files.Codes());
         app.MapKeyRotation(new KeyRotationService(instanceId, clients, new MemoryReplayCache()));
+        app.MapJoinCallback(app.Services.GetRequiredService<PendingJoins>());
         app.UseManagementAuthentication(new ConsoleTokenValidator(instanceId, clients, new MemoryReplayCache()), refused => log($"A call was refused ({refused.Failure}): {refused.Detail}"));
         // maintenance mode (plan 29b, C05): after the token check, so a request from an administrator is known, and before the product's own calls
         var maintenance = new MaintenanceGate();

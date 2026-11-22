@@ -62,11 +62,35 @@ public static class TrustModule
             -- Plan 24a UC04: the compatibility generation a client reported when it paired (null for a pairing made before, or by a client that does not say).
             ALTER TABLE {table:paired_client} {{addcolumn}} generation {{int}} NULL;
             """,
+            """
+            -- The join tokens a console made (its state keeps the module for itself): never the token, only its verifier, the public half of a key made from
+            -- the token. product, ceiling (role names separated by commas) and group_name are what the token lets a server become; ended_at is the earliest of
+            -- expires_at, spent_at and cancelled_at, so retention removes a token some time after it stopped working. row_version makes a change to one token
+            -- atomic on every engine: two joins with one token cannot both spend it.
+            CREATE TABLE {table:join_token} (
+                id            {{key}} PRIMARY KEY,
+                verifier      {{key}} NOT NULL,
+                product       {{key}} NOT NULL,
+                ceiling       {{text}} NOT NULL,
+                group_name    {{key}} NULL,
+                made_by       {{text}} NOT NULL,
+                made_by_name  {{text}} NULL,
+                made_at       {{time}} NOT NULL,
+                expires_at    {{time}} NOT NULL,
+                tries         {{int}} NOT NULL,
+                spent_at      {{time}} NULL,
+                cancelled_at  {{time}} NULL,
+                ended_at      {{time}} NOT NULL,
+                row_version   {{int}} NOT NULL
+            );
+            CREATE UNIQUE INDEX {index:join_token_by_verifier} ON {table:join_token}(verifier);
+            """,
         ],
-        // the second migration only adds a nullable column, which the code of version 1 never reads or writes: an instance of the previous version still works with it
+        // the last migration only adds a table, which the code of the version before never reads or writes: an instance of the previous version still works with it
         compatibleWithPrevious: 1,
-        // a code that was never redeemed and has long expired; pairing codes are swept when read, this catches a group nobody has paired with since
-        retention: [new RetentionRule("pairing_code", "expires_at")]);
+        // a code that was never redeemed and has long expired; pairing codes are swept when read, this catches a group nobody has paired with since. A join token is kept
+        // for a while after it ended, so a late join with it is still audited with who made it
+        retention: [new RetentionRule("pairing_code", "expires_at"), new RetentionRule("join_token", "ended_at")]);
 }
 
 /// <summary>A group's settings on the <c>trust</c> module: the same behaviour as <see cref="GroupSettings"/>.</summary>

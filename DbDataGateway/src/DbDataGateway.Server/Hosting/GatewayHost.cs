@@ -97,6 +97,9 @@ public static class GatewayHost
         UseSharedHost(builder, options, args);
         ConfigureServices(builder.Services, options);
         ConfigureKestrel(builder, options);
+        // the join step of the start: the joins the management listener's callback confirms, and what the management API made the join with
+        builder.Services.AddSingleton<DbDataKit.Web.Trust.PendingJoins>();
+        builder.Services.AddSingleton<Management.GatewayJoinTarget>();
         overrideServices?.Invoke(builder.Services); // a seam for tests: replace a registration made above (the last one wins)
 
         var app = builder.Build();

@@ -49,6 +49,8 @@ public sealed class McpServer(NounRouter router, McpOptions options, string serv
         foreach (var noun in router.Nouns)
         {
             if (options.Excluded.Contains(noun.Name) || McpOptions.Always.Contains(noun.Name)) continue;
+            // a one-word command (`pair`) is run by a person on the machine itself with what was given to them; it is never a tool
+            if (noun.Direct is not null) continue;
             foreach (var verb in noun.Verbs)
             {
                 string command = $"{noun.Name} {verb.Name}";

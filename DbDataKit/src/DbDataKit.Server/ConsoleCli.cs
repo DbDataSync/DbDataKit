@@ -408,7 +408,7 @@ public static class ConsoleCli
                 () => new DbDataKit.Secrets.SecretResolverChain([ConsoleSecrets.Open(directory, environment), new DbDataKit.Secrets.EnvSecretProvider(environment)]),
                 ConsoleState.SettingsFileIn(directory));
         },
-        ConsoleState.Modules, DbDataKit.State.StateScope.Install, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
+        ConsoleState.Modules, ConsoleState.Scope, ["engine", "repo"], "[--engine mssql|postgres] [--repo <console directory>]") { ConfigureMove = configureMove });
 
     // ---- user ----
 
@@ -522,7 +522,80 @@ public static class ConsoleCli
         new Verb("link", "Make a new setup link for the first administrator, on this machine, while the console has no user (the link works once and ends after setup.link_lifetime_hours, 24 by default)", EffectClass.RepoFilesOnly, "[--url <address>] [--repo <console directory>]",
             (args, context) => SetupLinkAsync(args, context, environment),
             DataSchemas.Object([("url", DataSchemas.String), ("expires", DataSchemas.String)], "url", "expires")),
+        new Verb("invite", "Make a single-use join token for a Gateway, a Runner or a Workspace and print the command to run on that server's machine", EffectClass.RepoFilesOnly,
+            "<gateway|runner|workspace> [--role <role>[,<role>...]] [--group <group>] [--minutes <n>] [--url <console address>] [--repo <console directory>]",
+            (args, context) => SetupInviteAsync(args, context, environment),
+            DataSchemas.Object([("command", DataSchemas.String), ("product", DataSchemas.String), ("token_id", DataSchemas.String), ("expires", DataSchemas.String), ("role", DataSchemas.StringList), ("group", DataSchemas.String)],
+                "command", "product", "token_id", "expires", "role")),
     ]);
+
+    /// <summary>
+    /// <c>setup invite</c>: a join token in the console's state and the <c>pair</c> command that uses it, printed once. It opens the console's own state and
+    /// certificate, so it runs on the console's machine as an account that can read its folder; the console's Add a server screen makes the same token.
+    /// </summary>
+    private static async Task<int> SetupInviteAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        const string usage = "Usage: setup invite <gateway|runner|workspace> [--role <role>[,<role>...]] [--group <group>] [--minutes <n>] [--url <console address>] [--repo <console directory>]";
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "repo", "role", "group", "minutes", "url" });
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1) { await context.Error.WriteLineAsync(usage); return CliExit.Usage; }
+        var product = parsed.Words[0].ToLowerInvariant();
+        if (!ConsoleJoins.Products.ContainsKey(product)) { await context.Error.WriteLineAsync($"'{parsed.Words[0]}' is not a server that joins the console: gateway, runner or workspace."); return CliExit.Usage; }
+        var ceiling = ServerRole.Admin;
+        if (parsed.Get("role") is { } roles && (!ServerRoles.TryParse(roles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries), out ceiling) || ceiling == ServerRole.None))
+        {
+            await context.Error.WriteLineAsync($"'{roles}' is not a role ceiling: give roles separated by commas (viewer, operator, author, approver, admin, publisher).");
+            return CliExit.Usage;
+        }
+        TimeSpan? lifetime = null;
+        if (parsed.Get("minutes") is { } minutes)
+        {
+            if (!int.TryParse(minutes, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var m) || m < 1 || m > JoinTokens.MaxLifetime.TotalMinutes)
+            {
+                await context.Error.WriteLineAsync($"--minutes is a whole number from 1 to {JoinTokens.MaxLifetime.TotalMinutes:0}.");
+                return CliExit.Usage;
+            }
+            lifetime = TimeSpan.FromMinutes(m);
+        }
+        var scope = new JoinScope(product, ceiling, parsed.Get("group"));
+        if (scope.Problem() is { } problem) { await context.Error.WriteLineAsync($"The join token cannot be made: {problem}."); return CliExit.Usage; }
+
+        var directory = DirectoryOf(parsed, environment);
+        // the console makes its certificate at its first start, as its own account; this command only reads it
+        if (!File.Exists(Path.Combine(directory, DbDataKit.Hosting.Certificates.DirectoryCertificate.PfxFileName)))
+        {
+            await context.Error.WriteLineAsync($"The console in {directory} has no certificate yet. Start it once (dbdatakit server run), then make the command.");
+            return CliExit.Failure;
+        }
+        string fingerprint;
+        try { fingerprint = PairingProof.CertificateFingerprint(ConsoleHost.Certificate(directory)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            await context.Error.WriteLineAsync($"The console's certificate in {directory} cannot be read: {ex.Message} Run the command as an account that can read the console's folder.");
+            return CliExit.Failure;
+        }
+
+        var given = (parsed.Get("url") ?? AddressOf(directory)).TrimEnd('/');
+        if (!Uri.TryCreate(given, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps || address.AbsolutePath != "/")
+        {
+            await context.Error.WriteLineAsync($"The console's address '{given}' cannot be used: it is https://, a host and a port.");
+            return CliExit.Usage;
+        }
+        address = ServerJoin.AddressFor(address);
+        var database = OpenState(parsed, environment);
+        var minted = new ConsoleJoins(database).Mint(scope, Environment.UserName, $"{Environment.UserName} (command line)", lifetime, actorKind: "command");
+        var command = ConsoleJoins.Command(product, address, minted.Token, fingerprint);
+        await context.Out.WriteLineAsync($"Run this on the {product}'s machine, as an administrator, before {minted.Record.ExpiresAt.UtcDateTime:u}. It works once:");
+        await context.Out.WriteLineAsync($"    {command}");
+        if (address.IsLoopback)
+            await context.Out.WriteLineAsync($"The command names {address.GetLeftPart(UriPartial.Authority)}, which only a server on this machine reaches. For another machine, make it with --url and the address that machine reaches the console at.");
+        context.Data["command"] = command;
+        context.Data["product"] = product;
+        context.Data["token_id"] = minted.Record.Id;
+        context.Data["expires"] = minted.Record.ExpiresAt.UtcDateTime.ToString("O");
+        context.Data["role"] = ServerRoles.Names(ceiling).ToList();
+        if (scope.Group is { } group) context.Data["group"] = group;
+        return CliExit.Ok;
+    }
 
     /// <summary>
     /// <c>setup link</c> (plan 23a FQ19): the console's first-run invitation made again, on the machine itself (it opens the console's own state and settings, which only an account that can read the directory can do; there is no API for it, so a remote
