@@ -41,8 +41,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-3 | The control service's deploy of a build is built: the Workspace serves a build's items and record (`.../builds/{b}/contents`, `.../files/{sha256}`), the console deploys an item as the person (`POST /api/deploys`, `ConsoleDeploys`), signs each version with its publisher key over the build record, and keeps the deploy record (`GET /api/deploys`; `docs/publishing.md`, "Deploying a build from the control service"). Left: an app build sent to an instance's preview (`preview-data`) through the console, which the Workspace still sends with its key; the deploy to a Gateway tested end to end through the console (an app build, which needs Bun and the vendored store; a Build project's semantic models; a Store project's models), so far tested against a stand-in Gateway in `DbDataKit.Deploy.Tests`; an app version is sent over the Gateway's app calls, with no signature and no build record on the Gateway, until PUBLISHING-1 puts apps on the shared publish API; for trusted code, the approver's signature once PUBLISHING-3 is built | none | M | a test through the console deploys an app build, a Build project's semantic models and a Store project's models to a Gateway; the Gateway records the person, and for the models the signature and the build record; the deploy record lists each |
 | WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). The Store project's Deploy tab stages its model package through the console's deploy too (`docs/publishing.md`, "Runs of a deployed build"). Left: the preview form of an app build calls it too, once WORKSPACEISOLATION-3 deploys a preview through the console | WORKSPACEISOLATION-3 | S | Playwright: Preview with data sends the build through the console and the preview opens |
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`), built for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
-| WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
-| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7, WORKSPACEISOLATION-11, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
+| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-11, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
 | WORKSPACEISOLATION-11 | The Rows tab of a Store project (`StoreRowsPanel`) offers the Gateways the control service manages, read from the console as the signed-in person, instead of the Workspace's paired targets (`GET /api/v1/publish-targets`, which WORKSPACEISOLATION-8 removes); a Gateway is offered when it serves the model, and rows are still read and written through the console's relay as today | none | S | vitest: the panel lists the Gateways from the console's answer and calls no Workspace target route; the Rows story (Playwright) edits a row with `publish-targets` answering 404 |
@@ -375,6 +374,56 @@ trigger: only a manual-only task is run from a version that is not served", beca
 - Option B: the packages stop writing `manual: true` on these tasks, and the Runner stays as it was.
 
 Recommendation: A: the packages already say what they mean, and the Runner's rule for a `ddl` task reads `manual` the same way.
+
+### WORKSPACEISOLATION-P24: who may store a development login on a Runner (default, awaiting the owner)
+
+Scenario: Ana is an author of the project `crm-to-dw` and holds the operator role on the Runner `runners-eu`. She sends a development login for `crm`
+in `dev` (`POST /api/workspace-dev-logins/...`). The console stores it on the Runner as Ana, and the Runner refuses: "This needs the admin role."
+
+- Option A (built): the Runner decides, with the admin role it asks for every secret it stores (`RunnerSecretsApi`). Only a Runner administrator can
+  set up a development login today.
+- Option B: a person who may author the project stores a development login in a non-production channel, after a warning that names the Runner and the
+  channel; the console checks the project role and stores the login with its own identity (CHANNELS-1's client, built with AUTHORING-19).
+- Option C: the Runner lets its operator role store a secret whose name is a development login (`dbdatakit:runner:dev-login:...`), and keeps the admin
+  role for every other secret.
+
+Recommendation: A until AUTHORING-19 is built, then B: a person with access to the project can do it, with a clear warning, and production stays the
+administrator's.
+
+### WORKSPACEISOLATION-P25: the names a development login is stored under (default, awaiting the owner)
+
+Scenario: Ana sets up `crm` of `crm-to-dw` for `dev`, typing the user `ana_dev` and a password. The Runner then holds
+`dbdatakit:runner:dev-login:crm-to-dw.dev.crm:user` and `dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password`. Setting up `test` later stores two
+other names, so a login of one channel never serves another.
+
+- Option A (built): one name per package, channel and slot, of the kind `dev-login`, with the parts `user` and `password`; the user is kept as a secret
+  too, so the connection's copy can be written from it later without asking Ana again.
+- Option B: the names of the connection's copy (`dbdatakit:runner:connection:<copy>:password`), the user written into the copy's text when it is sent,
+  and nothing stored for the user.
+
+Recommendation: A: the name says where the login is used, and a person reading the Runner's secrets overview sees which are development logins.
+
+### WORKSPACEISOLATION-P26: a development login for production (default, awaiting the owner)
+
+Scenario: Ana sends a development login for `crm` in `prod`. The console refuses (409): "A development login is set up in a channel other than prod.
+Production's logins are bound by an administrator on the Runner's Packages page (Bindings)." Nothing is sent to the Workspace server or the Runner.
+
+- Option A (built): `prod` is refused before anything is sent, for everyone.
+- Option B: a Runner administrator may store a login for `prod` this way, after a warning that it is production's login.
+
+Recommendation: A: production's logins are bound on the Runner, where its confirmations are, and a development login stays a development login.
+
+### WORKSPACEISOLATION-P27: what the Workspace server learns about a development login (default, awaiting the owner)
+
+Scenario: Ana sets up `crm` for `dev`. The console asks the Workspace server only which package `crm-to-dw` is (`GET /api/v1/projects/crm-to-dw`). Once the
+slot is bound in `dev`, the channel picker shows `dev` as bound, read from the Runner through the console.
+
+- Option A (built): the Workspace server is not told; it learns that the binding exists the way every screen does, through the console's read of the
+  Runner's channels.
+- Option B: the console also tells the Workspace server which binding it made (`{runner, channel, connection}`, no value), and the Workspace server records
+  it in its audit as something done on the project.
+
+Recommendation: A: the binding is the Runner's, and a second record could disagree with it.
 
 ## Shared areas touched
 
