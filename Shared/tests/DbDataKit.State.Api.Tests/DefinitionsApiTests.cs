@@ -190,6 +190,31 @@ public sealed class DefinitionsApiTests : IDisposable
     }
 
     [Fact]
+    public void A_version_signed_over_its_build_record_keeps_the_record_and_a_changed_record_is_refused()
+    {
+        var api = Open(signatures: true);
+        var key = ConsoleSigningKey.Generate();
+        AddKey(api, key);
+        const string record = """{"schema":"build-record/1","build":"b1","commit":"abc"}""";
+        var signature = DefinitionSigning.Sign(key, "page", "home", "v1", [], record);
+
+        // the record is part of what was signed: another record, or none, does not hold
+        Assert.Equal(403, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature, build = record.Replace("b1", "b2") }), PublisherA).Status);
+        Assert.Equal(403, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature }), PublisherA).Status);
+        var ok = api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature, build = record }), PublisherA);
+        Assert.Equal((200, "verified"), (ok.Status, (string)ok.Body["signature"]!));
+
+        // the group keeps the record as it was sent, with the signer, and a version read returns it to a promotion
+        var version = api.Handle("GET", "definitions/page/home/versions/1", null, Admin).Body;
+        Assert.Equal((record, key.Fingerprint), ((string?)version["build"], (string?)version["signer"]));
+        var listed = ((JsonArray)api.Handle("GET", "definitions/page/home", null, Admin).Body["versions"]!)[0]!;
+        Assert.Equal(record, (string?)listed["build"]);
+        // a version signed without a record is signed as before, and has none
+        Assert.Equal(200, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v2", signature = DefinitionSigning.Sign(key, "page", "home", "v2", []) }), PublisherA).Status);
+        Assert.Null(api.Handle("GET", "definitions/page/home/versions/2", null, Admin).Body["build"]);
+    }
+
+    [Fact]
     public void The_trust_of_every_kind_the_host_takes_is_one_read_for_a_viewer_and_never_for_a_publisher()
     {
         var api = Open(signatures: true);
