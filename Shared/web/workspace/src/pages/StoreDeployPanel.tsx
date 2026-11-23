@@ -3,6 +3,7 @@ import { Link as ConsoleLink } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ErrorBanner, parseYaml } from '@dbdatakit/shell'
 import { workspaceApi, type BuildSummary, type StagedRun, type StagedRunStarted } from '../api'
+import { deployApi, deployBody, deployTargets, useHostedServer } from '../deploys'
 import { followStagedRun } from './SyncProvisioningPanel'
 
 /** The step the task `deploy` records its report as (`DbDataKit.DataModel.Runner`, `ModelDeploySteps.Report`). */
@@ -76,7 +77,8 @@ export async function followBuild(read: () => Promise<BuildSummary>, intervalMs 
   return b
 }
 
-interface Deployed { started: StagedRunStarted; run: StagedRun; build: string }
+/** A run of the model's package: what started it, the run read back, and the console's deploy that staged the version it runs. */
+interface Deployed { started: StagedRunStarted; run: StagedRun; deploy: string }
 
 /** A run's line: its id, package, version, channel and outcome, a link to it on the Runner's screens, and its failure. */
 function RunHead({ result }: { result: Deployed }) {
@@ -132,7 +134,7 @@ export function ContractResult({ result }: { result: Deployed }) {
           ))}
           {report.blocked.map((s, i) => <div key={i} className="error" data-testid="wsp-contract-blocked">Blocked: {s}</div>)}
           {report.notes.map((s, i) => <div key={i} className="hint" data-testid="wsp-contract-note">{s}</div>)}
-          {report.dryRun && report.dropped.length > 0 && <div className="hint" data-testid="wsp-contract-dropped">Before it runs, the paired Gateways are asked who reads: {report.dropped.map((d) => d.description).join('; ')}.</div>}
+          {report.dryRun && report.dropped.length > 0 && <div className="hint" data-testid="wsp-contract-dropped">Before it runs, the Gateways the console manages are asked who reads: {report.dropped.map((d) => d.description).join('; ')}.</div>}
         </>
       )}
     </div>
@@ -142,6 +144,7 @@ export function ContractResult({ result }: { result: Deployed }) {
 /**
  * The Deploy tab of a Store project's workspace (plan 33 SC24): a model's tables created or expanded with no Store server. **Dry run** builds the draft, stages the model's deploy package on a channel of a Runner with the slot `storage` bound
  * to a connection the Runner holds, and runs the manual task `deploy` of that staged version for the signed-in person without writing; **Deploy** runs it again on the same version, writing. The login is the Runner's; this server holds none.
+ * The stage is the console's deploy of the build and the runs go through the console as the person (Design: docs/publishing.md#runs-of-a-deployed-build): the Workspace server only builds.
  */
 export function StoreDeployPanel({ project, id, paths }: { project: string; id: string; paths: readonly string[] }) {
   const models = modelsOf(paths)
@@ -151,47 +154,48 @@ export function StoreDeployPanel({ project, id, paths }: { project: string; id: 
   const [channel, setChannel] = useState('prod')
   const [connection, setConnection] = useState<string | null>(null)
   const [schema, setSchema] = useState('')
-  const targets = useQuery({ queryKey: ['workspace', 'publish-targets', project], queryFn: () => workspaceApi.publishTargets(project) })
-  const runners = (targets.data ?? []).filter((t) => t.product === 'runner')
-  const runner = target !== '' && runners.some((t) => t.name === target) ? target : (runners[0]?.name ?? '')
+  const server = useHostedServer()
+  const servers = useQuery({ queryKey: ['console', 'servers'], queryFn: deployApi.servers, enabled: server !== null, staleTime: 10_000 })
+  const runners = deployTargets(servers.data ?? [], undefined).filter((t) => t.product === 'runner')
+  const runner = target !== '' && runners.some((t) => t.id === target) ? target : (runners[0]?.id ?? '')
   const file = paths.find((p) => p === `models/${model}.yaml` || p === `models/${model}.yml`)
   const text = useQuery({ queryKey: ['workspace', project, id, 'file', file], queryFn: () => workspaceApi.readFile(project, id, file!), enabled: !!file })
   const storage = connection ?? storageConnectionOf(text.data ?? '')
-  const pkg = packageOf(model)
 
-  const run = async (build: string, dry: boolean): Promise<Deployed> => {
+  const run = async (deploy: string, dry: boolean): Promise<Deployed> => {
     const inputs: Record<string, string> = { dry_run: String(dry), ...(schema.trim() ? { schema: schema.trim() } : {}) }
-    const started = (await workspaceApi.runStaged(project, id, build, 'deploy', inputs, pkg)).run
-    return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, DeployStep, pkg)) }
+    const started = (await deployApi.run(deploy, 'deploy', inputs)).run
+    return { started, deploy, run: await followStagedRun(() => deployApi.runOf(deploy, started.run_id, DeployStep)) }
   }
-  // builds the draft as it is and stages the model's package on the Runner's channel, its slot storage bound; the build that did it is what the tasks run of
+  // builds the draft as it is and has the console stage the model's package on the Runner's channel, its slot storage bound; the console's deploy is what the tasks run of
   const stage = async (): Promise<string> => {
-    if (!runner) throw new Error('No Runner is paired with this server. An administrator pairs one under Publisher keys; then a model can be deployed through it.')
+    if (!server) throw new Error('A model is deployed through the console that manages this Workspace server; open this draft from the console.')
+    if (!runner) throw new Error('The console manages no Runner. An administrator adds one under Servers; then a model can be deployed through it.')
     if (!storage.trim()) throw new Error('Name the connection on the Runner the model\'s tables are in (the slot storage is bound to it).')
     const requested = await workspaceApi.requestBuild(project, id)
     const built = await followBuild(async () => (await workspaceApi.build(project, id, requested.id)).build)
     if (built.status !== 'succeeded') throw new Error(`The build ${built.status === 'failed' ? 'failed' : 'did not end'}${built.message ? `: ${built.message}` : ''}. See the Builds tab.`)
-    await workspaceApi.publish(project, id, built.id, runner, '', { channel: channel.trim(), model, bind: { storage: storage.trim() } })
-    return built.id
+    const deployed = await deployApi.deploy(deployBody({ workspaceServer: server, project, workspace: id, build: built.id }, runner, '', { channel: channel.trim(), model, bind: { storage: storage.trim() } }))
+    return deployed.deploy.id
   }
   const dry = useMutation({ mutationFn: async (): Promise<Deployed> => run(await stage(), true) })
-  const apply = useMutation({ mutationFn: () => run(dry.data!.build, false) })
+  const apply = useMutation({ mutationFn: () => run(dry.data!.deploy, false) })
   const report = dry.data ? deployReportOf(dry.data.run) : null
 
   const [allow, setAllow] = useState('')
   const plan = useMutation({
     mutationFn: async (): Promise<Deployed> => {
-      const build = dry.data?.build ?? await stage()
-      const started = (await workspaceApi.runStaged(project, id, build, 'contract', schema.trim() ? { schema: schema.trim() } : {}, pkg)).run
-      return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, ContractStep, pkg)) }
+      const deploy = dry.data?.deploy ?? await stage()
+      const started = (await deployApi.run(deploy, 'contract', schema.trim() ? { schema: schema.trim() } : {})).run
+      return { started, deploy, run: await followStagedRun(() => deployApi.runOf(deploy, started.run_id, ContractStep)) }
     },
   })
   const planned = plan.data ? contractReportOf(plan.data.run) : null
   const contract = useMutation({
     mutationFn: async (): Promise<Deployed> => {
-      const { build, run: read } = plan.data!
-      const started = (await workspaceApi.contract(project, id, build, { package: pkg, plan_run: read.id, approve: planned!.hash, allow_consumer: allowancesOf(allow) })).run
-      return { started, build, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, build, started.run_id, ContractStep, pkg)) }
+      const { deploy, run: read } = plan.data!
+      const started = (await deployApi.contract(deploy, { planRun: read.id, approve: planned!.hash, allowConsumer: allowancesOf(allow) })).run
+      return { started, deploy, run: await followStagedRun(() => deployApi.runOf(deploy, started.run_id, ContractStep)) }
     },
   })
   const busy = dry.isPending || apply.isPending || plan.isPending || contract.isPending
@@ -205,7 +209,7 @@ export function StoreDeployPanel({ project, id, paths }: { project: string; id: 
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select className="input" aria-label="Runner" value={runner} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-deploy-runner" disabled={runners.length === 0}>
-          {runners.length === 0 ? <option value="">No Runner paired</option> : runners.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+          {runners.length === 0 ? <option value="">No Runner</option> : runners.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <input className="input mono" style={{ width: 110 }} aria-label="Channel" value={channel} onChange={(e) => setChannel(e.target.value)} data-testid="wsp-deploy-channel" />
         <input className="input mono" style={{ width: 150 }} aria-label="Connection on the Runner" placeholder="connection" value={storage} onChange={(e) => setConnection(e.target.value)} data-testid="wsp-deploy-connection" />
@@ -213,7 +217,7 @@ export function StoreDeployPanel({ project, id, paths }: { project: string; id: 
         <button type="button" className="btn btn-primary" disabled={busy || !runner || channel.trim() === ''} data-testid="wsp-deploy-dry" onClick={() => { apply.reset(); dry.mutate() }}>{dry.isPending ? 'Building and planning...' : 'Dry run'}</button>
         <button type="button" className="btn" disabled={busy || !canApply(report)} data-testid="wsp-deploy-apply" onClick={() => apply.mutate()}>{apply.isPending ? 'Deploying...' : 'Deploy'}</button>
       </div>
-      {targets.isSuccess && runners.length === 0 && <div className="hint" data-testid="wsp-deploy-no-runner">No Runner is paired with this server: an administrator pairs one under Publisher keys.</div>}
+      {servers.isSuccess && runners.length === 0 && <div className="hint" data-testid="wsp-deploy-no-runner">The console manages no Runner: an administrator adds one under Servers.</div>}
       <ErrorBanner error={dry.error ?? apply.error} />
       {dry.data && <DeployResult result={dry.data} />}
       {apply.data && <DeployResult result={apply.data} />}

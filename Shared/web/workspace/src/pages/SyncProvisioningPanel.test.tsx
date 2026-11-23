@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { BuildDetail, ProvisioningPlan, StagedRun } from '../api'
-import { ProvisioningPlanView, SyncProvisioningPanel, followStagedRun, reportedSteps, stagedVersionOf, stateWord } from './SyncProvisioningPanel'
+import { ApiError } from '@dbdatakit/shell'
+import type { ProvisioningPlan, StagedRun } from '../api'
+import { ProvisioningPlanView, SyncProvisioningPanel, followStagedRun, reportedSteps, stateWord } from './SyncProvisioningPanel'
 
 const plan: ProvisioningPlan = {
   replication: 'orders', cache_generated_at: '2026-11-12T10:00:00Z', cache_server: 'prod-gateway',
@@ -64,18 +65,7 @@ describe('the provisioning plan of a Sync draft', () => {
   })
 })
 
-const build = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({
-  build: { id, workspace: 'd', status: 'succeeded', commit: null, requested_by: 'ada', message: null, requested: '', started: null, finished: null }, result: null, publishes,
-})
-
 describe('applying a draft on the Runner (plan 28c E21, step e)', () => {
-  it('takes the version of the newest build whose publish to a Runner worked, never a failed publish or an app', () => {
-    expect(stagedVersionOf([build('b2', [{ at: '', by: 'g', target: 'jobs', ok: false, error: 'no' }]), build('b1', [
-      { at: '', by: 'g', target: 'jobs', ok: true, answer: { package: 'orders-set', channel: 'prod', version: 1 } },
-      { at: '', by: 'g', target: 'jobs', ok: true, answer: { package: 'orders-set', channel: 'prod', version: 2 } },
-    ])])).toEqual({ build: 'b1', target: 'jobs', package: 'orders-set', channel: 'prod', version: '2' })
-    expect(stagedVersionOf([build('b1', [{ at: '', by: 'g', target: 'edge', ok: true, answer: { app: 'orders', version: 3 } }])])).toBeNull()
-  })
   it('follows the run to its end and reads the statements it reports', async () => {
     const running: StagedRun = { id: 'r', task: 'provision', outcome: 'running', started: 's', finished: null, version: '2', failure: null }
     const done: StagedRun = { ...running, outcome: 'failed', finished: 'f', failure: { kind: 'error', message: 'a step failed' }, steps: [{ key: 'orders', started: 's', completed: 'f', result: { steps: [{ title: 'Create the table', succeeded: false, error: 'denied' }] } }] }
@@ -86,5 +76,14 @@ describe('applying a draft on the Runner (plan 28c E21, step e)', () => {
     let n = 0
     expect((await followStagedRun(async () => { n++; return running }, 1, 3)).finished).toBeNull()
     expect(n).toBe(3)
+  })
+  it('reads a run the Runner has queued but not started again until it is on the Runner\'s record, and gives up on one that never is', async () => {
+    const queued = () => new ApiError(404, 'Runner one has no run r.')
+    const done: StagedRun = { id: 'r', task: 'provision', outcome: 'succeeded', started: 's', finished: 'f', version: '2', failure: null }
+    const reads: (StagedRun | ApiError)[] = [queued(), queued(), done]
+    const run = await followStagedRun(async () => { const next = reads.shift()!; if (next instanceof ApiError) throw next; return next }, 1, 10)
+    expect(run.outcome).toBe('succeeded')
+    await expect(followStagedRun(async () => { throw queued() }, 1, 10, 3)).rejects.toThrow('has no run')
+    await expect(followStagedRun(async () => { throw new ApiError(403, 'refused') }, 1, 10, 3)).rejects.toThrow('refused')
   })
 })
