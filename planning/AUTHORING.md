@@ -54,15 +54,14 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1, AUTHORING-2 (the target Runner's platform) and AUTHORING-22 (`preflight` before activation).
 - WORKSPACEISOLATION-6: the Gateway catalog refresh moves to the control service, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`).
 
-## Proposed decisions
+## Open designs
 
-### AUTHORING-P7: the built-in package where the group requires signed versions (default, awaiting the owner)
+### The Runner's built-in package where a group requires signed versions
 
-Built as the default: the runner puts `dbdatakit-metadata` in a channel through its own publish, so a group with `require_signatures` on refuses it, and
-the metadata route answers 409 naming the missing signature. Scenario: an administrator turned `require_signatures` on, and Ana presses Refresh catalog in
-`dev`. Option A (built): the read is refused until signatures are turned off or the package is signed. Option B: the package the runner ships beside its
-program is exempt, because it is the runner's own code, as trusted as the program; the audit line of its install says so. Recommendation: B once
-signatures are built (today no version can be verified, so with the setting on every publish is refused anyway).
+**What.** The Runner puts its built-in package `dbdatakit-metadata` in a channel through its own publish, so a group with `require_signatures` on
+refuses it and a catalog read answers 409 naming the missing signature. The direction is to exempt that package, because it ships beside the Runner's
+own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
+the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
 
 ### AUTHORING-P11: following a read the console stopped waiting for (default, awaiting the owner)
 
