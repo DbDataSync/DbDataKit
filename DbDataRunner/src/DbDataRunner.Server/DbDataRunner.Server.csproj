@@ -50,6 +50,8 @@
   <ItemGroup Condition="'$(UseLocalDbDataKit)' == 'true'">
     <!-- Private=false: its apphost, deps.json and runtimeconfig.json are not copied to this program's output root. Built for its executable only; published, with its own dependencies, to taskhost/ beside this program (see the targets below) -->
     <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.TaskHost\DbDataKit.Runner.TaskHost.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <!-- The built-in package dbdatakit-metadata: built for its files only, published with its own dependencies to builtin/dbdatakit-metadata/ beside this program (see the targets below); the task host loads it like any package -->
+    <ProjectReference Include="$(DbDataKitRoot)src\DbDataKit.Runner.Metadata\DbDataKit.Runner.Metadata.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <!--
@@ -69,6 +71,28 @@
     <ItemGroup>
       <_TaskHostFile Include="$(_TaskHostDir)**\*" />
       <ResolvedFileToPublish Include="@(_TaskHostFile)" RelativePath="taskhost\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The built-in packages (docs/authoring-metadata.md, "The built-in package dbdatakit-metadata"): the runner installs them in a channel from builtin/<name>/ beside the program when they are first needed there, so they are published
+    there on every build, and into the publish output with the program.
+  -->
+  <Target Name="CopyBuiltInPackages" AfterTargets="Build" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <PropertyGroup>
+      <_MetadataPackageDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutDir)', 'builtin', 'dbdatakit-metadata'))</_MetadataPackageDir>
+    </PropertyGroup>
+    <!-- The package is a portable library run by the task host, so it is published without the program's runtime and single-file properties: a library refuses PublishSingleFile (NETSDK1099), and its RID-free
+         build output, which the publish takes with NoBuild, is where the program's reference built it -->
+    <MSBuild Projects="$(DbDataKitRoot)src\DbDataKit.Runner.Metadata\DbDataKit.Runner.Metadata.csproj" Targets="Publish"
+             Properties="NoBuild=true;PublishDir=$(_MetadataPackageDir);SelfContained=false"
+             RemoveProperties="RuntimeIdentifier;PublishSingleFile;PublishReadyToRun;PublishTrimmed;PublishAot;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;EnableCompressionInSingleFile" />
+  </Target>
+  <!-- ExcludeFromSingleFile: under PublishSingleFile the SDK bundles every assembly of the list into the program's executable, and the package's assemblies must stay files in its folder, where the task host loads them from -->
+  <Target Name="BuiltInPackagesIntoPublish" AfterTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="CopyBuiltInPackages" Condition="'$(UseLocalDbDataKit)' == 'true'">
+    <ItemGroup>
+      <_MetadataPackageFile Include="$(_MetadataPackageDir)**\*" />
+      <ResolvedFileToPublish Include="@(_MetadataPackageFile)" RelativePath="builtin\dbdatakit-metadata\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     </ItemGroup>
   </Target>
 </Project>

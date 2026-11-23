@@ -542,7 +542,20 @@ public sealed partial class RunnerScheduler
 
         // the connection slots as the task's own channel binds them (plan 28c E02); a slot with no binding fails the run before anything starts, naming the slot and the channel
         IReadOnlyDictionary<string, string> handles = new Dictionary<string, string>();
-        if (task.Connections.Count > 0 && _options.Slots is { } slotResolver)
+        if (taskRef.Package == MetadataPackage.Name)
+        {
+            // the built-in package reads through another package's slot: its one slot is that slot's binding in this channel, held to the same rules as that package's own runs
+            try
+            {
+                handles = MetadataHandles(taskRef, payload.Inputs);
+            }
+            catch (DbDataKit.Runner.Protocol.Server.SlotResolutionException ex)
+            {
+                FailWithoutRun(item, payload, taskRef, version, ex.Message, temporary: false, null);
+                return;
+            }
+        }
+        else if (task.Connections.Count > 0 && _options.Slots is { } slotResolver)
         {
             try
             {
@@ -713,6 +726,20 @@ public sealed partial class RunnerScheduler
             if (beat is not null) await StopBeating(beat, beatCts).ConfigureAwait(false);
             ReleaseRunLock(lockTaken, owner, taskRef, item.RunId);
         }
+    }
+
+    /// <summary>
+    /// The handle of the built-in metadata package's one slot (<see cref="MetadataPackage.Slot"/>): the connection the run's channel binds to the slot <see cref="MetadataPackage.SlotInput"/> of the package <see cref="MetadataPackage.PackageInput"/>,
+    /// resolved as that package's own run would resolve it (a slot with no binding is refused, and so is production's connection in another channel unless an administrator allowed it). Throws <c>SlotResolutionException</c> naming what is missing.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> MetadataHandles(TaskRef task, IReadOnlyDictionary<string, string> inputs)
+    {
+        var resolver = _options.Slots ?? throw new DbDataKit.Runner.Protocol.Server.SlotResolutionException("This runner has no connection bindings, so the built-in package has nothing to read.");
+        if (!inputs.TryGetValue(MetadataPackage.PackageInput, out var package) || !PackageManifestValidator.NameRule.IsMatch(package)
+            || !inputs.TryGetValue(MetadataPackage.SlotInput, out var slot) || !PackageManifestValidator.NameRule.IsMatch(slot))
+            throw new DbDataKit.Runner.Protocol.Server.SlotResolutionException($"A run of {task} names the package and the slot it reads through (the inputs '{MetadataPackage.PackageInput}' and '{MetadataPackage.SlotInput}'); this one does not.");
+        var bound = resolver.Handles(new TaskRef(package, task.Channel, task.Task), [new ConnectionSlot(slot, "database")]);
+        return new Dictionary<string, string>(StringComparer.Ordinal) { [MetadataPackage.Slot] = bound[slot] };
     }
 
     private void ReleaseRunLock(bool taken, string owner, TaskRef taskRef, Guid runId)
