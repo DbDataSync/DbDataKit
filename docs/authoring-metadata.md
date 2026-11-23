@@ -231,8 +231,24 @@ What is left unchecked offline, and what the check says:
 - A connection has no entry in the cache: the check names the connection once and leaves the mappings on it unchecked.
 - A source filter the lexer of the source's dialect cannot read (a string that is not closed, a `;`, a subquery, parentheses that do not match): the
   filter is reported as not checked offline. A filter that can be read has each name that stands for a column compared with the cached table.
-- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types and keys are compared once the cache
-  holds it.
+- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types are compared once the cache holds it.
+- A connection whose driver the draft does not hold as `drivers/<id>/driver.yaml` (a compiled driver, or one installed where the set runs): the check
+  names the connection once, and its source types and filters are not checked offline. A driver with a `driver.yaml` in the draft has its source types
+  read through that file's type map.
+- A reader or writer that is an engine's own (SQL Server's change tracking, CDC and merge, PostgreSQL's logical slot): whether it needs a key is not
+  checked offline. The check says so once per replication.
+
+**A key where the reader or writer needs one.** The check works out which readers and writers each mapping runs, as the engine does: its change
+processing, its bulk load, and its reconcile sweep when that is on. It asks each one that matches rows on a key whether the cache gives it one:
+
+- `ChangeApply` and `KeyReconcileDelete` need the target's primary key.
+- `TriggerAudit` and `KeyReconcile` need the source's primary key.
+- `Scd2` needs a natural key, stated as its `naturalKey` option or derived from the source's key.
+
+Example: the replication `orders` reads with `Watermark` and names no writer, so it writes with `ChangeApply`. The cached `dw.public.orders` has no
+primary key. The check warns on the mapping: "The writer 'ChangeApply' would refuse this mapping: Table mapping 'orders': target table 'public.orders'
+has no primary key". Add the key to the target and refresh the cache, or read the whole table each pass with `BatchReload` and write with
+`DeleteInsert`, which needs no key.
 
 **The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
 

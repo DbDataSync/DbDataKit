@@ -160,7 +160,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-5 | Follows SYNCAUTHORING-16 (the sidebar, the overview with Create mappings and Refresh, the editor's two sides and Column Mapping exist). Designer, the rest of a mapping: Create mappings and Column Mapping take the inferred target types and natural key from SYNCAUTHORING-3 (bulk create by its route); the source filter; **Custom query, not a table** (the query text, no rows); the sub-tabs Notes, Custom Transforms, Bulk Load (`DefaultSegmentingCard`), Provisioning (the mapping's plan, its pending steps as the tab's badge), Pipeline (the overrides), Diagnostics (`traceTiming`), Verify (the `verification:` checks as `ChecksCard`) | SYNCAUTHORING-16, SYNCAUTHORING-4, SYNCAUTHORING-3 | L | Playwright: Create mappings on a table with no primary key writes the inferred natural key and target types; add a row-count verification and a default segmenting by month; the Provisioning badge counts the missing table's step; Files shows the same changes |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | SYNCAUTHORING-4, SYNCAUTHORING-5 | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-9 | The replication set's manual read-only task `preflight` in its own package (`dbdatasync-runtime`), with the run login each replication uses, per mapping, findings as step outputs: on the source, the table and mapped columns exist, the filter's columns exist and it compiles (a zero-row read), the login can read the table (the engine's privilege function, then the zero-row read), change tracking, CDC or a logical slot and publication are on where the reader's strategy needs them (a missing one as a provisioning step of the source side, with its statement: the source side of the provisioning plan, which was a task of AUTHORING before), source types the driver reads, a key where a reader or writer needs one; on the target, the table exists or provisioning can create it (the plan from the live catalog), the login can insert, update and delete and, for provisioning, create and alter (privilege functions, never a trial write), types compatible, keys agreeing with no nullable key column, the `tracking:` schema and tables exist or may be created; nothing is written; started on the version staged in `prod` before activation and as **Re-check** after publish (AUTHORING-22) (`docs/authoring-metadata.md`, "A sync project") | AUTHORING-22 | L | Sync conformance on SQL Server and PostgreSQL: change tracking off on `dbo.orders` is a finding with the statement that enables it, and on it is satisfied; a login without insert on the target is a finding; a filter naming a missing column is a finding; the target's row count and every table are unchanged after the run |
-| SYNCAUTHORING-10 | The driver kinds and descriptors are a shared library (`Shared/src/DbDataKit.Sync.*`). The rest of the offline checks in the sync draft's check (`SyncOfflineCheck` in `DbDataKit.Authoring.Server` reads tables, mapped and filter columns, source types of the built-in drivers, types against the target's and the keys against the cache): a key for a reader or writer that needs one (which readers and writers need a key is Sync's driver knowledge, in `DbDataSync.Drivers.*`), and the source types and filters of a connection whose driver is Sync's own (a YAML driver, a Flight SQL connection with no `dialect`), read through Sync's shared libraries (`Shared/src/DbDataKit.Sync.*`); whether the types are then read through Sync's `MappingColumnReader` is SYNCAUTHORING-P13 | none | S | xunit on a sync draft fixture with a cache: a `ChangeApply` writer on a source table with no key in the cache is a finding on the mapping's file and line; a YAML driver's type that its type map does not know is a finding |
+| SYNCAUTHORING-10 | The rest of the offline checks in the sync draft's check (`SyncOfflineCheck` in `DbDataKit.Authoring.Server`): the key check of the readers and writers that are an engine's own (SQL Server's change tracking, CDC and `MsSqlMerge`, PostgreSQL's `PgLogicalSlot` reader), once SYNCAUTHORING-P19 says where their capabilities come from. Until then each is the note "whether it needs a key is not checked offline". The generic readers and writers, and the types and filters of YAML drivers and of Flight SQL, are built (`docs/authoring-metadata.md`, "A sync project") | none | S | xunit on a sync draft fixture with a cache: an `MsSqlChangeTracking` reader on a source table with no key in the cache is a finding on the mapping's file and line; a `PgLogicalSlot` reader on a keyed table is none |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package (AUTHORING-23) through Sync's metadata service, started through the console's catalog read as the built-in package's are (AUTHORING-21); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | AUTHORING-23, AUTHORING-21, WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
 | SYNCAUTHORING-12 | Follows SYNCAUTHORING-18 (Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card exist). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (WORKSPACEISOLATION-5) | SYNCAUTHORING-18, SYNCAUTHORING-4, SYNCAUTHORING-5, AUTHORING-6, WORKSPACEISOLATION-5 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
 
@@ -200,6 +200,12 @@ does not know; today the check says the connection's types are not checked offli
 for the built-in drivers and add the YAML drivers' type maps now that the descriptors are a shared library (`DbDataKit.Sync.Drivers.Descriptor`; the remaining SYNCAUTHORING-10 row).
 Option B, also switch the comparison to Sync's `MappingColumnReader` once it is shared, so the check and provisioning answer from one code path.
 Recommendation: B, done in the remaining SYNCAUTHORING-10 row.
+
+Built since (awaiting the owner's confirmation): the switch to Sync's code. Each side's columns are read through `MappingColumnReader` over the cache,
+each native type through the driver's Sync dialect (`MsSqlDialect` and the other built-in dialects over the shared tables, a draft's
+`drivers/<id>/driver.yaml` through `DescriptorDialect`, ANSI first for Flight SQL), and the two sides are compared by `FidelityRules` after
+`CanonicalTypes.ToShared` (new in `DbDataKit.Sync.Core`). If the owner chooses to keep the shared tables, the dialect lookup in `SyncOfflineCheck`
+goes back to `DialectCatalog` for the built-in engines and the YAML drivers keep their `DescriptorDialect`.
 
 ### SYNCAUTHORING-P14: words inside a function call in a source filter (default, awaiting the owner)
 
@@ -260,11 +266,43 @@ are in the shared `DbDataKit.Sync.Drivers.Generic`, but the built-in drivers tha
 `SqlBulkCopy` staging, PostgreSQL's logical reader) are `DbDataSync.Drivers.MsSql`, `.Postgres`, `.MySql`, `.Oracle`, `.DuckDb` and `.ArrowFlightSql`,
 which did not move: each brings its database client (Microsoft.Data.SqlClient, Npgsql, MySqlConnector, Oracle's client, DuckDB). Scenario: the
 Pipeline sub-tab of a replication from SQL Server asks the Workspace for the source's readers; with only the moved code it can list the generic kinds,
-not `MsSqlChangeTracking`. The same gap is SYNCAUTHORING-10's "a key for a reader or writer that needs one". Option A, move the built-in driver projects
+not `MsSqlChangeTracking`. The same gap is SYNCAUTHORING-10's key check of the engine-specific readers and writers (the generic ones are checked). Option A, move the built-in driver projects
 too (the Workspace then carries every database client). Option B, a table of each built-in driver's capabilities (its kinds, which need a key, its
 options) in a shared project, which the drivers register from and which a DbDataSync test holds equal to what each driver registers. Option C,
 SYNCAUTHORING-3 answers only the generic kinds and descriptor drivers, and the screens offer the engine-specific kinds from a list of their own.
 Recommendation: B, built at the start of SYNCAUTHORING-3.
+
+### SYNCAUTHORING-P20: how the filter of a YAML driver's connection is read offline (default, awaiting the owner)
+
+A `driver.yaml` names its identifier quoting (`quoteIdentifier: bracket`, `backtick` or `doubleQuote`) and nothing else of its engine's grammar. The
+offline check reads such a connection's source filter with the ANSI lexer and reserved words, with the descriptor's quoting: brackets as well as
+double quotes for `bracket`; backticks, and double quotes as strings, for `backtick`. Scenario: Ana's `acme-odbc` connection (a `driver.yaml` with
+`quoteIdentifier: bracket`) filters `[region code] > 3 AND regoin_code > 3`; the check reports `regoin_code` and, if the cached table has no
+`region code`, that name too, as errors on the filter's line. A filter in a grammar ANSI does not have (a `#` comment, a `$$` string) can be misread:
+a word in it may be reported as a missing column. Option A, as built. Option B, read a YAML driver's filter as not checked offline, so no error comes
+from a guess at its grammar. Option C, a `lexer:` key in `driver.yaml` naming the shared dialect whose lexer reads it (`sqlserver`, `mysql`, ...), ANSI
+when absent. Recommendation: A now, C when a driver's filters are misread.
+
+### SYNCAUTHORING-P21: the key check of a target that is not in the cache yet (default, awaiting the owner)
+
+A writer that matches rows on the target's primary key (`ChangeApply`, `KeyReconcileDelete`) is checked against the cached target table. When the
+target is not in the cache (provisioning creates it), the check builds the table provisioning would create, with Sync's `ProvisioningColumnBuilder`:
+the mapped source columns under their target names, keyed by the source's key or the mapping's `primaryKey`. Scenario: Ana maps `crm.dbo.audit_log`,
+which has no key, into `dw.public.audit_log`, which does not exist yet, under a `Watermark` reader (so the writer is `ChangeApply`). The check warns:
+"The target dw.public.audit_log is not in catalog-cache.yaml, so it is checked as provisioning would create it, with the source's key. The writer
+'ChangeApply' would refuse this mapping: ... has no primary key". Option A, as built. Option B, check only a target the cache holds, and leave a
+missing one to the set's `preflight`. Recommendation: A, since the first pass after provisioning would fail on it.
+
+### SYNCAUTHORING-P22: rules of Sync's engine the offline check copies (default, awaiting the owner)
+
+Three rules have no public method in the shared Sync libraries, so `SyncOfflineCheck` repeats them: the Flight SQL driver's reading of a type (ANSI
+first, then the dialect of the engine behind it: `FlightSqlDialect`, in `DbDataSync.Drivers.ArrowFlightSql`, which brings the Flight client),
+`KeyReconcileDeleteWriter`'s refusal of a target with no cached key, and `Scd2Writer`'s refusal of a pass with no natural key (its check is
+`internal`). The words of the two refusals are copied. Scenario: a later change makes `FlightSqlDialect` read a Flight SQL column's type in another
+order; the engine changes and the offline check does not, until someone sees the two disagree. Option A, as built, with a comment at each copy naming
+the class it copies. Option B, move each rule into a public method of the shared libraries (a `FlightSqlTypes` class in `DbDataKit.Sync.Core`,
+`Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
+this subject or with SYNCAUTHORING-8.
 
 ## Open designs
 
