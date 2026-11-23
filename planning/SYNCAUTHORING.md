@@ -218,23 +218,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P27: ANSI type names, for Flight SQL columns and a generic Flight SQL target (awaiting the owner)
-
-The Flight SQL driver names each Arrow column's type in ANSI words (`tinyint`, `varbinary`, `time`, `varchar`), and Sync reads those names, and writes
-the tables of a generic "Arrow Flight SQL" target, with its own ANSI table. The shared `ansi` table reads `tinyint`, `varbinary`, `float`, `double`,
-`bool`, `text` and `char` as unmappable and `time` as `time(0)`; it writes an unbounded string as `clob` (Sync: `VARCHAR(4000)` with a note), a
-binary as `blob` (Sync: `VARBINARY(4000)`), and refuses an 8-bit integer, an unsigned one, a guid, JSON and XML (Sync: `SMALLINT`, `CHAR(36)`,
-`VARCHAR(4000)`, each with a note). The shared `ansi` table is also the Gateway's Flight SQL dialect, Build's `ansi` connections, the base of every
-ODBC dialect and Transfer's fallback. Scenario: Ana's source is a Flight SQL server with a `flags` column of Arrow type int8 and a `payload` binary
-column. Today Sync reads them as `tinyint` and `varbinary` and replicates both; on the shared `ansi` table as it is, both are unmappable and the
-mapping is refused. Option A, add Sync's reads and writes to the shared `ansi` table (the Gateway, Build, ODBC and Transfer then read those names
-and write those types too). Option B, a new shared dialect `flightsql` that extends `ansi` with the names the Flight SQL driver gives Arrow types and
-Sync's writes for a generic target, used by Sync's Flight SQL driver and the offline check; no other product changes. Option C, Sync takes the
-shared `ansi` table as it is. Recommendation: B. The same answer decides how ANSI writes a time with no stated precision (`time(0)` in the
-shared `ansi` table today, Sync's `TIME`), since every other engine writes one with microseconds.
-
-Answer from the owner, 2026-11-23: as recommended (B)
-
 ### SYNCAUTHORING-P28: the column type authors' scripts see (default, awaiting the owner)
 
 Sync's dialects now read and write every column type through the shared tables (`ReadColumnType` and `WriteColumnType`, the shared

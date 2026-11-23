@@ -254,6 +254,14 @@ implementation yourself — and is out of scope for this page beyond the command
 A newly installed driver is picked up by the next process that loads the driver set: the next `dbdatasync` command, and the next run of the engine on a
 Runner once the repository is published again (its package carries the `drivers/` and `libraries/` folders it needs).
 
+## Column types
+
+Every driver reads a source column's type, and writes a target column's type, through the shared type tables of the suite
+(`Shared/src/DbDataKit.Dialect`, its README lists the rules), so Sync, Build, Transfer and the Gateway give the same answer for the same column.
+A SQL Server `tinyint` becomes `tinyint` on SQL Server, `tinyint unsigned` on MySQL and `smallint` on PostgreSQL; a PostgreSQL `numeric` with no
+precision becomes `numeric` on PostgreSQL and `decimal(38,9)` elsewhere, with a note in the provisioning plan. A Flight SQL column is read by the
+names its client gives Arrow types (the shared `flightsql` dialect), then by the dialect of the engine behind the server when the connection names one.
+
 ## Worked example: a descriptor driver, with no rebuild
 
 **For a real MySQL or MariaDB replication, use the built-in `MySql` driver above instead** — it has
