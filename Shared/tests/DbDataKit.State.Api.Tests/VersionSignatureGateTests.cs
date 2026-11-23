@@ -53,6 +53,21 @@ public sealed class VersionSignatureGateTests : IDisposable
     }
 
     [Fact]
+    public void A_version_signed_over_a_build_record_is_verified_again_with_the_record_it_was_stored_with()
+    {
+        var key = ConsoleSigningKey.Generate();
+        trust.Add("page", key.PublicKey, "ci", "root");
+        const string record = """{"schema":"build-record/1","build":"b1"}""";
+        var signature = DefinitionSigning.Sign(key, "page", "home", "v1", [], record);
+        var stored = publisher.Publish(new PublishRequest("page", "home", "v1", "ci", DefinitionStore.Production, null, null, null, [], Signature: signature, Signer: key.Fingerprint, Build: record)).Version;
+
+        Assert.Equal(record, stored.Build);
+        Assert.Null(Gate().Refusal(stored));
+        // a record changed in the database after it was signed does not hold
+        Assert.Contains("does not hold", Gate().Refusal(stored with { Build = record.Replace("b1", "b2") })!);
+    }
+
+    [Fact]
     public void A_key_revoked_after_a_version_was_published_does_not_unseat_it()
     {
         var key = ConsoleSigningKey.Generate();

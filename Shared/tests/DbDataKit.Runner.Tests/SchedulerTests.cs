@@ -425,6 +425,25 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_task_marked_by_hand_is_manual_only_and_runs_from_a_version_not_served_while_a_task_with_another_trigger_is_refused(string engine)
+    {
+        // the packages the products make say "manual: true" on a person's task (Sync's provision, a Store model's deploy and contract); that marks it as by hand, which starts nothing of its own
+        using var h = new SchedulerHarness(engine);
+        var byHand = Def("provision") with { Triggers = [TaskTrigger.ByHand()] };
+        var afterRun = Def("notify") with { Triggers = [TaskTrigger.AfterRun("provision")] };
+        h.Versions.Add(Package, "3", Manifest(Package, byHand, afterRun));
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner);
+
+        var id = await scheduler.RunVersionAsync(new TaskRef(Package, Channel, "provision"), "3", requestedBy: "Ada");
+        Assert.NotNull(id);
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => scheduler.RunVersionAsync(new TaskRef(Package, Channel, "notify"), "3"));
+        Assert.Contains("has a schedule or a trigger", refused.Message);
+        await Tick(scheduler);
+        Assert.Equal("3", Assert.Single(runner.Requests, r => r.RunId == id).PackageVersion);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_task_whose_version_is_missing_fails_the_run_with_a_record_and_does_not_retry(string engine)
     {
         using var h = new SchedulerHarness(engine);

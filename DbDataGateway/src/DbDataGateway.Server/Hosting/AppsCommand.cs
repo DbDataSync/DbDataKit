@@ -53,7 +53,7 @@ public static class AppsCommand
         new Verb("build", "Build an app's source tree into a folder that validates and publishes: bundles src/main.ts (or --entry) with the pinned Bun, copies the files that are not source, runs the built-in checks on the result. With a package store (--store, or apps.packageStore in server.yaml) it installs nothing, builds from the vendored packages with no network, and refuses an import that is not in the default library or the allow-list (apps.allowedPackages)", EffectClass.RepoFilesOnly,
             "--src <source folder> --out <build folder> [--entry <script>] [--manifest <file>] [--no-minify] [--offline] [--store <package store folder>] [--allow <package>[,...]] [--isolation <auto|required|none>] [--repo <data directory>] [--bun <path>] [--timeout <seconds>]", AppsBuild.BuildAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("out", DataSchemas.String), ("files", DataSchemas.Integer), ("bundled", DataSchemas.ListOf(DataSchemas.String))], "app", "out", "files", "bundled")),
-        new Verb("publish", "Publish an app version from a folder: its manifest (app.yaml) and the files the host serves. With --to, to a Gateway elsewhere, as a paired client", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] ({Where} | {Remote})", PublishAsync,
+        new Verb("publish", "Publish an app version from a folder into this gateway's own state: its manifest (app.yaml) and the files the host serves. A Gateway elsewhere is deployed to from the console, not from here", EffectClass.RepoFilesOnly, $"--dir <folder> [--manifest <file, default <folder>/app.yaml>] [--note <text>] {Where}", PublishAsync,
             DataSchemas.Object([("app", DataSchemas.String), ("version", DataSchemas.Integer), ("files", DataSchemas.Integer)], "app", "version", "files")),
         new Verb("instance-save", "Make or change an instance of a published app: its version pin, title, settings and data bindings (a new instance version; the host serves it at once)", EffectClass.RepoFilesOnly,
             $"--name <instance> --app <app> [--pin <version>] [--title <text>] [--setting k=v[,k=v]] [--bind model=storeInstance[,model=storeInstance]] ({Where} | {Remote})", InstanceSaveAsync,
@@ -111,12 +111,17 @@ public static class AppsCommand
     private static async Task<int> PublishAsync(string[] args, CliContext context)
     {
         var parsed = CliArgs.Parse(args, new HashSet<string>(), Valued("dir", "manifest", "note"));
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
+        // publishing to a Gateway elsewhere is the console's deploy: the form that sent an app away answers so, whatever else it was given
+        if (parsed.Get("to") is not null)
         {
-            await context.Error.WriteLineAsync($"Usage: apps publish --dir <folder> [--manifest <file>] [--note <text>] ({Where} | {Remote})");
+            await context.Error.WriteLineAsync(RemovedCommands.PublishingGone("dbdatagateway apps publish --to"));
             return CliExit.Usage;
         }
-        if (RemoteMixedWithRepo(parsed)) { await context.Error.WriteLineAsync(MixedMessage); return CliExit.Usage; }
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || parsed.Get("dir") is not { Length: > 0 } dir)
+        {
+            await context.Error.WriteLineAsync($"Usage: apps publish --dir <folder> [--manifest <file>] [--note <text>] {Where}");
+            return CliExit.Usage;
+        }
         var folder = Path.GetFullPath(dir);
         var manifestPath = parsed.Get("manifest") is { Length: > 0 } m ? Path.GetFullPath(m) : Path.Combine(folder, "app.yaml");
         if (!Directory.Exists(folder) || !File.Exists(manifestPath))
@@ -128,15 +133,6 @@ public static class AppsCommand
         {
             // the manifest is read from where it is; the files are the folder's without it (the same package `apps approve --path` hashes)
             var package = AppPackage.FromFolder(folder, manifestPath);
-            if (RemoteOf(parsed) is { } remote)
-            {
-                var answer = (await remote.Client.PublishAsync(remote.Server, remote.Code, remote.Alias, remote.ClientName, package, parsed.Get("note"), line => context.Out.WriteLine(line), context.Cancellation)).Body;
-                await context.Out.WriteLineAsync($"Published {(string?)answer["name"]} version {(int?)answer["version"]} ({package.Files.Count} files) {Describe(remote, answer)}.");
-                context.Data["app"] = (string?)answer["name"];
-                context.Data["version"] = (int?)answer["version"];
-                context.Data["files"] = package.Files.Count;
-                return CliExit.Ok;
-            }
             var definitions = new DefinitionStore(IdentityCommand.Open(parsed));
             var version = new AppInstanceStore(definitions).PublishApp(package, Environment.UserName, note: parsed.Get("note"), approvals: new AppApprovalStore(definitions));
             await context.Out.WriteLineAsync($"Published {version.Name} version {version.Version} ({package.Files.Count} files).");

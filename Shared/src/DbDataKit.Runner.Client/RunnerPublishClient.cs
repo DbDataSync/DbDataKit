@@ -14,6 +14,9 @@ using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Runner.Client;
 
+/// <summary>Signs a version of a package as it is published: its name, its manifest's text and its files (path, SHA-256, size); null publishes it unsigned. A refusal to sign is a <see cref="RunnerClientException"/>.</summary>
+public delegate Task<string?> PackageSigner(string package, string manifest, IReadOnlyList<ArtifactRef> files, string? build, CancellationToken ct);
+
 /// <summary>A call to a runner failed or was refused; the message is the server's own, or says what could not be done here.</summary>
 public sealed class RunnerClientException(string message) : InvalidOperationException(message);
 
@@ -122,6 +125,15 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     public static RunnerPublishClient ForKey(PairedRunner runner, ConsoleIdentity identity, string subject, string displayName) =>
         new(new RunnerClientStore(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "dbdatarunner-unused-client")), null) { fixedLink = (runner, identity, subject, displayName) };
 
+    private IDefinitionsLink? givenLink;
+
+    /// <summary>
+    /// A client for one runner reached through <paramref name="link"/>, which carries each call and says who makes it (paths relative to <c>/api/v1/</c>): a control service that calls as the signed-in person, or a server that signs with a key of its
+    /// own, gives the link it already has. The client touches no client directory and pairs with nothing; the <c>server</c> and <c>code</c> of each call are not read.
+    /// </summary>
+    public static RunnerPublishClient ForLink(IDefinitionsLink link) =>
+        new(new RunnerClientStore(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "dbdatarunner-unused-client")), null) { givenLink = link };
+
     /// <summary>Pairs with the runner at <paramref name="url"/> using its code and remembers it as <paramref name="name"/> (default: its address).</summary>
     public async Task<PairedRunner> PairAsync(Uri url, string code, string? name, CancellationToken ct = default)
     {
@@ -134,7 +146,13 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return runner;
     }
 
-    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null)
+    /// <summary>
+    /// Publishes the package of <paramref name="manifestPath"/> with the files of <paramref name="directory"/> in <paramref name="channel"/> (staged, or served): files the runner holds are not sent again. <paramref name="build"/>, when given,
+    /// is the record of the build the package is deployed from, which the runner keeps with the version; <paramref name="sign"/>, when given, is asked for the version's signature once the files are on the runner (the package's name,
+    /// the manifest and the files) and answers null to publish it unsigned; what it signs covers <paramref name="build"/>.
+    /// </summary>
+    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null,
+        PackageSigner? sign = null, string? build = null)
     {
         if (!File.Exists(manifestPath)) throw new RunnerClientException($"The manifest '{manifestPath}' does not exist.");
         if (!Directory.Exists(directory)) throw new RunnerClientException($"The package directory '{directory}' does not exist.");
@@ -145,7 +163,6 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
 
         var link = await OpenAsync(server, code, log, ct);
         using var _ = link;
-        var runner = link.Runner;
         Task<HttpResponseMessage> Send(HttpMethod method, string path, HttpContent? content = null) => link.SendAsync(method, path, content, ct);
         Task<RunnerClientException> Refused(HttpResponseMessage response, string doing) => link.RefusedAsync(response, doing, ct);
 
@@ -187,6 +204,8 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             ["artifacts"] = new JsonArray([.. files.Select(f => (JsonNode)new JsonObject { ["path"] = f.Path, ["sha256"] = f.Sha, ["size"] = f.Size })]),
         };
         if (expectedVersion is { } expected) body["expected_version"] = expected;
+        if (build is not null) body["build"] = build;
+        if (sign is not null && await sign(manifest.PackageName, text, [.. files.Select(f => new ArtifactRef(f.Path, f.Sha, f.Size, null))], build, ct) is { } signature) body["signature"] = signature;
         // where the version came from, kept with it on the runner (a Workspace names its project, so the Runner's screens link back to it, plan 33 SC22l)
         if (!string.IsNullOrWhiteSpace(note)) body["note"] = note;
         using var publish = await Send(HttpMethod.Put, $"api/v1/definitions/integration/{Uri.EscapeDataString(manifest.PackageName)}", JsonContent.Create(body, options: Json));
@@ -199,6 +218,8 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     /// <summary>The runner paired under <paramref name="server"/> (pairing with <paramref name="code"/> first when there is none), with a client that pins its certificate and signs each call.</summary>
     private async Task<Link> OpenAsync(string server, string? code, Action<string>? log, CancellationToken ct)
     {
+        if (givenLink is { } through) return new Link(through);
+
         if (fixedLink is { } given)
         {
             var givenRole = ServerRoles.TryParse(given.Runner.Roles, out var held) ? held : ServerRole.Publisher;
@@ -219,18 +240,44 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return new Link(runner, http, self, role);
     }
 
-    private sealed class Link(PairedRunner runner, HttpClient http, ConsoleIdentity self, ServerRole role, string? subject = null, string? displayName = null) : IDisposable
+    private sealed class Link : IDisposable
     {
-        private readonly string _subject = subject ?? "local:" + Environment.UserName;
+        private readonly PairedRunner? runner;
+        private readonly HttpClient? http;
+        private readonly ConsoleIdentity? self;
+        private readonly ServerRole role;
+        private readonly string _subject = "local:" + Environment.UserName;
+        private readonly string? displayName;
+        private readonly IDefinitionsLink? through;
 
-        public PairedRunner Runner { get; } = runner;
+        public Link(PairedRunner runner, HttpClient http, ConsoleIdentity self, ServerRole role, string? subject = null, string? displayName = null)
+        {
+            (this.runner, this.http, this.self, this.role, this.displayName) = (runner, http, self, role, displayName);
+            if (subject is not null) _subject = subject;
+        }
+
+        /// <summary>A link the caller gave: each call goes through it, with its path relative to <c>/api/v1/</c>.</summary>
+        public Link(IDefinitionsLink through) => this.through = through;
+
+        /// <summary>The name the runner is known by (the paired name, or the given link's).</summary>
+        public string Name => runner?.Name ?? through!.Name;
+
+        /// <summary>Where the runner is, for a message: its address, or the given link's name.</summary>
+        private string Address => runner?.Url ?? through!.Name;
 
         public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct)
         {
+            if (through is not null)
+            {
+                const string prefix = "api/v1/";
+                try { return await through.SendAsync(method, path.StartsWith(prefix, StringComparison.Ordinal) ? path[prefix.Length..] : path, content, ct); }
+                catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message})."); }
+            }
+
             using var request = new HttpRequestMessage(method, path) { Content = content };
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self.Issuer().Issue(new ConsoleTokenRequest(Runner.InstanceId, _subject, displayName ?? Environment.UserName, role)));
-            try { return await http.SendAsync(request, ct); }
-            catch (HttpRequestException ex) { throw new RunnerClientException($"{Runner.Url} could not be reached ({ex.Message})."); }
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self!.Issuer().Issue(new ConsoleTokenRequest(runner!.InstanceId, _subject, displayName ?? Environment.UserName, role)));
+            try { return await http!.SendAsync(request, ct); }
+            catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message})."); }
         }
 
         public async Task<RunnerClientException> RefusedAsync(HttpResponseMessage response, string doing, CancellationToken ct)
@@ -242,7 +289,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             return new RunnerClientException($"The runner refused {doing} ({(int)response.StatusCode}): {error ?? (body.Length > 0 ? body : response.ReasonPhrase)}");
         }
 
-        public void Dispose() => http.Dispose();
+        public void Dispose() => http?.Dispose();
     }
 
     /// <summary>
@@ -314,7 +361,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
 
     private sealed class GroupLink(Link link) : IDefinitionsLink
     {
-        public string Name => link.Runner.Name;
+        public string Name => link.Name;
 
         public Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct) => link.SendAsync(method, "api/v1/" + path, content, ct);
     }

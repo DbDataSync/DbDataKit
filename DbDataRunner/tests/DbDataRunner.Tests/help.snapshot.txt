@@ -83,8 +83,6 @@ $ dbdatarunner package help
 dbdatarunner package: Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
 
 Verbs:
-  package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]
-      Pair this machine with a runner as a publisher, using the single-use code its administrator made with 'server pair --max-role publisher'; the runner's certificate is pinned [Repo files only (no target connection)]
   package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
       Publish a package to a runner's API: uploads only the files the runner does not have, then publishes the version (served at once, or staged with --stage) [Target writes (data only)]
   package promote <package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>, default prod] [--version <n>] [--stage] [--bind <slot>=<connection>[,<slot>=<connection>...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]

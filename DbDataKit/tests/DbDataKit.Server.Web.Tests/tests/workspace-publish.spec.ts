@@ -9,14 +9,16 @@ import { scratchDirectory, workspacePublish } from '../playwright.config'
 // Plan 22a GP35 (the done-when of the row): a person makes an app from the template in a workspace, edits one of its spec files, builds it, previews the build, commits, merges and publishes it to a Gateway, and then opens the
 // instance's address on that Gateway and sees the change. The whole workflow is on the console's pages as the signed-in administrator: the Workspace server (`dbdataworkspace`, port 8631) hosts the project `sales`, which is the app
 // template; the build runs Bun from the vendored package store (made here with `app-store/build.mjs`: `npm ci` in Shared/web first) and the server's `apps:` section; the Gateway (identity home 8632, apps host 8633, management 8634) is
-// started by the story, paired with the Workspace server on the publisher keys page with a single-use code, and the instance is made with the Gateway's own command. It also shows what the screens must show on the way: a refused import
-// with its file and line, whether the build was isolated, the preview with no network, the refusal of a publish in the server's words.
+// started by the story and paired with the console, which deploys the build to it as the signed-in person (docs/publishing.md, "Deploying a build from the control service"); it is also paired with the Workspace server on the publisher
+// keys page with a single-use code, for the preview with data, which the Workspace server still sends itself. The instance is made with the Gateway's own command. It also shows what the screens must show on the way: a refused import
+// with its file and line, whether the build was isolated, the preview with no network, a refusal of the preview in the Gateway's words.
 // It invites an administrator, so it sorts after identity-home (`workspace-files` before it, `workspaces` after, the order of the file names). `DBDATAKIT_TEST_E2E_GATEWAY_DLL` names a Gateway build outside its own bin folder.
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
 const gatewayDll = process.env.DBDATAKIT_TEST_E2E_GATEWAY_DLL ?? path.join(repoRoot, 'DbDataGateway/src/DbDataGateway.Server/bin/Debug/net10.0/dbdatagateway.dll')
 const serverName = 'Workspace publish e2e'
+const gatewayName = 'Workspace publish gateway'
 const { gateway } = workspacePublish
 const homeUrl = `https://localhost:${gateway.homePort}`
 const appsUrl = `https://localhost:${gateway.appsPort}`
@@ -129,8 +131,16 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await signInAsAdmin(page, context, baseURL!)
   const project = workspacePublish.project
 
-  // ---- the console pairs with the Workspace server and opens it
+  // ---- the console pairs with the Gateway: a build is published by the console, as the signed-in person, to a server it manages
+  const consoleCode = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gateway.directory, '--max-role', 'admin'], { encoding: 'utf8' }))![1]
   await page.goto('/instances')
+  await page.getByTestId('pair-url-input').fill(managementUrl)
+  await page.getByTestId('pair-code-input').fill(consoleCode)
+  await page.getByTestId('pair-name-input').fill(gatewayName)
+  await page.getByTestId('pair-button').click()
+  await expect(page.getByTestId(`instance-row-${gatewayName}`).getByTestId('instance-status')).toHaveText('Ready', { timeout: 30_000 })
+
+  // ---- the console pairs with the Workspace server and opens it
   await page.getByTestId('pair-url-input').fill(workspacePublish.url)
   await page.getByTestId('pair-code-input').fill(fs.readFileSync(path.join(scratchDirectory, 'workspace-publish-pairing-code.txt'), 'utf8').trim())
   await page.getByTestId('pair-name-input').fill(serverName)
@@ -140,7 +150,7 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await row.getByTestId('instance-open-link').click()
   await expect(page.getByTestId('ws-projects')).toBeVisible()
 
-  // ---- the publisher key: paired with the Gateway with its single-use code; the page shows a reference, never a key
+  // ---- the publisher key: paired with the Gateway with its single-use code; the page shows a reference, never a key (the preview with data is still sent with it)
   const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gateway.directory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
   await page.getByTestId('rail-keys').click()
   await expect(page.getByTestId('wsk-none')).toBeVisible()
@@ -254,26 +264,23 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   expect(fs.readFileSync(path.join(workspacePublish.directory, 'projects', project, 'views', 'territories.yaml'), 'utf8').replace(/\r\n/g, '\n')).toContain(`title: ${title}\n`)
   expect(fs.existsSync(folder)).toBe(false)
 
-  // ---- publish: the builds of the merged workspace are still there; an unknown key is refused in the server's words, then the real one publishes
+  // ---- publish: the builds of the merged workspace are still there; the console deploys the build to the Gateway it manages, as the signed-in person
   await expect(page.locator('[data-testid="wsp-build-row"]')).toHaveCount(2)
   await expect(page.getByTestId('wsp-build')).toBeDisabled()
   await expect(page.getByTestId('wsp-build-why')).toContainText('merged')
   const done = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
   await expect(done).toBeVisible()
-  await done.getByTestId('wsp-publish-target').fill('nowhere')
-  await done.getByTestId('wsp-publish').click()
-  await expect(done.getByTestId('wsp-publish-refused')).toContainText("There is no publisher key called 'nowhere'")
-  await done.getByTestId('wsp-publish-target').fill('edge')
+  await done.getByTestId('wsp-publish-target').selectOption({ label: `${gatewayName} (Gateway)` })
   await done.getByTestId('wsp-publish-note').fill('The first version, from the story')
   await done.getByTestId('wsp-publish').click()
   const published = done.getByTestId('wsp-published')
   await expect(published).toBeVisible({ timeout: 60_000 })
   await expect(published).toHaveAttribute('data-version', '1')
   await expect(published).toContainText(`to ${managementUrl}`)
-  await expect(done.locator('[data-testid="wsp-publish-step"]').first()).toContainText('Read the built app')
-  // the record of the build holds the refusal and the publish, with who and where
-  await expect(done.locator('[data-testid="wsp-publish-record"][data-ok="false"]')).toContainText("There is no publisher key called 'nowhere'")
-  await expect(done.locator('[data-testid="wsp-publish-record"][data-ok="true"]')).toContainText('Workspace Publisher to edge')
+  await expect(done.locator('[data-testid="wsp-publish-step"]').first()).toContainText(`Read build ${await done.getAttribute('data-build')}`)
+  // the console's record of the deploy, with where it went and the version
+  await expect(done.locator('[data-testid="wsp-deploy-record"][data-outcome="ok"]')).toContainText(`to ${gatewayName}`)
+  await expect(done.locator('[data-testid="wsp-deploy-record"][data-outcome="ok"]')).toHaveAttribute('data-version', '1')
 
   // ---- the instance on the Gateway: an instance of the published app, opened as a person of the home, shows the change
   gatewayCommand(['apps', 'instance-save', '--name', 'sales', '--app', 'sales'])

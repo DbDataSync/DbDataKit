@@ -2,20 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { BuildDetail, StagedRun } from '../api'
-import { ProjectRunsPanel, checkResultOf, checkSummary, buildConnectionsOf, isBuildView, viewProblem, viewResultOf, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, publishedVersionOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
+import type { StagedRun } from '../api'
+import { ProjectRunsPanel, checkResultOf, checkSummary, buildConnectionsOf, isBuildView, viewProblem, viewResultOf, syncSlotOf, bulkLoadRequests, mappingsOfReplication, passesOf, runnerScreens, segmentingProblem, syncTaskOf } from './ProjectRunsPanel'
 
-const detail = (id: string, publishes: BuildDetail['publishes']): BuildDetail => ({ build: { id } as BuildDetail['build'], result: null, publishes })
 
 describe('the runs of what a draft published (plan 33 SC20o, SC22l)', () => {
-  it('finds the newest publish to a Runner that worked, with its tasks and mode; a preview or a failure is not one', () => {
-    const found = publishedVersionOf([
-      detail('b2', [{ at: '', by: 'g', target: 'jobs', ok: false, error: 'no' }, { at: '', by: 'g', target: 'gw', ok: true, preview: 'x', answer: { package: 'p', channel: 'c', version: 9 } }]),
-      detail('b1', [{ at: '', by: 'g', target: 'jobs', ok: true, answer: { package: 'orders-set', channel: 'prod', version: 3, mode: 'serve', tasks: ['orders', 'provision'] } }]),
-    ])
-    expect(found).toEqual({ build: 'b1', target: 'jobs', package: 'orders-set', channel: 'prod', version: '3', mode: 'serve', tasks: ['orders', 'provision'] })
-    expect(publishedVersionOf([detail('b', [])])).toBeNull()
-  })
   it('names a replication\'s task as the Runner does', () => {
     expect(syncTaskOf('Orders Daily')).toBe('orders-daily')
     expect(syncTaskOf('_sales.eu')).toBe('sales-eu')

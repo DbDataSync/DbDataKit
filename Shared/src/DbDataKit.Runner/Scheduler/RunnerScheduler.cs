@@ -914,7 +914,8 @@ public sealed partial class RunnerScheduler
             ?? throw new InvalidOperationException($"The version {version} of '{task.Package}' has no task '{task.Task}'.");
         var projection = new TaskProjection(task.Package, task.Channel, task.Task, version, row.Schedule, row.Triggers, row.Limits, row.RequiredLabels, row.ProgressHash, _time.GetUtcNow());
         if (!ParseOrProblem(projection, out var served, out var problem)) throw new InvalidOperationException($"{task} of version {version} cannot be read: {problem}");
-        if (served!.Schedule.HasSchedule || ProjectionDocuments.ParseTriggers(row.Triggers).Count > 0)
+        // "by hand" (`manual: true`) is how a package says a task is a person's act, so it is no trigger here; any other trigger, like a schedule, starts runs of its own
+        if (served!.Schedule.HasSchedule || ProjectionDocuments.ParseTriggers(row.Triggers).Any(t => t.Kind != TriggerKind.Manual))
             throw new InvalidOperationException($"{task} of version {version} has a schedule or a trigger: only a manual-only task is run from a version that is not served.");
         if (dryRun) inputs = new Dictionary<string, string>(inputs ?? new Dictionary<string, string>(), StringComparer.Ordinal) { [RunnerProtocol.DryRunInput] = "true" };
         _pinnedOwners[OwnerOf(task)] = 0;
