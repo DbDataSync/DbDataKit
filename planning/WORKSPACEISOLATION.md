@@ -44,10 +44,12 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
 | WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7, WORKSPACEISOLATION-11, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
-| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
+| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
 | WORKSPACEISOLATION-11 | The Rows tab of a Store project (`StoreRowsPanel`) offers the Gateways the control service manages, read from the console as the signed-in person, instead of the Workspace's paired targets (`GET /api/v1/publish-targets`, which WORKSPACEISOLATION-8 removes); a Gateway is offered when it serves the model, and rows are still read and written through the console's relay as today | none | S | vitest: the panel lists the Gateways from the console's answer and calls no Workspace target route; the Rows story (Playwright) edits a row with `publish-targets` answering 404 |
 | WORKSPACEISOLATION-12 | A sync draft's script Test runs on a Runner: the sync runtime package gets a manual task `script-test` that uses no connection; Test on the Scripts tab builds the draft, stages it in a non-production channel through the control service and runs the task there as the person; the tab shows the result with a link to the run | WORKSPACEISOLATION-3 | M | a test: Test of a script runs it on a Runner and shows its rows; the Workspace service starts no script |
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
+| WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
+| WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 
 ## Where each part goes (the list of WORKSPACEISOLATION-1)
 
@@ -58,8 +60,6 @@ Every route, class and member of the Workspace's publish, run, check and catalog
 - **Moves**: it is in the shared library `DbDataKit.Deploy` (`Shared/src`), which the control service can use; the Workspace reaches it through
   an adapter until WORKSPACEISOLATION-8.
 - **Removed**: it calls another service or holds a publisher key. It goes with WORKSPACEISOLATION-8, once the task named has moved its work.
-
-Where a part's place is open, the row names its proposal (below, under "Proposed decisions").
 
 ### Routes of the management API
 
@@ -74,7 +74,7 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `POST {ws}/lowered` | viewer | `dbdatabuild project compile <model> --content`, read only | **Stays** |
 | `POST {ws}/lineage` | viewer | `dbdatabuild project show graph --columns`, read only | **Stays** |
 | `POST {ws}/import-preview` | viewer | `dbdatabuild project import --from-cache --write` on a copy | **Stays** |
-| `POST {ws}/sample` | viewer | `dbdatabuild project sample`: the draft's models run in DuckDB on generated rows | **Stays**; whether this runs project code is WORKSPACEISOLATION-P3 |
+| `POST {ws}/sample` | viewer | `dbdatabuild project sample`: the draft's models run in DuckDB on generated rows | **Stays**, with DuckDB's external access off (WORKSPACEISOLATION-14) |
 | `GET {ws}/scripts` | viewer | `dbdatasync script list` on a copy | **Stays** |
 | `POST {ws}/provisioning-plan` | viewer | `dbdatasync provisioning plan <replication> --from-cache` on a copy | **Stays** |
 | `POST {ws}/script-test` | author | `dbdatasync script test`: compiles the draft's C# script and runs it on generated rows, in a child process | **Removed** from the Workspace service, because it runs the author's code there; it becomes a Runner task (WORKSPACEISOLATION-12) |
@@ -106,12 +106,12 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `StandardProjectKinds`; `ProjectKinds`, `IProjectKind`, `ProjectDiagnostic`, `ProjectArtifact`, `ProjectPublishRoute`, `ProjectTemplate` (`DbDataKit.Authoring`) | the registry of kinds and what a kind answers | **Stays**; the moved `RouteFor` reads `ProjectPublishRoute` from `DbDataKit.Authoring` |
 | `AppProjectKind` | an app: its template, and its check with `AppManifestLoader` | **Stays** |
 | `BuildProjectKind` | a Build project: template (`project create starter`), check (`project show metadata`), package and models (`project publish --to runner\|gateway --out`), `CopyViews` | **Stays** |
-| `BuildDraftCompiler` (`IDraftCompiler` on `BuildProjectKind`) | compile, lower, sample, lineage and import of a draft | **Stays** (`sample`: WORKSPACEISOLATION-P3) |
+| `BuildDraftCompiler` (`IDraftCompiler` on `BuildProjectKind`) | compile, lower, sample, lineage and import of a draft | **Stays** (`sample`: WORKSPACEISOLATION-14) |
 | `StoreProjectKind` | Store models: template, check with `DataModelLoader` in process, the models and one deploy package per model (`ModelDeployPackage`) | **Stays** |
 | `SyncProjectKind` | a Sync set: template, `SecretFindings`, check and package with `dbdatasync package publish` | **Stays** |
 | `SyncDraftTools`: `ScriptsAsync`, `ProvisioningPlanAsync` | `script list` and `provisioning plan --from-cache` on a copy | **Stays** |
 | `SyncDraftTools`: `ScriptTestAsync` | `script test`: runs the draft's C# | **Removed** from the Workspace service; a Runner task (WORKSPACEISOLATION-12) |
-| `IntegrationProjectKind`: `CheckAsync`, the `package build` of `BuildCsxAsync`, `BuildCompiledAsync` | an integration's check and build | **Stays** until COMMANDLINES-8 replaces it; `dotnet publish` runs the project's MSBuild targets (WORKSPACEISOLATION-P3) |
+| `IntegrationProjectKind`: `CheckAsync`, the `package build` of `BuildCsxAsync`, `BuildCompiledAsync` | an integration's check and build | **Stays** until COMMANDLINES-8 replaces it; `dotnet publish` runs the project's MSBuild targets, and leaves with COMMANDLINES-8 |
 | `IntegrationProjectKind`: the `package test` of `BuildCsxAsync` | runs the author's tests before the package is made | **Removed** from the Workspace service by COMMANDLINES-8, which makes Test a run on a Runner |
 | `IntegrationTemplates` | the starting points of an integration | **Stays** |
 | `ChildProgram`, `BuildTool`, `SyncTool`, `RunnerTool`, `DotnetTool` | start a program with a cleared environment and a time limit | **Stays** until COMMANDLINES replaces each program (below) |
@@ -172,11 +172,11 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 
 | Program | Started by | Commands the Workspace runs | Runs the author's code | What COMMANDLINES would change |
 | --- | --- | --- | --- | --- |
-| `dbdatabuild` | `BuildTool` (`BuildProjectKind`, `BuildDraftCompiler`) | `project create starter`; `project show metadata`; `project publish --to runner --out` and `--to gateway --out`; `project compile` (on a copy) and `project compile <model> --content`; `project show graph --columns`; `project import --from-cache --write` (on a copy); `project sample` | `project sample` runs the models' SQL in DuckDB on generated rows (WORKSPACEISOLATION-P3); the others read and write files | COMMANDLINES-2 moves create, check and package into `Shared/src` and replaces `BuildTool`. Compile, lower, lineage, import and sample also start `dbdatabuild`, and its text does not name them: its "Done when" (the build-kind tests pass with no `dbdatabuild`) holds only if they move too, which COMMANDLINES-1's list would say |
+| `dbdatabuild` | `BuildTool` (`BuildProjectKind`, `BuildDraftCompiler`) | `project create starter`; `project show metadata`; `project publish --to runner --out` and `--to gateway --out`; `project compile` (on a copy) and `project compile <model> --content`; `project show graph --columns`; `project import --from-cache --write` (on a copy); `project sample` | `project sample` runs the models' SQL in DuckDB on generated rows, with DuckDB's external access off (WORKSPACEISOLATION-14); the others read and write files | COMMANDLINES-2 moves create, check and package into `Shared/src` and replaces `BuildTool`. Compile, lower, lineage, import and sample also start `dbdatabuild`, and its text does not name them: its "Done when" (the build-kind tests pass with no `dbdatabuild`) holds only if they move too, which COMMANDLINES-1's list would say |
 | `dbdatasync` | `SyncTool` (`SyncProjectKind`, `SyncDraftTools`) | `package publish --to runner --check --json`; `package publish --to runner --out --package [--platform]`, which restores the driver libraries; `script list`; `provisioning plan --from-cache`; `script test` | `script test` | COMMANDLINES-3 replaces `SyncTool` for check and package. `script list` and `provisioning plan` are offline reads that could move the same way. `script test` cannot meet COMMANDLINES-3's "Done when" (no `dbdatasync`) while it runs on the Workspace service (WORKSPACEISOLATION-12 moves it to a Runner). AUTHORING-2 builds the package for the target Runner's platform, in place of the `SyncPlatform` setting |
 | `dbdatarunner` | `RunnerTool` (`IntegrationProjectKind`) | `package build --out <scratch> --no-lock-write` (the check); `package build --out` (the build); `package test` | `package test` | COMMANDLINES-8 builds in process with the shared package build library, and makes Test a run on a Runner in a non-production channel |
-| `dotnet` (the .NET SDK) | `DotnetTool` (`IntegrationProjectKind`) | `--list-sdks`; `publish <project>` of a compiled integration | `publish` runs the project's MSBuild targets (WORKSPACEISOLATION-P3) | COMMANDLINES-8 says the build runs none of the author's code; it does not say how a compiled project is built that way |
-| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | not known: a Bun macro of the draft runs at bundle time, and the command line does not pass an option about macros (WORKSPACEISOLATION-P3) | not in COMMANDLINES |
+| `dotnet` (the .NET SDK) | `DotnetTool` (`IntegrationProjectKind`) | `--list-sdks`; `publish <project>` of a compiled integration | `publish` runs the project's MSBuild targets; it leaves with COMMANDLINES-8 | COMMANDLINES-8 says the build runs none of the author's code; it does not say how a compiled project is built that way |
+| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | a Bun macro of the draft would run at bundle time, and the command line has no option about macros; WORKSPACEISOLATION-15 refuses a draft that has one | not in COMMANDLINES |
 
 ### Counts
 
@@ -232,26 +232,6 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
 
 ## Proposed decisions
-
-### WORKSPACEISOLATION-P3: what else the Workspace service runs from a draft (awaiting the owner)
-
-Scenarios found while making the list:
-
-- Build's Sample (`dbdatabuild project sample`) runs the draft's model SQL in DuckDB on generated rows. DuckDB SQL can read a file or an address
-  (`read_csv('/etc/passwd')`, `read_parquet('https://...')`) unless DuckDB's external access is turned off; the list did not check whether Sample turns
-  it off.
-- An integration's build runs its tests (`dbdatarunner package test`), and a compiled integration's `dotnet publish` runs the project's MSBuild
-  targets. COMMANDLINES-8 takes both off the Workspace service.
-- An app build runs `bun build` in a network namespace. A Bun macro (an import `with { type: "macro" }`) runs at bundle time, and the bundler's
-  command line does not pass an option about macros.
-
-- Option A: each of these leaves the Workspace service; Sample becomes a Runner task as Test does.
-- Option B: the rule covers code in a general-purpose language (C#, TypeScript). Sample stays on the Workspace with DuckDB's external access off, and a
-  test shows that a model that reads a file or an address is refused. App builds turn Bun macros off, or refuse a draft that has one, and a test shows
-  it. The integration's tests and `dotnet publish` leave with COMMANDLINES-8.
-- Option C: all of them stay, inside the sandbox an app build has.
-
-Recommendation: B.
 
 ### WORKSPACEISOLATION-P8: where the build record of a deployed version goes (default, awaiting the owner)
 
