@@ -69,44 +69,6 @@ In the web app, `/instances` lists them and `/servers/<id>/...` opens a server's
 
 **Runners** (plan 28a R19). A `dbdatarunner` is paired like any server (`dbdatarunner server pair --max-role viewer,operator,admin`, then `instance add` or the Servers page, or it announces itself) and its product is `dbdatarunner`. Its screens are at `/servers/<id>`: **Tasks** (the group's instances, each live or gone, with host, version, labels marked as set by an administrator or reported by the machine, and the capabilities that matter for routing: memory and cpu limits enforced or only watched, network; then every task with package, channel, version, next due, last run, running, queued, paused, and the reason when it waits, such as a required label no runner has; run now, pause and resume for an administrator), **Runs** (filtered by package, channel and outcome, with a run's detail) and **Packages** (what each channel serves, a package's versions and history; a staged version with how far each runner is in preparing it; activation, which lists the progress the dry run would lose and needs it confirmed, or goes ahead anyway with a reason; roll back, serve another version, retire). The Monitoring page lists a runner's tasks (a failed last run, a task that waits, a hold) and a runner that is gone, with the other servers' rows. A signed-in administrator holds the runner's operator and admin roles there (what the pairing's ceiling allows); a viewer reads. The runner decides and audits every act, naming the person; the console's relay passes a runner's calls route by route, from the table `ServerProducts.RunnerRoutes` (method, route, the role the runner asks): the reads and `HEAD artifacts/{sha}` for a viewer; run, pause, resume and who schedules a task for an operator; the package life cycle, the upload of a file and the publish of a package, the bindings, `require_signatures` and an instance's labels for an administrator (plan 33 UE06 to UE11). The call is made as the signed-in person: the token carries their roles, the relay refuses at once, naming the role, when they do not hold the route's, and the runner checks again. Any other call (a product's report of decisions, a webhook, any other write, `HEAD` on another path) is not relayed, whoever signed in.
 
-## Finding a screen: the navigation
-
-Every screen of the console, and of the Workspace, Runner and Gateway it shows, is reached from one labelled navigation on the left, the same on every
-screen. Its entries sit in six groups named for what a person is doing, not for the server that answers ("Screens", `docs/architecture.md`); Home is first and Docs last, outside the groups. Entries marked * are for administrators and are hidden from a viewer, and a
-group a person can see nothing of is not shown.
-
-| Group | Entries |
-| --- | --- |
-| Explore | Views, Lineage, Quality |
-| Build and release | Projects (the paired Workspace's projects; one entry per Workspace when several are paired), Releases, Deployments, Backlog |
-| Operate | Monitoring, Runs, Approvals, Delivery, Tracking |
-| Agents and knowledge | Agents, Knowledge |
-| Servers | All servers* (Upgrades and a server's state are pages under it), Add a server* (the command a Gateway, a Runner or a Workspace joins the console with, and the commands still waiting; `docs/install.md`, "Pairing"), then each paired server by its name and product |
-| Settings | Connections, Bindings, Secrets*, Users*, Audit*, Setup* |
-
-**Inside a server the console's navigation stays.** Opening a server shows its own entries nested under its name in the Servers group: a Runner's Tasks,
-Runs and Packages; a Workspace's Workspaces and Publisher keys; a Gateway's Overview and then three sub-groups, **Serving** (Data sources*, Models,
-Saved queries, Apps, Result cache), **Access** (Access rules, Users and sign-in*, Identity home*, Publishers, Secrets*) and **Server** (Certificate*,
-Activity*, Server settings*, Configuration history*), its administrators' entries hidden from a viewer like the console's. The breadcrumb names the
-server (`gateway-east`), not only the product. So an administrator on `gateway-east`'s Data sources reaches the console's Lineage, or `runner-a`'s Runs,
-in one click.
-
-**On a narrow screen it collapses to icons.** The navigation is labelled, about 210 pixels wide, with a button that collapses it to an icon rail (the names
-as tooltips) and back; the browser keeps the choice, and a window under 1000 pixels wide starts collapsed, so a dashboard at 800 pixels keeps its width.
-Kiosk mode shows no navigation.
-
-**One look for the navigation and for tabs.** The navigation and the tabs inside a page use the styles of the shell (`Shared/web/shell/src/styles.css`)
-that the Sync server's screens used: the rail, the breadcrumb bar, the `tabbar` (a page's tabs as links, its buttons in `.actions` at the right end) and,
-a level down, the `subtabbar`. They replace the four tab styles pages had grown. The arrangement is deliberately plain: today's pages regrouped and
-labelled, with no page redesigned.
-
-**Every screen has a place.** A route of the console, or of a server's screens, is either an entry of the navigation or a page listed under one, with
-the page that links to it (`Shared/web/console/src/navigationPages.ts`: a dashboard `/views/dashboards/<name>` under Views, a server's state under All
-servers, a Gateway's model under Models); the console's test `routes.test.ts` fails, naming the route, when a new one is neither.
-
-Example: an operator signs in to find why last night's refresh failed. They read the heading **Operate**, open **Runs**, and see the failed run; from
-it, `runner-a` under **Servers** shows that runner's own Runs one click away.
-
 ## Connections across servers
 
 **Lineage** (plan 18, G09): `GET /api/lineage` joins the design graphs of the paired runners and Gateways by identity (a table one writes and another reads is one node), with what each server said or why it gave none; `?node=<id>&direction=downstream|upstream&depth=<n>` is the impact or provenance of one node across all of them, and `?refresh=true` asks the servers again instead of using what was kept for 30 seconds.

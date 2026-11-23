@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { signInNewAdmin } from './people'
 
-// The paired servers in the console's navigation (DbDataKit/README.md, "Finding a screen: the navigation"): each by its name and product under Servers,
+// The paired servers in the console's navigation: each by its name and product under Servers,
 // a Workspace's projects under Build and release, and inside a server the console's navigation stays with the server's entries nested under its name and
 // the breadcrumb naming it. The console's list of servers and the relay are answered in the page (the servers' own screens are the other stories'), so it
 // needs the signed-in console only and takes no port. It signs in a new administrator, so it sorts after `first-run` and `identity-home`.

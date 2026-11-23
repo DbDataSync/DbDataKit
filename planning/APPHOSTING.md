@@ -19,7 +19,7 @@ ownership of the name, the right sign-in redirects and cookies, behind listed pr
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| APPHOSTING-1 | The host binding table on the public listener: a host name maps to a site (an app instance, a portal, the views or the store under a path) | none | M | two host names on one listener reach two portals; an unbound name answers 404 |
+| APPHOSTING-1 | The host binding table on the public listener: a host name maps to a site (an app instance, a portal, the views or the store under a path); at a host name bound to an app instance, `/apps/...` is refused when the apps path is another (a test) | none | M | two host names on one listener reach two portals; an unbound name answers 404 |
 | APPHOSTING-2 | SNI certificates and DNS-TXT verification for every bound host name (generalised from app bindings) | APPHOSTING-1 | M | a TLS client sees each name's certificate; an unverified name is refused at bind time |
 | APPHOSTING-3 | Redirect URIs per site, including the home's side when the host client is held by another identity home | APPHOSTING-1 | S | sign-in on two sites returns to each; removing a binding removes its redirect URI at the home |
 | APPHOSTING-4 | Forwarded headers accepted only from listed proxies | none | S | a request through a listed proxy keeps the client address and scheme; the same headers from another address are ignored |

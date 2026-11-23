@@ -59,7 +59,7 @@ subject keep colliding, the subject is split into two subjects (the owner's call
 - **says what it changed and where it is pushed** in a line or two, when it has changed something.
 
 **Task rows.** A subject's task rows are in priority order only: a row does not depend on the rows above it unless it says so. Every dependency is a
-task id in the row's "Depends on" cell. A row's text may say why ("Follows SYNCAUTHORING-15: the page exists"), but a task named after "Follows"
+task id in the row's "Depends on" cell. A row's text may say why ("Follows <SLUG>-<n>: the screen that task adds exists"), but a task named after "Follows"
 must also be in that cell. `scripts/check_plans.py` refuses a cycle and a "Follows" missing from the cell, and reports each dependency on a subject
 ranked lower in `planning/README.md`. When a task is finished, its row leaves the subject file, and in the same commit every reference to it is cleared: its id
 leaves each "Depends on" cell and each line under "Needs from other subjects" that names it, in any subject file. A line that still says something
