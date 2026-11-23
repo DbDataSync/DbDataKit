@@ -7,7 +7,6 @@ dbdatarunner server run [--repo <server directory>] [--listen https://127.0.0.1:
 dbdatarunner server pair --max-role <roles> [--repo <server directory>]
 dbdatarunner pair --host <console address> --token <token|-> --console-thumbprint sha256:<hex> [--address <https address>] [--repo <server directory>]   # the command the console prints (dbdatakit setup invite): joins it at the next start
 dbdatarunner server clients | unpair <client> [--repo <server directory>]
-dbdatarunner package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]   # on a publisher's machine: pair with the runner
 dbdatarunner package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
 dbdatarunner package promote <package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>, default prod] [--version <n>] [--stage] [--bind <slot>=<connection>[,...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]   # the same version to another runner group
 dbdatarunner package require-signatures [on|off] [--repo <server directory>]
@@ -62,7 +61,7 @@ SQLite in `state.db` by default, and on a server engine when the shared `state:`
 
 ## Publishing packages
 
-A publisher is another program or a person's machine paired with the runner as a **Publisher**: the administrator makes a single-use code with `dbdatarunner server pair --max-role publisher`, and the publisher runs `dbdatarunner package pair https://<runner>:8495 --code <code>` (or gives `--code` to its first `package publish`). The certificate is pinned; the signing key is kept in the encrypted secret store of the client directory (`--client-dir`, `DBDATAKIT_RUNNER_CLIENT_DIR`).
+A publisher is another program or a person's machine paired with the runner as a **Publisher**: the administrator makes a single-use code with `dbdatarunner server pair --max-role publisher`, and the publisher gives it as `--code` to its first `package publish`. The certificate is pinned; the signing key is kept in the encrypted secret store of the client directory (`--client-dir`, `DBDATAKIT_RUNNER_CLIENT_DIR`). `dbdatarunner package pair`, which paired a machine on its own, is gone: it exits with code 2 and says that command lines do not publish to a Runner and that the console deploys (a Workspace project's publish, or "Publish a package from files" on the Runner's Packages screen).
 
 `dbdatarunner package publish <manifest.yaml> <directory> --server <name or address> --channel <name>` asks the runner for every file's hash (`HEAD /api/v1/artifacts/<sha256>`), uploads only the files it does not have (`PUT`, streamed, one file at a time), then publishes the version in one call. A second publish with one changed file sends one file. `--stage` stores the version without serving it: it is not scheduled or run until an administrator activates it. `--expected-version N` refuses the publish if the package has moved on since you looked (0 for a first publish).
 
