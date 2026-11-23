@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\DbDataKit.Sync.Drivers.Generic\DbDataKit.Sync.Drivers.Generic.csproj" />
+  </ItemGroup>
+</Project>

@@ -33,5 +33,11 @@
     <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Windows" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Core" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Drivers.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Scripting.Abstractions" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Drivers.Generic" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Provisioning" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Sync.Drivers.Descriptor" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>

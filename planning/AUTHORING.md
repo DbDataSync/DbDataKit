@@ -30,10 +30,9 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (WORKSPACEISOLATION-3), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | WORKSPACEISOLATION-3 | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
 | AUTHORING-3 | The mapping preview and the strategy try-run as Runner tasks of the published set, started by the control service as the person (WORKSPACEISOLATION-5), the rows kept where AUTHORING-P1 says | AUTHORING-P1, WORKSPACEISOLATION-5 | M | a Sync conformance test: the preview of a mapping returns its first rows through the Runner; the try-run's SQL runs against the bound login |
 | AUTHORING-5 | A form editor for a model's `queries:` in a build project (name, description, `sql` or `request`, parameters), checked as you type | none | M | vitest on the form and its YAML; Playwright: add a query with a list parameter, see a translation error at its line, fix it, publish |
-| AUTHORING-17 | The Runner's built-in package `dbdatakit-metadata` has `discover` and `describe` (`docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
+| AUTHORING-17 | Adds to the Runner's built-in package `dbdatakit-metadata` (its tasks `discover` and `describe` exist: `DbDataKit.Runner.Metadata`, the route `POST /api/v1/metadata/{channel}/{task}`, `docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
 | AUTHORING-18 | The binding test without a staged version: by package, channel and slot on the Runner, sent by the control service for a draft (WORKSPACEISOLATION-5), so **Test** works before publish in any channel that binds the slot | WORKSPACEISOLATION-5 | S | a test through the control service: a draft with no build tests its slot in `dev` against a Runner that binds it; the steps come back and no row; a channel that does not bind the slot says so |
 | AUTHORING-19 | **Set up for development**: from a draft on a Workspace screen, the person types a login once; the screen sends it through the relay to the project's Runner, which holds it; the control service puts the connection's copy on the Runner and binds the slot in a non-production channel (CHANNELS-1's client); the control service checks the person's role and refuses `prod`; the Workspace service only learns which binding exists (WORKSPACEISOLATION-7) | CHANNELS-1, WORKSPACEISOLATION-7 | M | a test: set up `crm` for `dev`, the Runner's Bindings show it; the login reaches no Workspace service; `prod` is refused naming the rule |
-| AUTHORING-21 | **Needed first by SYNCAUTHORING's first slice** (SYNCAUTHORING-18). The catalog read from a Runner channel, a route of the console (the control service), never of the Workspace service: the screen sends the project, a Runner, a channel and a connection, for the whole connection or one table; the console checks that the person has access to the project, takes the project's package name from the Workspace service, and starts the built-in package's `discover` on that Runner as the person; it waits up to 10 seconds, else answers the run's link, and the screen follows the run through the console and takes the answer when it ends; the answer is the connection's `catalog-cache/2` entry, recorded as read from that Runner group and channel; the console also answers which channels of the package on that Runner bind the connection's slot (the channel picker's list); the difference with the draft's cache (added, removed, retyped) is made by the screen, against the cache the frame holds with its unsaved edits (`docs/authoring-metadata.md`), and shown before the cache is replaced; it is built now, before WORKSPACEISOLATION-6, which later puts the Gateway refresh on the same route; `docs/authoring-parity.md` says what is read where, and `docs/authoring-metadata.md` that the console starts the read and waits | none | M | a test in `DbDataKit.Server.Servers.Tests` (the console against a real Runner and PostgreSQL, the Workspace service unable to reach the Runner): a read in `dev` answers an entry recorded as read from `dev` and its run names the person; with a column added to the table, a second read's difference reports it; a person without access to the project is refused |
 | AUTHORING-6 | The channel picker and Refresh exist (`ChannelPicker`, `CatalogRefresh` of `@dbdatakit/workspace`; the tab **Catalog**'s **Refresh from a Runner**). The rest of the Designer's shared pieces of authoring-time reads (`DbDataKit.Authoring`, `Shared/web/workspace`), used by every kind's Designer and Files area: **Describe** (a query's columns into the kind's file, read through the console as Refresh is), **Test** (AUTHORING-18), **Set up for development** offered by the channel picker when the channel does not bind the slot (AUTHORING-19), and the newest-check card (the newest `preflight` or test run per channel, read through the control service (WORKSPACEISOLATION-5): time, run link, findings); the console's posture page lists the non-production bindings made from the Workspace. The Gateway refresh stays as a second way to fill the cache for a connection that is already a Gateway data source; nothing new is built on it | AUTHORING-18, AUTHORING-19, WORKSPACEISOLATION-5 | M | vitest of each piece; Playwright: a build draft with no binding offers Set up for development, then Refresh fills the Catalog tab; Test shows its steps; the posture page lists the binding |
 | AUTHORING-22 | `preflight` as each package's read-only manual task (Build: its `status` under that name; the Store: the `deploy` dry run and the `contract` plan; Sync's is SYNCAUTHORING-9), started by the control service's deploy on the version staged in `prod` before activation (WORKSPACEISOLATION-3; the publish panel shows a warning with its run link; an error refuses activation unless the person confirms, and the confirmation is recorded) and by **Re-check** on the Runs tab after publish, through the control service (WORKSPACEISOLATION-5); findings as step outputs | WORKSPACEISOLATION-3, WORKSPACEISOLATION-5 | M | a test through the control service: deploying a build to `prod` runs `preflight` on the staged version before activating; an error finding stops activation until confirmed, and the confirmation is in the Runner's record; Playwright: Re-check shows the findings |
 | AUTHORING-7 | Retire the offline verb `project publish --to gateway --out` and the per-publish adopt confirmation (adapter first: the slot bindings' tests have run) | PUBLISHING-2 | S | the verb and `adopt` answer their sentence; `gateway-publish/1` leaves `docs/formats.json` and `docs/ui-editors.md`; the Workspace's publish tests pass unchanged |
@@ -52,7 +51,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - CHANNELS-1: the client that puts a connection copy on a Runner, sends its login and binds it for a channel, before AUTHORING-19.
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1, AUTHORING-2 (the target Runner's platform) and AUTHORING-22 (`preflight` before activation).
 - WORKSPACEISOLATION-5: runs, run results and binding tests through the control service, before AUTHORING-3, AUTHORING-6, AUTHORING-12, AUTHORING-18 and AUTHORING-22.
-- WORKSPACEISOLATION-6: the Gateway catalog refresh moves to the control service, onto the route AUTHORING-21 builds for the Runner read, which comes first.
+- WORKSPACEISOLATION-6: the Gateway catalog refresh moves to the control service, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`).
 
 ## Proposed decisions
 
@@ -61,35 +60,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 Option A: in the Runner's run record as the step result (kept under retention). Option B: only in the answer of the call, never stored. Option C: no preview.
 Scenario: an engineer previews `customers` (20 rows, one with an email address). Under A the rows are readable later by anyone who can read that run; under
 B they are shown once and gone; under C the engineer runs a trial run instead. Recommendation: B.
-
-### AUTHORING-P2: how `catalog-cache/2` lays out databases, and whether it keeps unique keys (default, awaiting the owner)
-
-Built as the default: a connection has a flat `tables:` list as in format 1, each table naming its `database`, beside a `databases:` list of
-`{name, schemas: [...]}` that holds the empty schemas too; a table must name a listed database and schema. Unique keys are kept (`unique_keys`) because
-`discover` answers them and its answer is what the cache records (`docs/authoring-metadata.md`, "The built-in package"). Scenario: Ana refreshes `crm` (SQL Server, databases `crm` and
-`crm_archive`, the schema `staging` empty). Option A (built): one list of tables, each with `database: crm`; `staging` appears only under `databases`.
-Option B: tables nested under `databases[].schemas[].tables`, so the empty schema is a schema with `tables: []` and nothing is repeated; every reader walks
-three levels. Option C: as A without `unique_keys` (a unique key is dropped from the answer). Recommendation: A, since every reader (Build's import, Sync's
-provisioning plan, the pickers) works on a table list, and a diff of the file stays one line per table.
-
-### AUTHORING-P3: a draft whose `catalog-cache.yaml` is still format 1 (default, awaiting the owner)
-
-Built as the default: the file is refused naming it (the draft's check, the Catalog tab, `provisioning plan --from-cache`, `import --from-cache`) and a
-refresh of any connection is refused too until the file is deleted, so nothing is converted or dropped silently. Scenario: Ana opens a draft committed last
-week with a format-1 cache of `crm` and `dw`, and presses Refresh on `crm`. Option A (built): the refresh says the file is format 1 and to delete it; she
-deletes it and refreshes both. Option B: the refresh replaces the whole file with only `crm`, saying `dw` was dropped. Option C: the reader converts a
-format-1 file (no databases, `read` from its `source`, no channel). Recommendation: A for this release (no released install holds a cache yet); C if one
-does by the next release.
-
-### AUTHORING-P6: the task host runs with the machine's culture data (default, awaiting the owner)
-
-Built as the default: the task host (`dbdatakit-taskhost`) no longer runs in invariant globalization mode, because Microsoft.Data.SqlClient refuses to open
-a connection in that mode and `discover` and `describe` open SQL Server inside it. Scenario: a package's job writes `1234.5.ToString()` into a file, and the
-runner's service account has the culture `de-DE`. Option A (built): the file says `1234,5`, as the same code does in any .NET program on that machine; a job
-that writes for a program names `CultureInfo.InvariantCulture`. Option B: the task host stays invariant (`1234.5`), and the built-in package starts as an
-executable of its own with its own runtime settings, built per platform (`win-x64`, `linux-x64`). Option C: the package sets SqlClient's view of the mode
-from inside its process (an AppContext switch) and the task host stays invariant. Recommendation: A, since every task runs in a process of its own and the
-runner itself already needs the culture data (ICU on Linux); C hides the mode from a library.
 
 ### AUTHORING-P7: the built-in package where the group requires signed versions (default, awaiting the owner)
 
@@ -123,6 +93,16 @@ and SQLite's drivers for every platform). The runner stores it once in the group
 Scenario: a group of one Windows and one Linux runner shares a state; the Linux runner installs the package in `dev`, and the Windows runner claims the
 next read. Option A (built): the Windows runner runs it, its drivers being in the package. Option B: each runner ships the package built for its own
 platform (about 25 MB) and a read is placed on a runner of the same platform as the version served. Recommendation: A while groups may mix platforms.
+
+### AUTHORING-P11: following a read the console stopped waiting for (default, awaiting the owner)
+
+Built as the default: `GET api/workspace-catalog/{workspace}/{project}/read/{run}` checks that the person may read the project named in the address and
+that the run is a `discover` of the built-in package in the channel given, but not that the run was started for that project, because the Runner keeps
+no inputs on a run's record. Scenario: Bob may read the project `orders` and learns the run id of Ana's read of `crm-to-dw` in `dev`. Option A (built):
+Bob follows it under `orders` and sees `crm-to-dw`'s shape; as a viewer of that Runner he could already read the same step through the relay. Option B:
+the console remembers which runs it started for which person and project, and refuses any other (a follow that lands on another console instance of a
+scaled-out console is refused too). Option C: the Runner keeps the package and slot of a metadata run on its record, and the console checks them.
+Recommendation: C.
 
 ### AUTHORING-P12: a read of one table that no longer finds it (default, awaiting the owner)
 

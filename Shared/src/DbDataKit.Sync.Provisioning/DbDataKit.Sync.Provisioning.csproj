@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The types keep their namespace (DbDataSync.Provisioning): DbDataSync's project of the same name forwards to this assembly. -->
+  <PropertyGroup>
+    <PackageId>DbDataKit.Sync.Provisioning</PackageId>
+    <Description>A replication's database setup: the plans of the DDL a table mapping or a whole replication needs on its source and target and their apply, and the column reader (MappingColumnReader) a mapping's columns, inferred types and key are read through.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572;CS1587</NoWarn>   <!-- doc comments on positional record parameters, and param tags of only some parameters -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Sync.Core\DbDataKit.Sync.Core.csproj" />
+    <ProjectReference Include="..\DbDataKit.Sync.Drivers.Abstractions\DbDataKit.Sync.Drivers.Abstractions.csproj" />
+    <ProjectReference Include="..\DbDataKit.Sync.Drivers.Generic\DbDataKit.Sync.Drivers.Generic.csproj" />
+  </ItemGroup>
+</Project>
