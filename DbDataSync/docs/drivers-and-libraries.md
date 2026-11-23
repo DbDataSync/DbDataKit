@@ -267,6 +267,10 @@ the shared tables, but Sync's readers and writers do not carry their values. Pro
 "Sync does not replicate interval columns (interval); leave the column out, or give it a transform that reads it as text". Leave it out of the
 mapping, or add a transform that reads it as text.
 
+**The JDBC driver reads PostgreSQL's names.** pgJDBC reports PostgreSQL's catalog names (`int4`, `bytea`, `timestamptz`), and the JDBC driver
+reads and writes them through the same table as the PostgreSQL driver: a `bytea` column is provisioned as `bytea`, a `varchar` with no length as
+`text`.
+
 ## Worked example: a descriptor driver, with no rebuild
 
 **For a real MySQL or MariaDB replication, use the built-in `MySql` driver above instead** — it has

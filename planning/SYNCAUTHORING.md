@@ -234,15 +234,6 @@ of a set that uses the old names, and Sync's type is deleted. Recommendation: A,
 
 Answer from the owner, 2026-11-23: P: 28, but no extra check (option B without the check that names each script using the old names)
 
-### SYNCAUTHORING-P30: the JDBC driver's types (default, awaiting the owner)
-
-The JDBC driver (pgJDBC) reads PostgreSQL's catalog names, and its dialect now reads and writes them through the shared `postgres` table, where it
-had its own short table that refused `bytea`, `time`, `uuid`, `jsonb` and `xml` and wrote a `varchar` with no length as `varchar(255)`. Scenario: a
-JDBC source with `payload bytea` and `name varchar` is provisioned into PostgreSQL as `bytea` and `text`; before, the mapping was refused. Option A,
-as built. Option B, keep the old table. Recommendation: A.
-
-Answer from the owner, 2026-11-23: as recommended (A)
-
 ## Open designs
 
 ### Monitoring and operations, second pass
