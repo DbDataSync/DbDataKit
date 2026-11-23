@@ -44,6 +44,14 @@ const CACHE = [
   "          - {name: 'total', type: 'decimal(12,2)', nullable: true}", '',
 ].join('\n')
 
+/** The cache with `target-db` read too: its database `dw` has `dbo.Orders` only, so a mapping of another table targets one provisioning creates. */
+const CACHE_WITH_TARGET = CACHE + [
+  "  'target-db':", "    engine: 'postgres'", "    read: {server: 'runners-eu', product: 'runner', channel: 'dev', at: '2026-11-20T10:00:00Z'}",
+  '    databases:', "      - {name: 'dw', schemas: ['dbo', 'staging']}", '    tables:',
+  "      - database: 'dw'", "        schema: 'dbo'", "        name: 'Orders'", '        kind: table', '        columns:',
+  "          - {name: 'id', type: 'integer', nullable: false, key: true}", '',
+].join('\n')
+
 type Fake = Awaited<ReturnType<typeof mockWorkspace>>
 
 /** A file of the draft as the fake Workspace server holds it (what was saved), parsed. */
@@ -189,4 +197,96 @@ test('a replication from New replication to its endpoints and schedule, Enabled 
   await expect(page.locator('[data-testid="wsp-file"][data-path^="config/replications/orders/"]')).toHaveCount(0)
   expect([...workspace.files('plant', 'replication-edit')!.keys()].filter((p) => p.startsWith('config/replications/orders/'))).toEqual([])
   await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'invoices')
+})
+
+test('table mappings: Create mappings from two ticked tables, then Auto-map, the key and an overridden target schema on one, the same changes in Files', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Mappings', `sync-mappings-${Date.now()}@example.com`)
+  const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE_WITH_TARGET } })
+  await makeDraft(page, 'plant', 'sync', 'mappings-edit')
+  const mappingFile = (name: string) => `config/replications/orders/table-mappings/${name}.yaml`
+
+  // the replication's endpoints, which every mapping made below inherits
+  await page.getByTestId('task-source-connection-select').selectOption('source-db')
+  await page.getByTestId('task-source-database-select').selectOption('App')
+  await page.getByTestId('task-target-connection-select').selectOption('target-db')
+  await page.getByTestId('task-target-database-select').selectOption('dw')
+  await page.getByTestId('save-settings-button').click()
+  await expect(page.getByTestId('sd-task-dirty')).toHaveCount(0)
+
+  // the overview lists the source database's tables from the catalog cache, with how many mappings read each; the sidebar counts mapped columns
+  await page.getByTestId('tab-mappings').click()
+  await expect(page).toHaveURL(/\/designer\/replications\/orders\/mappings$/)
+  await expect(page.locator('[data-testid^="select-table-"]')).toHaveCount(3)
+  await expect(page.getByTestId('table-mapping-count-dbo.Orders')).toHaveText('1')
+  await expect(page.getByTestId('table-mapping-count-dbo.Invoices')).toHaveText('unmapped')
+  await expect(page.getByTestId('mapping-item-orders')).toContainText('0')
+
+  // two tables ticked make two mapping files, unsaved; the target database has neither table, so the overview says provisioning creates them
+  await page.getByTestId('select-table-dbo.Customers').check()
+  await page.getByTestId('select-table-dbo.Invoices').check()
+  await expect(page.getByTestId('create-mappings-button')).toHaveText('Create 2 mappings')
+  await page.getByTestId('create-mappings-button').click()
+  await expect(page.getByTestId('bulk-create-notes')).toContainText('it is created with these columns when the target is provisioned')
+  await expect(page.getByTestId('mapping-item-dbo.Customers')).toContainText('2')
+  await expect(page.getByTestId('mapping-item-dbo.Invoices')).toContainText('3')
+  await expect(page.getByTestId('table-mapping-count-dbo.Invoices')).toHaveText('1')
+  for (const name of ['dbo.Customers', 'dbo.Invoices']) await expect(page.locator(`[data-testid="wsp-file"][data-path="${mappingFile(name)}"]`)).toHaveAttribute('data-dirty', 'true')
+  await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '2')
+  expect(workspace.files('plant', 'mappings-edit')?.has(mappingFile('dbo.Invoices'))).toBe(false)
+  await shot(page, '04-mappings-overview')
+
+  // on dbo.Invoices: two rows removed, then Auto-map by name maps the three columns again
+  await page.getByTestId('mapping-item-dbo.Invoices').click()
+  await expect(page.getByTestId('mapping-editor')).toHaveAttribute('data-name', 'dbo.Invoices')
+  await expect(page.getByTestId('source-table-select').locator('option:checked')).toHaveText('dbo.Invoices')
+  const rows = page.getByTestId('column-mapping-row')
+  await expect(rows).toHaveCount(3)
+  await page.getByTestId('column-mapping-remove-2').click()
+  await page.getByTestId('column-mapping-remove-1').click()
+  await expect(rows).toHaveCount(1)
+  await page.getByTestId('auto-map-button').click()
+  await expect(rows).toHaveCount(3)
+  await expect(page.getByTestId('column-mapping-source-type-2')).toHaveText('decimal(12,2)')
+
+  // the key: the source reports id; two columns ticked, then id unticked, leaves customer_id as the mapping's own key
+  await expect(page.getByTestId('primary-key-source')).toContainText('The source reports a primary key: id.')
+  await page.getByTestId('primary-key-column-id').check()
+  await page.getByTestId('primary-key-column-customer_id').check()
+  await page.getByTestId('primary-key-column-id').uncheck()
+  await expect(page.getByTestId('primary-key-column-customer_id')).toBeChecked()
+  await expect(page.getByTestId('primary-key-source')).toContainText('The columns chosen below replace it.')
+
+  // the target side overridden for this table, into the schema staging, which the cache does not have: provisioning creates the table
+  await page.getByTestId('target-override-toggle').click()
+  await expect(page.getByTestId('target-connection-select')).toHaveValue('target-db')
+  await page.getByTestId('target-schema-input').fill('staging')
+  await expect(page.getByTestId('target-table-will-be-created')).toBeVisible()
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  await shot(page, '05-mapping-editor')
+
+  // Files shows the same file with the same changes, not saved; back in the Designer the edits are still there
+  await page.locator(`[data-testid="wsp-file"][data-path="${mappingFile('dbo.Invoices')}"]`).click()
+  await expect(area(page)).toHaveAttribute('data-area', 'files')
+  await expect(page.getByTestId('wsp-dirty')).toBeVisible()
+  await page.getByTestId('wsp-mode-yaml').click()
+  await expect(page.getByTestId('wsp-code')).toContainText('staging')
+  await expect(page.getByTestId('wsp-code')).toContainText('target-db')
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await page.getByTestId('tab-mappings').click()
+  await page.getByTestId('mapping-item-dbo.Invoices').click()
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  await expect(page.getByTestId('target-schema-input')).toHaveValue('staging')
+  await expect(page.getByTestId('primary-key-column-customer_id')).toBeChecked()
+
+  // Save mapping writes that one file: what the server holds is what the screens showed
+  await page.getByTestId('save-mapping-button').click()
+  await expect(page.getByTestId('mapping-dirty')).toHaveCount(0)
+  const invoices = saved(workspace, 'mappings-edit', mappingFile('dbo.Invoices'))
+  expect(invoices.sources).toEqual([{ schema: 'dbo', table: 'Invoices' }])
+  expect(invoices.targets).toEqual([{ connectionName: 'target-db', database: 'dw', schema: 'staging', table: 'Invoices' }])
+  expect(invoices.columnMappings.map((c: { targetColumn: string }) => c.targetColumn)).toEqual(['id', 'customer_id', 'total'])
+  expect(invoices.columnMappings.some((c: Record<string, unknown>) => 'targetType' in c)).toBe(false)
+  expect(invoices.primaryKey).toEqual(['customer_id'])
+  expect(workspace.files('plant', 'mappings-edit')?.has(mappingFile('dbo.Customers'))).toBe(false)
+  await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '1')
 })

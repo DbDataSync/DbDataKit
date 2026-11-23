@@ -184,7 +184,12 @@ export function newTaskText(name: string, scheduling: { mode: 'Continuous'; freq
   }) + '\n'
 }
 
-/** A new mapping that states only its tables: the endpoints, provisioning, scripts and hooks follow the replication. */
+/**
+ * A new mapping that states only its tables: the endpoints, provisioning, scripts and hooks follow the replication. Each side is written as a mapping
+ * of its own, even when the caller passes one object for both: the writer would otherwise write the target as an alias of the source (`- *a1`),
+ * which a later edit of one side cannot change without the other.
+ */
 export function newMappingText(name: string, source: { schema: string; table: string }, target: { schema: string; table: string }): string {
-  return toYaml({ schemaVersion: SYNC_MAPPING_CURRENT, name, sources: [source], targets: [target], columnMappings: [] }) + '\n'
+  const side = (t: { schema: string; table: string }) => ({ schema: t.schema, table: t.table })
+  return toYaml({ schemaVersion: SYNC_MAPPING_CURRENT, name, sources: [side(source)], targets: [side(target)], columnMappings: [] }) + '\n'
 }
