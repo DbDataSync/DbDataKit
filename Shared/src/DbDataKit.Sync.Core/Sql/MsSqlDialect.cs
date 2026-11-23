@@ -58,9 +58,6 @@ public sealed class MsSqlDialect : SqlDialect
         CancellationToken cancellationToken) =>
         MsSqlIdentityInsert.RunAsync(connection, transaction, qualifiedTable, overrideRequired, write, cancellationToken);
 
-    /// <summary>See the type-mapping table in phase 25 §2 — the pairs listed there are what the tests
-    /// pin. <c>sql_variant</c>, <c>hierarchyid</c> and geospatial types fall through to
-    /// <see cref="CanonicalTypeKind.Unmappable"/>: nothing here guesses a rendering for them.</summary>
     /// <summary>SQL Server's ADD takes no COLUMN keyword.</summary>
     public override string RenderAddColumn(string qualifiedTable, string column, string type) =>
         $"ALTER TABLE {qualifiedTable} ADD {QuoteIdentifier(column)} {type} NULL";
@@ -107,12 +104,8 @@ public sealed class MsSqlDialect : SqlDialect
 
     /// <summary>The shared <c>sqlserver</c> table (<c>dialects/sqlserver.yaml</c>): <c>tinyint</c> is an unsigned 8-bit integer, <c>binary(n)</c>
     /// and <c>rowversion</c> are fixed-length binary.</summary>
-    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
         DialectTypes.Write(Shared, type, sourceNote);
-
-    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

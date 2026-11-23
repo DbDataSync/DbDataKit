@@ -1,23 +1,33 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Sql;
+using MySqlDialect = DbDataSync.Core.Sql.MySqlDialect;
+using OracleDialect = DbDataSync.Core.Sql.OracleDialect;
 
 namespace DbDataSync.Core.Tests;
 
 /// <summary>
 /// Sync's dialects answer from the shared type tables (<c>DbDataKit.Dialect</c>): what a column read on one engine becomes on another.
-/// Design: the shared dialects' README, "Types with no stated size, unsigned integers and fixed-length binary".
 /// </summary>
 public sealed class SharedTypeAnswersTests
 {
-    private static string Write(SqlDialect target, SqlDialect source, string native) => target.RenderColumnType(source.ToCanonicalType(native)).Sql;
+    private static CanonicalType Read(SqlDialect dialect, string native) =>
+        dialect.ReadColumnType(native) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+
+    private static RenderedColumnType Carry(SqlDialect target, SqlDialect source, string native)
+    {
+        var read = source.ReadColumnType(native);
+        return target.WriteColumnType(read.Result!, read.Fidelity == Fidelity.Exact ? null : read.Note);
+    }
+
+    private static string Write(SqlDialect target, SqlDialect source, string native) => Carry(target, source, native).Sql;
 
     [Fact]
     public void SqlServer_tinyint_is_read_as_an_unsigned_8_bit_integer()
     {
-        var type = MsSqlDialect.Instance.ToCanonicalType("tinyint");
+        var type = Read(MsSqlDialect.Instance, "tinyint");
 
-        Assert.Equal(CanonicalTypeKind.Int8, type.Kind);
-        Assert.True(type.IsUnsigned);
-        Assert.True(MsSqlDialect.Instance.ReadColumnType("tinyint").Result!.Unsigned);
+        Assert.Equal(CanonicalKind.Int8, type.Kind);
+        Assert.True(type.Unsigned);
     }
 
     [Fact]
@@ -42,17 +52,17 @@ public sealed class SharedTypeAnswersTests
     [Fact]
     public void A_history_column_on_MySql_keeps_microseconds()
     {
-        var historyColumn = new CanonicalType(CanonicalTypeKind.Timestamp, null, null, null, false, false);
+        var historyColumn = CanonicalType.Timestamp();
 
-        Assert.Equal("datetime(6)", MySqlDialect.Instance.RenderColumnType(historyColumn).Sql);
-        Assert.Equal("datetime2(7)", MsSqlDialect.Instance.RenderColumnType(historyColumn).Sql);
+        Assert.Equal("datetime(6)", MySqlDialect.Instance.WriteColumnType(historyColumn).Sql);
+        Assert.Equal("datetime2(7)", MsSqlDialect.Instance.WriteColumnType(historyColumn).Sql);
     }
 
     [Fact]
     public void PostgreSQL_numeric_with_no_precision_keeps_its_fractions()
     {
         Assert.Equal("numeric", Write(PostgresDialect.Instance, PostgresDialect.Instance, "numeric"));
-        var onSqlServer = MsSqlDialect.Instance.RenderColumnType(PostgresDialect.Instance.ToCanonicalType("numeric"));
+        var onSqlServer = Carry(MsSqlDialect.Instance, PostgresDialect.Instance, "numeric");
         Assert.Equal("decimal(38,9)", onSqlServer.Sql);
         Assert.Contains("no precision", onSqlServer.Fidelity);
     }
@@ -63,46 +73,61 @@ public sealed class SharedTypeAnswersTests
         Assert.Equal("binary(16)", Write(MsSqlDialect.Instance, MsSqlDialect.Instance, "binary(16)"));
         Assert.Equal("binary(16)", Write(MySqlDialect.Instance, MsSqlDialect.Instance, "binary(16)"));
         Assert.Equal("bytea", Write(PostgresDialect.Instance, MsSqlDialect.Instance, "binary(16)"));
-        var rowversion = MsSqlDialect.Instance.ToCanonicalType("rowversion");
-        Assert.True(rowversion.IsFixed);
+        var rowversion = Read(MsSqlDialect.Instance, "rowversion");
+        Assert.True(rowversion.Fixed);
         Assert.Equal(8, rowversion.Length);
-        Assert.Equal("binary(8)", MsSqlDialect.Instance.RenderColumnType(rowversion).Sql);
+        Assert.Equal("binary(8)", MsSqlDialect.Instance.WriteColumnType(rowversion).Sql);
     }
+
+    [Fact]
+    public void A_time_on_Oracle_is_a_timestamp()
+    {
+        var rendered = Carry(OracleDialect.Instance, MsSqlDialect.Instance, "time(3)");
+
+        Assert.Equal("timestamp(3)", rendered.Sql);
+        Assert.Contains("TIME-only", rendered.Fidelity);
+    }
+
+    [Theory]
+    [InlineData("tinyint", CanonicalKind.Int8)]
+    [InlineData("varbinary", CanonicalKind.Binary)]
+    [InlineData("time", CanonicalKind.Time)]
+    public void The_Flight_SQL_names_of_Arrow_types_are_read_through_the_flightsql_dialect(string native, CanonicalKind kind) =>
+        Assert.Equal(kind, Read(AnsiDialect.Instance, native).Kind);
 
     [Theory]
     [InlineData("interval")]
     [InlineData("integer[]")]
     public void Interval_and_array_columns_are_not_replicated(string native)
     {
-        var type = PostgresDialect.Instance.ToCanonicalType(native);
+        var read = PostgresDialect.Instance.ReadColumnType(native);
 
-        Assert.Equal(CanonicalTypeKind.Unmappable, type.Kind);
-        Assert.False(PostgresDialect.Instance.ReadColumnType(native).IsMapped);
+        Assert.False(read.IsMapped);
+        if (native == "interval") Assert.Contains("Sync does not replicate", read.Note);
     }
 
     [Fact]
     public void The_JDBC_dialect_reads_and_writes_PostgreSQL_types()
     {
-        Assert.Equal("bytea", JdbcDialect.Instance.RenderColumnType(JdbcDialect.Instance.ToCanonicalType("bytea")).Sql);
-        Assert.Equal("text", JdbcDialect.Instance.RenderColumnType(JdbcDialect.Instance.ToCanonicalType("character varying")).Sql);
+        Assert.Equal("bytea", Write(JdbcDialect.Instance, JdbcDialect.Instance, "bytea"));
+        Assert.Equal("text", Write(JdbcDialect.Instance, JdbcDialect.Instance, "character varying"));
     }
 
     [Fact]
     public void A_string_with_no_length_is_unbounded()
     {
-        var noLength = new CanonicalType(CanonicalTypeKind.String, null, null, null, true, false);
+        var noLength = CanonicalType.String();
 
-        Assert.Equal("nvarchar(max)", MsSqlDialect.Instance.RenderColumnType(noLength).Sql);
-        Assert.Equal("text", PostgresDialect.Instance.RenderColumnType(noLength).Sql);
+        Assert.Equal("nvarchar(max)", MsSqlDialect.Instance.WriteColumnType(noLength).Sql);
+        Assert.Equal("text", PostgresDialect.Instance.WriteColumnType(noLength).Sql);
     }
 
     [Fact]
-    public void Converting_to_the_shared_type_and_back_changes_nothing()
+    public void A_reading_note_is_joined_to_the_writing_note()
     {
-        foreach (var native in new[] { "tinyint", "binary(16)", "rowversion", "datetimeoffset(3)", "nvarchar(50)", "varchar(max)", "decimal(12,4)", "money" })
-        {
-            var type = MsSqlDialect.Instance.ToCanonicalType(native);
-            Assert.Equal(type with { SourceNote = null }, CanonicalType.FromShared(type.ToShared()));
-        }
+        var rendered = Carry(PostgresDialect.Instance, MsSqlDialect.Instance, "money");
+
+        Assert.Equal("numeric(19,4)", rendered.Sql);
+        Assert.Contains("currency", rendered.Fidelity);
     }
 }

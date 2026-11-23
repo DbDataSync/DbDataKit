@@ -48,12 +48,8 @@ public sealed class JdbcDialect : SqlDialect
     /// <summary>pgJDBC reports PostgreSQL's own catalog names, so the types are the shared <c>postgres</c> table's.</summary>
     private static readonly ISqlDialect Types = DialectCatalog.Builtin.Get("postgres");
 
-    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Types, nativeType);
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Types, nativeType);
 
-    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
         DialectTypes.Write(Types, type, sourceNote);
-
-    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

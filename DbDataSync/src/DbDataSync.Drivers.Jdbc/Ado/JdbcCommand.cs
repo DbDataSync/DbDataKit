@@ -197,7 +197,7 @@ internal sealed partial class JdbcCommand : DbCommand
     /// <summary>
     /// Phase 172V: dispatches on <paramref name="parameter"/>'s own <c>.Value</c> CLR runtime type, not
     /// <c>.DbType</c> — found, not assumed, while getting a real write working. <c>GenericValueBinder</c>'s
-    /// own watermark-parameter path sets <c>DbType</c> explicitly (from <c>dialect.ToCanonicalType</c>),
+    /// own watermark-parameter path sets <c>DbType</c> explicitly (from <c>dialect.ReadColumnType</c>),
     /// which is how this worked at all for readers. <c>DbDataSync.Drivers.Generic.DbCommandExtensions
     /// .AddParameter</c> — the plain helper <c>BatchInsertStagingProvider</c> uses for every staged
     /// value, on every engine — never sets it, and <see cref="JdbcParameter.DbType"/> has no fallback

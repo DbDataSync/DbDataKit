@@ -273,8 +273,8 @@ public sealed class ScriptCompilerTests : IDisposable
         public string EngineName => "MsSql";
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
-        public DbDataSync.Core.Sql.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataSync.Core.Sql.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
+        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 
     /// <summary>
@@ -314,6 +314,42 @@ public sealed class ScriptCompilerTests : IDisposable
                 }
 
                 new ReadsItsContext()
+                """,
+        });
+
+        Assert.True(result.Success, string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    /// <summary>A hook reads a column's type as the shared <c>DbDataKit.Dialect.CanonicalType</c>; its namespace is imported for every
+    /// script, so <c>CanonicalKind</c> needs no <c>using</c>.</summary>
+    [Fact]
+    public void AHookScriptReadsColumnTypesAsTheSharedType()
+    {
+        var result = _compiler.Compile(new ScriptDefinition
+        {
+            Manifest = new ScriptConfig
+            {
+                Name = "adds-missing-columns", Kind = ScriptSlots.LifecycleHook,
+            },
+            Code = """
+                public sealed class AddsMissingColumns : ILifecycleHook
+                {
+                    public IReadOnlyList<string> DeclarePoints(LifecycleHookContext c) => ["beforeStage"];
+
+                    public IReadOnlyList<HookStatement> BuildStatements(string point, LifecycleHookContext c)
+                    {
+                        var statements = new List<HookStatement>();
+                        foreach (var column in c.SourceColumns)
+                        {
+                            var type = c.SourceDialect.ToCanonicalType(column.NativeType);
+                            if (type.Kind == CanonicalKind.Unmappable || type.Length is null) continue;
+                            statements.Add(new HookStatement($"-- {column.Name} {c.TargetDialect.RenderColumnType(type).Sql}", []));
+                        }
+                        return statements;
+                    }
+                }
+
+                new AddsMissingColumns()
                 """,
         });
 

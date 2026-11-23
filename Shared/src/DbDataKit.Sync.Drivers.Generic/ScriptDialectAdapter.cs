@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Scripting.Abstractions;
 using DbDataSync.Core.Sql;
@@ -49,7 +50,8 @@ public sealed class ScriptDialectAdapter(SqlDialect dialect, string engineName) 
 
     public string ParameterReference(string name) => dialect.ParameterReference(name);
 
-    public CanonicalType ToCanonicalType(string nativeType) => dialect.ToCanonicalType(nativeType);
+    public CanonicalType ToCanonicalType(string nativeType) =>
+        dialect.ReadColumnType(nativeType) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
 
-    public RenderedColumnType RenderColumnType(CanonicalType type) => dialect.RenderColumnType(type);
+    public RenderedColumnType RenderColumnType(CanonicalType type) => dialect.WriteColumnType(type);
 }

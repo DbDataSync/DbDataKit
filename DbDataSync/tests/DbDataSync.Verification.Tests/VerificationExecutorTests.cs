@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -145,8 +146,8 @@ public sealed class VerificationExecutorTests
     {
         public override string QuoteIdentifier(string identifier) => $"\"{identifier}\"";
         public override string ParameterReference(string name) => $"@{name}";
-        public override CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public override RenderedColumnType RenderColumnType(CanonicalType type) => throw new NotSupportedException();
+        public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => throw new NotSupportedException();
+        public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => throw new NotSupportedException();
     }
 
     private sealed class AnsiScriptDialect : IScriptDialect

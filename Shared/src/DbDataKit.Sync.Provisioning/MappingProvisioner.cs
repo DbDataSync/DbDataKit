@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataSync.Core.Config;
@@ -608,12 +609,12 @@ public class MappingProvisioner(
     {
         try
         {
-            var canonical = sourceDialect.ToCanonicalType(column.NativeType);
-            if (canonical.Kind == CanonicalTypeKind.Unmappable)
+            var read = sourceDialect.ReadColumnType(column.NativeType);
+            if (read is not { IsMapped: true, Result: { } canonical })
                 return new InferredColumnType(column.Name, column.NativeType, null, null,
                     $"'{column.NativeType}' has no cross-engine equivalent — set a target type by hand.");
 
-            var rendered = targetDialect.RenderColumnType(canonical);
+            var rendered = targetDialect.WriteColumnType(canonical, read.Fidelity == Fidelity.Exact ? null : read.Note);
             return new InferredColumnType(column.Name, column.NativeType, rendered.Sql, rendered.Fidelity, null);
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or FormatException)

@@ -90,12 +90,8 @@ public sealed class PostgresDialect : SqlDialect
 
     /// <summary>The type tables are the shared <c>postgres</c> dialect's (<c>dialects/postgres.yaml</c>). Postgres has one string type
     /// family, so a string is always Unicode here; arrays and user-defined types are unmappable.</summary>
-    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
         DialectTypes.Write(Shared, type, sourceNote);
-
-    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

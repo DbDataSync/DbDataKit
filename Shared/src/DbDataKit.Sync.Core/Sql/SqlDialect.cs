@@ -410,42 +410,18 @@ public abstract class SqlDialect
         CancellationToken cancellationToken) => write();
 
     /// <summary>
-    /// Translates one of this engine's native type specs (e.g. <c>"nvarchar(50)"</c>, the exact string
-    /// <c>ColumnMetadata.NativeType</c> carries) into the canonical intermediate a
-    /// provisioning plan uses to create a matching column on a *different* engine, in the shape scripts and
-    /// <c>driver.csx</c> files see. A built-in dialect answers it from <see cref="ReadColumnType"/>.
+    /// One of this engine's native type specs (e.g. <c>"nvarchar(50)"</c>, the exact string <c>ColumnMetadata.NativeType</c> carries) as the
+    /// shared dialects' type, with how faithfully it was read. A built-in dialect reads it from the shared table of its engine
+    /// (<c>DbDataKit.Dialect</c>). A kind Sync does not replicate (an interval, a list) is unmappable, with a note.
     /// </summary>
-    public abstract CanonicalType ToCanonicalType(string nativeType);
+    public abstract TypeMapping<CanonicalType> ReadColumnType(string nativeType);
 
     /// <summary>
-    /// One of this engine's native type specs as the shared dialects' type, with how faithfully it was read. A built-in dialect reads it from
-    /// the shared table of its engine (<c>DbDataKit.Dialect</c>); a dialect a <c>driver.csx</c> defines answers it from its own
-    /// <see cref="ToCanonicalType"/>. A kind Sync does not replicate (an interval, a list) is unmappable with a note.
+    /// This engine's DDL for a shared type (usually read by another engine's <see cref="ReadColumnType"/>), with <paramref name="sourceNote"/>
+    /// (what was already lost when the source column was read) joined to what writing it loses. Must not be called with an unmappable type: a
+    /// caller checks the kind and reports <c>Unsupported</c> first.
     /// </summary>
-    public virtual TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType)
-    {
-        var type = ToCanonicalType(nativeType);
-        if (type.Kind == CanonicalTypeKind.Unmappable)
-            return TypeMapping<DbDataKit.Dialect.CanonicalType>.Unmappable(type.SourceNote ?? $"native type '{nativeType.Trim()}' has no canonical mapping");
-        return type.SourceNote is { } note
-            ? new(type.ToShared(), Fidelity.Lossy, note)
-            : TypeMapping<DbDataKit.Dialect.CanonicalType>.Exact(type.ToShared());
-    }
-
-    /// <summary>
-    /// This engine's DDL for a shared type, with <paramref name="sourceNote"/> (what was already lost when the source column was read) joined to
-    /// what writing it loses. Must not be called with an unmappable type. A built-in dialect writes it from the shared table of its engine.
-    /// </summary>
-    public virtual RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
-        RenderColumnType(CanonicalType.FromShared(type, sourceNote));
-
-    /// <summary>
-    /// The reverse direction: renders this engine's DDL for a canonical type produced by (usually)
-    /// another engine's <see cref="ToCanonicalType"/>. Must not be called with
-    /// <see cref="CanonicalTypeKind.Unmappable"/> — a caller checks <see cref="CanonicalType.Kind"/>
-    /// and reports <c>Unsupported</c> before ever reaching a renderer.
-    /// </summary>
-    public abstract RenderedColumnType RenderColumnType(CanonicalType type);
+    public abstract RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null);
 }
 
 /// <summary>How auto-segmentation may divide a column's value space. Not a type system — only the four

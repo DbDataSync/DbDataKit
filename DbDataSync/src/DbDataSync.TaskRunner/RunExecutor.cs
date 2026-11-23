@@ -1484,7 +1484,7 @@ public sealed class RunExecutor(
     /// **Read back from the catalog, not taken from the plan.** The plan's <c>provisioned</c> list is
     /// what was asked for; the cache's contract (see <see cref="CachedColumn"/>) is what somebody saw
     /// when they last looked, and only the catalog can answer the three things that differ. A
-    /// <see cref="ProvisioningColumn"/> carries a <see cref="CanonicalType"/> rather than the native
+    /// <see cref="ProvisioningColumn"/> carries a <c>DbDataKit.Dialect.CanonicalType</c> rather than the native
     /// type the target rendered it to, which is the string staging builds its own DDL from; it carries
     /// no identity flag, which is what a writer decides <c>IDENTITY_INSERT</c> on; and on the alter
     /// path it names only the mapped columns, so caching it would report a narrower table than the one

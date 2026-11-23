@@ -6,17 +6,17 @@ namespace DbDataSync.Core.Sql;
 internal static class DialectTypes
 {
     /// <summary>The shared table's reading; a kind Sync does not replicate (an interval, a list) is unmappable, with a note that says what to do.</summary>
-    public static TypeMapping<DbDataKit.Dialect.CanonicalType> Read(ISqlDialect shared, string nativeType)
+    public static TypeMapping<CanonicalType> Read(ISqlDialect shared, string nativeType)
     {
         var read = shared.ToCanonical(nativeType);
         return read.Result is { Kind: CanonicalKind.Interval or CanonicalKind.List } t
-            ? TypeMapping<DbDataKit.Dialect.CanonicalType>.Unmappable(
+            ? TypeMapping<CanonicalType>.Unmappable(
                 $"Sync does not replicate {t.Kind.ToString().ToLowerInvariant()} columns ({nativeType.Trim()}); leave the column out, or give it a transform that reads it as text")
             : read;
     }
 
     /// <summary>The shared table's DDL for <paramref name="type"/>, its note joined to <paramref name="sourceNote"/>.</summary>
-    public static RenderedColumnType Write(ISqlDialect shared, DbDataKit.Dialect.CanonicalType type, string? sourceNote)
+    public static RenderedColumnType Write(ISqlDialect shared, CanonicalType type, string? sourceNote)
     {
         var mapping = shared.ColumnType(type);
         var native = mapping.Require();

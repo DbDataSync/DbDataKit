@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
@@ -128,8 +129,9 @@ public sealed class LifecycleHookContractTests
         public string EngineName => engineName;
         public string QuoteIdentifier(string identifier) => dialect.QuoteIdentifier(identifier);
         public string ParameterReference(string name) => dialect.ParameterReference(name);
-        public CanonicalType ToCanonicalType(string nativeType) => dialect.ToCanonicalType(nativeType);
-        public RenderedColumnType RenderColumnType(CanonicalType type) => dialect.RenderColumnType(type);
+        public CanonicalType ToCanonicalType(string nativeType) =>
+            dialect.ReadColumnType(nativeType) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+        public RenderedColumnType RenderColumnType(CanonicalType type) => dialect.WriteColumnType(type);
     }
 
     /// <summary>The reference implementation phase 27's doc sketches by name. Declares only
@@ -152,7 +154,7 @@ public sealed class LifecycleHookContractTests
                 var sourceColumn = context.SourceColumns.First(
                     c => string.Equals(c.Name, mapping.SourceColumn, StringComparison.OrdinalIgnoreCase));
                 var canonical = context.SourceDialect.ToCanonicalType(sourceColumn.NativeType);
-                if (canonical.Kind == CanonicalTypeKind.Unmappable)
+                if (canonical.Kind == CanonicalKind.Unmappable)
                     continue; // Never guess — the same rule phase 25's provisioner follows.
 
                 var rendered = context.TargetDialect.RenderColumnType(canonical);

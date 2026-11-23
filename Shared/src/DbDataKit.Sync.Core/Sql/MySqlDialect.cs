@@ -112,12 +112,8 @@ public sealed class MySqlDialect : SqlDialect
 
     /// <summary>The type tables are the shared <c>mysql</c> dialect's (<c>dialects/mysql.yaml</c>): <c>binary(n)</c> is fixed-length, and a time
     /// or timestamp with no stated precision is written with microseconds.</summary>
-    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
         DialectTypes.Write(Shared, type, sourceNote);
-
-    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

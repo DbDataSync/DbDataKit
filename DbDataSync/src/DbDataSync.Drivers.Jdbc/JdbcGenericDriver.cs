@@ -24,7 +24,7 @@ namespace DbDataSync.Drivers.Jdbc;
 /// Reuses <see cref="GenericValueBinder"/> rather than a driver-specific <c>ISegmentValueBinder</c> —
 /// unlike Postgres/MySQL/Oracle, whose native parameter types (<c>NpgsqlDbType</c>, <c>MySqlDbType</c>)
 /// are a real reason to write one, a JDBC parameter's "native" type *is* the generic <see
-/// cref="System.Data.DbType"/>/<see cref="CanonicalType"/> pair <c>GenericValueBinder</c> already binds
+/// cref="System.Data.DbType"/>/<c>CanonicalType</c> pair <c>GenericValueBinder</c> already binds
 /// through — there is no richer JDBC-specific enum to lose precision against. <see cref="JdbcCommand"/>
 /// (in <c>Ado/</c>) is what turns that generic <see cref="System.Data.DbType"/> into the right
 /// <c>PreparedStatement.setXxx</c> call.
