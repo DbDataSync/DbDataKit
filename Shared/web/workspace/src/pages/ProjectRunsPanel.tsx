@@ -6,6 +6,7 @@ import type { BindingTestAnswer, StagedRun, StagedRunStarted } from '../api'
 import { deployApi, useRunnerVersion } from '../deploys'
 import { connectionsOf, replicationsOf } from '../syncSchemas'
 import { followStagedRun } from './SyncProvisioningPanel'
+import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
 /** The task a replication is on a Runner (`RunnerTaskNames.Of`): lower case, what a task name does not take made a dash, no leading dash or underscore, at most 64. */
 export const syncTaskOf = (replication: string): string =>
@@ -140,6 +141,17 @@ function CheckRow({ busy, onRun }: { busy: boolean; onRun: (inputs: Record<strin
   )
 }
 
+/** The preflight's line: Re-check runs it on the version the channel serves, read only, and its findings come back here. */
+function PreflightRow({ busy, onRun }: { busy: boolean; onRun: () => void }) {
+  return (
+    <div className="grid-row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }} data-testid="wsp-runs-preflight">
+      <span className="mono" style={{ minWidth: 80 }}>{PREFLIGHT_TASK}</span>
+      <button type="button" className="btn btn-sm" disabled={busy} data-testid="wsp-runs-preflight-recheck" onClick={onRun}>Re-check</button>
+      <span className="hint">Checks, read only, what would stand in the way of the published version on its databases; the console runs it before it serves a version in production.</span>
+    </div>
+  )
+}
+
 /** A pass a drain recorded (`PassRecord`, the step `pass-record`): what the run did to each mapping. */
 interface PassStep { mapping?: string; kind?: string; segment?: string | null; status?: string; rowsRead?: number; rowsWritten?: number; summary?: string | null; failureKind?: string | null }
 export const passesOf = (run: StagedRun): PassStep[] => (run.steps ?? []).map((s) => (s.result ?? {}) as PassStep).filter((p) => !!p.mapping)
@@ -182,6 +194,12 @@ function RunLine({ result, instance }: { result: Started; instance: string | nul
             </table>
           )}
           {checkResultOf(run)!.truncated && <div className="hint">The document was cut to fit; the Quality page has every result.</div>}
+        </div>
+      )}
+      {preflightFindingsOf(run) && (
+        <div data-testid="wsp-runs-preflight-result" data-errors={preflightFindingsOf(run)!.filter((f) => f.severity === 'error').length}>
+          <div className={preflightFindingsOf(run)!.some((f) => f.severity === 'error') ? 'error' : 'hint'} data-testid="wsp-runs-preflight-summary">{findingsSummary(preflightFindingsOf(run)!)}</div>
+          <PreflightFindings findings={preflightFindingsOf(run)!} />
         </div>
       )}
       {passesOf(run).map((p, i) => (
@@ -239,7 +257,8 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
     mutationFn: async ({ task, inputs }: { task: string; inputs: Record<string, string> }): Promise<Started> => {
       if (!at) throw new Error('No build of this draft is published to a Runner. Build it and publish it to a Runner (Builds tab); then its tasks run from here.')
       const started = (await deployApi.run(at.deploy, task, inputs, true)).run
-      return { started, run: await followStagedRun(() => deployApi.runOf(at.deploy, started.run_id, kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined)) }
+      const step = task === PREFLIGHT_TASK ? PREFLIGHT_STEP : kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined
+      return { started, run: await followStagedRun(() => deployApi.runOf(at.deploy, started.run_id, step)) }
     },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
@@ -254,7 +273,8 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
   })
   const connections = kind === 'sync' ? connectionsOf(paths) : []
   const replications = replicationsOf(paths).filter((r) => !at || at.tasks.length === 0 || at.tasks.includes(syncTaskOf(r)))
-  const tasks = kind === 'sync' ? [] : (at?.tasks ?? []).filter((t) => !isBuildView(t) && t !== CHECK_TASK)
+  const tasks = kind === 'sync' ? [] : (at?.tasks ?? []).filter((t) => !isBuildView(t) && t !== CHECK_TASK && t !== PREFLIGHT_TASK)
+  const preflight = (at?.tasks ?? []).includes(PREFLIGHT_TASK)
   const recheck = kind !== 'sync' && (at?.tasks ?? []).includes(CHECK_TASK)
   const views = kind === 'sync' ? [] : (at?.tasks ?? []).filter(isBuildView)
   return (
@@ -290,6 +310,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       {at && views.length > 0 && <div className="hint" style={{ marginTop: 6 }}>Views, read only:</div>}
       {at && views.map((v) => <BuildViewRow key={v} view={v} connections={buildConnectionsOf(paths)} busy={start.isPending} onRun={(inputs) => start.mutate({ task: v, inputs })} />)}
       {at && recheck && <CheckRow busy={start.isPending} onRun={(inputs) => start.mutate({ task: CHECK_TASK, inputs })} />}
+      {at && preflight && <PreflightRow busy={start.isPending} onRun={() => start.mutate({ task: PREFLIGHT_TASK, inputs: {} })} />}
       {start.isPending && <div className="hint" data-testid="wsp-runs-running">Running on the Runner...</div>}
       {start.data && <RunLine result={start.data} instance={start.data.started.instance ?? instance} />}
     </div>

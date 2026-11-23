@@ -175,6 +175,16 @@ public sealed class StoreDeployOnRunnerTests
             Assert.True(await DeployAsync("dry_run=false") == RunOutcome.Succeeded, Logs());
             Assert.Contains("territory.name", await ColumnsAsync(engine, connection));
 
+            // the preflight, read only: the deploy's dry run says nothing is missing and nothing stands in its way; the contract's plan is told, to be approved on its own
+            var preflightJob = $"{package}/{Channel}/{DbDataKit.Runner.Preflight.TaskName}";
+            Assert.True(await RunAsync(preflightJob) == RunOutcome.Succeeded, Logs(preflightJob));
+            var parts = new StepStore(state, new ProgressKey(package, Channel, DbDataKit.Runner.Preflight.TaskName)).Recent(DbDataKit.Runner.Preflight.StepName, 10, null, null).Select(st => JsonNode.Parse(st.ResultJson!)!).ToList();
+            Assert.Equal(["contract sales", "deploy sales"], parts.Select(p => (string?)p["part"]).Order(StringComparer.Ordinal));
+            var findings = DbDataKit.Runner.Preflight.Findings(parts);
+            Assert.DoesNotContain(findings, f => f.Severity == DbDataKit.Runner.Preflight.Error);
+            Assert.Contains(findings, f => f.Message.StartsWith("The contract plan ", StringComparison.Ordinal) && f.Message.Contains("2 step(s)", StringComparison.Ordinal));
+            Assert.Contains("territory.name", await ColumnsAsync(engine, connection));
+
             // the contract task: without an approval a plan (the column to drop, as the lineage graph names it, and the plan's hash), changing nothing
             Assert.True(await RunAsync(contractJob) == RunOutcome.Succeeded, Logs(contractJob));
             var plan = ContractReport();

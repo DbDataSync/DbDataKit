@@ -49,7 +49,7 @@ public static class ArtifactDeploy
                 step($"Bound {string.Join(", ", options.Bind.Keys.Order(StringComparer.Ordinal))} in {options.Channel}.");
             }
             var done = await client.PublishAsync(target.Name, null, manifestPath, Path.Combine(artifactFolder, "files"), options.Channel, stage: !options.Serve, options.ExpectedVersion, step, ct, options.Note,
-                signer is null ? null : PackageSigning.For(link, signer.Key), build);
+                signer is null ? null : PackageSigning.For(link, signer.Key), build, options.Serve ? null : options.Hold);
             step($"{(done.Mode == "stage" ? "Staged" : "Published")} {package} on {done.Channel}: version {done.Version}{(done.Changed ? "" : " (the same content as before, nothing changed)")}.");
             return new JsonObject
             {
@@ -58,6 +58,15 @@ public static class ArtifactDeploy
             };
         }
         catch (RunnerClientException ex) { throw RunnerCalls.Refused(ex, notFound: false); }
+    }
+
+    /// <summary>The names of the tasks the package of <paramref name="artifactFolder"/> declares (its <c>package.yaml</c>); empty when the folder has no package that reads.</summary>
+    public static IReadOnlyList<string> PackageTasks(string artifactFolder)
+    {
+        var manifestPath = Path.Combine(artifactFolder, "package.yaml");
+        if (!File.Exists(manifestPath)) return [];
+        var load = PackageManifestReader.Load(File.ReadAllText(manifestPath), "package.yaml");
+        return load.Ok ? [.. load.Manifest!.Tasks.Select(t => t.Name)] : [];
     }
 
     /// <summary>A Store project's models (<c>models/*.yaml</c> of <paramref name="artifactFolder"/>) to a Gateway as entity models (<see cref="GatewayDefinitionsPublish.PublishEntityModelsAsync"/>).</summary>

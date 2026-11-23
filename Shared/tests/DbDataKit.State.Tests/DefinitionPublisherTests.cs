@@ -348,6 +348,39 @@ public sealed class DefinitionPublisherTests : IDisposable
 
     [Theory]
     [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
+    public void A_staged_version_held_for_its_preflight_is_not_activated_by_itself_and_an_administrators_activation_ends_the_hold(string engine)
+    {
+        var (publisher, database, _) = Open(engine);
+        var store = new DefinitionStore(database);
+        string[] live = ["r1"];
+        var staged = publisher.Publish(new PublishRequest("integration", "nightly", "v1", "ada", Mode: PublishMode.Stage, Hold: "its preflight"));
+        publisher.Status.Report("r1", "integration", "nightly", "prod", 1, InstanceStates.Ready);
+
+        // every instance is ready, and still it waits: the publisher asked it to
+        var waiting = publisher.ActivateIfAllReady("integration", "nightly", live, "system");
+        Assert.False(waiting.Activated);
+        Assert.Equal(("its preflight", 1, "ada"), (waiting.Held!.Reason, waiting.Held.Version, waiting.Held.HeldBy));
+        Assert.Equal(1, publisher.HoldOf("integration", "nightly")!.Version);
+        Assert.Null(store.Current("integration", "nightly"));
+
+        // the same content staged again with a hold keeps it held; served at once, a hold is refused (there is nothing to wait for)
+        Assert.False(publisher.Publish(new PublishRequest("integration", "nightly", "v1", "ada", Mode: PublishMode.Stage, Hold: "its preflight again")).Changed);
+        Assert.Equal("its preflight again", publisher.HoldOf("integration", "nightly")!.Reason);
+        Assert.Throws<PublishRefusedException>(() => publisher.Publish(new PublishRequest("integration", "nightly", "v2", "ada", Mode: PublishMode.Serve, Hold: "x")));
+
+        // the administrator activates it with what they confirmed, which the event keeps; the hold is gone
+        Assert.Equal(staged.Version.Version, publisher.Activate("integration", "nightly", "root", note: "reason: preflight found 1 error, confirmed").Version);
+        Assert.Null(publisher.HoldOf("integration", "nightly"));
+        Assert.Contains("confirmed", ReadNote(database));
+
+        // a later stage without a hold activates by itself again
+        publisher.Publish(new PublishRequest("integration", "nightly", "v2", "ada", Mode: PublishMode.Stage));
+        publisher.Status.Report("r1", "integration", "nightly", "prod", 2, InstanceStates.Ready);
+        Assert.True(publisher.ActivateIfAllReady("integration", "nightly", live, "system").Activated);
+    }
+
+    [Theory]
+    [MemberData(nameof(StateEngines.Engines), MemberType = typeof(StateEngines))]
     public void One_failed_instance_blocks_automatic_activation_but_an_administrator_can_activate_anyway_and_it_is_recorded(string engine)
     {
         var (publisher, database, _) = Open(engine);

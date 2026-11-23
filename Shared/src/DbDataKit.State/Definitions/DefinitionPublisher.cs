@@ -36,13 +36,19 @@ public sealed record ResolvedSlot(string Slot, SlotAccess Access, string? BoundT
 /// <param name="Format">The format of the manifest (24a UC01, numbered from 1 per kind); null takes what the kind reads from the manifest (<see cref="DefinitionKind.FormatOf"/>), or 1.</param>
 /// <param name="Build">The build record the version was deployed from, as the text the publisher sent and signed (where it was built, the commit, what its checks found); stored with the version as it is, null when none was sent.</param>
 public sealed record PublishRequest(string Kind, string Name, string Manifest, string By, string Channel = DefinitionStore.Production, PublishMode? Mode = null, IReadOnlyList<string>? DependsOn = null,
-    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null, int? Format = null, string? Signature = null, string? Signer = null, string? Build = null);
+    string? Note = null, IReadOnlyList<ArtifactRef>? Artifacts = null, string? Progress = null, int? ExpectedVersion = null, int? Format = null, string? Signature = null, string? Signer = null, string? Build = null, string? Hold = null);
+
+/// <summary>
+/// A staged version that waits for an administrator (<see cref="PublishRequest.Hold"/>): it is prepared as any staged version is, and is not activated by itself; an administrator's activation ends the wait.
+/// <paramref name="Reason"/> is what the publisher said it waits for (a preflight on the staged version, by whom).
+/// </summary>
+public sealed record StagedHold(string Kind, string Name, string Channel, int Version, string Reason, string HeldBy, DateTimeOffset HeldAt);
 
 /// <summary>What a publish did: the version, whether anything changed (the same content again changes nothing), and the mode it took.</summary>
 public sealed record PublishResult(DefinitionVersion Version, bool Changed, PublishMode Mode);
 
 /// <summary>The outcome of <see cref="DefinitionPublisher.ActivateIfAllReady"/>: activated, or not, with the progress that decided it. <paramref name="AlreadyDone"/> is true when another caller activated the staged version first (nothing was done here).</summary>
-public sealed record ActivationResult(bool Activated, StageProgress Progress, DefinitionVersion? Version, bool AlreadyDone = false);
+public sealed record ActivationResult(bool Activated, StageProgress Progress, DefinitionVersion? Version, bool AlreadyDone = false, StagedHold? Held = null);
 
 /// <summary>
 /// What a pointer change hands the work that must happen in the same transaction (plan 30 section 3.5): the connection and transaction the change is written on, and the versions it moves between
@@ -115,6 +121,8 @@ public sealed partial class DefinitionPublisher
                 throw new PublishRefusedException(PublishRefusal.ApprovalRequired, $"The {kind.Name} '{request.Name}' is trusted code: publish it staged, have an administrator approve it, then activate it.");
         }
 
+        if (request.Hold is not null && mode == PublishMode.Serve)
+            throw new PublishRefusedException(PublishRefusal.Invalid, $"The {request.Kind} '{request.Name}' is served at once, so there is nothing to hold: a hold is asked of a staged version.");
         var format = request.Format ?? kind?.FormatOf?.Invoke(request.Manifest) ?? DefinitionFormat.First;
         if (format < DefinitionFormat.First) throw new PublishRefusedException(PublishRefusal.Format, $"The {request.Kind} '{request.Name}' names format {format}; formats are numbered from {DefinitionFormat.First}.");
         if (kind is not null && DefinitionFormat.Refusal(kind.Name, request.Name, null, format, kind.Formats, "this server") is { } unreadable)
@@ -145,6 +153,12 @@ public sealed partial class DefinitionPublisher
             }
             else if (active?.Hash == hash || staged?.Hash == hash)
             {
+                // the same content staged again: a hold asked now holds it, so the wait the publisher asked for is there either way
+                if (staged?.Hash == hash && request.Hold is not null)
+                {
+                    PutHold(connection, transaction, request.Kind, request.Name, request.Channel, staged.Version, request.Hold, request.By, now);
+                    transaction.Commit();
+                }
                 return new PublishResult(staged?.Hash == hash ? staged : active!, false, mode);
             }
 
@@ -187,7 +201,9 @@ public sealed partial class DefinitionPublisher
                 CheckSlots(connection, transaction, request.Kind, request.Name, request.Channel, stored);
                 var after = new Pointer(head?.Active ?? 0, head?.Previous, stored.Version, now, request.By);
                 Save(connection, transaction, request.Kind, request.Name, request.Channel, after, head is not null, activeChanged: false, request.By, now);
-                Log(connection, transaction, "stage", request.Kind, request.Name, request.Channel, stored.Version, request.By, now);
+                Log(connection, transaction, "stage", request.Kind, request.Name, request.Channel, stored.Version, request.By, now, request.Hold is null ? null : "hold: " + request.Hold);
+                if (request.Hold is not null) PutHold(connection, transaction, request.Kind, request.Name, request.Channel, stored.Version, request.Hold, request.By, now);
+                else RemoveHold(connection, transaction, request.Kind, request.Name, request.Channel);
             }
 
             transaction.Commit();
@@ -215,6 +231,7 @@ public sealed partial class DefinitionPublisher
             var progress = Status.Progress(connection, transaction, kind, name, channel, live);
             if (progress.StagedVersion is null) throw new DefinitionNotFoundException($"The {kind} '{name}' has nothing staged in channel '{channel}'.");
             if (!progress.IsAllReady) return new ActivationResult(false, progress, null);
+            if (ReadHold(connection, transaction, kind, name, channel) is { } held && held.Version == progress.StagedVersion) return new ActivationResult(false, progress, null, Held: held);
             var version = ActivateIn(connection, transaction, kind, name, channel, by, null, "activate", $"automatic: {progress.Describe()}", now, inTransaction);
             if (version is null) return new ActivationResult(false, progress, null, AlreadyDone: true);
             transaction.Commit();
@@ -483,6 +500,14 @@ public sealed partial class DefinitionPublisher
 
     // ---- reading
 
+    /// <summary>The wait a publisher asked of the version staged in the channel, or null when the staged version activates by itself (or nothing is held).</summary>
+    public StagedHold? HoldOf(string kind, string name, string channel = DefinitionStore.Production) =>
+        _database.Retry(() =>
+        {
+            using var connection = _database.OpenConnection();
+            return ReadHold(connection, null, kind, name, channel) is { } held && ReadHead(connection, null, kind, name, channel)?.Staged == held.Version ? held : null;
+        });
+
     /// <summary>What a channel has of a definition, or null when it has nothing (neither active nor staged).</summary>
     public DefinitionHead? Head(string kind, string name, string channel = DefinitionStore.Production) =>
         _database.Retry(() =>
@@ -570,6 +595,7 @@ public sealed partial class DefinitionPublisher
         if (!Save(connection, transaction, kind, name, channel, after, true, activeChanged: true, by, now, new Guard(head.Active, staged, true))) return null;
         inTransaction?.Invoke(new DefinitionChange(connection, transaction, kind, name, channel, head.Active > 0 ? head.Active : null, staged));
         Log(connection, transaction, action, kind, name, channel, staged, by, now, note);
+        RemoveHold(connection, transaction, kind, name, channel);
         return version;
     }
 
@@ -810,6 +836,29 @@ public sealed partial class DefinitionPublisher
         }
 
         return command.ExecuteNonQuery() == 1;
+    }
+
+    private StagedHold? ReadHold(DbConnection connection, DbTransaction? transaction, string kind, string name, string channel)
+    {
+        using var command = _database.Command(Module, connection, transaction, "SELECT version, reason, held_by, held_at FROM {table:definition_staged_hold} WHERE kind = $kind AND name = $name AND channel = $channel;");
+        command.Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "channel", channel);
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? new StagedHold(kind, name, channel, reader.Int32(0), reader.GetString(1), reader.GetString(2), reader.Time(3)) : null;
+    }
+
+    private void PutHold(DbConnection connection, DbTransaction transaction, string kind, string name, string channel, int version, string reason, string by, DateTimeOffset now)
+    {
+        using var command = _database.Command(Module, connection, transaction, _database.Dialect.Upsert("{table:definition_staged_hold}", "kind, name, channel, version, reason, held_by, held_at", "$kind, $name, $channel, $version, $reason, $by, $now",
+            "kind, name, channel", "version = EXCLUDED.version, reason = EXCLUDED.reason, held_by = EXCLUDED.held_by, held_at = EXCLUDED.held_at"));
+        command.Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "channel", channel).Bind(_database, "version", (long)version).Bind(_database, "reason", reason).Bind(_database, "by", by).Bind(_database, "now", now);
+        command.ExecuteNonQuery();
+    }
+
+    private void RemoveHold(DbConnection connection, DbTransaction transaction, string kind, string name, string channel)
+    {
+        using var command = _database.Command(Module, connection, transaction, "DELETE FROM {table:definition_staged_hold} WHERE kind = $kind AND name = $name AND channel = $channel;");
+        command.Bind(_database, "kind", kind).Bind(_database, "name", name).Bind(_database, "channel", channel);
+        command.ExecuteNonQuery();
     }
 
     private void Log(DbConnection connection, DbTransaction transaction, string action, string kind, string name, string channel, int version, string by, DateTimeOffset now, string? note = null)

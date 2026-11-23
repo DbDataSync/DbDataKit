@@ -38,4 +38,40 @@ public sealed class BuildViewTaskTests
         Assert.Null(head["document"]);
         Assert.True(head.ToJsonString().Length < 64 * 1024);
     }
+
+    [Fact]
+    public void The_preflight_reads_a_structure_behind_the_project_as_an_error_and_a_change_outside_the_tool_as_a_warning()
+    {
+        using var pending = System.Text.Json.JsonDocument.Parse("""
+            {"data":{"connection":"warehouse","objects":[{"name":"marts.fct_orders","state":"in_sync"},{"name":"marts.dim_region","state":"missing"},{"name":"marts.dim_store","state":"out_of_band"}],
+              "preview":{"steps":2,"risky":0,"destructive":0,"questions":[],"blocked":["DROP COLUMN marts.dim_store.code needs --allow-destructive"],"skipped":[]},
+              "noticed":["the refresh plan nightly has never run"],"summary":{"structure":"pending","steps":2,"risky":0,"destructive":0}},"diagnostics":[]}
+            """);
+        var found = BuildPreflight.Findings("warehouse", 1, pending);
+        Assert.Equal(["error", "warning", "error", "error", "info"], found.Select(f => f.Severity));
+        Assert.Contains("marts.dim_region is not on the connection", found[0].Message);
+        Assert.Contains("DROP COLUMN marts.dim_store.code", found[2].Message);
+        Assert.Contains("2 deploy step(s) are pending", found[3].Message);
+        Assert.All(found, f => Assert.Equal("warehouse", f.About));
+
+        using var inStep = System.Text.Json.JsonDocument.Parse("""{"data":{"objects":[{"name":"marts.fct_orders","state":"in_sync"}],"summary":{"structure":"in_sync"}},"diagnostics":[]}""");
+        Assert.Equal(("info", "The deployed structure is in step with the project."), (BuildPreflight.Findings("warehouse", 0, inStep).Single().Severity, BuildPreflight.Findings("warehouse", 0, inStep).Single().Message));
+
+        // a command that could not read the connection is an error: where it stands is not known
+        using var failed = System.Text.Json.JsonDocument.Parse("""{"diagnostics":[{"code":"DDB-242","title":"The database refused the command","found":"SqlException 18456"}]}""");
+        var unknown = Assert.Single(BuildPreflight.Findings("warehouse", 70, failed));
+        Assert.Equal("error", unknown.Severity);
+        Assert.Contains("DDB-242", unknown.Message);
+    }
+
+    [Fact]
+    public void The_preflight_takes_the_connections_the_plans_use_and_refuses_an_option_in_their_place()
+    {
+        var (connections, refusal) = BuildPreflight.Connections("sqlserver, postgres,sqlserver");
+        Assert.Equal(["sqlserver", "postgres"], connections);
+        Assert.Null(refusal);
+        Assert.Contains("--apply", BuildPreflight.Connections("sqlserver,--apply").Refusal);
+        Assert.NotNull(BuildPreflight.Connections(" , ").Refusal);
+        Assert.Equal("sqlserver,postgres", BuildPreflight.InputOf(["sqlserver", "postgres"]).Default);
+    }
 }

@@ -31,7 +31,8 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
 
     /// <summary>
     /// The stand-in of <c>dbdatasync</c> and <c>dbdatabuild</c> for the verbs the Workspace runs to check and package a project: a draft with a file named <c>broken</c> is refused in the program's way (the file, on the error output, exit
-    /// 1); otherwise the package is a <c>package/1</c> manifest whose manual tasks <c>load</c> and <c>provision</c> read the connection slot <c>source</c>, with the project's files under <c>files/</c>.
+    /// 1); otherwise the package is a <c>package/1</c> manifest whose manual tasks <c>load</c> and <c>provision</c> read the connection slot <c>source</c>, with the project's files under <c>files/</c>. A draft with a file named
+/// <c>preflight</c> also has the manual task <c>preflight</c>.
     /// </summary>
     private const string Tool = """
         #!/bin/bash
@@ -43,6 +44,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         if [ -n "$out" ]; then
           mkdir -p "$out/files/repo" "$out/files/bin"; printf 'a stand-in assembly' > "$out/files/bin/Orders.dll"; for f in "$root"/*; do case "$(basename "$f")" in .git) ;; *) cp -r "$f" "$out/files/repo/";; esac; done
           printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n  - name: provision\n    entry: { type: Orders.Provision }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
+          if [ -e "$root/preflight" ]; then printf '  - name: preflight\n    entry: { type: Orders.Preflight }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' >> "$out/package.yaml"; fi
         fi
         if [ "$verb" = "project publish" ]; then echo "{\"data\":{\"package\":\"$pkg\",\"files\":1,\"tasks\":[{\"name\":\"load\",\"plan\":\"refresh\"}]}}"; exit 0; fi
         echo "{\"package\":\"$pkg\",\"mode\":\"check\",\"files\":1,\"replications\":[{\"replication\":\"orders\",\"task\":\"load\"}]}"
@@ -254,6 +256,10 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     private static IReadOnlyList<(string Step, string Result)> StepsOf(DbDataKit.Runner.Execution.TaskRunRequest request) => request.Task.Task switch
     {
         "provision" => [("provision-applied", new JsonObject { ["steps"] = new JsonArray(new JsonObject { ["title"] = $"Create the table of {request.Inputs.GetValueOrDefault("mapping")}", ["succeeded"] = true }) }.ToJsonString())],
+        // the package risky finds an error on its database, any other a warning
+        "preflight" => [(DbDataKit.Runner.Preflight.StepName, DbDataKit.Runner.Preflight.Document("status", request.Task.Package == "risky"
+            ? [new DbDataKit.Runner.PreflightFinding(DbDataKit.Runner.Preflight.Error, "The deployed structure differs from the project: the table orders has no column region.", "source")]
+            : [new DbDataKit.Runner.PreflightFinding(DbDataKit.Runner.Preflight.Warning, "The refresh plan nightly has never run on this connection.", "source")]).ToJsonString())],
         "load" => [("pass-record", new JsonObject { ["mapping"] = "orders", ["kind"] = "Primary", ["status"] = "Succeeded", ["rowsRead"] = 3, ["rowsWritten"] = 3 }.ToJsonString())],
         "contract" => [("contract-report", new JsonObject
         {
@@ -331,6 +337,84 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var own = await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" });
         Assert.Equal(HttpStatusCode.Conflict, own.Status);
         Assert.Contains("has not been staged on a Runner", (string?)own.Body!["error"]);
+    }
+
+    // ---- the preflight before a version is served in production (Design: docs/publishing.md#preflight-before-activation) ----
+
+    [Fact]
+    public async Task Deploying_a_build_to_prod_runs_its_preflight_on_the_staged_version_before_activating_it_and_an_error_stops_activation_until_the_person_confirms()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatabuild is a shell script");
+        var prod = new JsonObject { ["channel"] = "prod", ["serve"] = true, ["bind"] = new JsonObject { ["source"] = "erp" } };
+
+        // a preflight with a warning only: the staged version is checked, then activated, and the record keeps the run and its link
+        var (cleanDraft, cleanBuild) = await BuildAsync("clean", "build", new Dictionary<string, string> { ["preflight"] = "yes" });
+        var clean = await DeployAsync("clean", cleanDraft, cleanBuild, prod);
+        Assert.True(clean.Status == HttpStatusCode.OK, clean.Body?.ToJsonString());
+        var cleanPreflight = clean.Body!["deployed"]!["preflight"]!;
+        Assert.Equal(("serve", "activated", 0, 1), ((string?)clean.Body["deployed"]!["mode"], (string?)cleanPreflight["activation"], (int)cleanPreflight["errors"]!, (int)cleanPreflight["warnings"]!));
+        Assert.StartsWith($"/servers/{runnerId}/runs?run=", (string?)cleanPreflight["link"]);
+        var checkedFirst = tasks.Requests.Single(r => r.Task.Package == "clean" && r.Task.Task == DbDataKit.Runner.Preflight.TaskName);
+        Assert.Equal(("1", "prod"), (checkedFirst.PackageVersion, checkedFirst.Task.Channel));
+        Assert.Equal(1, runner.Publishing.Publisher.Head("integration", "clean", "prod")!.Active);
+        Assert.Contains(runner.Publishing.Publisher.EventsOf("integration", "clean"), e => e.Action == "stage" && e.Version == 1);
+        Assert.Contains(runner.Publishing.Publisher.EventsOf("integration", "clean"), e => e.Action == "activate" && e.ActorId == personId && e.Note!.Contains("found no error", StringComparison.Ordinal));
+        Assert.Equal("serve", (string?)clean.Body["deploy"]!["mode"]);
+
+        // an error: the version stays staged and held, the runner does not activate it by itself, and the answer says what was found, with the run's link
+        var (riskyDraft, riskyBuild) = await BuildAsync("risky", "build", new Dictionary<string, string> { ["preflight"] = "yes" });
+        var risky = await DeployAsync("risky", riskyDraft, riskyBuild, prod);
+        Assert.True(risky.Status == HttpStatusCode.Conflict, risky.Body?.ToJsonString());
+        Assert.Contains("found 1 error, so it was not activated in prod", (string?)risky.Body!["error"]);
+        Assert.Contains("the table orders has no column region", (string?)risky.Body["error"]);
+        var riskyPreflight = risky.Body["deploy"]!["preflight"]!;
+        Assert.Equal(("refused", 1), ((string?)riskyPreflight["activation"], (int)riskyPreflight["errors"]!));
+        Assert.Equal(("error", "source"), ((string?)riskyPreflight["findings"]![0]!["severity"], (string?)riskyPreflight["findings"]![0]!["about"]));
+        await Task.Delay(TimeSpan.FromSeconds(1));   // several passes of the runner's staging follower
+        var held = runner.Publishing.Publisher.Head("integration", "risky", "prod")!;
+        Assert.Equal((null, 1), (held.Active, held.Staged));
+        Assert.NotNull(runner.Publishing.Publisher.HoldOf("integration", "risky", "prod"));
+        var deploy = (string)risky.Body["deploy"]!["id"]!;
+
+        // activation without the confirmation is refused again; with it, the runner activates the version and keeps the confirmation in its record
+        var unconfirmed = await As(HttpMethod.Post, $"/api/deploys/{deploy}/activate", new JsonObject());
+        Assert.True(unconfirmed.Status == HttpStatusCode.Conflict, unconfirmed.Body?.ToJsonString());
+        Assert.Null(runner.Publishing.Publisher.Head("integration", "risky", "prod")!.Active);
+        var confirmed = await As(HttpMethod.Post, $"/api/deploys/{deploy}/activate", new JsonObject { ["confirm"] = true });
+        Assert.True(confirmed.Status == HttpStatusCode.OK, confirmed.Body?.ToJsonString());
+        Assert.Equal(("activated", 1), ((string?)confirmed.Body!["activation"], (int)confirmed.Body["active"]!));
+        Assert.Equal(1, runner.Publishing.Publisher.Head("integration", "risky", "prod")!.Active);
+        Assert.Null(runner.Publishing.Publisher.HoldOf("integration", "risky", "prod"));
+        var activated = runner.Publishing.Publisher.EventsOf("integration", "risky").Single(e => e.Action == "activate");
+        Assert.Equal(personId, activated.ActorId);
+        Assert.Contains("Ada Admin confirmed the activation through the console although preflight run", activated.Note);
+        Assert.Contains("the table orders has no column region", activated.Note);
+        var kept = (await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=risky")).Body!["deploys"]![0]!;
+        Assert.Equal(("serve", "activated", personId), ((string?)kept["mode"], (string?)kept["preflight"]!["activation"], (string?)kept["preflight"]!["confirmed_by"]));
+        var audit = console.Services.GetRequiredService<AuditLog>();
+        Assert.Single(audit.Read(new AuditQuery(Verb: ConsoleDeployPreflight.ConfirmVerb)));
+        Assert.Contains(audit.Read(new AuditQuery(Verb: ConsoleDeployPreflight.ActivateVerb)), a => a.Entry.Outcome == AuditEvent.Refused);
+        Assert.Equal(HttpStatusCode.Conflict, (await As(HttpMethod.Post, $"/api/deploys/{deploy}/activate", new JsonObject { ["confirm"] = true })).Status);
+
+        // Re-check on the Runs tab: the preflight of the version the channel serves, started through the console, its findings read back the same way
+        var recheck = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = DbDataKit.Runner.Preflight.TaskName, ["served"] = true });
+        Assert.True(recheck.Status == HttpStatusCode.Accepted, recheck.Body?.ToJsonString());
+        var read = await RunThroughConsoleAsync(deploy, (string)recheck.Body!["run"]!["run_id"]!, DbDataKit.Runner.Preflight.StepName);
+        Assert.Equal("error", (string?)DbDataKit.Runner.Preflight.Findings(read["steps"]!.AsArray().Select(step => step!["result"])).Single().Severity);
+    }
+
+    [Fact]
+    public async Task A_package_with_no_preflight_is_served_in_prod_as_before_and_the_deploy_says_nothing_was_checked()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        var served = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "prod", ["serve"] = true, ["bind"] = new JsonObject { ["source"] = "erp" } });
+        Assert.True(served.Status == HttpStatusCode.OK, served.Body?.ToJsonString());
+        Assert.Equal("serve", (string?)served.Body!["deployed"]!["mode"]);
+        Assert.False((bool)served.Body["deployed"]!["preflight"]!["declared"]!);
+        Assert.Contains(served.Body["steps"]!.AsArray(), s => (string?)s == "The package declares no preflight task, so nothing is checked before it is served in prod.");
+        Assert.Equal(1, runner.Publishing.Publisher.Head("integration", "orders", "prod")!.Active);
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Task == DbDataKit.Runner.Preflight.TaskName);
     }
 
     [Fact]

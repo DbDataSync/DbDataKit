@@ -209,7 +209,15 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     }
 
     private JsonArray Heads(string kind, string name) =>
-        new([.. publisher.HeadsOf(kind, name).Select(h => (JsonNode)new JsonObject { ["channel"] = h.Channel, ["active"] = h.Active, ["previous"] = h.Previous, ["staged"] = h.Staged })]);
+        new([.. publisher.HeadsOf(kind, name).Select(h => (JsonNode)Head(kind, name, h))]);
+
+    // a staged version that waits for an administrator says so, with what it waits for
+    private JsonObject Head(string kind, string name, DefinitionHead h)
+    {
+        var head = new JsonObject { ["channel"] = h.Channel, ["active"] = h.Active, ["previous"] = h.Previous, ["staged"] = h.Staged };
+        if (h.Staged is not null && publisher.HoldOf(kind, name, h.Channel) is { } held) head["held"] = new JsonObject { ["version"] = held.Version, ["reason"] = held.Reason, ["by"] = held.HeldBy, ["at"] = held.HeldAt.UtcDateTime.ToString("O") };
+        return head;
+    }
 
     private DefinitionsResult Describe(string kind, string name, DefinitionsCaller caller)
     {
@@ -330,7 +338,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         var existed = store.Versions(kind, name).Count > 0;
         try
         {
-            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format, Signature: verdict.State == SignatureState.Verified ? Text(json, "signature") : null, Signer: verdict.Signer, Build: Text(json, "build")));
+            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format, Signature: verdict.State == SignatureState.Verified ? Text(json, "signature") : null, Signer: verdict.Signer, Build: Text(json, "build"), Hold: Text(json, "hold")));
             if (!existed && !caller.Admin && caller.ClientId is not null) settings.Put(OwnerKey(kind, name), caller.ClientId);
             audit?.Invoke("definition.publish", caller, kind, name, channel, "ok", new { version = result.Version.Version, mode = result.Mode.ToString().ToLowerInvariant(), changed = result.Changed, files = files.Count, signature = verdict.Word, signer = verdict.Signer });
             changed?.Invoke(kind, name, channel);

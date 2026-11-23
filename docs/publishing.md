@@ -15,7 +15,7 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 | events | append-only: publish, stage, activate, switch, rollback, retire, bind; followers poll it and it is the audit of what a channel serves |
 
 - **Publish** (`DefinitionPublisher`) validates with the kind's validator, stores the next version and points the channel at it (`serve`) or stores it as the channel's staged version (`stage`), in one transaction. The same content again changes nothing, so a retry is safe. `expected_version` is the optimistic check.
-- **Activate** makes the staged version active; `ActivateIfAllReady` does it when every live instance reports `ready`. A failed preparation never activates silently; an administrator may activate anyway as a recorded choice. **Switch** points a channel at any stored version (promotion), **rollback** returns to the previous one, **retire** stops serving and keeps the versions.
+- **Activate** makes the staged version active; `ActivateIfAllReady` does it when every live instance reports `ready`. A version staged with a `hold` (the publish body's text, which says what it waits for) is never activated by `ActivateIfAllReady`; an administrator's activation ends the hold, and the next stage in the channel replaces it. A failed preparation never activates silently; an administrator may activate anyway as a recorded choice. **Switch** points a channel at any stored version (promotion), **rollback** returns to the previous one, **retire** stops serving and keeps the versions.
 - **Checks on every move:** declared slots must be bound in the channel (a missing binding refuses the move and names the slot; a slot declared `access: read` is read from production's binding when the channel has none, a write slot never is (the integration kind declares it per connection of a task in `package.yaml`, `access: read|write`, `ConnectionSlot.Access`; the agent kinds' model slots are all write): `DefinitionPublisher.ResolveSlots` says for each slot whether its binding is the channel's own or inherited); `depends_on` must be active in the target channel; a kind that is trusted code needs an approved version (`RequiresApproval`); a format that a live instance of the group cannot read is refused naming the instance (`DefinitionFormats`, `DefinitionFormat.Refusal`). `PromoteWithDependencies` moves a version with the dependencies it pins, in one transaction, and the matching rollback restores them (plan 32 DBR10).
 - **Artifacts** are content-addressed payloads (`PublishArtifacts`, over `PayloadStore`): a file whose hash is stored is not written again. The runner side has the HTTP form: `HEAD` and `PUT /api/v1/artifacts/{sha256}` (refused when the hash differs), `PUT /api/v1/definitions/integration/{name}` with the manifest, the file list, `depends_on`, channel, `serve` or `stage` and `expected_version`, and `POST .../activate|switch|rollback|retire|prune`. Those routes (`DbDataKit.Runner.Api/RunnerPublishApi.cs`) hand every call to the shared library `DefinitionsApi` (`RunnerPublishing.Api`), and what is the runner's own sits in the hook of its kind (below); the runner keeps its own audit verbs (`runner.package.*`) and answer shapes (`already_stored`, `tasks`, `unbound`, a `202` while an activation waits for runs; client `DbDataKit.Runner.Client/RunnerPublishClient.cs`, which also promotes a version from one channel to the next).
 - **Followers.** `DefinitionFollower` hands each subscriber (`IDefinitionSubscriber`) what its kind serves and then polls the events; a subscriber builds the new version before replacing the old one, and if it cannot, the old one keeps serving and the failure is reported. The runner's `StagingFollower` prepares a staged version (materialises files into the disk cache by hash, checks hashes) and reports to the instance status.
@@ -75,6 +75,65 @@ POST /api/deploys
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
 
+### Preflight before activation
+
+A package can declare a read-only manual task named `preflight`. It reads the databases the package's slots bind and records what would stand in the way
+of the version, as findings. Each finding has a severity (`error`, `warning` or `info`), words, and what it is about (a connection, a schema). Each part
+of the task records the step `preflight-findings` with its findings.
+
+What each kind's preflight reads:
+
+| Package | What `preflight` does | An error |
+| --- | --- | --- |
+| A Build project's refresh package | `connection status` of each connection the plans use (the input `connections` lists them by default) | An object of the project is not on the connection, the deployed structure is behind the project, a deploy step is blocked, or the status could not be read. An object changed outside dbdatabuild is a warning. |
+| A Store model's package | The `deploy` task's dry run, then the `contract` task's plan | The deploy needs a change it does not make (a column removed or retyped). What the contract would drop is information, and a blocked contract a warning, because the contract is approved on its own. |
+| A Sync set | No `preflight` task yet | |
+
+When the control service deploys a Runner package to the channel `prod` with `serve`, and the package declares `preflight`:
+
+1. The console stages the version with a hold. The Runner prepares it as any staged version, and does not activate it by itself.
+2. The console runs `preflight` on the staged version as the person, and waits for it (two minutes at most).
+3. What the preflight found decides what happens next:
+   - No error: the console activates the version. The Runner records the activation with the person and the preflight run.
+   - An error, or a run that did not succeed: the version stays staged and held. The answer is 409, with the findings and the run's address.
+   - The run has not ended: the answer is 202. The person activates the version once the run has ended.
+4. The person activates the version with `POST /api/deploys/{id}/activate`. When the preflight found an error, the call needs `"confirm": true`.
+   The Runner keeps the person's name and the errors they confirmed in its record of the activation, and the console audits the confirmation as
+   `build.preflight.confirm`.
+
+An activation is the Runner's administrator call. A person without the administrator role on the Runner is refused in the Runner's words, and the
+version stays staged until an administrator activates it.
+
+A package that declares no `preflight` is served at once, as before. The answer's steps say that nothing was checked. A deploy to any other channel,
+or one that stages, runs no preflight.
+
+Example: Ana serves build `9c2e...` of the Build project `sales` on the Runner `jobs` in `prod`. The preflight finds that `marts.dim_region` is missing
+on the connection `warehouse`:
+
+```
+POST /api/deploys
+{"workspaceServer": "Workspace", "project": "sales", "workspace": "draft-2", "build": "9c2e...", "target": "jobs", "channel": "prod", "serve": true}
+
+409 {"error": "The preflight of version 4 found 1 error, so it was not activated in prod: warehouse: marts.dim_region is not on the connection ...",
+     "deployed": {"mode": "stage", "version": 4, "preflight": {"run": "0193...", "link": "/servers/jobs/runs?run=0193...", "errors": 1, "warnings": 0,
+                  "findings": [...], "activation": "refused"}},
+     "deploy": {"id": "01a9...", ...}}
+```
+
+Ana reads the run, deploys the structure, and runs **Re-check**. Or she decides the error does not matter for this version and confirms it:
+
+```
+POST /api/deploys/01a9.../activate
+{"confirm": true}
+```
+
+On the Builds tab the publish panel shows the preflight: the findings (errors first), the run's link, and **Activate** (once the run has ended) or
+**Activate anyway** (after an error). On the Runs tab, **Re-check** runs `preflight` of the version the channel serves, through
+`POST /api/deploys/{id}/runs`, and shows the findings.
+
+A version staged with a hold says so on the Runner. The package's `channels` list shows `held` with the reason and who asked. An administrator can
+activate it on the Runner too, and the activation ends the hold. A later stage of the package in that channel replaces the hold.
+
 ### Publishing from the Builds tab
 
 On the console's screens of a Workspace server, the Builds tab of a draft makes this deploy. Ana opens build `4f1c...` of `orders`, and the publish
@@ -116,6 +175,7 @@ The calls name the deploy by its id. The console calls the Runner as the signed-
 | `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
 | `POST /api/deploys/{id}/binding-test` | approver | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
 | `POST /api/deploys/{id}/contract` | approver | operator | Runs a Store model's approved contract plan (below). |
+| `POST /api/deploys/{id}/activate` | approver | admin | Activates the version the deploy staged in `prod` for its preflight, once the run has ended; `"confirm": true` when the preflight found an error ([Preflight before activation](#preflight-before-activation)). |
 
 A Store model's contract step removes what the model no longer has. It runs in two steps:
 
@@ -139,7 +199,8 @@ The answer (202) has the run's id. The tab then reads `GET /api/deploys/01a2.../
 each statement the run reports.
 
 The console audits each call under the person, with the deploy and the Runner: `build.run`, `build.binding_test`, `build.contract` and
-`build.contract.allow_consumer`, refused calls included.
+`build.contract.allow_consumer`, refused calls included. An activation after a preflight is `build.activate`, and a confirmation of its errors
+`build.preflight.confirm`.
 
 ## The build record
 

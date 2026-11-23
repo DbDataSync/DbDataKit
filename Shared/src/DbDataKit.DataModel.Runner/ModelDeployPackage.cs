@@ -9,7 +9,8 @@ namespace DbDataKit.DataModel.Runner;
 public sealed record BuiltModelPackage(string Name, PackageManifest Manifest, string ManifestText, string Model, string ModelText);
 
 /// <summary>
-/// The definition package of a Store model on the Runner (plan 33 SC24): two manual-only tasks, <c>deploy</c> (<see cref="ModelDeployJob"/>) and <c>contract</c> (<see cref="ModelContractJob"/>), run by the <c>dbdatastore</c> runtime (<see cref="RuntimeName"/>), with the one slot
+/// The definition package of a Store model on the Runner (plan 33 SC24): three manual-only tasks, <c>deploy</c> (<see cref="ModelDeployJob"/>), <c>contract</c> (<see cref="ModelContractJob"/>) and the read-only <c>preflight</c>
+/// (<see cref="ModelPreflightJob"/>: the deploy's dry run and the contract's plan as findings, which a control service runs before it serves a version in production), run by the <c>dbdatastore</c> runtime (<see cref="RuntimeName"/>), with the one slot
 /// <c>storage</c> that a channel binds to the model's connection on the Runner, never on a schedule, never retried, under the name of the person who asks. The model goes in the package as written (in the current format), so what a run
 /// deploys is the version the channel serves.
 /// </summary>
@@ -45,12 +46,12 @@ public static class ModelDeployPackage
             return null;
         }
 
-        // both tasks are a person's act: by hand only, never scheduled, never retried
+        // every task is a person's act: by hand only, never scheduled, never retried
         static PackageTask Manual(Type job) { var t = ManifestGenerator.TaskOf(job); return t with { Entry = new TaskEntry(), Schedule = new Schedule(), Triggers = [TaskTrigger.ByHand()], Limits = t.Limits with { Attempts = 1 } }; }
         var name = package ?? NameOf(model.Name);
         var manifest = new PackageManifest(name, $"The Store model {model.Name}: deploy its tables",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
-            new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), [Manual(typeof(ModelDeployJob)), Manual(typeof(ModelContractJob))]);
+            new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), [Manual(typeof(ModelDeployJob)), Manual(typeof(ModelContractJob)), Manual(typeof(ModelPreflightJob))]);
         var text = PackageManifestWriter.Write(manifest);
         var check = PackageManifestReader.Load(text, "package.yaml");
         if (!check.Ok)

@@ -48,7 +48,7 @@ public class ProjectPublishTests
         var built = Built(dir);
 
         // after the plans: the follower on its own (plan 28c E16), on demand, holding the connections of the plans; then the database-facing views, manual only (plan 33 SC20p); then the re-check of the checks (plan 35 I3a)
-        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up", "tests", "status", "compare", "check"], built.Manifest.Tasks.Select(t => t.Name));
+        Assert.Equal(["sqlserver-hourly", "sqlserver-quiet", "catch-up", "tests", "status", "compare", "check", "preflight"], built.Manifest.Tasks.Select(t => t.Name));
         var catchUp = built.Manifest.Tasks[2];
         var check = built.Manifest.Tasks[6];
         Assert.False(check.Schedule.HasSchedule);
@@ -57,6 +57,12 @@ public class ProjectPublishTests
         Assert.Equal(["check-result"], check.StepList.Select(s => s.Name));
         Assert.Equal([("dataset", "")], check.Inputs.Select(i => (i.Name, i.Default!)));
         Assert.Equal((1, 1), (check.Limits.Concurrency, check.Limits.Attempts));
+        // the preflight, which a control service runs on a version staged in production: by hand, the same slots, every connection by default
+        var preflight = built.Manifest.Tasks[7];
+        Assert.Equal([TaskTrigger.ByHand()], preflight.Triggers);
+        Assert.Equal(catchUp.Connections, preflight.Connections);
+        Assert.Equal(["preflight-findings"], preflight.StepList.Select(s => s.Name));
+        Assert.Equal([("connections", string.Join(",", catchUp.Connections.Select(c => c.Name)))], preflight.Inputs.Select(i => (i.Name, i.Default!)));
         foreach (var view in built.Manifest.Tasks.Skip(3).Take(3))
         {
             Assert.False(view.Schedule.HasSchedule);

@@ -32,6 +32,20 @@ function fakeConsole() {
       { id: 'g-1', name: 'edge', product: 'dbdatagateway', reachable: true },
     ])
     if (url.pathname === '/api/deploys' && method === 'GET') return reply({ deploys })
+    // serving in prod waits for the package's preflight: it found an error, so the version stays staged (409, the deploy kept) until the person confirms
+    const preflight = { declared: true, run: '6f1c0f1e-0000-4000-8000-000000000001', link: '/servers/r-1/runs?run=6f1c0f1e-0000-4000-8000-000000000001', state: 'finished', outcome: 'succeeded', errors: 1, warnings: 1,
+      findings: [{ severity: 'warning', message: 'marts.dim_store was changed outside dbdatabuild since it was deployed.', about: 'warehouse' }, { severity: 'error', message: 'marts.dim_region is not on the connection.', about: 'warehouse' }], activation: 'refused' }
+    if (url.pathname === '/api/deploys' && method === 'POST' && body.channel === 'prod' && body.serve) {
+      const record = { id: 'd-prod', workspace_server: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', item: 'package', kind: 'sync', target: 'r-1', target_name: 'jobs', product: 'runner', route: 'package',
+        name: 'orders', channel: 'prod', version: 2, mode: 'stage', signature: 'verified', deployed_by: 'ana', deployed_at: '2026-11-23T10:05:00Z', outcome: 'ok', error: null, preflight }
+      deploys.unshift(record)
+      return reply({ error: 'The preflight of version 2 found 1 error, so it was not activated in prod: warehouse: marts.dim_region is not on the connection. It stays staged.', steps: ['Staged orders on prod: version 2.'],
+        deployed: { package: 'orders', channel: 'prod', mode: 'stage', version: 2, changed: true, target: 'jobs', runner: 'https://jobs:8495', signature: 'verified', preflight }, deploy: record }, 409)
+    }
+    if (url.pathname === '/api/deploys/d-prod/activate' && method === 'POST') {
+      if (!body.confirm) return reply({ error: 'The preflight of version 2 found 1 error, so it was not activated in prod.' }, 409)
+      return reply({ activation: 'activated', message: 'Version 2 of orders is active in prod.', active: 2, preflight: { ...preflight, activation: 'activated', confirmed_by: 'ana' }, deploy: { ...deploys[0], mode: 'serve' } })
+    }
     if (url.pathname === '/api/deploys' && method === 'POST') {
       const record = { id: `d${deploys.length + 1}`, workspace_server: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', item: 'package', kind: 'sync', target: 'r-1', target_name: 'jobs', product: 'runner', route: 'package',
         name: 'orders', channel: body.channel, version: 1, mode: 'stage', signature: 'verified', deployed_by: 'ana', deployed_at: '2026-11-23T10:05:00Z', outcome: 'ok', error: null }
@@ -110,6 +124,27 @@ describe('publishing a build from the Builds tab', () => {
     expect(console_.calls.some((c) => c.method === 'GET' && c.path === '/api/deploys?workspace_server=ws-1&project=orders&workspace=d1&build=b1')).toBe(true)
     // the draft's other reads of its deploys are asked again too: what the replication's rail says a Runner has is the version just staged
     expect(q('[data-testid="runner-version"]')?.dataset.version).toBe('1')
+  })
+
+  it('shows the preflight of a version served in prod: an error keeps it staged with the findings and the run\'s link, and Activate anyway confirms it', async () => {
+    await mount('/?build=b1')
+    await fill('[data-testid="wsp-publish-channel"]', 'prod')
+    await click('[data-testid="wsp-publish-serve"]')
+    await click('[data-testid="wsp-publish"]')
+
+    const card = q('[data-testid="wsp-preflight"]')
+    expect(card?.dataset.activation).toBe('refused')
+    expect(q('[data-testid="wsp-preflight-words"]')?.textContent).toContain('so the version was not activated')
+    expect([...host.querySelectorAll('[data-testid="wsp-preflight-finding"]')].map((f) => (f as HTMLElement).dataset.severity)).toEqual(['error', 'warning'])
+    expect(q('[data-testid="wsp-preflight-run-link"]')?.getAttribute('href')).toBe('/servers/r-1/runs?run=6f1c0f1e-0000-4000-8000-000000000001')
+    expect(q('[data-testid="wsp-preflight-activate"]')?.textContent).toBe('Activate anyway')
+
+    await click('[data-testid="wsp-preflight-activate"]')
+    expect(console_.calls.filter((c) => c.path === '/api/deploys/d-prod/activate')).toEqual([{ method: 'POST', path: '/api/deploys/d-prod/activate', body: { confirm: true } }])
+    expect(q('[data-testid="wsp-preflight"]')?.dataset.activation).toBe('activated')
+    expect(q('[data-testid="wsp-preflight-words"]')?.textContent).toContain('the confirmation is kept in the Runner\'s record')
+    expect(q('[data-testid="wsp-preflight-activated"]')?.textContent).toBe('Version 2 of orders is active in prod.')
+    expect(q('[data-testid="wsp-preflight-activate"]')).toBeNull()
   })
 
   it('opens the build the address names, and puts the build chosen in the address', async () => {

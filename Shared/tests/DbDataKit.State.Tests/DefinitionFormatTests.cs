@@ -91,11 +91,12 @@ public sealed class DefinitionFormatTests : IDisposable
     [Fact]
     public void The_migration_is_appended_and_an_instance_of_the_version_before_still_works_with_it()
     {
-        Assert.Equal(6, DefinitionsModule.Module.Version);   // the sixth migration is the build record of a version: a nullable column, so version 5 still works with it
+        Assert.Equal(7, DefinitionsModule.Module.Version);   // the seventh migration is the hold of a staged version: a table of its own, so version 6 still works with it
         Assert.Equal(1, DefinitionsModule.Module.CompatibleWithPrevious);
         Assert.Contains("DEFAULT 1", DefinitionsModule.Module.Migrations[3], StringComparison.Ordinal);
         Assert.DoesNotContain("NOT NULL DEFAULT", DefinitionsModule.Module.Migrations[4].Replace("PRIMARY KEY", ""), StringComparison.Ordinal);
         Assert.Contains("build_record {{text}} NULL", DefinitionsModule.Module.Migrations[5], StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE {table:definition_staged_hold}", DefinitionsModule.Module.Migrations[6], StringComparison.Ordinal);
     }
 
     // ---- publish
