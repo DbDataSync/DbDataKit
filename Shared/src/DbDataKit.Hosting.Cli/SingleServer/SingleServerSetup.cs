@@ -187,7 +187,7 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
             notes.Add($"wrote the join request {request} with a single-use token");
             return Task.FromResult<Outcome?>(null);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException)
         {
             return Task.FromResult<Outcome?>(new Outcome(1, false, true, "no join request could be written for it", ex.Message, notes));
         }

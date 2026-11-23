@@ -112,6 +112,13 @@ internal sealed class RealProcess : IAsyncDisposable
         Assert.Fail($"The server did not answer at {url} within {timeout.TotalSeconds:0} s:\n{Output}");
     }
 
+    /// <summary>Ends the program and what it started, and waits for it to be gone, so its ports are free again.</summary>
+    public async Task KillAsync(TimeSpan timeout)
+    {
+        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+        await WaitForExitAsync(timeout);
+    }
+
     public ValueTask DisposeAsync()
     {
         try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }

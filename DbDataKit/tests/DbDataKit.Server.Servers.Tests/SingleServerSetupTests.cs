@@ -63,7 +63,9 @@ public sealed class SingleServerSetupTests
         public async Task StopAsync(SuiteService service, TimeSpan timeout)
         {
             Calls.Add("stop " + service.Program);
-            if (Running.Remove(service.Program, out var process)) await process.DisposeAsync();
+            if (!Running.Remove(service.Program, out var process)) return;
+            await process.KillAsync(timeout);
+            await process.DisposeAsync();
         }
 
         public string OutputOf(SuiteService service) => Running.TryGetValue(service.Program, out var p) ? p.Output : "(not running)";
@@ -78,6 +80,7 @@ public sealed class SingleServerSetupTests
     {
         var output = new StringWriter();
         var exit = await setup.RunAsync(members, new SingleServerSetupOptions { SkipFolderPermissionsCheck = skip, Wait = TimeSpan.FromSeconds(120) }, output);
+        TestContext.Current.TestOutputHelper?.WriteLine($"setup single-server{(skip ? " --skip-folder-permissions-check" : "")} exited {exit}:\n{output}");
         return (exit, output.ToString());
     }
 
@@ -136,7 +139,9 @@ public sealed class SingleServerSetupTests
 
             // the Runner's configured port held by another program: its start fails at the ports step, the file is printed, the summary names it
             await host.StopAsync(SuiteServices.Runner, TimeSpan.FromSeconds(30));
+            // the stopped Runner's connections may still be closing: the port is taken as soon as the system lets it go
             var holder = new TcpListener(IPAddress.Loopback, ports[SuiteServices.Runner]);
+            holder.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             holder.Start();
             try
             {

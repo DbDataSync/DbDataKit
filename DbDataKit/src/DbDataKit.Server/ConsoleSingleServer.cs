@@ -41,7 +41,7 @@ public sealed partial class ConsoleSingleServer(string directory, Func<string, s
         var minted = new ConsoleJoins(state).Mint(new JoinScope(product, ServerRole.Admin), account, $"{account} (setup single-server)", actorKind: "command");
         GiveBackToFolderOwner(Directory);
         var path = ServerJoin.RequestPath(member.DataFolder);
-        JoinRequestFile.From(address.GetLeftPart(UriPartial.Authority), fingerprint, minted.Token).Write(path);
+        JoinRequestFile.From(address.GetLeftPart(UriPartial.Authority), Thumbprints.Format(fingerprint), minted.Token).Write(path);
         return path;
     }
 
