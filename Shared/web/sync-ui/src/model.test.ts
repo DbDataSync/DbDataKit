@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseYaml } from '@dbdatakit/shell'
 import { readCatalogCache } from '@dbdatakit/workspace'
-import { editTask, editText, mappingsOf, newTaskText, readConnection, readMapping, readTask } from './model'
+import { editTask, editText, mappingsOf, newTaskText, readConnection, readMapping, readScript, readTask, scriptPathsOf } from './model'
 import { createMappings } from './mappings/createMappings'
 import { columnDifference } from './mappings/CachedMetadataCard'
 import { CATALOG } from './fixtures'
@@ -149,5 +149,15 @@ describe('the cached metadata card', () => {
     const col = (name: string, nativeType = 'int') => ({ name, nativeType, isNullable: true, isPrimaryKey: false, isIdentity: false })
     expect(columnDifference([col('id'), col('total')], [col('id'), col('total', 'bigint'), col('placed_at')])).toBe('the catalog cache has 1 column added (placed_at), 1 changed type (total)')
     expect(columnDifference([col('id')], [col('id')])).toBe('the same as the catalog cache')
+  })
+})
+
+describe('the set\'s scripts, read only', () => {
+  it('are the manifests of config/scripts, each with its slot, parameters and whether it is enabled', () => {
+    expect(scriptPathsOf(['config/scripts/b.yaml', 'config/scripts/b.csx', 'config/scripts/a.yml', 'config/scripts/x/y.yaml', 'config/connections/erp.yaml']))
+      .toEqual(['config/scripts/a.yml', 'config/scripts/b.yaml'])
+    const read = readScript('config/scripts/mask.yaml', 'schemaVersion: 1\nkind: rowTransform\nenabled: false\nparameters:\n- name: column\n  type: ColumnPicker\n- type: Text\n')
+    expect(read.value).toEqual({ name: 'mask', path: 'config/scripts/mask.yaml', kind: 'rowTransform', language: 'CSharp', description: null, parameters: [{ name: 'column', type: 'ColumnPicker' }], enabled: false })
+    expect(readScript('config/scripts/bad.yaml', 'kind: [').problem).toContain('config/scripts/bad.yaml is not valid YAML')
   })
 })

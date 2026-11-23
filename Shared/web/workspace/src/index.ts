@@ -10,6 +10,7 @@ export { workspaceNav } from './WorkspaceShell'
 export { CATALOG_CACHE_FILE, CATALOG_CACHE_VERSION, readCatalogCache, readLine, schemasOf, tableLabel } from './catalogCache'
 export type { CacheColumn, CacheConnection, CacheDatabase, CacheFinding, CacheReadAt, CacheTable, CatalogCache } from './catalogCache'
 export { SYNC_TASK_CURRENT, connectionPath, connectionsOf, replicationPath, replicationsOf, syncNameProblem, withCurrentTaskVersion } from './syncSchemas'
+export type { CheckDiagnostic, ProvisioningEndpoint, ProvisioningMapping, ProvisioningPlan, ProvisioningSide, ProvisioningStep, ToolAnswer } from './api'
 export { writeColumns } from './mappingColumns'
 export type { ColumnChoices } from './mappingColumns'
 // the read of a connection's shape from a Runner channel, through the console, for every kind's Designer and the Files area's Catalog tab

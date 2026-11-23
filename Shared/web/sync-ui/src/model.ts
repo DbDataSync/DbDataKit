@@ -1,7 +1,7 @@
 import { parseYaml, removeAt, setAt, toYaml, type YamlPath } from '@dbdatakit/shell'
 import { SYNC_TASK_CURRENT, withCurrentTaskVersion } from '@dbdatakit/workspace'
 import type {
-  ColumnMapping, ConnectionView, EndpointRef, ReplicationTaskConfig, RelationshipConfig, SourceTableSpec, TableMappingConfig, TableSpec,
+  ColumnMapping, ConnectionView, EndpointRef, ParameterDescriptor, ReplicationTaskConfig, RelationshipConfig, ScriptView, SourceTableSpec, TableMappingConfig, TableSpec,
 } from './types'
 
 /** The newest format of a table mapping this reads and writes (`ConfigSchema.MappingCurrent`). */
@@ -113,6 +113,26 @@ export function readConnection(path: string, text: string): Read<ConnectionView>
   const sync = isMap(raw.extensions) && isMap(raw.extensions.sync) ? raw.extensions.sync : {}
   const scripts = isMap(sync.scripts) ? (sync.scripts as ConnectionView['scripts']) : {}
   return { value: { name: str(raw.name, fallback), path, engine: str(raw.engine), database: strOrNull(address.database), scripts }, problem: null }
+}
+
+/** The manifests of the set's scripts (`config/scripts/<name>.yaml`), from the draft's paths. */
+export const scriptPathsOf = (paths: readonly string[]): string[] =>
+  paths.filter((p) => /^config\/scripts\/[^/]+\.ya?ml$/i.test(p)).sort()
+
+/** A script's manifest, read only: its name, the slot it fills, its declared parameters and whether it is enabled (absent is enabled). */
+export function readScript(path: string, text: string): Read<ScriptView> {
+  const read = parsed(path, text)
+  if (read.value === null) return read
+  const raw = read.value
+  const fallback = /([^/]+)\.ya?ml$/i.exec(path)?.[1] ?? ''
+  const parameters = maps(raw.parameters).flatMap((p): ParameterDescriptor[] => (typeof p.name === 'string' && p.name !== '' ? [{ ...p, name: p.name } as ParameterDescriptor] : []))
+  return {
+    value: {
+      name: str(raw.name, fallback), path, kind: str(raw.kind), language: str(raw.language, 'CSharp'),
+      description: strOrNull(raw.description), parameters, enabled: raw.enabled !== false,
+    },
+    problem: null,
+  }
 }
 
 const absent = (v: unknown) => v === null || v === undefined
