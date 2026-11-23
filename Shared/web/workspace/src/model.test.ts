@@ -121,15 +121,16 @@ describe('builds, preview and publish', () => {
     expect(notIsolated(['The bundler ran without network isolation: this Linux machine could not make a network namespace.'])).toBe(true)
     expect(notIsolated(['The bundler ran in a network namespace with no route.'])).toBe(false)
   })
-  it('publishing needs the role, a succeeded build and a key that can publish', () => {
-    const targets = [{ name: 'edge', can_publish: true }, { name: 'viewing', can_publish: false }]
-    const ok = { canWrite: true, status: 'succeeded', target: 'edge', targets, busy: false }
+  it('publishing needs the role, a succeeded build and a server of the console that answers', () => {
+    const targets = [{ id: 'gw-1', name: 'edge', product: 'gateway', reachable: true, accepts: true }, { id: 'gw-2', name: 'viewing', product: 'gateway', reachable: false, accepts: true }]
+    const ok = { canWrite: true, status: 'succeeded', target: 'gw-1', targets, busy: false }
     expect(publishButton(ok)).toEqual({ enabled: true, why: null })
     expect(publishButton({ ...ok, canWrite: false }).why).toContain('approver')
     expect(publishButton({ ...ok, status: 'failed' }).why).toContain('succeeded')
-    expect(publishButton({ ...ok, target: '', targets: [] }).why).toContain('Publisher keys')
+    expect(publishButton({ ...ok, target: '', targets: [] }).why).toContain('an administrator adds one under Servers')
     expect(publishButton({ ...ok, target: '' })).toEqual({ enabled: false, why: null })
-    expect(publishButton({ ...ok, target: 'viewing' }).why).toContain('not paired with a Gateway that lets it publish')
+    expect(publishButton({ ...ok, target: 'gw-2' }).why).toBe('viewing is not answering the console.')
+    expect(publishButton({ ...ok, target: 'gone' }).why).toContain('Choose a Runner or a Gateway')
     expect(publishButton({ ...ok, busy: true }).enabled).toBe(false)
   })
   it('refuses a key typed where a reference goes', () => {

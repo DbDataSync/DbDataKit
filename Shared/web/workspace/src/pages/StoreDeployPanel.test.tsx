@@ -45,7 +45,7 @@ describe('deploying a Store model on a Runner (plan 33 SC24)', () => {
     expect(deployReportOf(run(null, { outcome: 'failed' }))).toBeNull()
   })
   it('draws the run with its statements, what is blocked and a link to the run on the Runner\'s screens', () => {
-    const html = renderToStaticMarkup(<MemoryRouter><DeployResult result={{ build: 'b', started, run: run(report({ blocked: ['drop column x'], notes: ['a note'] })) }} /></MemoryRouter>)
+    const html = renderToStaticMarkup(<MemoryRouter><DeployResult result={{ deploy: 'd', started, run: run(report({ blocked: ['drop column x'], notes: ['a note'] })) }} /></MemoryRouter>)
     expect(html).toContain('data-dry="true"')
     expect(html.match(/data-testid="wsp-deploy-statement"/g)).toHaveLength(2)
     expect(html).toContain('Blocked: drop column x')
@@ -53,7 +53,7 @@ describe('deploying a Store model on a Runner (plan 33 SC24)', () => {
     expect(html).toContain('href="/servers/runner-1/runs?run=11111111-2222-3333-4444-555555555555"')
   })
   it('says the failure of a run that failed', () => {
-    const html = renderToStaticMarkup(<MemoryRouter><DeployResult result={{ build: 'b', started, run: run(null, { outcome: 'failed', failure: { kind: 'Permanent', message: 'The login was refused.' } }) }} /></MemoryRouter>)
+    const html = renderToStaticMarkup(<MemoryRouter><DeployResult result={{ deploy: 'd', started, run: run(null, { outcome: 'failed', failure: { kind: 'Permanent', message: 'The login was refused.' } }) }} /></MemoryRouter>)
     expect(html).toContain('data-outcome="failed"')
     expect(html).toContain('The login was refused.')
   })
@@ -79,7 +79,7 @@ describe('the contract step of a Store model on a Runner (plan 33 SC24)', () => 
       { object: 'territory.region', description: 'make territory.region required', text: 'ALTER TABLE ... SET NOT NULL', requiresEveryRowToHaveAValue: true }],
     blocked: [], notes: [], dropped: [{ description: "drop the column 'note' of 'territories.territory'", columnId: 'postgres://db/x#note', datasetId: 'postgres://db/x' }], ...over,
   })
-  const contractRun = (r: ContractReport | null, over: Partial<StagedRun> = {}) => ({ build: 'b', started: { ...started, task: 'contract' }, run: run(null, { task: 'contract', steps: r ? [{ key: r.schema, started: '', completed: '', result: r }] : [], ...over }) })
+  const contractRun = (r: ContractReport | null, over: Partial<StagedRun> = {}) => ({ deploy: 'd', started: { ...started, task: 'contract' }, run: run(null, { task: 'contract', steps: r ? [{ key: r.schema, started: '', completed: '', result: r }] : [], ...over }) })
 
   it('approves only a plan that has steps and nothing blocked', () => {
     expect(canContract(plan())).toBe(true)
@@ -98,7 +98,7 @@ describe('the contract step of a Store model on a Runner (plan 33 SC24)', () => 
     expect(html).toContain('would run 2 step(s). Plan abcdef012345.')
     expect(html.match(/data-testid="wsp-contract-step"/g)).toHaveLength(2)
     expect(html).toContain('(every row must have a value first)')
-    expect(html).toContain('the paired Gateways are asked who reads: drop the column &#x27;note&#x27; of &#x27;territories.territory&#x27;')
+    expect(html).toContain('the Gateways the console manages are asked who reads: drop the column &#x27;note&#x27; of &#x27;territories.territory&#x27;')
     expect(html).toContain('of contract of model-territories')
   })
   it('says what an approved contract did, and what blocks a plan', () => {

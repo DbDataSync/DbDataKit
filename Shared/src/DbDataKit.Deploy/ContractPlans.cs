@@ -19,6 +19,12 @@ public static class ContractPlans
     /// <summary>The field of a request that carries the person's allowances, as the refusal names it.</summary>
     public const string AllowField = "allow";
 
+    /// <summary>The manual task of a Store model's deploy package that reads a contract's plan (without an approval) or runs it (with the approved hash).</summary>
+    public const string Task = "contract";
+
+    /// <summary>The step a run of <see cref="Task"/> records its report as: the plan, its hash and the columns it drops.</summary>
+    public const string ReportStep = "contract-report";
+
     /// <summary>
     /// The plan of <paramref name="run"/> (a run read with its <c>contract-report</c> steps, as <see cref="RunnerCalls.RunOfAsync"/> answers) that <paramref name="approve"/> names: its last report must be a dry run with that hash and no item a
     /// contract does not do. <paramref name="planRun"/> is the run's id, for the refusal.

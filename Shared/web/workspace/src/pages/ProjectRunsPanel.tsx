@@ -1,22 +1,11 @@
 import { useState } from 'react'
 import { Link as ConsoleLink } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
-import { workspaceApi, type BindingTestAnswer, type BuildDetail, type StagedRun, type StagedRunStarted } from '../api'
+import type { BindingTestAnswer, StagedRun, StagedRunStarted } from '../api'
+import { deployApi, useRunnerVersion } from '../deploys'
 import { connectionsOf, replicationsOf } from '../syncSchemas'
 import { followStagedRun } from './SyncProvisioningPanel'
-
-/** The version a build of this draft last published (staged or served) on a Runner, with the tasks the Runner answered and how it was sent. */
-export interface PublishedVersion { build: string; target: string; package: string; channel: string; version: string; mode: string; tasks: string[] }
-
-/** The newest build, newest first, whose publish to a Runner worked and named a package (a preview is not one). */
-export function publishedVersionOf(details: readonly BuildDetail[]): PublishedVersion | null {
-  for (const d of details) {
-    const record = [...d.publishes].reverse().find((p) => p.ok && !p.preview && p.answer?.package && p.answer.channel && p.answer.version != null)
-    if (record?.answer) return { build: d.build.id, target: record.target, package: record.answer.package!, channel: record.answer.channel!, version: String(record.answer.version), mode: record.answer.mode ?? 'stage', tasks: record.answer.tasks ?? [] }
-  }
-  return null
-}
 
 /** The task a replication is on a Runner (`RunnerTaskNames.Of`): lower case, what a task name does not take made a dash, no leading dash or underscore, at most 64. */
 export const syncTaskOf = (replication: string): string =>
@@ -239,28 +228,18 @@ function ReplicationRow({ replication, mappings, busy, onRun }: { replication: s
  * The Runs tab of a Build or Sync project's workspace (plan 33 SC20o, SC22l): the runs of what this draft published, in the project's page. The version a build of this draft last sent to a Runner names the package and the channel; each of its tasks
  * runs now from here as the channel serves it (a replication's drain, a refresh), for the signed-in person with the logins bound on the Runner, and a replication's bulk load is asked as a person thinks of it (the default segmenting, the whole
  * table or a column's range in buckets), which the drain divides against the source. The run comes back here with what it did; its log, the schedule, pause and resume, cancel and the history are the Runner's screens, linked from here (and
- * the Runner's screens link back to this workspace from the version's note). Nothing runs on this server: it holds no login.
+ * the Runner's screens link back to this workspace from the version's note). The version is the console's newest deploy of a build of this draft to a Runner, and every run, read and test goes through the console as the signed-in
+ * person (Design: docs/publishing.md#runs-of-a-deployed-build): the Workspace server holds no login and calls no Runner.
  */
 export function ProjectRunsPanel({ project, id, kind, paths }: { project: string; id: string; kind: 'build' | 'sync'; paths: readonly string[] }) {
-  const published = useQuery({
-    queryKey: ['workspace', project, id, 'published-version'],
-    queryFn: async () => {
-      const succeeded = (await workspaceApi.builds(project, id)).filter((b) => b.status === 'succeeded').slice(0, 5)
-      for (const b of succeeded) {
-        const found = publishedVersionOf([await workspaceApi.build(project, id, b.id)])
-        if (found) return found
-      }
-      return null
-    },
-  })
-  const targets = useQuery({ queryKey: ['workspace', 'publish-targets', project], queryFn: () => workspaceApi.publishTargets(project) })
+  const published = useRunnerVersion(project, id)
   const at = published.data ?? null
-  const instance = at ? (targets.data ?? []).find((t) => t.name === at.target)?.instance ?? null : null
+  const instance = at?.target ?? null
   const start = useMutation({
     mutationFn: async ({ task, inputs }: { task: string; inputs: Record<string, string> }): Promise<Started> => {
       if (!at) throw new Error('No build of this draft is published to a Runner. Build it and publish it to a Runner (Builds tab); then its tasks run from here.')
-      const started = (await workspaceApi.runServed(project, id, at.build, task, inputs)).run
-      return { started, run: await followStagedRun(() => workspaceApi.stagedRun(project, id, at.build, started.run_id, kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined)) }
+      const started = (await deployApi.run(at.deploy, task, inputs, true)).run
+      return { started, run: await followStagedRun(() => deployApi.runOf(at.deploy, started.run_id, kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined)) }
     },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
@@ -268,7 +247,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
   const test = useMutation({
     mutationFn: async (connection: string): Promise<{ connection: string; answer?: BindingTestAnswer; error?: string }> => {
       if (!at) throw new Error('Nothing is published yet.')
-      try { return { connection, answer: await workspaceApi.bindingTest(project, id, at.build, syncSlotOf(connection)) } }
+      try { return { connection, answer: await deployApi.bindingTest(at.deploy, syncSlotOf(connection)) } }
       catch (e) { return { connection, error: e instanceof Error ? e.message : String(e) } }
     },
     onSuccess: ({ connection, ...result }) => setTests((t) => ({ ...t, [connection]: result })),
@@ -288,7 +267,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       {published.isLoading ? null : at
         ? (
           <div className="hint" data-testid="wsp-runs-version">
-            {at.package} version {at.version} on {at.channel} of {at.target} ({at.mode === 'stage' ? 'staged: its tasks run once the version is served' : 'served'}).
+            {at.package} version {at.version} on {at.channel} of {at.targetName} ({at.mode === 'stage' ? 'staged: its tasks run once the version is served' : 'served'}).
             {screens && <> <ConsoleLink to={screens.tasks} data-testid="wsp-runs-tasks-link">Its tasks on the Runner</ConsoleLink> (schedule, pause, resume) and <ConsoleLink to={screens.runs} data-testid="wsp-runs-history-link">its runs</ConsoleLink> (history, logs, cancel).</>}
           </div>
         )
@@ -296,7 +275,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       <ErrorBanner error={published.error ?? start.error} />
       {kind === 'sync' && connections.length > 0 && (
         <div style={{ margin: '6px 0' }} data-testid="wsp-runs-connections">
-          <div className="hint">Connections: Test tries, on the Runner, the login the published channel binds to each one's slot, the way a run would ({at ? 'the pairing needs the Runner\'s admin role' : 'after publish: nothing is bound before the set is published'}).</div>
+          <div className="hint">Connections: Test tries, on the Runner, the login the published channel binds to each one's slot, the way a run would ({at ? 'it needs the administrator role on the Runner' : 'after publish: nothing is bound before the set is published'}).</div>
           {at && connections.map((c) => <ConnectionTestRow key={c} connection={c} busy={test.isPending} onTest={() => test.mutate(c)} answer={tests[c]?.answer} error={tests[c]?.error} />)}
         </div>
       )}

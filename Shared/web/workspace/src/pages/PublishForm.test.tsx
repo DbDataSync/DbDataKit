@@ -1,13 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { PublishTarget } from '../api'
+import type { DeployTarget } from '../deploys'
 import { adoptionRequest, adoptionSentence, makeLabel, parseBindings, publishButton, publishedLine } from '../model'
 import { PublishForm } from './PublishForm'
 
-const targets: PublishTarget[] = [
-  { name: 'jobs', gateway: 'https://runner:8495', product: 'runner', accepts: true, can_publish: true },
-  { name: 'edge', gateway: 'https://gateway:8816', product: 'gateway', accepts: false, can_publish: true },
-  { name: 'serving', gateway: 'https://gateway2:8816', product: 'gateway', accepts: true, can_publish: true },
+// the servers of the console, by id: `jobs` a Runner, `edge` and `serving` Gateways; `accepts` (whether the project's kind goes to the server's product) is set by hand here, so one Gateway is refused
+const targets: DeployTarget[] = [
+  { id: 'jobs', name: 'jobs', product: 'runner', reachable: true, accepts: true },
+  { id: 'edge', name: 'edge', product: 'gateway', reachable: true, accepts: false },
+  { id: 'serving', name: 'serving', product: 'gateway', reachable: true, accepts: true },
 ]
 const draw = (props: Partial<Parameters<typeof PublishForm>[0]> = {}) =>
   renderToStaticMarkup(<PublishForm canWrite status="succeeded" targets={targets} busy={false} onPublish={() => {}} {...props} />)
@@ -37,7 +38,7 @@ describe('the publish form by the product of the target', () => {
     expect(html).not.toContain('<option value="edge">')
   })
 
-  it('names why a target of the wrong product cannot be used when it is typed anyway', () => {
+  it('names why a target of the wrong product cannot be used when the address names it anyway', () => {
     expect(draw({ initialTarget: 'edge' })).toContain('This kind of project is not published to a Gateway')
   })
 })
@@ -48,7 +49,7 @@ describe('the words of a publish', () => {
     expect(publishButton(ok).why).toContain('channel')
     expect(publishButton({ ...ok, channel: 'prod' })).toEqual({ enabled: true, why: null })
     expect(publishButton({ ...ok, target: 'edge' }).why).toContain('not published to a Gateway')
-    expect(publishButton({ ...ok, targets: [{ ...targets[0]!, can_publish: false }], channel: 'prod' }).why).toBe('The key jobs is not paired with a Runner that lets it publish.')
+    expect(publishButton({ ...ok, targets: [{ ...targets[0]!, reachable: false }], channel: 'prod' }).why).toBe('jobs is not answering the console.')
   })
 
   it('bindings are slot=connection pairs, separated by commas or lines, and a pair with a missing side is named', () => {
