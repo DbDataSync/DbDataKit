@@ -63,7 +63,24 @@ public sealed class FlightSqlProvider : DbProviderBase
     public FlightSqlProvider(DialectCatalog? dialects = null, IRedactor? redactor = null, bool includeRawFailures = false)
         : base(EngineName, new FlightSqlComposer(),
             ReadOnlySession.NoneAvailable("flightsql", "Nothing at the session level: the upstream server's login and the statement check are the controls."),
-            new FlightSqlFailureMapper(), dialects, redactor, includeRawFailures) { }
+            new FlightSqlFailureMapper(), dialects, redactor, includeRawFailures) => catalog = dialects ?? DialectCatalog.Builtin;
+
+    private readonly DialectCatalog catalog;
+
+    // The catalog's `flightsql` dialect is how Sync's Flight SQL driver reads a column's type; this provider speaks the dialect a connection names, and
+    // ANSI SQL otherwise, as the engine registry's flightsql entry says. What a Flight SQL server can do is the engine's behind it, which is not known here.
+    public override EngineCaps Caps => EngineCaps.None;
+
+    public override ISqlDialect Dialect(ConnectionDefinition definition)
+    {
+        if (definition.Dialect is { } id)
+        {
+            var colon = id.IndexOf(':', StringComparison.Ordinal);
+            foreach (var name in colon > 0 ? [id, id[..colon]] : new[] { id })
+                if (!string.Equals(name, "flightsql", StringComparison.OrdinalIgnoreCase) && catalog.TryGet(new EngineId(name), out var named)) return named!;
+        }
+        return catalog.Get(EngineId.Ansi);
+    }
 
     protected override DbConnection NewConnection(string connectionString, ConnectionContext context)
     {
