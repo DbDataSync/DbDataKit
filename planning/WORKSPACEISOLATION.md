@@ -42,10 +42,9 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). The Store project's Deploy tab stages its model package through the console's deploy too (`docs/publishing.md`, "Runs of a deployed build"). Left: the preview form of an app build calls it too, once WORKSPACEISOLATION-3 deploys a preview through the console | WORKSPACEISOLATION-3 | S | Playwright: Preview with data sends the build through the console and the preview opens |
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`), built for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
 | WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
-| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7, WORKSPACEISOLATION-11, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
+| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
-| WORKSPACEISOLATION-11 | The Rows tab of a Store project (`StoreRowsPanel`) offers the Gateways the control service manages, read from the console as the signed-in person, instead of the Workspace's paired targets (`GET /api/v1/publish-targets`, which WORKSPACEISOLATION-8 removes); a Gateway is offered when it serves the model, and rows are still read and written through the console's relay as today | none | S | vitest: the panel lists the Gateways from the console's answer and calls no Workspace target route; the Rows story (Playwright) edits a row with `publish-targets` answering 404 |
 | WORKSPACEISOLATION-12 | A sync draft's script Test runs on a Runner: the sync runtime package gets a manual task `script-test` that uses no connection; Test on the Scripts tab builds the draft, stages it in a non-production channel through the control service and runs the task there as the person; the tab shows the result with a link to the run | WORKSPACEISOLATION-3 | M | a test: Test of a script runs it on a Runner and shows its rows; the Workspace service starts no script |
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
@@ -162,8 +161,8 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
   `ProjectRunsPanel`, `StoreDeployPanel` (deploy, contract) and `SyncProvisioningPanel` (provision) go through the console's `/api/deploys/{id}/...`
   (`docs/publishing.md`, "Runs of a deployed build"); the Gateway refresh of
   `CatalogPanel` with WORKSPACEISOLATION-6; the Test of `SyncScriptsPanel` with WORKSPACEISOLATION-12.
-- `StoreRowsPanel` picks its Gateway from `publish-targets`, then edits rows through the console's relay. WORKSPACEISOLATION-11 gives it the
-  control service's list of Gateways before WORKSPACEISOLATION-8 removes that route.
+- `StoreRowsPanel` takes its Gateways from the console (`GET /api/instances`) and asks each one's store through the relay which models it serves; it
+  no longer calls `publish-targets`.
 
 ### The child programs
 
@@ -375,6 +374,21 @@ trigger: only a manual-only task is run from a version that is not served", beca
 - Option B: the packages stop writing `manual: true` on these tasks, and the Runner stays as it was.
 
 Recommendation: A: the packages already say what they mean, and the Runner's rule for a `ddl` task reads `manual` the same way.
+
+### WORKSPACEISOLATION-P23: which Gateways the Rows tab offers when one does not say what it serves (default, awaiting the owner)
+
+Scenario: Ana opens the Rows tab of the Store project `regions`. The console manages three Gateways: `edge` serves `regions`; `plain` has no store
+module, so its `GET /api/v1/store/models` answers 404 (a Gateway where Ana has no role answers 403); `far` is down, and the console marks it
+unreachable.
+
+- Option A (built): `edge` is offered. `plain` counts as serving no model to Ana, with no message, as the console's Approvals page treats a 404 or a
+  403. `far` is not asked; under the pickers the tab says "far did not say which models it serves: The console cannot reach it." A Gateway that
+  answers with any other error is named the same way with its message. The others are still offered.
+- Option B: every Gateway that does not list the model is named under the pickers with the reason, 403 and 404 included.
+- Option C: a Gateway that does not answer is offered anyway, and the editor shows its error when Ana picks it.
+
+Recommendation: A: a Gateway without the store module, or where the person has no role, has nothing to edit, and naming it would be noise on
+every Store project; a Gateway that is down is worth one line, since the model may be served there.
 
 ## Shared areas touched
 
