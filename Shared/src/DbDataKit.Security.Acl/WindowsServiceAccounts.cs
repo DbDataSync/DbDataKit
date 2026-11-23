@@ -51,7 +51,7 @@ public static class WindowsServiceAccounts
     /// The SID of the virtual account <c>NT SERVICE\&lt;name&gt;</c>, computed as Windows computes it (S-1-5-80 and the SHA-1 of the upper-case name in UTF-16, as five little-endian numbers),
     /// so it is known whether or not a service of that name is registered now.
     /// </summary>
-    internal static string VirtualAccountSid(string serviceName)
+    public static string VirtualAccountSid(string serviceName)
     {
         var hash = System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.Unicode.GetBytes(serviceName.ToUpperInvariant()));
         return "S-1-5-80-" + string.Join("-", Enumerable.Range(0, 5).Select(i => BitConverter.ToUInt32(hash, i * 4)));

@@ -16,6 +16,9 @@ internal sealed class RealProcess : IAsyncDisposable
 
     public int Id => process.Id;
 
+    /// <summary>The program has ended.</summary>
+    public bool HasExited => process.HasExited;
+
     /// <summary>The processes this program started (its task processes), found by walking the parent ids of <c>/proc</c> (Linux); each is a process of this test's own tree, never another one on the machine.</summary>
     public IReadOnlyList<(int Pid, string Command)> Descendants()
     {
@@ -107,6 +110,13 @@ internal sealed class RealProcess : IAsyncDisposable
             await Task.Delay(250);
         }
         Assert.Fail($"The server did not answer at {url} within {timeout.TotalSeconds:0} s:\n{Output}");
+    }
+
+    /// <summary>Ends the program and what it started, and waits for it to be gone, so its ports are free again.</summary>
+    public async Task KillAsync(TimeSpan timeout)
+    {
+        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+        await WaitForExitAsync(timeout);
     }
 
     public ValueTask DisposeAsync()
