@@ -24,7 +24,7 @@ test('a model goes onto a data source made by hand only after the person confirm
   await page.getByTestId('wsp-build').click()
   const done = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
   await expect(done).toBeVisible({ timeout: 15_000 })
-  await done.getByTestId('wsp-publish-target').fill('edge')
+  await done.getByTestId('wsp-publish-target').selectOption('edge')
   await done.getByTestId('wsp-publish').click()
 
   // refused: the confirmation names the data source and who made it, and nothing was adopted yet

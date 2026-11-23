@@ -32,8 +32,11 @@ internal sealed class PairedRunner : IAsyncDisposable
 
     public RunnerPublishing Publishing { get; }
 
-    /// <summary>Starts a runner whose instance id is <paramref name="id"/>, serving the channels <c>dev</c> and <c>prod</c>.</summary>
-    public static async Task<PairedRunner> StartAsync(string id = "runner-1")
+    /// <summary>
+    /// Starts a runner whose instance id is <paramref name="id"/>, serving the channels <c>dev</c> and <c>prod</c>. <paramref name="tasks"/>, when given, runs every task in this process over the runner's state (<see cref="InProcessTasks"/>);
+    /// otherwise a run fails with "nothing is scheduled in this test".
+    /// </summary>
+    public static async Task<PairedRunner> StartAsync(string id = "runner-1", Func<StateDatabase, ITaskRunner>? tasks = null)
     {
         var directory = Directory.CreateTempSubdirectory("ddk-paired-runner").FullName;
         var state = StateOpener.Open(new StateSettings(), Path.Combine(directory, "state.db"), [.. RunnerNames.EngineModules, TrustModule.Module], new StateScope(Group: RunnerNames.DefaultGroup, Service: RunnerNames.ServiceId));
@@ -43,7 +46,7 @@ internal sealed class PairedRunner : IAsyncDisposable
             Tick = TimeSpan.FromMilliseconds(200),
             CancellationGrace = TimeSpan.FromSeconds(5),
             TaskHostPath = typeof(RunnerHost).Assembly.Location,
-            WrapRunner = _ => new NoRun(),
+            WrapRunner = _ => tasks?.Invoke(state) ?? new NoRun(),
         }, state);
         await host.StartAsync(CancellationToken.None);
         var publishing = new RunnerPublishing(state);
@@ -53,6 +56,7 @@ internal sealed class PairedRunner : IAsyncDisposable
             RunnerApi.Map(app, state, () => host, id, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, ServerProducts.Runner, "9.9.9"));
             RunnerPublishApi.Map(app, publishing);
             RunnerConnectionCopyApi.Map(app, state, () => host, "/api/v1", RunnerCallers.TokenResolver);
+            RunnerBindingTestApi.Map(app, state, () => host.Slots, "/api/v1", RunnerCallers.TokenResolver);
             RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver, engine: () => host);
         });
         return new PairedRunner(directory, server, host, state, publishing);
@@ -68,5 +72,34 @@ internal sealed class PairedRunner : IAsyncDisposable
         await Server.DisposeAsync();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try { Directory.Delete(_directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }   // the artifact store's files are read-only on Windows
+    }
+}
+
+/// <summary>
+/// A task of a package run in this process, the way the runner's executor records one: the run begins with the version it is of, the steps <paramref name="steps"/> gives for the request are recorded (a step's name and its result as
+/// JSON; none for a task it does not know), and the run succeeds. <see cref="Requests"/> keeps each request, so a test can say who asked, with which inputs and of which version.
+/// </summary>
+internal sealed class InProcessTasks(StateDatabase state, Func<TaskRunRequest, IReadOnlyList<(string Step, string Result)>> steps) : ITaskRunner
+{
+    public System.Collections.Concurrent.ConcurrentQueue<TaskRunRequest> Requests { get; } = new();
+
+    public Task<TaskRunResult> RunAsync(TaskRunRequest request, CancellationToken ct = default)
+    {
+        Requests.Enqueue(request);
+        var runs = new RunStore(state, RunnerNames.EngineService);
+        var runId = request.RunId ?? state.NewId();
+        runs.Start(request.Task.ToString(), runId, package: request.Task.Package, packageVersion: request.PackageVersion, channel: request.Task.Channel, attempt: request.Attempt);
+        var store = new StepStore(state, new ProgressKey(request.Task.Package, request.Task.Channel, request.Task.Task));
+        var i = 0;
+        foreach (var (step, result) in steps(request))
+        {
+            var key = $"{step}-{i++}";
+            store.Begin(request.Chain, step, key, request.Attempt);
+            store.CompleteValue(request.Chain, step, key, request.Attempt, result);
+        }
+        var end = new TaskEnd(TaskEndState.Succeeded, Processed: 1);
+        var finish = end.ToRunFinish();
+        runs.Finish(runId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure);
+        return Task.FromResult(new TaskRunResult(runId, end, true, null, false, TimeSpan.Zero, 0, 0, 0, 0, DbDataKit.Runner.Limits.LimitEnforcement.None, DbDataKit.Runner.Limits.LimitEnforcement.None, "none", 0, false, []));
     }
 }

@@ -168,11 +168,20 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
 
     private static JsonArray Steps(List<string> steps) => new([.. steps.Select(s => (JsonNode?)s)]);
 
-    /// <summary>A deploy record as the console's answers show it; the build record is the object it was signed as.</summary>
+    /// <summary>A deploy record as the console's answers show it; the build record is the object it was signed as, and <c>tasks</c> the tasks a Runner said the package has (empty for what is not a Runner package).</summary>
     public static JsonObject Describe(DeployRecord d) => new()
     {
+        ["tasks"] = TasksOf(d.Answer),
         ["id"] = d.Id, ["workspace_server"] = d.WorkspaceServer, ["project"] = d.Project, ["workspace"] = d.Workspace, ["build"] = d.Build, ["item"] = d.Item, ["kind"] = d.ProjectKind,
         ["target"] = d.Target, ["target_name"] = d.TargetName, ["product"] = d.Product, ["route"] = d.Route, ["name"] = d.DefinitionName, ["channel"] = d.Channel, ["version"] = d.Version, ["mode"] = d.Mode,
         ["signature"] = d.Signature, ["build_record"] = BuildRecord.Read(d.BuildRecord), ["deployed_by"] = d.DeployedBy, ["deployed_at"] = d.DeployedAt.UtcDateTime.ToString("O"), ["outcome"] = d.Outcome, ["error"] = d.Error,
     };
+
+    private static JsonArray TasksOf(string? answer)
+    {
+        JsonNode? parsed = null;
+        try { parsed = string.IsNullOrEmpty(answer) ? null : JsonNode.Parse(answer); }
+        catch (JsonException) { /* an answer kept as it came; one that is not JSON has no tasks */ }
+        return new JsonArray([.. ((parsed as JsonObject)?["tasks"] as JsonArray ?? []).Select(t => t is JsonValue v && v.TryGetValue<string>(out var name) ? (JsonNode?)name : null).Where(t => t is not null)]);
+    }
 }
