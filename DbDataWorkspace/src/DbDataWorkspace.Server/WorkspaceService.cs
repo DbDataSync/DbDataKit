@@ -47,57 +47,9 @@ public static class WorkspaceService
     public static Noun Noun(WorkspaceServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
 
-    public static ServiceCommandContext Context(WorkspaceServiceEnvironment env)
-    {
-        var installDirectory = Path.GetDirectoryName(env.BinaryPath) ?? env.BinaryPath;
-        var admin = new AclRule(LayoutPrincipal.Administrators, AccessRights.Full);
-        var system = new AclRule(LayoutPrincipal.System, AccessRights.Full);
-        AclRule Svc(AccessRights r) => new(LayoutPrincipal.ServiceAccount, r);
+    /// <summary>The Workspace's registration, as the suite's registrations are made (<see cref="SuiteServiceRegistration"/>).</summary>
+    public static ServiceCommandContext Context(WorkspaceServiceEnvironment env) =>
+        SuiteServiceRegistration.Context(SuiteServices.Workspace, env.BinaryPath, env.DefaultDataDirectory, env.PrincipalResolver, WorkspaceServer.Version);
 
-        var layout = DirectoryLayout.Create(RegistrationName,
-        [
-            new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
-                "Binaries; the service can read and run them but not change them."),
-            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
-            // Design: docs/install.md#a-service-owns-its-data
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
-                "The server's identity, paired clients, certificate, projects and workspaces; Users have no access."),
-        ]);
-
-        return new ServiceCommandContext
-        {
-            ServiceName = RegistrationName,
-            DisplayName = DisplayName,
-            Description = Description,
-            BinaryPath = env.BinaryPath,
-            Version = WorkspaceServer.Version,
-            // the service runs the server, with its directory named so it does not depend on the account's profile
-            Arguments = ["server", "run", "--repo", env.DefaultDataDirectory],
-            Layout = layout,
-            PrincipalResolver = env.PrincipalResolver,
-            SystemdUnit = () => UnitOptions("dbdataworkspace", env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdataworkspace/dbdataworkspace"),
-            StartMode = ServiceStartMode.Automatic,
-            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
-            DataDirectoryArgument = path => ["--repo", path],
-            StartupService = SuiteServices.Workspace,
-        };
-    }
-
-    public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
-    {
-        Name = name,
-        Description = SuiteServices.Workspace.Description,
-        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{WorkspaceSettings.ServiceName}",
-        WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/workspace and /var/log/dbdatakit/dbdataworkspace for it
-        // at each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
-        // Design: docs/install.md#a-service-owns-its-data
-        DynamicUser = false,
-        User = SuiteServices.Workspace.LinuxUser,
-        Group = SuiteServices.LinuxGroup,
-        StateDirectories = [$"dbdatakit/{WorkspaceSettings.ServiceName}"],
-        StateDirectoryMode = "0700",
-        LogsDirectories = [$"dbdatakit/{SuiteServices.Workspace.LogFolder}"],
-        LogsDirectoryMode = "0700",
-    };
+    public static SystemdUnitOptions UnitOptions(string name, string executable) => SuiteServiceRegistration.UnitOptions(SuiteServices.Workspace, executable, name);
 }

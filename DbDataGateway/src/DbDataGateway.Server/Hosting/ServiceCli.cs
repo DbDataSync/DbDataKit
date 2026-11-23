@@ -170,43 +170,9 @@ public static class ServiceCli
         return rc;
     }
 
-    /// <summary>The shared command's inputs for this product: layout, failure actions, display text.</summary>
-    public static ServiceCommandContext Context(string name, string binaryPath, string dataDirectory, Func<ServiceAccount, IPrincipalResolver> principals)
-    {
-        string installDirectory = Path.GetDirectoryName(binaryPath) ?? binaryPath;
-        var admin = new AclRule(LayoutPrincipal.Administrators, AccessRights.Full);
-        var system = new AclRule(LayoutPrincipal.System, AccessRights.Full);
-        AclRule Svc(AccessRights r) => new(LayoutPrincipal.ServiceAccount, r);
-
-        // Gateway keeps everything it writes (generated certificate and its password file) in one flat data directory.
-        var layout = DirectoryLayout.Create(name,
-        [
-            new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
-                "Binaries; the service can read and run them but not change them."),
-            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
-            // Design: docs/install.md#a-service-owns-its-data
-            new LayoutEntry(LayoutRole.Data, dataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
-                "Settings (config/), the generated TLS certificate and its protected password; Users have no access."),
-        ]);
-
-        return new ServiceCommandContext
-        {
-            ServiceName = name,
-            DisplayName = DisplayName,
-            Description = Description,
-            BinaryPath = binaryPath,
-            Version = GatewayHost.Version,
-            // the service runs the server: there is no default command
-            Arguments = ["server", "run"],
-            Layout = layout,
-            PrincipalResolver = principals,
-            // Same as before: start at boot (not delayed); restart after a crash after 5s, 5s, then 60s; reset after a day.
-            StartMode = ServiceStartMode.Automatic,
-            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
-            DataDirectoryArgument = path => [$"--{GatewayOptions.SectionName}:{nameof(GatewayOptions.DataDirectory)}={path}"],
-            StartupService = SuiteServices.Gateway,
-        };
-    }
+    /// <summary>The shared command's inputs for this product, as the suite's registrations are made (<see cref="SuiteServiceRegistration"/>).</summary>
+    public static ServiceCommandContext Context(string name, string binaryPath, string dataDirectory, Func<ServiceAccount, IPrincipalResolver> principals) =>
+        SuiteServiceRegistration.Context(SuiteServices.Gateway, binaryPath, dataDirectory, principals, GatewayHost.Version, name);
 
     private static int Unit(ServiceCliEnvironment env, ExtractedArgs args)
     {
@@ -226,29 +192,7 @@ public static class ServiceCli
         }
     }
 
-    public static SystemdUnitOptions UnitOptions(string name, string executable)
-    {
-        // the folder is named for the service (gateway); a second gateway on one machine, started under another --name, keeps a folder of that name beside it
-        string folder = string.Equals(name, "dbdatagateway", StringComparison.Ordinal) ? "gateway" : name;
-        return new()
-        {
-            Name = name,
-            Description = SuiteServices.Gateway.Description,
-            ExecStart = executable + " server run",
-            WorkingDirectory = executable[..executable.LastIndexOf((char)47)], // a Unix path whatever OS generates it
-            // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/gateway and /var/log/dbdatakit/dbdatagateway for
-            // it at each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
-            // Design: docs/install.md#a-service-owns-its-data
-            DynamicUser = false,
-            User = SuiteServices.Gateway.LinuxUser,
-            Group = SuiteServices.LinuxGroup,
-            StateDirectories = [$"dbdatakit/{folder}"],
-            StateDirectoryMode = "0700",
-            LogsDirectories = [$"dbdatakit/{SuiteServices.Gateway.LogFolder}"],
-            LogsDirectoryMode = "0700",
-            Environment = new Dictionary<string, string> { [DbDataKit.State.SuiteEnvironment.FolderVariable("gateway")] = $"/var/lib/dbdatakit/{folder}" },
-        };
-    }
+    public static SystemdUnitOptions UnitOptions(string name, string executable) => SuiteServiceRegistration.UnitOptions(SuiteServices.Gateway, executable, name);
 
     private sealed record ExtractedArgs(string? Verb, string? Name, bool Systemd, string? Exec, string? PasswordOnCommandLine, string? PasswordSecret, List<string> Rest);
 

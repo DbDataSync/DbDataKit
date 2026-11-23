@@ -47,57 +47,9 @@ public static class ConsoleService
     public static Noun Noun(ConsoleServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
 
-    public static ServiceCommandContext Context(ConsoleServiceEnvironment env)
-    {
-        var installDirectory = Path.GetDirectoryName(env.BinaryPath) ?? env.BinaryPath;
-        var admin = new AclRule(LayoutPrincipal.Administrators, AccessRights.Full);
-        var system = new AclRule(LayoutPrincipal.System, AccessRights.Full);
-        AclRule Svc(AccessRights r) => new(LayoutPrincipal.ServiceAccount, r);
+    /// <summary>The console's registration, as the suite's registrations are made (<see cref="SuiteServiceRegistration"/>).</summary>
+    public static ServiceCommandContext Context(ConsoleServiceEnvironment env) =>
+        SuiteServiceRegistration.Context(SuiteServices.Console, env.BinaryPath, env.DefaultDataDirectory, env.PrincipalResolver, ConsoleHost.Version);
 
-        var layout = DirectoryLayout.Create(RegistrationName,
-        [
-            new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
-                "Binaries and the web app; the service can read and run them but not change them."),
-            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
-            // Design: docs/install.md#a-service-owns-its-data
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
-                "The users, sessions, invitations and the certificate; Users have no access."),
-        ]);
-
-        return new ServiceCommandContext
-        {
-            ServiceName = RegistrationName,
-            DisplayName = DisplayName,
-            Description = Description,
-            BinaryPath = env.BinaryPath,
-            Version = ConsoleHost.Version,
-            // the service runs the console, with its directory named so it does not depend on the account's profile
-            Arguments = ["server", "run", "--repo", env.DefaultDataDirectory],
-            Layout = layout,
-            PrincipalResolver = env.PrincipalResolver,
-            SystemdUnit = () => UnitOptions("dbdatakit", env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdatakit/dbdatakit"),
-            StartMode = ServiceStartMode.Automatic,
-            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
-            DataDirectoryArgument = path => ["--repo", path],
-            StartupService = SuiteServices.Console,
-        };
-    }
-
-    public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
-    {
-        Name = name,
-        Description = SuiteServices.Console.Description,
-        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{ConsoleSettings.ServiceName}",
-        WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/server and /var/log/dbdatakit/dbdatakit for it at
-        // each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
-        // Design: docs/install.md#a-service-owns-its-data
-        DynamicUser = false,
-        User = SuiteServices.Console.LinuxUser,
-        Group = SuiteServices.LinuxGroup,
-        StateDirectories = [$"dbdatakit/{ConsoleSettings.ServiceName}"],
-        StateDirectoryMode = "0700",
-        LogsDirectories = [$"dbdatakit/{SuiteServices.Console.LogFolder}"],
-        LogsDirectoryMode = "0700",
-    };
+    public static SystemdUnitOptions UnitOptions(string name, string executable) => SuiteServiceRegistration.UnitOptions(SuiteServices.Console, executable, name);
 }
