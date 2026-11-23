@@ -77,6 +77,19 @@ public sealed class PackageManifestTests
         return Full.Replace(from, to, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("crm", "crm")]
+    [InlineData("CRM-db", "crm_db")]
+    [InlineData("crm.archive", "crm_archive")]
+    [InlineData("2024_sales", "c_2024_sales")]
+    [InlineData("_hidden", "c__hidden")]
+    public void A_connection_becomes_the_slot_of_its_name_in_the_identifier_alphabet(string connection, string slot)
+    {
+        Assert.Equal(slot, ConnectionSlots.NameOf(connection));
+        Assert.Matches(PackageManifestValidator.IdentifierRule, ConnectionSlots.NameOf(connection));
+        Assert.Equal(64, ConnectionSlots.NameOf(new string('a', 80)).Length);
+    }
+
     // a valid manifest ------------------------------------------------------------------------------------------------------------------
 
     [Fact]

@@ -10,6 +10,12 @@ This page is the list that parity is measured against: every thing a person can 
 
 **What the Workspace does differently on purpose.** It authors files in a git draft and publishes artifacts; it holds no connection, login or row (D20), and it does not run anything against a database (a run is the Runner's task, plan 28c). So a standalone screen that reads or changes a database is `not planned` here unless the answer can come from a committed cache (D20, SC20i), which has the shape of tables and never their rows.
 
+**Where a database's shape is read.** The Runner reads it: its built-in task `discover` runs in a channel that binds the connection's slot, with the
+login bound there. The console starts the read for the signed-in person, after the Workspace server says the person may read the project. The
+Workspace server never calls the Runner and never sees the login. A connection that is a data source of a paired Gateway can also be read through the Gateway's schema call.
+The authoring screens read everything else from the committed `catalog-cache.yaml`, without a connection
+([authoring-metadata.md](authoring-metadata.md#how-a-screen-asks-for-a-read)).
+
 Summary (counts of the features below):
 
 | Product | built | partly | missing | not planned | features |
