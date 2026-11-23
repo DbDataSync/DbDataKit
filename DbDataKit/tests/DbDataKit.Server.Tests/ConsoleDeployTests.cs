@@ -257,20 +257,21 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         "load" => [("pass-record", new JsonObject { ["mapping"] = "orders", ["kind"] = "Primary", ["status"] = "Succeeded", ["rowsRead"] = 3, ["rowsWritten"] = 3 }.ToJsonString())],
         "contract" => [("contract-report", new JsonObject
         {
-            ["model"] = "territories", ["schema"] = request.Inputs.GetValueOrDefault("schema") ?? "territories", ["engine"] = "sqlserver", ["hash"] = "c0ffee11", ["dryRun"] = !request.Inputs.ContainsKey("approve"),
-            ["applied"] = request.Inputs.ContainsKey("approve"), ["blocked"] = new JsonArray(), ["notes"] = new JsonArray(),
+            ["model"] = "territories", ["schema"] = request.Inputs.GetValueOrDefault("schema") ?? "territories", ["engine"] = "sqlserver", ["hash"] = "c0ffee11", ["dryRun"] = string.IsNullOrEmpty(request.Inputs.GetValueOrDefault("approve")),
+            ["applied"] = !string.IsNullOrEmpty(request.Inputs.GetValueOrDefault("approve")), ["blocked"] = new JsonArray(), ["notes"] = new JsonArray(),
             ["steps"] = new JsonArray(new JsonObject { ["object"] = "territory.region", ["description"] = "drop the column region of territory", ["text"] = "ALTER TABLE territory DROP COLUMN region", ["requiresEveryRowToHaveAValue"] = false }),
             ["dropped"] = new JsonArray(new JsonObject { ["description"] = "drop the column region of territory", ["columnId"] = "mssql://mdm/territories.territory/region", ["datasetId"] = "mssql://mdm/territories.territory" }),
         }.ToJsonString())],
         _ => [],
     };
 
-    /// <summary>The run <paramref name="runId"/> read back through the console until it ended, with the steps named <paramref name="step"/>.</summary>
+    /// <summary>The run <paramref name="runId"/> read back through the console until it ended, with the steps named <paramref name="step"/>. A run still queued is not on the runner's record yet, and is read again, as the screens do.</summary>
     private async Task<JsonNode> RunThroughConsoleAsync(string deploy, string runId, string step)
     {
         for (var i = 0; i < 300; i++)
         {
             var read = await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs/{runId}?step={step}");
+            if (read.Status == HttpStatusCode.NotFound && i < 100) { await Task.Delay(100); continue; }
             Assert.True(read.Status == HttpStatusCode.OK, read.Body?.ToJsonString());
             if (read.Body!["run"]!["finished"] is not null) return read.Body["run"]!;
             await Task.Delay(100);
@@ -316,7 +317,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
 
         // Test of a connection: the runner tries the login bound to the slot, and says how far it got (it holds no connection erp, so not far); no value comes back
         var tested = await As(HttpMethod.Post, $"/api/deploys/{deploy}/binding-test", new JsonObject { ["slot"] = "source" });
-        Assert.True(tested.Status == HttpStatusCode.OK, tested.Body?.ToJsonString());
+        Assert.True(tested.Status == HttpStatusCode.OK, $"{tested.Status} {tested.Body?.ToJsonString()}");
         Assert.Equal(("source", "orders", "dev"), ((string?)tested.Body!["test"]!["slot"], (string?)tested.Body["test"]!["package"], (string?)tested.Body["test"]!["channel"]));
         Assert.False((bool)tested.Body["test"]!["ok"]!);
 
@@ -360,6 +361,13 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     [Fact]
     public async Task A_store_models_contract_is_read_then_run_as_approved_through_the_console_after_the_gateways_it_manages_were_asked()
     {
+        // a model's package runs on the runtime dbdatastore-runtime: a stand-in of it is served in dev (its tasks run in this process, so its files are never started)
+        var runtime = Directory.CreateDirectory(Path.Combine(directory, "store-runtime")).FullName;
+        Directory.CreateDirectory(Path.Combine(runtime, "files", "bin"));
+        File.WriteAllText(Path.Combine(runtime, "files", "bin", "dbdatastore.dll"), "a stand-in");
+        File.WriteAllText(Path.Combine(runtime, "package.yaml"), $"schema: package/1\nname: dbdatastore-runtime\nruntime: true\nversion: \"1.0.0\"\nplatform: {DbDataKit.Runner.RuntimePlatforms.Current}\nlaunch: {{ kind: executable, command: dotnet, args: [\"{{runtime}}/bin/dbdatastore.dll\", \"--runner\"] }}\nbuilt_against: {{ dotnet: \"10.0\", kit: \"1\", protocol: dbdatakit.runner.v1 }}\n");
+        DbDataKit.Runner.Api.RunnerPackageInstaller.Install(runner.State, Path.Combine(runtime, "package.yaml"), Path.Combine(runtime, "files"), "dev", "test");
+
         var (draft, build) = await BuildAsync("territories", "store");
         var staged = await DeployAsync("territories", draft, build, new JsonObject { ["channel"] = "dev", ["model"] = "territories", ["bind"] = new JsonObject { ["storage"] = "mdm" } });
         Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
@@ -370,6 +378,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.True(planned.Status == HttpStatusCode.Accepted, planned.Body?.ToJsonString());
         var planRun = (string)planned.Body!["run"]!["run_id"]!;
         var plan = await RunThroughConsoleAsync(deploy, planRun, "contract-report");
+        Assert.True(plan["steps"]!.AsArray().Count == 1, plan.ToJsonString());
         Assert.Equal("c0ffee11", (string?)plan["steps"]![0]!["result"]!["hash"]);
 
         // an approval is never a plain run: it goes through .../contract
@@ -387,14 +396,14 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, blocked.Status);
         Assert.Contains("'Gateway gone'", (string?)blocked.Body!["error"]);
         Assert.Contains("gateway:Gateway gone", (string?)blocked.Body["error"]);
-        Assert.DoesNotContain(tasks.Requests, r => r.Task.Task == "contract" && r.Inputs.ContainsKey("approve"));
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Task == "contract" && !string.IsNullOrEmpty(r.Inputs.GetValueOrDefault("approve")));
 
         var contracted = await As(HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = planRun, ["approve"] = "c0ffee11", ["allowConsumer"] = new JsonArray("gateway:Gateway gone") });
         Assert.True(contracted.Status == HttpStatusCode.Accepted, contracted.Body?.ToJsonString());
         Assert.Equal(1, (int)contracted.Body!["checked"]!);
         var ran = await RunThroughConsoleAsync(deploy, (string)contracted.Body["run"]!["run_id"]!, "contract-report");
         Assert.True((bool)ran["steps"]![0]!["result"]!["applied"]!);
-        var asked = tasks.Requests.Single(r => r.Task.Task == "contract" && r.Inputs.ContainsKey("approve"));
+        var asked = tasks.Requests.Single(r => r.Task.Task == "contract" && !string.IsNullOrEmpty(r.Inputs.GetValueOrDefault("approve")));
         Assert.Equal(("c0ffee11", "mdm_territories"), (asked.Inputs["approve"], asked.Inputs["schema"]));
         var allowances = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.AllowConsumerVerb));
         Assert.Contains(allowances, a => a.Entry.ActorId == personId && a.Entry.Detail!.Contains("gateway:Gateway gone"));

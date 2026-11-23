@@ -22,11 +22,11 @@ public sealed record DeployRunOutcome(int Status, JsonObject Body)
 /// </summary>
 public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions, AuditLog audit)
 {
-    /// <summary>The audit verbs, the same the Workspace server's own run routes wrote.</summary>
+    /// <summary>The audit verbs (the words of the Workspace server's own run routes, in the form an audit verb takes).</summary>
     public const string RunVerb = "build.run";
-    public const string BindingTestVerb = "build.binding-test";
+    public const string BindingTestVerb = "build.binding_test";
     public const string ContractVerb = "build.contract";
-    public const string AllowConsumerVerb = "build.contract.allow-consumer";
+    public const string AllowConsumerVerb = "build.contract.allow_consumer";
 
     private sealed class Refusal(int status, string message) : Exception(message)
     {
@@ -120,8 +120,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         {
             if (deployed is not null) Audit(person, BindingTestVerb, deployed, slot, false, AuditEvent.Refused, new { error = ex.Message });
             return DeployRunOutcome.Error(StatusOf(ex), ex.Message);
-        }
-    }
+        }    }
 
     /// <summary>
     /// Runs the contract plan of a Store model a person read and approved: <paramref name="planRun"/> is the run of <c>contract</c> without an approval whose report has the hash <paramref name="approve"/>. The columns that report drops are

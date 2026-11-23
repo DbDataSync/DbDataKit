@@ -56,6 +56,7 @@ internal sealed class PairedRunner : IAsyncDisposable
             RunnerApi.Map(app, state, () => host, id, new RunnerApiOptions("/api/v1", RunnerCallers.TokenResolver, ServerProducts.Runner, "9.9.9"));
             RunnerPublishApi.Map(app, publishing);
             RunnerConnectionCopyApi.Map(app, state, () => host, "/api/v1", RunnerCallers.TokenResolver);
+            RunnerBindingTestApi.Map(app, state, () => host.Slots, "/api/v1", RunnerCallers.TokenResolver);
             RunnerQualityApi.Map(app, state, "/api/v1", RunnerCallers.TokenResolver, engine: () => host);
         });
         return new PairedRunner(directory, server, host, state, publishing);

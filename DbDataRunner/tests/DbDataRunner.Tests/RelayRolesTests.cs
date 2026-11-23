@@ -31,7 +31,7 @@ public sealed class RelayRolesTests
         { "PUT", "/api/v1/artifacts/" + "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1", ServerRole.Admin },
         { "PUT", "/api/v1/definitions/integration/orders", ServerRole.Admin }, { "PUT", "/api/v1/bindings/dev/integration/orders", ServerRole.Admin }, { "POST", "/api/v1/bindings/dev/integration/orders/test", ServerRole.Admin },
         { "GET", "/api/v1/posture-choices", ServerRole.Viewer }, { "PUT", "/api/v1/posture-choices", ServerRole.Admin },
-        { "GET", $"/api/v1/runs/{Instance}/units", ServerRole.Viewer }, { "GET", $"/api/v1/runs/{Instance}/steps", ServerRole.Viewer },
+        { "GET", $"/api/v1/runs/{Instance}/units", ServerRole.Viewer }, { "GET", $"/api/v1/runs/{Instance}/steps", ServerRole.Viewer }, { "GET", "/api/v1/tasks/orders/dev/load/steps/pass-record", ServerRole.Viewer },
         { "GET", "/api/v1/tasks/orders/dev/load/in-doubt", ServerRole.Operator }, { "POST", "/api/v1/tasks/orders/dev/load/steps/charge/resolve", ServerRole.Operator },
         { "GET", "/api/v1/tasks/orders/dev/load/dead-letters", ServerRole.Operator }, { "POST", $"/api/v1/tasks/orders/dev/load/dead-letters/{Instance}/replay", ServerRole.Operator }, { "POST", $"/api/v1/tasks/orders/dev/load/dead-letters/{Instance}/discard", ServerRole.Operator },
         { "GET", "/api/v1/tasks/orders/dev/load/checkpoints", ServerRole.Operator }, { "GET", "/api/v1/tasks/orders/dev/load/checkpoints/watermark/history", ServerRole.Operator }, { "POST", "/api/v1/tasks/orders/dev/load/checkpoints/watermark/rewind", ServerRole.Operator },
