@@ -492,6 +492,47 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
     }
 
     [Fact]
+    public async Task ThePreflightTask_ReadsEachMappingWithTheRunLogin_RecordsItsFindingsAsSteps_AndWritesNothing()
+    {
+        // the set's preflight, run by the runner as the console runs it on a staged version: the engine's process, the run logins of the slots, a read-only view; each mapping's findings are a step
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        var drain = await rig.DrainRequestAsync(source, "runner-sync");
+        var request = drain with
+        {
+            Task = new TaskRef(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.PreflightTask),
+            Inputs = new Dictionary<string, string> { ["replication"] = "", ["repo_dir"] = "repo" },
+        };
+        var view = Snapshot(request.PackageDirectory!);
+        var target = await TargetFingerprintAsync(_runnerTarget);
+
+        IReadOnlyList<PreflightFinding> Findings(string part, string chain = RunnerRig.Chain)
+        {
+            var documents = new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, ReplicationSetPackage.PreflightTask)).List(chain)
+                .Where(s => s.Name == Preflight.StepName).Select(s => System.Text.Json.Nodes.JsonNode.Parse(s.ResultJson!)).Where(d => (string?)d!["part"] == part).ToList();
+            return Preflight.Findings(documents.TakeLast(1));
+        }
+
+        var result = await rig.Executor.RunAsync(request);
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        var clean = Findings("runner-sync/main");
+        Assert.NotEmpty(clean);
+        Assert.True(clean.All(f => f.Severity != Preflight.Error), string.Join("\n", clean.Select(f => $"[{f.Severity}] {f.Message}")));
+        Assert.NotEmpty(Findings("old-sync/main"));
+
+        // change tracking turned off on the source table: the next preflight is an error naming the statement that turns it on, and still a run that succeeded
+        await ExecuteAsync(_admin, $"ALTER TABLE dbo.[{_sourceTable}] DISABLE CHANGE_TRACKING;");
+        var chain = Guid.CreateVersion7().ToString();   // a run of its own: a step of the same chain would be the first run's
+        var again = await rig.Executor.RunAsync(request with { RunId = Guid.NewGuid(), Chain = chain });
+        Assert.True(again.End.State == TaskEndState.Succeeded, Describe(rig, again));
+        Assert.Contains(Findings("runner-sync/main", chain), f => f.Severity == Preflight.Error && f.Message.Contains("ENABLE CHANGE_TRACKING", StringComparison.OrdinalIgnoreCase));
+
+        // nothing written: the view, and the target's rows
+        Assert.Equal(view, Snapshot(request.PackageDirectory!));
+        Assert.Equal(target, await TargetFingerprintAsync(_runnerTarget));
+    }
+
+    [Fact]
     public async Task AMappingWhoseTargetTableDoesNotExistYet_IsPublished_ItsDrainRefusesNamingTheTable_AndAfterTheSetupIsAppliedTheDrainDelivers()
     {
         // plan 28c E21, owner decision 2026-11-15 (option 1): the set carries a mapping whose target is not there (no target cache, create-if-missing off); its drain refuses, naming the table and

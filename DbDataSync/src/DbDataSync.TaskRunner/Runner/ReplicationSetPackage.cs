@@ -57,6 +57,9 @@ public static class ReplicationSetPackage
     /// <summary>The name of the set's manual-only provisioning task (<see cref="ProvisionJob"/>, plan 28c E21); a replication may not take it.</summary>
     public const string ProvisionTask = DbDataSync.State.RunnerTaskNames.Provision;
 
+    /// <summary>The name of the set's manual, read-only preflight (<see cref="SetPreflightJob"/>), which a control service runs before it serves a version in production; a replication may not take it.</summary>
+    public const string PreflightTask = Preflight.TaskName;
+
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
     private static string TargetDotnet()
@@ -128,6 +131,7 @@ public static class ReplicationSetPackage
             var taskName = NameOf(task.Name);
             if (!PackageManifestValidator.NameRule.IsMatch(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task name `{taskName}`, which is not 1 to 64 lower-case letters, digits, `-` or `_`."); continue; }
             if (taskName == ProvisionTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's provisioning task; rename the replication."); continue; }
+            if (taskName == PreflightTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's preflight; rename the replication."); continue; }
             if (named.TryGetValue(taskName, out var other)) { problems.Add($"{file}: the replications `{other}` and `{task.Name}` both make the task `{taskName}`; rename one of them."); continue; }
             named[taskName] = task.Name;
 
@@ -215,6 +219,9 @@ public static class ReplicationSetPackage
             Inputs = [.. provision.Inputs.Select(i => i.Name == "repo_dir" ? i with { Default = RepoDir } : i)],
             Limits = provision.Limits with { Attempts = 1 },
         });
+
+        // the set's preflight (Design: docs/authoring-metadata.md#a-sync-project): read only, by hand, over the same connections, which a control service runs on a version staged in production before it serves it
+        tasks.Add(Preflight.Declare(allSlots, inputs: SetPreflightSteps.Inputs(RepoDir)));
 
         var manifest = new PackageManifest(package, $"The Sync replication set {package}: {tasks.Count} replication(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
