@@ -54,7 +54,7 @@ dotnet build
 runs (`scripts/runtime-manifest.sh` prints its manifest). To run a replication end to end, write the package with `dbdatasync package publish --to runner --out
 <directory>` and send it to a Runner of your own (`dbdatarunner server run`, see the Runner's README) with the Runner client library
 (`RunnerPublishClient` in `DbDataKit.Runner.Client`), as the console's servers suite does (`DbDataKit/tests/DbDataKit.Server.Servers.Tests`,
-`SyncOnRunner`); the command line itself sends nothing.
+`SyncOnRunner`). The command line itself never sends a package to a Runner.
 
 ## Running the tests
 
