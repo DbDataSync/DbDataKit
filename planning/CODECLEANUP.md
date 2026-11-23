@@ -31,7 +31,7 @@ server as current; what the deleted plans decided and is still true is in the pr
 | CODECLEANUP-1 | Delete the old state path (adapter first: every product opens its state through modules) and fix the `SessionAuthRegistration.cs` comment | none | M | nothing references `StateSchema`, `SchemaVersion` or the older stores; the module tests pass on SQLite, SQL Server and PostgreSQL |
 | CODECLEANUP-2 | Delete `LineageKeeper`, `SyncLineageRuns`, `LocalRunnerState` and `IInitialLoadEnqueuer` with their tests, and the comments that name them | none | S | the solution builds; the Lineage and Sync State suites pass; `git grep` finds none of the four names |
 | CODECLEANUP-3 | Comments and docs that describe a deleted server as current: rewrite or remove them (outside `DbDataSync/architecture/`) | none | S | `git grep -n "DbDataSync.Api\|Build server\|Store server"` outside history files lists only clean-break messages and the release notes |
-| CODECLEANUP-4 | `DbDataSync/architecture/` as CODECLEANUP-P1 says | CODECLEANUP-P1 | S | the folder is gone or holds what CODECLEANUP-P1 kept, and `check_docs_commands.py` passes |
+| CODECLEANUP-4 | `DbDataSync/architecture/` is deleted except `staging-value-types.md` and `runner-coverage-matrix.md`, which the Transfer README and Sync's docs cite | none | S | the folder holds only those two files, and `check_docs_commands.py` passes |
 | CODECLEANUP-5 | The decisions of the deleted plans that a product doc carries only in part: check each against the doc and write what is missing as design (what it does, why, an example), never as a list of decisions: plan 27 section 8's decisions 1 to 34 and 43 to 46 (agents, integrations, chunking) against `docs/agent-tools.md`, `docs/agents/`, `docs/integrations.md` and `docs/knowledge.md`; 27a SD8 to SD17 and SD23 against the same docs; 23a's decisions D1 to D7 and QF1 to QF10 against `Shared/src/DbDataKit.Quality/README.md`; plan 32's custom-view decisions D1 to D9 against `docs/views.md`; 14a D26 and 14's R2a against `docs/semantic/`. A decision that later work seems to have overturned is never dropped: it goes to the owner as a proposed decision of this subject | none | M | checked by hand (it is prose): each decision read against its doc; the commit lists each one as carried (with the doc and section) or as a new proposed decision |
 | CODECLEANUP-6 | (After the owner's sign-off of the migration audit, given 2026-11-18, so no plan reference is removed before its design has a home.) A repository check against references to the deleted plans and their row ids in code, comments, docs, workflows and messages (`plan 33`, `28c E17`, `SC23`, `GP16` and the like), with a baseline of today's occurrences per file that only shrinks; a new reference fails, naming the file and line | none | S | the check and its unit tests run in CI; the baseline lists every file that has references today (about 5,700 in about 2,700 files) |
 | CODECLEANUP-7 | `Shared/` (libraries, tests and web packages): remove the old plan and row references, and rewrite or delete every comment and code doc that is out of date (a deleted server, the embedded runner, pairing by code, a route or type that no longer exists, a "not built yet" that is built); a comment keeps what it explains about the code, not where the work came from | CODECLEANUP-5, CODECLEANUP-6 | L | the check's baseline has no `Shared/` entry; the Shared suites pass |
@@ -47,14 +47,6 @@ server as current; what the deleted plans decided and is still true is in the pr
 ## Needs from other subjects
 
 None.
-
-## Proposed decisions
-
-### CODECLEANUP-P1: `DbDataSync/architecture/` (awaiting the owner)
-
-Option A: delete the folder; git keeps it. Option B: keep only `staging-value-types.md` and `runner-coverage-matrix.md` (cited by the Transfer README and
-Sync's docs) and delete the rest. Option C: keep it as it is. Scenario: a new agent searches for how Sync verifies a load; under C it finds phase notes about
-a server that no longer exists; under A and B it finds `DbDataSync/README.md` and the code. Recommendation: B.
 
 ## Shared areas touched
 

@@ -28,7 +28,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | --- | --- | --- | --- | --- |
 | AUTHORING-1 | The Workspace builds the operations package beside the refresh package, and the control service deploys both to the same channel (WORKSPACEISOLATION-3); the Runs tab offers `init`, `seed`, `apply_plan` and `ack` with their inputs | WORKSPACEISOLATION-3 | M | `WorkspaceBuildPublishTests`: a build stages both packages; vitest of `ProjectRunsPanel`: the four tasks are offered; a conformance run of `seed` started from the console through the control service |
 | AUTHORING-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (WORKSPACEISOLATION-3), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | WORKSPACEISOLATION-3 | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
-| AUTHORING-3 | The mapping preview and the strategy try-run as Runner tasks of the published set, started by the control service as the person (WORKSPACEISOLATION-5), the rows kept where AUTHORING-P1 says | AUTHORING-P1, WORKSPACEISOLATION-5 | M | a Sync conformance test: the preview of a mapping returns its first rows through the Runner; the try-run's SQL runs against the bound login |
+| AUTHORING-3 | The mapping preview and the strategy try-run as Runner tasks of the published set, started by the control service as the person (WORKSPACEISOLATION-5), the preview's rows returned in the call's answer and never stored | WORKSPACEISOLATION-5 | M | a Sync conformance test: the preview of a mapping returns its first rows through the Runner; the try-run's SQL runs against the bound login |
 | AUTHORING-5 | A form editor for a model's `queries:` in a build project (name, description, `sql` or `request`, parameters), checked as you type | none | M | vitest on the form and its YAML; Playwright: add a query with a list parameter, see a translation error at its line, fix it, publish |
 | AUTHORING-17 | Adds to the Runner's built-in package `dbdatakit-metadata` (its tasks `discover` and `describe` exist: `DbDataKit.Runner.Metadata`, the route `POST /api/v1/metadata/{channel}/{task}`, `docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
 | AUTHORING-18 | The binding test without a staged version: by package, channel and slot on the Runner, sent by the control service for a draft (WORKSPACEISOLATION-5), so **Test** works before publish in any channel that binds the slot | WORKSPACEISOLATION-5 | S | a test through the control service: a draft with no build tests its slot in `dev` against a Runner that binds it; the steps come back and no row; a channel that does not bind the slot says so |
@@ -44,6 +44,8 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-13 | The form editor of the `access:` section (rules tables, row rules, column rules) in the Workspace's build and store model panels | none | M | vitest: the form round-trips a model's `access:` section; Playwright: add a column rule, see the check's finding for a missing rules table, publish |
 | AUTHORING-15 | Browser stories of the console's own screens that are written and never run in CI, run there like AUTHORING-9: the agents' evaluation panel (`screens-agents-evaluation.spec.ts`), the Runner's Link flow, the store approvals (`store-approvals.spec.ts`), the monitoring story against real servers (`monitoring.spec.ts`), and the others `docs/ui-coverage.md` lists as not run | none | M | the Playwright specs run in a CI job of the console; `docs/ui-coverage.md` no longer lists them as not run |
 | AUTHORING-16 | Browser stories of the Gateway's screens (shown by the console) that are written and never run in CI, and the missing ones: the semantic model browser and query explorer (`semantic-models-explorer.spec.ts`), the result cache screen (a dataset's hit rate rises after repeated queries, Clear empties it and the next query is a miss), click-to-sort of tables and matrices (`views-sort-print.spec.ts`), the stories that need a real Gateway (`views-apps-addresses`, `views-apps-embed`), and the `semantic-models.spec.ts` and `refresh-run.spec.ts` stories that need the test PostgreSQL | none | M | the Playwright specs run in a CI job against a real Gateway; the cache story passes; `docs/ui-coverage.md` no longer lists them as not run |
+| AUTHORING-25 | On SQL Server, `discover` also lists every database the connection's login can open (`sys.databases`), each with its schemas, and reads the tables of the one asked for (an input `database`); the database pickers offer them. A PostgreSQL connection reads its one database, as today | none | M | a SQL Server conformance test: a login that reads two databases sees both in the cache, and the tables of the second after a read that names it |
+| AUTHORING-26 | A read of a database's shape (`discover`, `describe`) needs the Runner's viewer role, not operator: it changes nothing, and the console has already checked that the person has access to the project | none | S | a person who is a viewer on the project's Runner refreshes the catalog; starting any other task still needs operator |
 
 ## Needs from other subjects
 
@@ -57,12 +59,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 
 ## Proposed decisions
 
-### AUTHORING-P1: where a mapping preview's rows may be kept (awaiting the owner)
-
-Option A: in the Runner's run record as the step result (kept under retention). Option B: only in the answer of the call, never stored. Option C: no preview.
-Scenario: an engineer previews `customers` (20 rows, one with an email address). Under A the rows are readable later by anyone who can read that run; under
-B they are shown once and gone; under C the engineer runs a trial run instead. Recommendation: B.
-
 ### AUTHORING-P7: the built-in package where the group requires signed versions (default, awaiting the owner)
 
 Built as the default: the runner puts `dbdatakit-metadata` in a channel through its own publish, so a group with `require_signatures` on refuses it, and
@@ -70,31 +66,6 @@ the metadata route answers 409 naming the missing signature. Scenario: an admini
 `dev`. Option A (built): the read is refused until signatures are turned off or the package is signed. Option B: the package the runner ships beside its
 program is exempt, because it is the runner's own code, as trusted as the program; the audit line of its install says so. Recommendation: B once
 signatures are built (today no version can be verified, so with the setting on every publish is refused anyway).
-
-### AUTHORING-P8: `discover` reads the one database the connection opens (default, awaiting the owner)
-
-Built as the default: `discover` lists the schemas of the database the connection opens and reads its tables; `databases` in the answer holds that one
-database. Scenario: the connection `crm` (SQL Server) opens the database `crm`, and the same server holds `crm_archive`, which the login can read. Option A
-(built): the cache lists `crm` only; Ana adds a connection `crm_archive` to read the other. Option B: `discover` also lists every database the login can
-open (`sys.databases`, `pg_database`), each with its schemas, and reads tables in the one asked for (an input `database`); the database pickers then
-offer `crm_archive` under `crm`. Recommendation: B for SQL Server, where one connection commonly reaches several databases; A elsewhere (a PostgreSQL
-connection cannot read another database).
-
-### AUTHORING-P9: which Runner role a read of a database's shape needs (default, awaiting the owner)
-
-Built as the default: `POST /api/v1/metadata/{channel}/{task}` needs the operator role, as starting any task does; the console's token carries the person's
-role on that Runner. Scenario: Ana authors the project `crm-to-dw`, and on the project's Runner she holds the viewer role only. Option A (built): her
-Refresh catalog is refused with 403 until an administrator makes her an operator there. Option B: a read of shape needs the viewer role, since it starts
-a run that changes nothing and the console has already checked that she has access to the project. Recommendation: B, matching "anyone with access to
-the project may discover and describe".
-
-### AUTHORING-P10: the built-in package carries every platform's drivers (default, awaiting the owner)
-
-Built as the default: `builtin/dbdatakit-metadata/` is the portable publish of the package (about 60 MB, most of it the native libraries of SQL Server's
-and SQLite's drivers for every platform). The runner stores it once in the group's state per version it installs, and every instance can run it.
-Scenario: a group of one Windows and one Linux runner shares a state; the Linux runner installs the package in `dev`, and the Windows runner claims the
-next read. Option A (built): the Windows runner runs it, its drivers being in the package. Option B: each runner ships the package built for its own
-platform (about 25 MB) and a read is placed on a runner of the same platform as the version served. Recommendation: A while groups may mix platforms.
 
 ## Shared areas touched
 

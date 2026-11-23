@@ -160,7 +160,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-5 | Follows SYNCAUTHORING-16 (the sidebar, the overview with Create mappings and Refresh, the editor's two sides and Column Mapping exist). Designer, the rest of a mapping: Create mappings and Column Mapping take the inferred target types and natural key from SYNCAUTHORING-3 (bulk create by its route); the source filter; **Custom query, not a table** (the query text, no rows); the sub-tabs Notes, Custom Transforms, Bulk Load (`DefaultSegmentingCard`), Provisioning (the mapping's plan, its pending steps as the tab's badge), Pipeline (the overrides), Diagnostics (`traceTiming`), Verify (the `verification:` checks as `ChecksCard`) | SYNCAUTHORING-16, SYNCAUTHORING-4, SYNCAUTHORING-3 | L | Playwright: Create mappings on a table with no primary key writes the inferred natural key and target types; add a row-count verification and a default segmenting by month; the Provisioning badge counts the missing table's step; Files shows the same changes |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | SYNCAUTHORING-4, SYNCAUTHORING-5 | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-9 | The replication set's manual read-only task `preflight` in its own package (`dbdatasync-runtime`), with the run login each replication uses, per mapping, findings as step outputs: on the source, the table and mapped columns exist, the filter's columns exist and it compiles (a zero-row read), the login can read the table (the engine's privilege function, then the zero-row read), change tracking, CDC or a logical slot and publication are on where the reader's strategy needs them (a missing one as a provisioning step of the source side, with its statement: the source side of the provisioning plan, which was a task of AUTHORING before), source types the driver reads, a key where a reader or writer needs one; on the target, the table exists or provisioning can create it (the plan from the live catalog), the login can insert, update and delete and, for provisioning, create and alter (privilege functions, never a trial write), types compatible, keys agreeing with no nullable key column, the `tracking:` schema and tables exist or may be created; nothing is written; started on the version staged in `prod` before activation and as **Re-check** after publish (AUTHORING-22) (`docs/authoring-metadata.md`, "A sync project") | AUTHORING-22 | L | Sync conformance on SQL Server and PostgreSQL: change tracking off on `dbo.orders` is a finding with the statement that enables it, and on it is satisfied; a login without insert on the target is a finding; a filter naming a missing column is a finding; the target's row count and every table are unchanged after the run |
-| SYNCAUTHORING-10 | The rest of the offline checks in the sync draft's check (`SyncOfflineCheck` in `DbDataKit.Authoring.Server`): the key check of the readers and writers that are an engine's own (SQL Server's change tracking, CDC and `MsSqlMerge`, PostgreSQL's `PgLogicalSlot` reader), once SYNCAUTHORING-P19 says where their capabilities come from. Until then each is the note "whether it needs a key is not checked offline". The generic readers and writers, and the types and filters of YAML drivers and of Flight SQL, are built (`docs/authoring-metadata.md`, "A sync project") | none | S | xunit on a sync draft fixture with a cache: an `MsSqlChangeTracking` reader on a source table with no key in the cache is a finding on the mapping's file and line; a `PgLogicalSlot` reader on a keyed table is none |
+| SYNCAUTHORING-10 | The rest of the offline checks in the sync draft's check (`SyncOfflineCheck` in `DbDataKit.Authoring.Server`): the key check of the readers and writers that are an engine's own (SQL Server's change tracking, CDC and `MsSqlMerge`, PostgreSQL's `PgLogicalSlot` reader), once SYNCAUTHORING-3's table of the built-in drivers' capabilities exists. Until then each is the note "whether it needs a key is not checked offline". The generic readers and writers, and the types and filters of YAML drivers and of Flight SQL, are built (`docs/authoring-metadata.md`, "A sync project") | SYNCAUTHORING-3 | S | xunit on a sync draft fixture with a cache: an `MsSqlChangeTracking` reader on a source table with no key in the cache is a finding on the mapping's file and line; a `PgLogicalSlot` reader on a keyed table is none |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package `dbdatakit-metadata` (`docs/authoring-metadata.md`) through Sync's metadata service, started through the console's catalog read as the built-in package's are (AUTHORING-21); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | AUTHORING-21, WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
 | SYNCAUTHORING-12 | Follows SYNCAUTHORING-18 (Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card exist). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (WORKSPACEISOLATION-5) | SYNCAUTHORING-18, SYNCAUTHORING-4, SYNCAUTHORING-5, AUTHORING-6, WORKSPACEISOLATION-5 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
 | SYNCAUTHORING-19 | Sync uses the shared types: Sync's own type list (`CanonicalType` and `CanonicalTypeKind` in `DbDataKit.Sync.Core`) is replaced by the shared `DbDataKit.Dialect.CanonicalType`, **adapter first**, and every rule that exists only in Sync's conversion (`SharedTypes`) moves into the shared dialects so every product answers the same: an unsigned integer widened to the next signed type where the target has no unsigned type (today only DuckDB's reading does it), and a time or timestamp with no stated precision meaning microseconds; first the list of every case Sync needs that the shared types lack, each added to the shared types with a test, including whether SQL Server's `tinyint` (0 to 255) is read as a signed 8-bit integer; then Sync's dialects, drivers and `driver.yaml` type maps read and write the shared type, and `SharedTypes` is removed | none | M | the shared dialect tests cover each case on the list; DbDataSync's unit suite (`Category!=Integration`) and the moved `DbDataKit.Sync.*` tests pass with no test changed except where a case on the list changes an answer (each named in the commit); no `DbDataSync`/`DbDataKit.Sync` type named `CanonicalType` remains |
@@ -190,15 +190,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 
 ## Proposed decisions
 
-### SYNCAUTHORING-P14: words inside a function call in a source filter (default, awaiting the owner)
-
-The offline check compares each name a source filter uses as a column with the cached table. A lexer cannot tell a column from an argument a function
-names, so a bare word inside a function's parentheses that is no column of the table is not reported; a quoted name there is. Scenario: the filter
-`DATEADD(day, -7, GETDATE()) < created AND UPPER(stauts) = 'OPEN'` reports nothing about `day` (right) and nothing about the misspelt `stauts` (missed),
-which `preflight`'s zero-row read finds. Option A, as built. Option B, report such a word as a note ("not a column of the table; checked when the set
-runs") rather than a warning. Option C, a per-dialect list of the words functions take (date parts, `AS` types), and report any other word. Recommendation:
-A now, C if authors ask for it.
-
 ### SYNCAUTHORING-P15: the shared Sync libraries keep the namespaces `DbDataSync.*` (default, awaiting the owner)
 
 The assemblies are `DbDataKit.Sync.Core`, `DbDataKit.Sync.Drivers.Abstractions` and so on, and their types keep the names they had:
@@ -210,50 +201,6 @@ option B each file's `using` lines change when SYNCAUTHORING-8 lands, or a scrip
 not be found". Option A, keep `DbDataSync.*` as the public names of Sync's script and driver contracts (built). Option B, rename them to
 `DbDataKit.Sync.*` in SYNCAUTHORING-8, with a check that names the old `using` in every script of a set. Recommendation: A, since the names are part
 of what an author's script compiles against.
-
-### SYNCAUTHORING-P16: what moved beyond the four named libraries (default, awaiting the owner)
-
-The column reader (`MappingColumnReader`) is in Sync's provisioning library with the provisioner that plans and applies DDL (`MappingProvisioner`), and
-the driver descriptors build on the generic drivers (`DbDataSync.Drivers.Generic`: the readers, staging providers and writers every SQL driver shares,
-and the rules for a target table and a natural key). Both moved whole, so the Workspace's process now has code that can open a database and run DDL.
-Nothing in the Workspace calls it: `SyncCatalogColumns` answers the column reader from the draft's `catalog-cache.yaml`, and the Workspace has no
-connection factory. Scenario: a later route calls `MappingProvisioner.GetPlansAsync` for a draft; it needs an `IConnectionFactory`, which the Workspace
-does not have, so the call cannot be made without adding one, which WORKSPACEISOLATION would refuse in review. Option A, as built. Option B, split
-the column reader, the natural-key rule and the target-table planner into their own shared project, and leave the provisioner and the readers and
-writers in DbDataSync. Recommendation: A; B moves code the engine keeps calling as one unit, for a guarantee a review already gives.
-
-### SYNCAUTHORING-P17: the generic drivers' engine tests stay in DbDataSync (default, awaiting the owner)
-
-`DbDataSync.Drivers.Generic.Tests` keeps `GenericDriverTests`, `GenericDriverTestDatabase` and `QueryCatalogTests` (category Integration), unchanged,
-running through the forwarding assembly; the other 26 files moved to `Shared/tests/DbDataKit.Sync.Drivers.Generic.Tests`. Those three connect to
-Sync's PostgreSQL (`DBDATAKIT_TEST_POSTGRES_LOGICAL`, the login `dbdatasync`) and do not skip when it is missing, while the shared libraries' CI
-runs without engines unless it is asked for them, and then sets only `DBDATAKIT_TEST_POSTGRES`. Scenario: moved to `Shared/tests`, the shared CI
-run fails on a pull request with "Connection refused" on port 15432.
-Option A, as built: they stay with Sync's integration job, and SYNCAUTHORING-8 points them at the shared project. Option B, move them and skip each
-when its engine's variable is not set (`Assert.Skip`), and start the engines they need in the shared CI. Recommendation: A.
-
-### SYNCAUTHORING-P18: where the tests of `DbDataKit.Authoring.Server` live (default, awaiting the owner)
-
-The in-process test of this move (`SyncInProcessTests`: a mapping's natural key derived from the cached source key, through Sync's shared libraries,
-and no `DbDataSync.*` assembly loaded) is in a new project, `Shared/tests/DbDataKit.Authoring.Server.Tests`, as the repository's rule puts a shared
-library's tests. The Workspace's other tests of the same library (the sync draft's check, scripts, provisioning plan) are in
-`DbDataWorkspace/tests/DbDataWorkspace.Tests` and start the Workspace's host. Scenario: SYNCAUTHORING-3 adds the route of the inferred key; its test
-of the route goes beside the host's tests, and a test of the answer with no host can go to either. Option A, as built: tests that need no host in
-`DbDataKit.Authoring.Server.Tests`, tests of routes in `DbDataWorkspace.Tests`. Option B, everything in `DbDataWorkspace.Tests` and no new project.
-Recommendation: A, since a test with no host runs in a second rather than starting a server.
-
-### SYNCAUTHORING-P19: the capabilities of the built-in drivers for SYNCAUTHORING-3 (default, awaiting the owner)
-
-A connection's readers, staging providers and writers are what its driver registers. The generic kinds (`Watermark`, `BatchReload`, `ChangeApply`, ...)
-are in the shared `DbDataKit.Sync.Drivers.Generic`, but the built-in drivers that add their own (SQL Server's change tracking and CDC readers and
-`SqlBulkCopy` staging, PostgreSQL's logical reader) are `DbDataSync.Drivers.MsSql`, `.Postgres`, `.MySql`, `.Oracle`, `.DuckDb` and `.ArrowFlightSql`,
-which did not move: each brings its database client (Microsoft.Data.SqlClient, Npgsql, MySqlConnector, Oracle's client, DuckDB). Scenario: the
-Pipeline sub-tab of a replication from SQL Server asks the Workspace for the source's readers; with only the moved code it can list the generic kinds,
-not `MsSqlChangeTracking`. The same gap is SYNCAUTHORING-10's key check of the engine-specific readers and writers (the generic ones are checked). Option A, move the built-in driver projects
-too (the Workspace then carries every database client). Option B, a table of each built-in driver's capabilities (its kinds, which need a key, its
-options) in a shared project, which the drivers register from and which a DbDataSync test holds equal to what each driver registers. Option C,
-SYNCAUTHORING-3 answers only the generic kinds and descriptor drivers, and the screens offer the engine-specific kinds from a list of their own.
-Recommendation: B, built at the start of SYNCAUTHORING-3.
 
 ### SYNCAUTHORING-P20: how the filter of a YAML driver's connection is read offline (default, awaiting the owner)
 
