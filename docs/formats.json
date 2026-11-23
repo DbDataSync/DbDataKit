@@ -320,6 +320,16 @@
       "note": "the console's https address, the SHA-256 thumbprint of its certificate (`sha256:` and 64 hex digits), the single-use join token and optionally the address the console calls the server at; read and written by `JoinRequestFile` of DbDataKit.Web (readable by its owner only on Linux), which the servers' `pair` command and join step are to use (not built yet); another schema, an unknown key or a missing key is refused naming the file; the token in it never leaves the machine (the join carries a signature made with a key derived from it)",
       "version_source": { "file": "Shared/src/DbDataKit.Web/JoinRequestFile.cs", "pattern": "Schema = \"join-request/(\\d+)\";" },
       "files": [ { "path": "Shared/src/DbDataKit.Web/JoinRequestFile.cs", "sha256": null } ]
+    },
+    {
+      "id": "build-record",
+      "title": "The record of the build a deployed version comes from (definition_version.build_record and the console's deploys, schema: build-record/N)",
+      "current": 1,
+      "previous": 1,
+      "status": "open",
+      "note": "one line of JSON written by the control service from the Workspace server's description of a build (BuildRecord.Text): the Workspace server, project, kind, workspace, build, commit, uncommitted changes, the item sent and the SHA-256 of its list of files, and what the kind's validators found; signed with the version (the message dbdatakit-definition/2 holds its SHA-256), kept as sent by the Runner or Gateway and by the console's deploys module; a reader that finds another schema treats the text as no record (BuildRecord.Read returns null); docs/publishing.md, the build record",
+      "version_source": { "file": "Shared/src/DbDataKit.Deploy/BuildRecord.cs", "pattern": "Schema = \"build-record/(\\d+)\";" },
+      "files": [ { "path": "Shared/src/DbDataKit.Deploy/BuildRecord.cs", "sha256": null } ]
     }
   ]
 }
