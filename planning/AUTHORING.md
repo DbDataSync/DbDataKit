@@ -53,7 +53,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - PUBLISHING-2: the per-kind routes removed and every caller on the shared route, before AUTHORING-7.
 - CHANNELS-1: the client that puts a connection copy on a Runner, sends its login and binds it for a channel, before AUTHORING-19.
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1 and AUTHORING-2 (the target Runner's platform).
-- WORKSPACEISOLATION-6: the Gateway catalog refresh moves to the control service, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`).
+- The Gateway catalog refresh is the console's `POST api/workspace-catalog/{workspace}/{project}/gateway-read` (`ConsoleCatalogRead.GatewayAsync`; `docs/authoring-metadata.md`, "A read from a Gateway").
 
 ## Open designs
 

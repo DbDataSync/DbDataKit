@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using DbDataKit.Catalog;
+using DbDataKit.Deploy;
 using DbDataKit.Runner;
 using DbDataKit.Web.Trust;
 
@@ -7,6 +9,9 @@ namespace DbDataKit.Server;
 
 /// <summary>What a screen asks to read: the Runner (a registered server's id or name), the channel, the project's connection, and optionally one schema or one table of it.</summary>
 public sealed record CatalogReadBody(string? Runner, string? Channel, string? Connection, string? Schema = null, string? Table = null);
+
+/// <summary>What a screen asks to read from a Gateway: the Gateway (a registered server's id or name), the project's connection, the Gateway's data source for it (the connection's name when none is given), and whether the person confirmed reading a data source made by hand.</summary>
+public sealed record GatewayReadBody(string? Gateway, string? Connection, [property: JsonPropertyName("data_source")] string? DataSource = null, bool Adopt = false);
 
 /// <summary>An answer of <see cref="ConsoleCatalogRead"/>: the status the console answers with and its JSON body.</summary>
 public sealed record CatalogReadAnswer(int Status, JsonObject Body)
@@ -19,9 +24,13 @@ public sealed record CatalogReadAnswer(int Status, JsonObject Body)
 /// becomes on a Runner, and the console starts the Runner's built-in task <c>discover</c> for that package, the connection's slot and the channel (<c>POST /api/v1/metadata/{channel}/discover</c> with the person named). The Workspace
 /// server is never in the path of the read: it holds no login and calls no Runner. The console waits up to <see cref="Wait"/> for the run; after that it answers the run, and the screen asks again with the run's id until it ends.
 /// The answer of a finished read is the connection as a file of <c>catalog-cache/2</c> holding that one connection, recorded as read from the Runner and the channel; the screen compares it with the cache it holds and replaces the entry.
+/// <para>
+/// A connection that is a data source of a Gateway is read from that Gateway instead (<see cref="GatewayAsync"/>): the console asks the Gateway's schema call as the person, and the Gateway reads with its own login. The Workspace server is
+/// not in that path either.
+/// </para>
 /// Design: docs/authoring-metadata.md#the-catalog-cache
 /// </summary>
-public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay relay)
+public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions)
 {
     /// <summary>The built-in package and its task, as the Runner names them.</summary>
     private const string BuiltIn = "dbdatakit-metadata";
@@ -42,7 +51,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     /// </summary>
     public async Task<CatalogReadAnswer> ChannelsAsync(string workspace, string project, string? runner, string? connection, CancellationToken ct)
     {
-        var (package, refused) = await ProjectAsync(workspace, project, ct);
+        var (package, refused) = await PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
         if (SlotProblem(connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
         var (target, problem) = await RunnerAsync(runner, ct);
@@ -79,7 +88,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     /// <summary>Starts the read and waits for it up to <see cref="Wait"/>: the finished read (200), the run still going (202), or the run's failure (422).</summary>
     public async Task<CatalogReadAnswer> StartAsync(string workspace, string project, CatalogReadBody body, string person, CancellationToken ct)
     {
-        var (package, refused) = await ProjectAsync(workspace, project, ct);
+        var (package, refused) = await PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
         if (SlotProblem(body.Connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
         if (!PackageManifestValidator.NameRule.IsMatch(body.Channel ?? "")) return CatalogReadAnswer.Error(400, "Name the channel to read from: `channel` (lower-case letters, digits, - and _).");
@@ -107,7 +116,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     /// <summary>The read the screen follows after the console stopped waiting: as <see cref="StartAsync"/> answers, for the run <paramref name="run"/>. The person must still have access to the project.</summary>
     public async Task<CatalogReadAnswer> FollowAsync(string workspace, string project, string? runner, string? channel, string? connection, string run, CancellationToken ct)
     {
-        var (_, refused) = await ProjectAsync(workspace, project, ct);
+        var (_, refused) = await PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
         if (SlotProblem(connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
         if (!PackageManifestValidator.NameRule.IsMatch(channel ?? "")) return CatalogReadAnswer.Error(400, "Name the channel the read was started in: `channel`.");
@@ -168,17 +177,70 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         return new(200, done);
     }
 
-    /// <summary>The project's package on a Runner, asked of the Workspace server as the signed-in person (which also says whether they may read the project); a refusal is the Workspace server's own words.</summary>
-    private async Task<(string? Package, CatalogReadAnswer? Error)> ProjectAsync(string workspace, string project, CancellationToken ct)
+    /// <summary>
+    /// The shape of a data source of a Gateway, for the project's connection: the Gateway's schema call (<c>POST /api/v1/data-sources/{name}/schema</c>, <see cref="GatewayCalls.ReadSchemaAsync"/>) as the signed-in person, which the
+    /// Gateway answers with the tables, columns and keys it reads with its own login. A data source the Gateway says was made by hand is read only once the person confirmed it (<see cref="GatewayReadBody.Adopt"/>); until then the
+    /// refusal carries <c>adopt</c> (the data source and who made it) for the screen to ask. The answer is a file of <c>catalog-cache/2</c> holding that one connection, recorded as read from the Gateway and checked by the cache's strict
+    /// reader; the screen compares it with the cache it holds, as it does a Runner's read. An app is refused: it has no connections.
+    /// </summary>
+    public async Task<CatalogReadAnswer> GatewayAsync(string workspace, string project, GatewayReadBody body, RelayPerson person, CancellationToken ct)
+    {
+        var (found, refused) = await ProjectAsync(workspace, project, ct);
+        if (refused is not null) return refused;
+        if ((string?)found!["kind"] == "app") return CatalogReadAnswer.Error(409, $"The project '{project}' is an app, which has no connections, so it has no catalog to read.");
+        if (SlotProblem(body.Connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
+        if (string.IsNullOrWhiteSpace(body.Gateway)) return CatalogReadAnswer.Error(400, "Name the Gateway to read from: `gateway`.");
+        if (instances.Registry.Find(body.Gateway) is not { } gateway) return CatalogReadAnswer.Error(404, $"No server '{body.Gateway}' is registered.");
+        if (await relay.ProductOfAsync(gateway, ct) != ServerProducts.Gateway) return CatalogReadAnswer.Error(409, $"'{gateway.Name}' is not a Gateway: the catalog of a data source is read from a Gateway.");
+        var dataSource = string.IsNullOrWhiteSpace(body.DataSource) ? body.Connection! : body.DataSource.Trim();
+
+        var link = promotions.LinkFor(gateway.InstanceId, person) ?? throw new InvalidOperationException("A registered server has a link.");
+        var target = new DeployTarget(gateway.Name, gateway.Url.ToString().TrimEnd('/'), gateway.InstanceId, DeployProducts.Gateway);
+        JsonObject schema;
+        try { schema = await GatewayCalls.ReadSchemaAsync(link, target, dataSource, body.Adopt, _ => { }, ct); }
+        catch (DeployException ex)
+        {
+            var refusal = CatalogReadAnswer.Error(ex.Status, ex.Message);
+            if (ex.Adopt is not null) refusal.Body["adopt"] = ex.Adopt.DeepClone();
+            return refusal;
+        }
+
+        var at = DateTimeOffset.UtcNow;
+        string text;
+        try { text = CatalogCache.Write(CatalogCache.Refreshed(null, body.Connection!, schema, gateway.Name, DeployProducts.Gateway, at)); }
+        catch (InvalidDataException ex) { return CatalogReadAnswer.Error(502, $"The catalog {gateway.Name} answered for '{dataSource}' cannot be a catalog cache: {ex.Message}"); }
+        // the cache's strict reader, the one the draft's check runs: a value that looks like a secret or a row is refused here, before the screen ever holds it
+        var load = CatalogCache.Load(text);
+        if (!load.Ok)
+            return CatalogReadAnswer.Error(502, $"The catalog {gateway.Name} answered for '{dataSource}' is not one the cache can hold: {string.Join(" ", load.Diagnostics.Select(d => d.Message))}");
+        var entry = load.Cache!.Connections[body.Connection!];
+        return new(200, new JsonObject
+        {
+            ["state"] = "done", ["gateway"] = gateway.InstanceId, ["gateway_name"] = gateway.Name, ["connection"] = body.Connection, ["data_source"] = dataSource,
+            ["cache"] = text, ["tables"] = entry.Tables.Count, ["columns"] = entry.Tables.Sum(t => t.Columns.Count),
+            ["read"] = new JsonObject { ["server"] = gateway.Name, ["product"] = DeployProducts.Gateway, ["at"] = CatalogCache.Stamp(at) },
+        });
+    }
+
+    /// <summary>The project's package on a Runner (<see cref="ProjectAsync"/>); a project whose kind makes none is refused, since its connections are not read on a Runner.</summary>
+    private async Task<(string? Package, CatalogReadAnswer? Error)> PackageAsync(string workspace, string project, CancellationToken ct)
+    {
+        var (found, refused) = await ProjectAsync(workspace, project, ct);
+        if (refused is not null) return (null, refused);
+        if ((string?)found!["package"] is not { Length: > 0 } package)
+            return (null, CatalogReadAnswer.Error(409, $"The project '{project}' is a {(string?)found["kind"] ?? "kind of"} project, which makes no package of tasks on a Runner, so its connections are not read there."));
+        return (package, null);
+    }
+
+    /// <summary>The project as the Workspace server describes it (its kind, and the package it becomes on a Runner), asked as the signed-in person, which also says whether they may read the project; a refusal is the Workspace server's own words.</summary>
+    private async Task<(JsonObject? Project, CatalogReadAnswer? Error)> ProjectAsync(string workspace, string project, CancellationToken ct)
     {
         if (instances.Registry.Find(workspace) is not { } server) return (null, CatalogReadAnswer.Error(404, $"No server '{workspace}' is registered."));
         if (await relay.ProductOfAsync(server, ct) != ServerProducts.Workspace) return (null, CatalogReadAnswer.Error(409, $"'{server.Name}' is not a Workspace server."));
         var (status, body) = await relay.CallAsync(server, HttpMethod.Get, $"/api/v1/projects/{Uri.EscapeDataString(project)}", null, ct);
         if (status == 404) return (null, CatalogReadAnswer.Error(404, $"{server.Name} has no project '{project}'."));
         if (status != 200 || body is not JsonObject found) return (null, Passed(status, body, $"{server.Name} did not say whether you may read the project '{project}'."));
-        if ((string?)found["package"] is not { Length: > 0 } package)
-            return (null, CatalogReadAnswer.Error(409, $"The project '{project}' is a {(string?)found["kind"] ?? "kind of"} project, which makes no package of tasks on a Runner, so its connections are not read there."));
-        return (package, null);
+        return (found, null);
     }
 
     private async Task<(RegisteredInstance? Runner, CatalogReadAnswer? Error)> RunnerAsync(string? runner, CancellationToken ct)

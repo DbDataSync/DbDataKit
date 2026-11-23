@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
-import { workspaceApi, type AdoptionRequest, type CatalogRefreshAnswer, type CatalogRefreshRequest, type PublishTarget } from '../api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { ApiError, ErrorBanner, useModule } from '@dbdatakit/shell'
+import { workspaceApi, type AdoptionRequest } from '../api'
 import { adoptionRequest, catalogAdoptionSentence, refreshButton, refreshedLine, refreshLabel } from '../model'
 import { shapePreview } from '../catalogPreview'
+import { catalogReadApi, refreshOutcome, workspaceServerOf, type GatewayReadAnswer, type GatewayReadRequest, type RunnerChoice } from '../catalogRefresh'
 import { BuildImportPanel } from './BuildImportPanel'
-import { CatalogRefresh } from './CatalogRefresh'
+import { CatalogRefresh, RefreshDifference } from './CatalogRefresh'
 import { CATALOG_CACHE_FILE, readCatalogCache, readLine, tableLabel, type CacheRead, type CacheTable, type CatalogCache } from '../catalogCache'
 import { useDraftFile, useDraftOrNull } from '../draft'
 
@@ -71,24 +72,30 @@ export function useCatalogRead(project: string, id: string): { read: CacheRead |
 }
 
 /**
- * **Refresh from a data source** (plan 33 SC20j, D20): the Workspace holds no login, so a paired Gateway, which does, answers a read-only question (the tables and columns of a data source: names, types, keys, never a row) and the answer is written into the
- * draft as `catalog-cache.yaml`. A data source made by hand is asked for only after the confirmation `adoption` shows (the Gateway records who and when). It sends nothing itself: `onRefresh` gets the request, so the screen and its tests say the same.
+ * **Refresh from a Gateway**: a Gateway the console has, which holds the data source's login, answers a read-only question (the tables and columns of a data source: names, types, keys, never a row), asked by the console as the
+ * signed-in person. A data source made by hand is asked for only after the confirmation `adoption` shows (the Gateway records who and when). It sends nothing itself: `onRefresh` gets the request, so the screen and its tests say the same.
  */
-export function RefreshForm({ canWrite, targets, busy, onRefresh, adoption = null, onCancelAdoption, initialTarget = '', initialConnection = '', initialDataSource = '' }: {
-  canWrite: boolean; targets: readonly PublishTarget[]; busy: boolean; onRefresh: (request: CatalogRefreshRequest) => void
-  adoption?: AdoptionRequest | null; onCancelAdoption?: () => void; initialTarget?: string; initialConnection?: string; initialDataSource?: string
+export function RefreshForm({ canWrite, gateways, connections, busy, onRefresh, adoption = null, onCancelAdoption, initialGateway = '', initialConnection = '', initialDataSource = '' }: {
+  canWrite: boolean; gateways: readonly RunnerChoice[]; connections: readonly string[]; busy: boolean; onRefresh: (request: GatewayReadRequest) => void
+  adoption?: AdoptionRequest | null; onCancelAdoption?: () => void; initialGateway?: string; initialConnection?: string; initialDataSource?: string
 }) {
-  const [target, setTarget] = useState(initialTarget)
-  const [connection, setConnection] = useState(initialConnection)
+  const [picked, setGateway] = useState(initialGateway)
+  const [named, setConnection] = useState(initialConnection)
   const [dataSource, setDataSource] = useState(initialDataSource)
-  const gateways = targets.filter((t) => t.product === 'gateway' && t.can_publish)
-  const state = refreshButton({ canWrite, target, connection, busy, targets })
-  const request = (adopt: boolean): CatalogRefreshRequest => ({ target: target.trim(), connection: connection.trim(), ...(dataSource.trim() !== '' ? { data_source: dataSource.trim() } : {}), ...(adopt ? { adopt: true } : {}) })
+  const gateway = picked || gateways[0]?.id || ''
+  const connection = named || connections[0] || ''
+  const state = refreshButton({ canWrite, gateway, connection, busy, gateways })
+  const request = (adopt: boolean): GatewayReadRequest => ({ gateway, connection: connection.trim(), ...(dataSource.trim() !== '' ? { data_source: dataSource.trim() } : {}), ...(adopt ? { adopt: true } : {}) })
   return (
     <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0 10px' }} data-testid="wsp-catalog-refresh" onSubmit={(e) => { e.preventDefault(); if (state.enabled) onRefresh(request(false)) }}>
-      <input className="input mono" list="wsp-catalog-targets" aria-label="Gateway to read the catalog from" placeholder="publisher key of a Gateway" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-catalog-refresh-target" />
-      <datalist id="wsp-catalog-targets">{gateways.map((t) => <option key={t.name} value={t.name}>{t.gateway ?? 'not paired'}</option>)}</datalist>
-      <input className="input mono" aria-label="Connection of the project" placeholder="connection of the project" value={connection} onChange={(e) => setConnection(e.target.value)} data-testid="wsp-catalog-refresh-connection" />
+      <select className="input" aria-label="Gateway to read the catalog from" value={gateway} onChange={(e) => setGateway(e.target.value)} data-testid="wsp-catalog-refresh-gateway">
+        {gateways.length === 0 && <option value="">no Gateway is paired</option>}
+        {gateways.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+      <select className="input mono" aria-label="Connection of the project" value={connection} onChange={(e) => setConnection(e.target.value)} data-testid="wsp-catalog-refresh-connection">
+        {connections.length === 0 && <option value="">the draft has no connection</option>}
+        {connections.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
       <input className="input mono" aria-label="Data source on the Gateway" placeholder="data source (blank: the connection's name)" value={dataSource} onChange={(e) => setDataSource(e.target.value)} data-testid="wsp-catalog-refresh-datasource" />
       <button type="submit" className="btn" disabled={!state.enabled} title={state.why ?? undefined} data-testid="wsp-catalog-refresh-go">{refreshLabel(connection, dataSource)}</button>
       {state.why && <span className="hint" data-testid="wsp-catalog-refresh-why">{state.why}</span>}
@@ -155,6 +162,43 @@ function RunnerRefresh({ cache, canWrite, project }: { cache: CatalogCache | nul
 }
 
 /**
+ * **Refresh from a Gateway** on the Catalog tab: the console asks a Gateway it has for the shape of one of its data sources, as the signed-in person; the
+ * Workspace server is not asked. The difference with the cache the draft shows (its unsaved edit included) is shown first; accepted, the new cache is an
+ * unsaved edit of the draft, as with a Runner's read.
+ */
+function GatewayRefresh({ canWrite, project }: { canWrite: boolean; project: string }) {
+  const draft = useDraftOrNull()!
+  const file = useDraftFile(CATALOG_CACHE_FILE)
+  const workspace = workspaceServerOf(useModule().apiBase)
+  const gateways = useQuery({ queryKey: ['console', 'gateways'], queryFn: catalogReadApi.gateways, enabled: workspace !== null, retry: false })
+  const [settled, setSettled] = useState(false)
+  const read = useMutation<GatewayReadAnswer, Error, GatewayReadRequest>({ mutationFn: (body) => catalogReadApi.gatewayRead(workspace!, project, body), onMutate: () => setSettled(false) })
+  const answer = read.data
+  const outcome = answer && !settled ? refreshOutcome(file.text, answer.cache, answer.connection) : undefined
+  if (workspace === null) return <div className="hint" data-testid="wsp-gateway-refresh-unavailable">A read from a Gateway is asked through the console: open this draft from the console's Workspace screens.</div>
+  return (
+    <div className="card" style={{ margin: '6px 0 10px' }} data-testid="wsp-gateway-refresh">
+      <div className="card-body">
+        <div className="hint" style={{ marginBottom: 6 }}>Read the shape of a Gateway's data source, with the login the Gateway holds. Only names and types are read, never a row.</div>
+        <RefreshForm canWrite={canWrite && draft.canEdit} gateways={gateways.data ?? []} connections={draftConnections(draft.paths)} busy={read.isPending} onRefresh={(request) => read.mutate(request)}
+          adoption={read.isError && read.error instanceof ApiError ? adoptionRequest(read.error.body) : null} onCancelAdoption={read.reset} />
+        <ErrorBanner error={gateways.error} />
+        {read.isPending && <div className="hint" data-testid="wsp-catalog-refresh-progress">Asking the Gateway for the tables and columns of the data source...</div>}
+        {read.isError && <div data-testid="wsp-catalog-refresh-refused"><ErrorBanner error={read.error} /></div>}
+        {outcome && !outcome.ok && <div className="banner error" role="alert" data-testid="wsp-refresh-refused"><span className="mark">!</span><span>{outcome.problem}</span></div>}
+        {outcome?.ok && answer && (
+          <>
+            <div className="hint" data-testid="wsp-catalog-refreshed">{refreshedLine(answer)}</div>
+            <RefreshDifference difference={outcome.difference} canEdit={canWrite && draft.canEdit}
+              onAccept={() => { draft.edit(CATALOG_CACHE_FILE, outcome.text); setSettled(true) }} onDismiss={() => setSettled(true)} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
  * The cache of a draft, read through the file route and checked by the twin reader, or the unsaved edit of it when there is one; with the refresh from
  * a Runner and the refresh from a Gateway above it.
  */
@@ -166,24 +210,11 @@ export function CatalogPanel({ project, id, onOpen, canWrite = true, kind }: { p
   const present = saved.present || unsaved !== undefined
   const error = saved.error
   const [preview, setPreview] = useState<string | null>(null)
-  const client = useQueryClient()
-  const targets = useQuery({ queryKey: ['workspace', 'targets', 'all'], queryFn: () => workspaceApi.publishTargets(), retry: false })
-  const refresh = useMutation<CatalogRefreshAnswer, Error, CatalogRefreshRequest>({
-    mutationFn: (request) => workspaceApi.refreshCatalog(project, id, request),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['workspace', 'files', project, id] })
-      void client.invalidateQueries({ queryKey: ['workspace', 'catalog', project, id] })
-    },
-  })
   return (
     <>
       {draft && <RunnerRefresh cache={read?.cache ?? null} canWrite={canWrite} project={project} />}
+      {draft && <GatewayRefresh canWrite={canWrite} project={project} />}
       {unsaved !== undefined && <div className="hint" data-testid="wsp-catalog-unsaved">The cache below is an unsaved edit of the draft: save it to keep it.</div>}
-      <RefreshForm canWrite={canWrite} targets={targets.data ?? []} busy={refresh.isPending} onRefresh={(request) => refresh.mutate(request)}
-        adoption={refresh.isError && refresh.error instanceof ApiError ? adoptionRequest(refresh.error.body) : null} onCancelAdoption={refresh.reset} />
-      {refresh.isPending && <div className="hint" data-testid="wsp-catalog-refresh-progress">Asking the Gateway for the tables and columns of the data source...</div>}
-      {refresh.isError && <div data-testid="wsp-catalog-refresh-refused"><ErrorBanner error={refresh.error} /></div>}
-      {refresh.isSuccess && <div className="empty" data-testid="wsp-catalog-refreshed">{refreshedLine(refresh.data)}</div>}
       <ErrorBanner error={error} />
       <CatalogView read={read} present={present} onOpen={onOpen} preview={preview} onPreview={setPreview} />
       {kind === 'build' && read?.cache && Object.keys(read.cache.connections).length > 0 && <BuildImportPanel project={project} id={id} connections={read.cache.connections} canWrite={canWrite} />}
