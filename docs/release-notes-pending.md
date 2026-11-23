@@ -116,6 +116,26 @@ release moves the entries into its notes and empties this file.
 
 - **New: a replication's page in the Designer of a Workspace sync project.** It has the tabs Overview (the source and target connections and databases, the schedule) and Table Mappings (the source's tables with **Create mappings**, and a mapping's two sides and **Column Mapping**), with **Enabled**, **Save settings** and **Delete** in its chrome. The databases, tables and columns are those of the draft's `catalog-cache.yaml`. Each change is an unsaved edit of the draft's file, the same one Files shows, and keeps the file's comments and the keys the page does not show. What to do: nothing; everything the page does not offer is still edited in Files.
 
+## Column types: one set of answers for every product
+
+- **Fixed: Sync no longer reads SQL Server's `tinyint` (0 to 255) as a signed 8-bit integer, nor MySQL's unsigned integers as signed ones.** A
+  replication into MySQL or DuckDB created a signed `tinyint`, and values from 128 to 255 failed on write; MySQL `int unsigned` and `bigint unsigned`
+  became `int` and `bigint`, and values above their signed maximum failed. Sync now writes `tinyint` on SQL Server, `tinyint unsigned` on MySQL and
+  `utinyint` on DuckDB, and the next wider signed type on PostgreSQL and Oracle. A target made before shows a type change in its next provisioning
+  plan (for example SQL Server `smallint` to `tinyint`); apply it or leave it. DuckDB's `UTINYINT` to `UBIGINT` are written back as the same type
+  where the target has unsigned types, where Sync wrote `smallint` to `decimal(20,0)`.
+- **Fixed: a decimal with no stated precision (PostgreSQL's `numeric`) is no longer rounded to a whole number.** Sync created `numeric(18,0)` or
+  `decimal(18,0)`, so 12.75 arrived as 13; Transfer and the Store created `decimal(18,0)` on SQL Server and `decimal(10,0)` on MySQL. Every product now
+  writes PostgreSQL's `numeric` on PostgreSQL and `decimal(38,9)` (`number(38,9)` on Oracle) elsewhere, with a note. A Sync target made before shows a
+  type change in its next provisioning plan.
+- **Changed: a time or timestamp with no stated precision is `time(6)`, `datetime(6)` or `timestamp(6)` on MySQL in every product**, where Transfer
+  and the Store wrote whole seconds (Sync already wrote microseconds).
+- **Changed: SQL Server's and MySQL's `binary(n)` stay fixed-length in Transfer and the Store too** (Sync already kept them): a `binary(16)` copied to
+  SQL Server or MySQL is created as `binary(16)`, where it was `varbinary(16)`. The catalog shows such a column as `binary(fixed,16)`, and the
+  Gateway reads an Arrow fixed-size binary column as one, with no note.
+- **Changed: Sync's JDBC driver reads and writes PostgreSQL's types through the same table as the PostgreSQL driver**, so a `bytea` or `time`
+  column it refused before is provisioned, and a `varchar` with no length becomes `text`, where it was `varchar(255)`.
+
 ## Since the last release before the 2026-11-13 beta
 
 These entries were written before the 2026-11-13 beta and are in no release note: the beta's release carries only the install text. They describe

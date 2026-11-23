@@ -313,6 +313,35 @@ Sync's writes for a generic target, used by Sync's Flight SQL driver and the off
 shared `ansi` table as it is. Recommendation: B. The same answer decides how ANSI writes a time with no stated precision (`time(0)` in the
 shared `ansi` table today, Sync's `TIME`), since every other engine writes one with microseconds.
 
+### SYNCAUTHORING-P28: the column type authors' scripts see (default, awaiting the owner)
+
+Sync's dialects now read and write every column type through the shared tables (`ReadColumnType` and `WriteColumnType`, the shared
+`DbDataKit.Dialect.CanonicalType`). Sync's own `CanonicalType` and `CanonicalTypeKind` stay as the shape a script sees, converted to and from the
+shared type without changing an answer: `IScriptDialect.ToCanonicalType` and `RenderColumnType` in a lifecycle hook, `ProvisioningColumn.Type` in a
+`driver.csx` provisioner, and the `ToCanonicalType`/`RenderColumnType` a `driver.csx` dialect implements. C# has no alias a script can pick up from
+an assembly, so removing the type means changing what scripts compile against. Scenario: Ana's `add-missing-columns.csx` hook does
+`var t = context.SourceDialect.ToCanonicalType(c.NativeType); if (t.Kind == CanonicalTypeKind.Unmappable) continue;` and then
+`context.TargetDialect.RenderColumnType(t)`. Under option A it compiles and runs unchanged. Under option B it fails to compile ("The name
+'CanonicalTypeKind' does not exist") until she writes `CanonicalKind.Unmappable` and the shared type's names (`Unicode` for `IsUnicode`, a null
+`Length` for `IsMax`, `timestamp(tz)` for `TimestampTz`). Option A, as built: Sync's type stays as the scripts' shape, its rules are the shared
+tables', and nothing in Sync decides a type on its own. Option B, the script contracts take the shared type, with a check that names each script
+of a set that uses the old names, and Sync's type is deleted. Recommendation: A, for the same reason as SYNCAUTHORING-P15.
+
+### SYNCAUTHORING-P29: interval and list columns in Sync (default, awaiting the owner)
+
+The shared tables read PostgreSQL's and DuckDB's `interval`, Oracle's intervals and list types; Sync's readers, staging and writers do not carry
+those values, so Sync reads such a column as unmappable, with the note "Sync does not replicate interval columns (interval); leave the column out,
+or give it a transform that reads it as text". Scenario: Ana maps `ops.public.job` with a `duration interval` column into PostgreSQL. Provisioning
+and the offline check both say the column cannot be replicated. Option A, as built. Option B, replicate an interval between engines that have one
+(PostgreSQL, DuckDB, Oracle), once the readers and writers carry it. Recommendation: A until a set needs B.
+
+### SYNCAUTHORING-P30: the JDBC driver's types (default, awaiting the owner)
+
+The JDBC driver (pgJDBC) reads PostgreSQL's catalog names, and its dialect now reads and writes them through the shared `postgres` table, where it
+had its own short table that refused `bytea`, `time`, `uuid`, `jsonb` and `xml` and wrote a `varchar` with no length as `varchar(255)`. Scenario: a
+JDBC source with `payload bytea` and `name varchar` is provisioned into PostgreSQL as `bytea` and `text`; before, the mapping was refused. Option A,
+as built. Option B, keep the old table. Recommendation: A.
+
 ## Open designs
 
 ### Monitoring and operations, second pass
