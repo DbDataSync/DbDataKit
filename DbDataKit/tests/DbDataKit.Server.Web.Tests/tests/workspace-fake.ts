@@ -65,6 +65,9 @@ function check(kind: Kind, files: Map<string, string>): Finding[] {
         if (m && !m[1].startsWith('secret:')) found.push({ severity: 'error', code: 'DBD-WS-SYNC-SECRET', message: `${file} has a \`password_secret\` that is not a secret reference.`, file, line: i + 1 })
       })
     }
+    if (kind === 'sync' && /^config\/replications\/[^/]+\/task\.yaml$/.test(file) && text.includes('NOT_A_READER')) {
+      found.push({ severity: 'error', code: 'DBD-WS-SYNC-READER', message: "The reader 'NOT_A_READER' is not one the source connection's driver offers.", file, line: lineOf(text, 'NOT_A_READER') })
+    }
     if (kind === 'integration' && file.startsWith('src/') && file.endsWith('.csx') && text.includes('BROKEN')) {
       found.push({ severity: 'error', code: 'DBD-INT-CS1002', message: '; expected', file, line: lineOf(text, 'BROKEN') })
     }

@@ -471,3 +471,112 @@ test('Build and publish… on a replication opens the draft\'s Builds tab, a bui
   await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'orders')
   await expect(page.getByTestId('enabled-toggle')).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('the rest of a replication: error counts in the navigation, Unpublished changes in the rail, a script bound, the plan applied on the Runner, a quality check in Files', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Replication Rest', `sync-replication-rest-${Date.now()}@example.com`)
+  const task = (name: string, reader: string) => `schemaVersion: 2\nname: ${name}\nscheduling: {mode: Continuous, frequencySeconds: 60}\nchangeProcessing:\n  reader: {kind: ${reader}, options: {}}\n  cache: {kind: StagingTable, options: {}}\n  writer: {kind: DeleteInsert, options: {}}\nendpoints:\n  source: {connectionName: source-db, database: App}\n  target: {connectionName: target-db}\n`
+  const workspace = await mockWorkspace(page, { syncFiles: {
+    'catalog-cache.yaml': CACHE,
+    'config/replications/customers/task.yaml': task('customers', 'BatchReload'),
+    'config/replications/invoices/task.yaml': task('invoices', 'NOT_A_READER'),
+    'config/scripts/trim-names.yaml': 'name: trim-names\nkind: rowTransform\nlanguage: CSharp\ndescription: Trims the names.\n',
+  } })
+  await makeDraft(page, 'plant', 'sync', 'rest-edit')
+  await expect(page).toHaveURL(/\/designer\/replications\/customers$/)
+
+  // three replications in the navigation; the one whose task the draft's check refuses carries its error count
+  await expect(page.locator('[data-testid="sd-nav-replication"]')).toHaveCount(3)
+  await expect(page.locator('[data-testid="sd-nav-replication"][data-name="invoices"] [data-testid="sd-nav-errors"]')).toHaveAttribute('data-count', '1')
+  await expect(page.locator('[data-testid="sd-nav-replication"][data-name="orders"] [data-testid="sd-nav-errors"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="sd-nav-replication"][data-name="customers"] [data-testid="sd-nav-errors"]')).toHaveCount(0)
+  await shot(page, '30-navigation-error-count')
+
+  // the Pipeline sub-tab of customers: the reader from the source's driver (SQL Server), the writer from the target's (PostgreSQL)
+  await page.getByTestId('overview-tab-pipeline').click()
+  await expect(page).toHaveURL(/\/designer\/replications\/customers\/overview\/pipeline$/)
+  await expect(page.getByTestId('reader-kind-select').locator('option')).toContainText(['MsSqlChangeTracking', 'Watermark', 'BatchReload'])
+  await page.getByTestId('stage-writer').click()
+  await expect(page.getByTestId('writer-kind-select').locator('option')).toContainText(['ChangeApply', 'DeleteInsert', 'Scd2'])
+  await expect(page.getByTestId('reconcile-config-card')).toBeVisible()
+
+  // a build of the draft staged on the Runner's dev through the console, from the rail of orders
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'orders')
+  await expect(page.getByTestId('unpublished-changes')).toHaveCount(0)
+  await page.getByTestId('sd-rail').getByTestId('sd-build-and-publish').click()
+  await page.getByTestId('wsp-build').click()
+  const built = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
+  await expect(built).toBeVisible({ timeout: 15_000 })
+  await built.getByTestId('wsp-publish-target').selectOption(RUNNER)
+  await built.getByTestId('wsp-publish-channel').fill('dev')
+  await built.getByTestId('wsp-publish').click()
+  await expect(built.getByTestId('wsp-published')).toHaveAttribute('data-version', '1')
+  await page.goBack()
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'orders')
+
+  // published and nothing changed since: no notice; Enabled off is an unsaved edit of this replication, and the rail says the Runner runs version 1 without it
+  await expect(page.getByTestId('unpublished-changes')).toHaveCount(0)
+  await page.getByTestId('enabled-toggle').click()
+  await expect(page.getByTestId('sd-rail').getByTestId('unpublished-changes')).toHaveAttribute('data-unsaved-here', '1')
+  await expect(page.getByTestId('unpublished-changes-text')).toContainText('Version 1 on dev of plant was built before unsaved edits of 1 file of this replication')
+  await shot(page, '31-rail-unpublished')
+  // another replication's page does not count an unsaved edit of orders
+  await page.locator('[data-testid="sd-nav-replication"][data-name="customers"]').click()
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'customers')
+  await expect(page.getByTestId('unpublished-changes')).toHaveCount(0)
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'orders')
+
+  // Custom Transforms offers the Workspace's slots of a replication and the draft's scripts that fill each; binding one is an unsaved edit of task.yaml
+  await page.getByTestId('overview-tab-transforms').click()
+  await expect(page).toHaveURL(/\/designer\/replications\/orders\/overview\/transforms$/)
+  await expect(page.getByTestId('script-slot-metadataProvider')).toHaveCount(0)
+  await page.getByTestId('script-binding-rowTransform').selectOption('trim-names')
+  await shot(page, '32-custom-transforms')
+
+  // saved: the binding and Enabled are in the file, the rest of it as it was
+  await page.getByTestId('save-settings-button').click()
+  await expect(page.getByTestId('sd-task-dirty')).toHaveCount(0)
+  const orders = saved(workspace, 'rest-edit', 'config/replications/orders/task.yaml')
+  expect(orders.scripts).toEqual({ rowTransform: { scriptName: 'trim-names', parameters: {} } })
+  expect(orders.enabled).toBe(false)
+  expect(orders.changeProcessing.reader.kind).toBe('MsSqlChangeTracking')
+
+  // the Provisioning sub-tab: the plan in the old layout, the target table that is missing and its statement, applied on the Runner through the console
+  await page.getByTestId('overview-tab-provisioning').click()
+  await expect(page).toHaveURL(/\/overview\/provisioning$/)
+  const group = page.locator('[data-testid="provisioning-group"][data-connection="target-db"][data-side="target"]')
+  await expect(group).toBeVisible()
+  await expect(group.getByTestId('provisioning-step')).toHaveAttribute('data-step-title', 'Create the table')
+  await expect(group.getByTestId('provisioning-step-sql')).toHaveText('CREATE TABLE "public"."orders" ("id" bigint)')
+  await expect(page.getByTestId('provisioning-staged')).toHaveText('Apply runs the task provision of plant version 1, staged on dev of plant.')
+  await shot(page, '33-provisioning-plan')
+  await group.locator('[data-testid="provisioning-apply"][data-mapping="orders"]').click()
+  await expect(page.getByTestId('wsp-prov-run-result')).toHaveAttribute('data-outcome', 'succeeded', { timeout: 15_000 })
+  await expect(page.getByTestId('wsp-prov-run-step')).toHaveText('Done: Create the table of orders')
+  expect(workspace.runs.map((r) => [r.task, r.inputs.replication, r.inputs.mapping, r.inputs.action])).toEqual([['provision', 'orders', 'orders', 'createTargetTable']])
+  expect(workspace.workspaceRuns).toEqual([])
+
+  // Quality Checks: a freshness check added to the list is an unsaved edit of task.yaml that Files shows
+  await page.getByTestId('tab-checks').click()
+  await expect(page).toHaveURL(/\/designer\/replications\/orders\/checks$/)
+  await page.getByTestId('replication-check-add').click()
+  await page.getByTestId('replication-check-id-input').fill('orders_fresh')
+  await page.getByTestId('replication-check-dataset-input').fill('public.orders')
+  await page.getByTestId('replication-check-maxAge-input').fill('6h')
+  await page.getByTestId('replication-check-apply').click()
+  await expect(page.locator('[data-testid="replication-check-orders_fresh"]')).toHaveAttribute('data-kind', 'freshness')
+  await expect(page.getByTestId('tab-checks-count')).toHaveText('1')
+  await shot(page, '34-quality-checks')
+  await page.locator('[data-testid="wsp-file"][data-path="config/replications/orders/task.yaml"]').click()
+  await expect(area(page)).toHaveAttribute('data-area', 'files')
+  await expect(page.getByTestId('wsp-dirty')).toBeVisible()
+  await page.getByTestId('wsp-mode-yaml').click()
+  await expect(page.getByTestId('wsp-code')).toContainText('orders_fresh')
+  await expect(page.getByTestId('wsp-code')).toContainText('max_age: 6h')
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await expect(area(page)).toHaveAttribute('data-area', 'designer')
+  await page.getByTestId('wsp-save-all').click()
+  await expect(page.getByTestId('wsp-unsaved')).toHaveCount(0)
+  expect(saved(workspace, 'rest-edit', 'config/replications/orders/task.yaml').checks).toEqual([expect.objectContaining({ id: 'orders_fresh', kind: 'freshness', dataset: 'public.orders', max_age: '6h' })])
+})
