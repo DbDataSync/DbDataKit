@@ -164,17 +164,26 @@ public sealed class ServiceCommand(
         }
     }
 
-    private ServiceInstallSpec BuildSpec(ParsedArgs parsed, bool skipFolderPermissionsCheck = false)
+    private ServiceInstallSpec BuildSpec(ParsedArgs parsed, bool skipFolderPermissionsCheck = false) =>
+        InstallSpec(context, parsed.Get("data-dir"), skipFolderPermissionsCheck || parsed.Has(DbDataKit.Hosting.Startup.FolderPermissions.FlagName),
+            parsed.Get("account"), parsed.Has("allow-localsystem"));
+
+    /// <summary>
+    /// What <c>service install</c> registers for <paramref name="context"/>: its command line with the data folder <paramref name="dataDirectory"/> when
+    /// one is given, and <c>--skip-folder-permissions-check</c> when <paramref name="skipFolderPermissionsCheck"/> is set.
+    /// </summary>
+    public static ServiceInstallSpec InstallSpec(ServiceCommandContext context, string? dataDirectory = null, bool skipFolderPermissionsCheck = false,
+        string? account = null, bool allowLocalSystem = false)
     {
         var args = context.Arguments.ToList();
-        if (parsed.Get("data-dir") is { } dataDir)
+        if (dataDirectory is not null)
         {
-            args.AddRange(context.DataDirectoryArgument?.Invoke(dataDir) ?? ["--data-dir", dataDir]);
+            args.AddRange(context.DataDirectoryArgument?.Invoke(dataDirectory) ?? ["--data-dir", dataDirectory]);
         }
 
         // the switch is recorded on the registered command line, so the service's account reads it at every start and no file in its folder is
         // written by the administrator who installs it
-        if (skipFolderPermissionsCheck || parsed.Has(DbDataKit.Hosting.Startup.FolderPermissions.FlagName))
+        if (skipFolderPermissionsCheck)
             args.Add(DbDataKit.Hosting.Startup.FolderPermissions.Flag);
 
         return new ServiceInstallSpec
@@ -184,8 +193,8 @@ public sealed class ServiceCommand(
             Description = context.Description,
             BinaryPath = context.BinaryPath,
             Arguments = args,
-            Account = ServiceAccount.Parse(parsed.Get("account"), context.ServiceName),
-            AllowLocalSystem = parsed.Has("allow-localsystem"),
+            Account = ServiceAccount.Parse(account, context.ServiceName),
+            AllowLocalSystem = allowLocalSystem,
             StartMode = context.StartMode ?? ServiceStartMode.AutomaticDelayed,
             Failure = context.Failure ?? FailurePolicy.Default,
             Dependencies = context.Dependencies,
