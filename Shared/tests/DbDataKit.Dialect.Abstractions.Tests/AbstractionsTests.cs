@@ -11,6 +11,7 @@ public class AbstractionsTests
     [InlineData("string")]
     [InlineData("string(unicode,50)")]
     [InlineData("binary(16)")]
+    [InlineData("binary(fixed,16)")]
     [InlineData("decimal(18,2)")]
     [InlineData("decimal(38)")]
     [InlineData("timestamp(tz,6)")]
@@ -19,6 +20,14 @@ public class AbstractionsTests
     [InlineData("list")]
     public void CanonicalType_text_round_trips(string text)
         => Assert.Equal(text, CanonicalType.Parse(text).ToString());
+
+    [Fact]
+    public void A_fixed_binary_is_its_own_type()
+    {
+        Assert.Equal(new CanonicalType(CanonicalKind.Binary, Length: 16, Fixed: true), CanonicalType.Parse("binary(fixed,16)"));
+        Assert.Equal(CanonicalType.Binary(16, @fixed: true), CanonicalType.Parse("binary(fixed,16)"));
+        Assert.NotEqual(CanonicalType.Binary(16), CanonicalType.Parse("binary(fixed,16)"));
+    }
 
     [Theory]
     [InlineData("nonsense")]

@@ -1,3 +1,5 @@
+using DbDataKit.Dialect;
+using MySqlDialect = DbDataSync.Core.Sql.MySqlDialect;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
 
@@ -9,26 +11,32 @@ public sealed class MySqlDialectCanonicalTypeTests
 {
     private static readonly MySqlDialect Dialect = MySqlDialect.Instance;
 
+    /// <summary>The dialect's reading, or the unmappable type when the dialect does not know the name.</summary>
+    private static CanonicalType Read(string native) => Dialect.ReadColumnType(native) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+
+    /// <summary>The note of a reading that is not exact (what the reading already lost), or null.</summary>
+    private static string? NoteOf(string native) => Dialect.ReadColumnType(native) is { Fidelity: not Fidelity.Exact } read ? read.Note : null;
+
     [Theory]
-    [InlineData("smallint", CanonicalTypeKind.Int16)]
-    [InlineData("int", CanonicalTypeKind.Int32)]
-    [InlineData("bigint", CanonicalTypeKind.Int64)]
-    [InlineData("json", CanonicalTypeKind.Json)]
-    public void SimpleTypes_TranslateToTheirCanonicalKind(string nativeType, CanonicalTypeKind expected) =>
-        Assert.Equal(expected, Dialect.ToCanonicalType(nativeType).Kind);
+    [InlineData("smallint", CanonicalKind.Int16)]
+    [InlineData("int", CanonicalKind.Int32)]
+    [InlineData("bigint", CanonicalKind.Int64)]
+    [InlineData("json", CanonicalKind.Json)]
+    public void SimpleTypes_TranslateToTheirCanonicalKind(string nativeType, CanonicalKind expected) =>
+        Assert.Equal(expected, Read(nativeType).Kind);
 
     [Fact]
     public void TinyintWithDisplayWidthOne_IsBoolean()
     {
-        var canonical = Dialect.ToCanonicalType("tinyint(1)");
-        Assert.Equal(CanonicalTypeKind.Boolean, canonical.Kind);
+        var canonical = Read("tinyint(1)");
+        Assert.Equal(CanonicalKind.Boolean, canonical.Kind);
     }
 
     [Fact]
     public void BareTinyint_IsInt8_NotBoolean()
     {
-        var canonical = Dialect.ToCanonicalType("tinyint");
-        Assert.Equal(CanonicalTypeKind.Int8, canonical.Kind);
+        var canonical = Read("tinyint");
+        Assert.Equal(CanonicalKind.Int8, canonical.Kind);
     }
 
     [Theory]
@@ -37,57 +45,58 @@ public sealed class MySqlDialectCanonicalTypeTests
     [InlineData("bit")]
     [InlineData("geometry")]
     public void EnumSetBitAndSpatialTypes_AreUnmappable(string nativeType) =>
-        Assert.Equal(CanonicalTypeKind.Unmappable, Dialect.ToCanonicalType(nativeType).Kind);
+        Assert.Equal(CanonicalKind.Unmappable, Read(nativeType).Kind);
 
     [Fact]
     public void Varchar_IsAlwaysUnicode()
     {
-        var canonical = Dialect.ToCanonicalType("varchar(50)");
-        Assert.Equal(CanonicalTypeKind.String, canonical.Kind);
+        var canonical = Read("varchar(50)");
+        Assert.Equal(CanonicalKind.String, canonical.Kind);
         Assert.Equal(50, canonical.Length);
-        Assert.True(canonical.IsUnicode);
+        Assert.True(canonical.Unicode);
     }
 
     [Fact]
     public void Text_HasNoLength_AndIsMax()
     {
-        var canonical = Dialect.ToCanonicalType("text");
-        Assert.Equal(CanonicalTypeKind.String, canonical.Kind);
-        Assert.True(canonical.IsMax);
+        var canonical = Read("text");
+        Assert.Equal(CanonicalKind.String, canonical.Kind);
+        Assert.Null(canonical.Length);
     }
 
     [Fact]
     public void Blob_IsBinaryMax()
     {
-        var canonical = Dialect.ToCanonicalType("blob");
-        Assert.Equal(CanonicalTypeKind.Binary, canonical.Kind);
-        Assert.True(canonical.IsMax);
+        var canonical = Read("blob");
+        Assert.Equal(CanonicalKind.Binary, canonical.Kind);
+        Assert.Null(canonical.Length);
     }
 
     [Fact]
     public void Timestamp_IsTimestampTz_WithASourceNote()
     {
-        var canonical = Dialect.ToCanonicalType("timestamp");
-        Assert.Equal(CanonicalTypeKind.TimestampTz, canonical.Kind);
-        Assert.NotNull(canonical.SourceNote);
+        var canonical = Read("timestamp");
+        Assert.Equal(CanonicalKind.Timestamp, canonical.Kind);
+        Assert.True(canonical.TimeZone);
+        Assert.NotNull(NoteOf("timestamp"));
     }
 
     [Fact]
     public void Datetime_IsPlainTimestamp_WithNoSourceNote()
     {
-        var canonical = Dialect.ToCanonicalType("datetime");
-        Assert.Equal(CanonicalTypeKind.Timestamp, canonical.Kind);
-        Assert.Null(canonical.SourceNote);
+        var canonical = Read("datetime");
+        Assert.Equal(CanonicalKind.Timestamp, canonical.Kind);
+        Assert.Null(NoteOf("datetime"));
     }
 
     // --- Reverse direction: rendering canonical types another engine originated. ---
 
-    private static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
+    private static CanonicalType Simple(CanonicalKind kind) => CanonicalType.Of(kind);
 
     [Fact]
     public void RenderingBoolean_ProducesTinyint1_WithANoNativeBooleanNote()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Boolean));
+        var rendered = Dialect.WriteColumnType(Simple(CanonicalKind.Boolean));
         Assert.Equal("tinyint(1)", rendered.Sql);
         Assert.Contains("no native boolean", rendered.Fidelity);
     }
@@ -95,8 +104,8 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingDecimal18_2_ProducesDecimal18_2_Faithfully()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Decimal, null, 18, 2, false, false);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Decimal, Precision: 18, Scale: 2);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("decimal(18,2)", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -104,8 +113,8 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingNvarchar50_ProducesVarchar50_Faithfully()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.String, 50, null, null, true, false);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.String, Length: 50, Unicode: true);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("varchar(50)", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -113,8 +122,8 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingNvarcharMax_ProducesLongtext_Faithfully()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.String, Unicode: true);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("longtext", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -122,8 +131,8 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingVarcharOver65535_FallsBackToLongtext_WithAFidelityNote()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.String, 100_000, null, null, true, false);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.String, Length: 100_000, Unicode: true);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("longtext", rendered.Sql);
         Assert.NotNull(rendered.Fidelity);
     }
@@ -131,8 +140,8 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingDatetime2Scale7_LosesOneDigitOfPrecision()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Timestamp, null, null, 7, false, false);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Timestamp, Scale: 7);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("datetime(6)", rendered.Sql);
         Assert.Contains("precision", rendered.Fidelity);
     }
@@ -140,7 +149,7 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingDatetimeoffset_ProducesTimestamp_WithAFidelityNote()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.TimestampTz));
+        var rendered = Dialect.WriteColumnType(CanonicalType.Timestamp(tz: true));
         Assert.Equal("timestamp(6)", rendered.Sql);
         Assert.NotNull(rendered.Fidelity);
     }
@@ -148,7 +157,7 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingUniqueidentifier_ProducesChar36_WithAFidelityNote()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Guid));
+        var rendered = Dialect.WriteColumnType(Simple(CanonicalKind.Guid));
         Assert.Equal("char(36)", rendered.Sql);
         Assert.NotNull(rendered.Fidelity);
     }
@@ -156,12 +165,12 @@ public sealed class MySqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingVarbinaryMax_ProducesLongblob()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Binary, null, null, null, false, true);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Binary);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("longblob", rendered.Sql);
     }
 
     [Fact]
     public void RenderingUnmappable_Throws() =>
-        Assert.Throws<InvalidOperationException>(() => Dialect.RenderColumnType(Simple(CanonicalTypeKind.Unmappable)));
+        Assert.Throws<InvalidOperationException>(() => Dialect.WriteColumnType(Simple(CanonicalKind.Unmappable)));
 }

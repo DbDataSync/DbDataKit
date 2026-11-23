@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;

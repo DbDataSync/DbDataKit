@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Drivers.Generic;
@@ -17,8 +18,8 @@ public sealed class AlterTargetTablePlannerTests
         ConnectionName = "tgt", Database = "DW", Schema = "dbo", Table = "Orders",
     };
 
-    private static ProvisioningColumn Wanted(string name, CanonicalTypeKind kind = CanonicalTypeKind.Int32) =>
-        new(name, new CanonicalType(kind, kind == CanonicalTypeKind.String ? 50 : null, null, null, true, false),
+    private static ProvisioningColumn Wanted(string name, CanonicalKind kind = CanonicalKind.Int32) =>
+        new(name, new CanonicalType(kind, Length: kind == CanonicalKind.String ? 50 : null, Unicode: kind == CanonicalKind.String ? true : null),
             IsNullable: true, IsPrimaryKey: false);
 
     private static ColumnMetadata Existing(string name, string nativeType) =>
@@ -138,7 +139,7 @@ public sealed class AlterTargetTablePlannerTests
     [Fact]
     public void AChosenTargetType_IsUsedVerbatim()
     {
-        var wanted = Wanted("Payload", CanonicalTypeKind.Unmappable) with { TypeOverride = "jsonb" };
+        var wanted = Wanted("Payload", CanonicalKind.Unmappable) with { TypeOverride = "jsonb" };
 
         var step = Assert.Single(Plan([wanted], []).Steps);
 
@@ -170,7 +171,7 @@ public sealed class AlterTargetTablePlannerTests
     [Fact]
     public void AMappedColumnTheTargetLacks_IsAdded()
     {
-        var plan = Plan([Wanted("Id"), Wanted("Region", CanonicalTypeKind.String)], [Existing("Id", "int")]);
+        var plan = Plan([Wanted("Id"), Wanted("Region", CanonicalKind.String)], [Existing("Id", "int")]);
 
         Assert.Equal(ProvisioningState.Missing, plan.State);
         var step = Assert.Single(plan.Steps);
@@ -187,7 +188,7 @@ public sealed class AlterTargetTablePlannerTests
     public void AnAddedColumn_IsNullableEvenWhenTheMappingIsNot()
     {
         var wanted = new ProvisioningColumn(
-            "Region", new CanonicalType(CanonicalTypeKind.String, 50, null, null, true, false),
+            "Region", new CanonicalType(CanonicalKind.String, Length: 50, Unicode: true),
             IsNullable: false, IsPrimaryKey: false);
 
         var step = Assert.Single(Plan([wanted], []).Steps);
@@ -199,7 +200,7 @@ public sealed class AlterTargetTablePlannerTests
     [Fact]
     public void AColumnWhoseTypeChanged_IsAltered()
     {
-        var plan = Plan([Wanted("Id", CanonicalTypeKind.Int64)], [Existing("Id", "int")]);
+        var plan = Plan([Wanted("Id", CanonicalKind.Int64)], [Existing("Id", "int")]);
 
         var step = Assert.Single(plan.Steps);
         Assert.Contains("Change Id from int", step.Title);
@@ -234,7 +235,7 @@ public sealed class AlterTargetTablePlannerTests
     [Fact]
     public void AnUnmappableType_IsReportedRatherThanGuessedAt()
     {
-        var plan = Plan([Wanted("Weird", CanonicalTypeKind.Unmappable)], [Existing("Id", "int")]);
+        var plan = Plan([Wanted("Weird", CanonicalKind.Unmappable)], [Existing("Id", "int")]);
 
         Assert.Equal(ProvisioningState.Unsupported, plan.State);
         Assert.Empty(plan.Steps);
@@ -249,7 +250,7 @@ public sealed class AlterTargetTablePlannerTests
     public void AnEngineThatCannotAlterInPlace_WarnsInsteadOfEmitting()
     {
         var plan = AlterTargetTablePlanner.Plan(
-            NoAlterDialect.Instance, Target, [Wanted("Id", CanonicalTypeKind.Int64)], [Existing("Id", "int")]);
+            NoAlterDialect.Instance, Target, [Wanted("Id", CanonicalKind.Int64)], [Existing("Id", "int")]);
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Warnings, w => w.Contains("Id") && w.Contains("by hand"));
@@ -267,19 +268,16 @@ public sealed class AlterTargetTablePlannerTests
         public override string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public override string ParameterReference(string name) => $"@{name}";
 
-        public override CanonicalType ToCanonicalType(string nativeType) => nativeType.ToLowerInvariant() switch
+        public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => nativeType.ToLowerInvariant() switch
         {
-            "int" or "integer" or "int32" => New(CanonicalTypeKind.Int32),
-            "bigint" or "int64" => New(CanonicalTypeKind.Int64),
-            var s when s.StartsWith("varchar") || s == "string" => New(CanonicalTypeKind.String, 50),
-            _ => New(CanonicalTypeKind.Unmappable),
+            "int" or "integer" or "int32" => TypeMapping<CanonicalType>.Exact(CanonicalType.Of(CanonicalKind.Int32)),
+            "bigint" or "int64" => TypeMapping<CanonicalType>.Exact(CanonicalType.Of(CanonicalKind.Int64)),
+            var s when s.StartsWith("varchar") || s == "string" => TypeMapping<CanonicalType>.Exact(CanonicalType.String(50)),
+            _ => TypeMapping<CanonicalType>.Unmappable("not a type this test dialect knows"),
         };
 
-        public override RenderedColumnType RenderColumnType(CanonicalType type) =>
+        public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
             new(type.Kind.ToString().ToUpperInvariant(), null);
-
-        private static CanonicalType New(CanonicalTypeKind kind, int? length = null) =>
-            new(kind, length, null, null, true, false);
     }
 
     /// <summary>A dialect that reports it cannot change a column's type in place.</summary>

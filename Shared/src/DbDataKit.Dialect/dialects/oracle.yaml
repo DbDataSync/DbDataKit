@@ -44,6 +44,7 @@ types:
   - { native: "number({p},0)", canonical: "int16", direction: to_canonical, p_max: 4 }
   - { native: "number({p},0)", canonical: "int32", direction: to_canonical, p_min: 5, p_max: 9 }
   - { native: "number({p},0)", canonical: "int64", direction: to_canonical, p_min: 10, p_max: 18 }
+  - { native: "number(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as number(38,9), so digits beyond it are rounded" }
   - { native: "number({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 38 }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
@@ -69,7 +70,7 @@ types:
   - { native: "long raw", canonical: "binary", direction: to_canonical }
   - { native: "date", canonical: "timestamp(0)", direction: to_canonical, fidelity: widened, note: "Oracle DATE carries a time of day; read as timestamp(0)" }
   - { native: "date", canonical: "date", direction: from_canonical, fidelity: widened, note: "Oracle DATE always carries a time of day (00:00:00)" }
-  - { native: "interval day(0) to second({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 9, fidelity: widened, note: "no TIME type; stored as an interval of the day" }
+  - { native: "timestamp({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 9, fidelity: lossy, note: "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless." }
   - { native: "timestamp({s}) with time zone", canonical: "timestamp(tz,{s})", defaults: { s: 6 }, s_max: 9 }
   - { native: "timestamp({s}) with local time zone", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 6 } }
   - { native: "timestamp({s})", canonical: "timestamp({s})", defaults: { s: 6 }, s_max: 9 }

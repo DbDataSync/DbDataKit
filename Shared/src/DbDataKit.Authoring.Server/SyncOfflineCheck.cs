@@ -132,7 +132,7 @@ public static class SyncOfflineCheck
     /// <param name="Filter">How the driver's filters are read; null when they are not checked offline.</param>
     /// <param name="TypeMap">How a finding names the type map: "the sqlserver driver's type map".</param>
     /// <param name="Unchecked">Why the types and filters are not checked offline, when they are not.</param>
-    private sealed record ConnectionInfo(string Engine, Sql.SqlDialect? Dialect, Func<string, Sql.CanonicalType>? ToCanonical, FilterReader? Filter, string TypeMap, string? Unchecked);
+    private sealed record ConnectionInfo(string Engine, Sql.SqlDialect? Dialect, Func<string, TypeMapping<CanonicalType>>? ToCanonical, FilterReader? Filter, string TypeMap, string? Unchecked);
 
     private sealed class Run(string root, CatalogCacheFile cache)
     {
@@ -205,14 +205,14 @@ public static class SyncOfflineCheck
         {
             var ansi = DialectCatalog.Builtin.Get("ansi");
             if (BuiltInEngines.TryGetValue(engine, out var builtIn))
-                return new(engine, builtIn, builtIn.ToCanonicalType, FilterReader.Of(DialectCatalog.Builtin.Get(engine)), $"the {engine} driver's type map", null);
+                return new(engine, builtIn, builtIn.ReadColumnType, FilterReader.Of(DialectCatalog.Builtin.Get(engine)), $"the {engine} driver's type map", null);
             if (engine == "flightsql")
             {
                 // A Flight SQL column reports an ANSI type name, whatever engine the server fronts; a name ANSI does not have is read as that engine's.
                 if (dialectName is null)
-                    return new(engine, Sql.AnsiDialect.Instance, Sql.AnsiDialect.Instance.ToCanonicalType, FilterReader.Of(ansi), "the flightsql driver's type map", null);
+                    return new(engine, Sql.AnsiDialect.Instance, Sql.AnsiDialect.Instance.ReadColumnType, FilterReader.Of(ansi), "the flightsql driver's type map", null);
                 if (BuiltInEngines.TryGetValue(dialectName, out var inner))
-                    return new(engine, inner, native => Sql.AnsiDialect.Instance.ToCanonicalType(native) is { Kind: not Sql.CanonicalTypeKind.Unmappable } read ? read : inner.ToCanonicalType(native),
+                    return new(engine, inner, native => Sql.AnsiDialect.Instance.ReadColumnType(native) is { IsMapped: true } read ? read : inner.ReadColumnType(native),
                         FilterReader.Of(DialectCatalog.Builtin.Get(dialectName)), $"the flightsql driver's type map (with the {dialectName} dialect)", null);
                 return new(engine, null, null, null, "", $"the dialect '{dialectName}' is not one a flightsql connection takes");
             }
@@ -224,7 +224,7 @@ public static class SyncOfflineCheck
             Sql.SqlDialect dialect;
             try { dialect = new DescriptorDialect(descriptor.Dialect, descriptor.TypeMap); }
             catch (NotSupportedException ex) { return new(engine, null, null, null, "", $"{found.File} does not read ({ex.Message})"); }
-            return new(engine, dialect, dialect.ToCanonicalType, DescriptorFilter(descriptor, dialect, ansi), $"the {engine} driver's type map ({found.File})", null);
+            return new(engine, dialect, dialect.ReadColumnType, DescriptorFilter(descriptor, dialect, ansi), $"the {engine} driver's type map ({found.File})", null);
         }
 
         /// <summary>
@@ -349,8 +349,8 @@ public static class SyncOfflineCheck
                 }
                 if (info?.ToCanonical is not { } read || !checkedTypes.Add(fromLabel + "." + cached.Name)) continue;
                 var mapped = read(cached.Type);
-                if (mapped.Kind == Sql.CanonicalTypeKind.Unmappable)
-                    Found.Add(new("warning", UnknownType, $"The source column '{name}' of {fromLabel} has the type {cached.Type}, which {info.TypeMap} does not know{(mapped.SourceNote is { Length: > 0 } n ? $" ({n})" : "")}. Leave the column out, or give it a transform that reads it as a type the driver knows.", file, at));
+                if (!mapped.IsMapped)
+                    Found.Add(new("warning", UnknownType, $"The source column '{name}' of {fromLabel} has the type {cached.Type}, which {info.TypeMap} does not know{(mapped.Note is { Length: > 0 } n ? $" ({n})" : "")}. Leave the column out, or give it a transform that reads it as a type the driver knows.", file, at));
             }
             if (info?.ToCanonical is null)
                 Note("types:" + source.Connection, "info", NotChecked,
@@ -388,8 +388,8 @@ public static class SyncOfflineCheck
                 if (s is null || t is null) continue;
                 var sourceType = fromSource(s.NativeType);
                 var targetType = fromTarget(t.NativeType);
-                if (sourceType.Kind == Sql.CanonicalTypeKind.Unmappable || targetType.Kind == Sql.CanonicalTypeKind.Unmappable) continue;
-                var fit = FidelityRules.Assess(Sql.CanonicalTypes.ToShared(sourceType), Sql.CanonicalTypes.ToShared(targetType));
+                if (sourceType.Result is not { } sourceShared || !sourceType.IsMapped || targetType.Result is not { } targetShared || !targetType.IsMapped) continue;
+                var fit = FidelityRules.Assess(sourceShared, targetShared);
                 var pair = $"'{sourceName}' ({s.NativeType} on {Label(source)}) into '{targetName}' ({t.NativeType} on {Label(target)})";
                 if (!fit.IsMapped)
                     Found.Add(new("warning", Types, $"The column {pair} is not a type the target column can hold{(fit.Note is { Length: > 0 } n ? $": {n}" : "")}.", file, LineOf(column, "targetColumn")));

@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -8,15 +9,15 @@ public sealed class CreateTargetTablePlannerTests
 {
     private static readonly TableRef Target = new() { ConnectionName = "c", Database = "db", Schema = "dbo", Table = "Orders" };
 
-    private static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
+    private static CanonicalType Simple(CanonicalKind kind) => CanonicalType.Of(kind);
 
     [Fact]
     public void AnyUnmappableColumn_PlansUnsupported_NamingTheColumn()
     {
         var columns = new[]
         {
-            new ProvisioningColumn("Id", Simple(CanonicalTypeKind.Int32), IsNullable: false, IsPrimaryKey: true),
-            new ProvisioningColumn("Location", Simple(CanonicalTypeKind.Unmappable), IsNullable: true, IsPrimaryKey: false),
+            new ProvisioningColumn("Id", Simple(CanonicalKind.Int32), IsNullable: false, IsPrimaryKey: true),
+            new ProvisioningColumn("Location", Simple(CanonicalKind.Unmappable), IsNullable: true, IsPrimaryKey: false),
         };
 
         var plan = CreateTargetTablePlanner.Plan(FakeCanonicalDialect.Instance, Target, columns);
@@ -31,8 +32,8 @@ public sealed class CreateTargetTablePlannerTests
     {
         var columns = new[]
         {
-            new ProvisioningColumn("Id", Simple(CanonicalTypeKind.Int32), IsNullable: false, IsPrimaryKey: true),
-            new ProvisioningColumn("Name", Simple(CanonicalTypeKind.Boolean), IsNullable: true, IsPrimaryKey: false),
+            new ProvisioningColumn("Id", Simple(CanonicalKind.Int32), IsNullable: false, IsPrimaryKey: true),
+            new ProvisioningColumn("Name", Simple(CanonicalKind.Boolean), IsNullable: true, IsPrimaryKey: false),
         };
 
         var plan = CreateTargetTablePlanner.Plan(FakeCanonicalDialect.Instance, Target, columns);
@@ -51,7 +52,7 @@ public sealed class CreateTargetTablePlannerTests
         var columns = new[]
         {
             new ProvisioningColumn(
-                "Description", new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true),
+                "Description", new CanonicalType(CanonicalKind.String, Unicode: true),
                 IsNullable: true, IsPrimaryKey: false),
         };
 
@@ -67,8 +68,8 @@ public sealed class CreateTargetTablePlannerTests
         var columns = new[]
         {
             new ProvisioningColumn(
-                "Price", new CanonicalType(CanonicalTypeKind.Decimal, null, 19, 4, false, false, "carries currency semantics"),
-                IsNullable: true, IsPrimaryKey: false),
+                "Price", new CanonicalType(CanonicalKind.Decimal, Precision: 19, Scale: 4),
+                IsNullable: true, IsPrimaryKey: false, TypeNote: "carries currency semantics"),
         };
 
         var plan = CreateTargetTablePlanner.Plan(FakeCanonicalDialect.Instance, Target, columns);

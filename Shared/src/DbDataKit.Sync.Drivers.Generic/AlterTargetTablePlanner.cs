@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -24,7 +25,7 @@ public static class AlterTargetTablePlanner
         IReadOnlyList<ColumnMetadata> existing)
     {
         var unmappable = wanted
-            .Where(c => c.TypeOverride is null && c.Type.Kind == CanonicalTypeKind.Unmappable)
+            .Where(c => c.TypeOverride is null && c.Type.Kind == CanonicalKind.Unmappable)
             .ToList();
         if (unmappable.Count > 0)
         {
@@ -68,7 +69,7 @@ public static class AlterTargetTablePlanner
         {
             var rendered = column.TypeOverride is { } chosen
                 ? new RenderedColumnType(chosen, null)
-                : targetDialect.RenderColumnType(column.Type);
+                : targetDialect.WriteColumnType(column.Type, column.TypeNote);
             if (rendered.Fidelity is not null)
                 warnings.Add($"Column '{column.Name}': {rendered.Fidelity}");
 
@@ -206,11 +207,10 @@ public static class AlterTargetTablePlanner
 
         try
         {
-            var actual = dialect.ToCanonicalType(actualNativeType);
-            if (actual.Kind == CanonicalTypeKind.Unmappable)
+            if (dialect.ReadColumnType(actualNativeType) is not { IsMapped: true, Result: { } actual })
                 return true;
 
-            return string.Equals(dialect.RenderColumnType(actual).Sql, wantedSql, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(dialect.WriteColumnType(actual).Sql, wantedSql, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or FormatException)
         {

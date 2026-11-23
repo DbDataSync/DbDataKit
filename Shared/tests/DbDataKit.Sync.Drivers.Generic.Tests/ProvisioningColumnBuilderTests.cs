@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -53,7 +54,7 @@ public sealed class ProvisioningColumnBuilderTests
     }
 
     /// <summary>Records exactly which native type strings it was asked to translate, so a test can
-    /// assert the builder calls <c>ToCanonicalType</c> with the source's own native type rather than
+    /// assert the builder calls <c>ReadColumnType</c> with the source's own native type rather than
     /// anything else.</summary>
     private sealed class RecordingDialect : SqlDialect
     {
@@ -61,13 +62,13 @@ public sealed class ProvisioningColumnBuilderTests
         public override string QuoteIdentifier(string identifier) => identifier;
         public override string ParameterReference(string name) => name;
 
-        public override CanonicalType ToCanonicalType(string nativeType) => nativeType switch
+        public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => nativeType switch
         {
-            "int" => new CanonicalType(CanonicalTypeKind.Int32, null, null, null, false, false),
-            "text" => new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true),
-            _ => new CanonicalType(CanonicalTypeKind.Unmappable, null, null, null, false, false),
+            "int" => TypeMapping<CanonicalType>.Exact(CanonicalType.Of(CanonicalKind.Int32)),
+            "text" => TypeMapping<CanonicalType>.Exact(CanonicalType.String()),
+            _ => TypeMapping<CanonicalType>.Unmappable("not a type this test dialect knows"),
         };
 
-        public override RenderedColumnType RenderColumnType(CanonicalType type) => throw new NotSupportedException();
+        public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => throw new NotSupportedException();
     }
 }

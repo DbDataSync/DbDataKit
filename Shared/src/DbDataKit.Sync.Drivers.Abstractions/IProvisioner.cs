@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using DbDataSync.Core.Config;
 using DbDataSync.Core.Sql;
@@ -103,7 +104,7 @@ public sealed record ProvisioningPlan(
 /// <summary>One column a <see cref="ProvisioningActions.CreateTargetTable"/> plan should create, with
 /// its type already translated to canonical form by the caller (using the *source* dialect) — so the
 /// provisioner, which belongs to the *target* driver, only ever has to call its own
-/// <c>RenderColumnType</c> and never needs to know what dialect produced the column it was handed.</summary>
+/// <c>WriteColumnType</c> and never needs to know what dialect produced the column it was handed.</summary>
 /// <param name="Name">The target column name.</param>
 /// <param name="TypeOverride">
 /// The target type an operator chose, in the target's own dialect, or null to use whatever
@@ -114,6 +115,8 @@ public sealed record ProvisioningPlan(
 /// This column's rename history, oldest first, so a planner can work out which name the target
 /// currently uses. Empty for a column nobody has renamed, which is nearly all of them.
 /// </param>
+/// <param name="TypeNote">What was already lost when the source column's type was read (SQL Server's <c>money</c> loses its currency
+/// semantics), joined to what writing it loses in the plan's warnings. Null when the reading was exact.</param>
 public sealed record ProvisioningColumn(
     string Name,
     CanonicalType Type,
@@ -121,7 +124,8 @@ public sealed record ProvisioningColumn(
     bool IsPrimaryKey,
     string? TypeOverride = null,
     IReadOnlyList<RenameStep>? Renames = null,
-    int KeyOrdinal = 0);
+    int KeyOrdinal = 0,
+    string? TypeNote = null);
 
 /// <param name="Table">The table this call is about: the source table for
 /// <see cref="ProvisioningActions.EnableSourceChangeCapture"/>, the target table for
