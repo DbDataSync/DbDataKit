@@ -81,7 +81,7 @@ async function makeDraft(page: Page, id: string, workspace: string) {
 test('Refresh of a table on the Catalog tab shows "1 column added", and accepted the cache is an unsaved edit recorded as read from dev', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Catalog Refresh', `catalog-refresh-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page)
-  const console = await mockCatalogRead(page)
+  const catalog = await mockCatalogRead(page)
   await makeDraft(page, 'plant', 'catalog-edit')
   await page.getByTestId('wsp-nav-files').click()
   await page.getByTestId('wsp-tab-catalog').click()
@@ -106,12 +106,12 @@ test('Refresh of a table on the Catalog tab shows "1 column added", and accepted
   expect(workspace.files('plant', 'catalog-edit')?.get('catalog-cache.yaml')).toContain("'Orders'")
 
   // a DBA adds a column; Refresh of that one table shows the difference before anything is replaced
-  console.addSegment()
+  catalog.addSegment()
   await page.getByTestId('wsp-runner-refresh-table').selectOption('dbo.Orders')
   await page.getByTestId('wsp-refresh-go').click()
   await expect(page.getByTestId('wsp-refresh-summary')).toHaveText('1 column added')
   await expect(page.locator('[data-testid="wsp-refresh-change"][data-change="column-added"]')).toContainText('App.dbo.Orders.segment')
-  expect(console.reads.at(-1)).toEqual({ runner: RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Orders' })
+  expect(catalog.reads.at(-1)).toEqual({ runner: RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Orders' })
   await page.getByTestId('wsp-refresh-accept').click()
 
   // accepted: an unsaved edit of the draft, recorded as read from dev; the server's file has not changed
