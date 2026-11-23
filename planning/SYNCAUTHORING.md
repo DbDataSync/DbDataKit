@@ -142,9 +142,9 @@ the slice built and names the slice task it follows. Where a slice task uses som
 - **No Set up for development** (AUTHORING-19, which needs CHANNELS-1): a read needs the project's package on the Runner with the connection's slot
   bound in the channel, done by hand as `docs/authoring-metadata.md` says; the channel picker names a channel that binds no slot and says how.
   AUTHORING-6 adds the button.
-- **No `facts`** (AUTHORING-17), no preflight and no live checks (SYNCAUTHORING-9 to SYNCAUTHORING-12). The console already runs a package's
-  `preflight` before it serves a version in `prod`, and Re-check on the Runs tab runs it (`docs/publishing.md`, "Preflight before activation"); a
-  Sync set declares none yet, so its deploy to `prod` says that nothing was checked and serves it.
+- **No `facts`** (AUTHORING-17) and no live checks in the Designer (SYNCAUTHORING-11, SYNCAUTHORING-12). The set's `preflight` is built: the
+  console runs it before it serves a version in `prod`, and **Re-check** on the Runs tab runs it (`docs/publishing.md`, "Preflight before
+  activation"; `docs/authoring-metadata.md`, "A sync project"); the Designer does not show its newest run yet (SYNCAUTHORING-12).
 - **Publishing** is the Files area's Builds tab, linked from the Designer (**Build and publish…**, `PublishCard.tsx`), the card that also
   holds **Unpublished changes**.
 
@@ -157,7 +157,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | --- | --- | --- | --- | --- |
 | SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
-| SYNCAUTHORING-9 | The replication set's manual read-only task `preflight` in its own package (`dbdatasync-runtime`), with the run login each replication uses, per mapping, findings as step outputs: on the source, the table and mapped columns exist, the filter's columns exist and it compiles (a zero-row read), the login can read the table (the engine's privilege function, then the zero-row read), change tracking, CDC or a logical slot and publication are on where the reader's strategy needs them (a missing one as a provisioning step of the source side, with its statement: the source side of the provisioning plan, which was a task of AUTHORING before), source types the driver reads, a key where a reader or writer needs one; on the target, the table exists or provisioning can create it (the plan from the live catalog), the login can insert, update and delete and, for provisioning, create and alter (privilege functions, never a trial write), types compatible, keys agreeing with no nullable key column, the `tracking:` schema and tables exist or may be created; nothing is written; each part records the step `preflight-findings` with its findings (`Preflight` of `DbDataKit.Runner.Abstractions`: `Declare`, `Document`), which the console's deploy already runs on the version staged in `prod` before activation and **Re-check** on the Runs tab after publish (`docs/publishing.md`, "Preflight before activation"; `docs/authoring-metadata.md`, "A sync project") | none | L | Sync conformance on SQL Server and PostgreSQL: change tracking off on `dbo.orders` is a finding with the statement that enables it, and on it is satisfied; a login without insert on the target is a finding; a filter naming a missing column is a finding; the target's row count and every table are unchanged after the run |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package `dbdatakit-metadata` (`docs/authoring-metadata.md`) through Sync's metadata service, started through the console's catalog read as the built-in package's are (`api/workspace-catalog/...`); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
 | SYNCAUTHORING-12 | Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card are built (`RefreshPanel.tsx` of `@dbdatakit/sync-ui`). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (the console's run calls, `/api/deploys/{id}/runs`) | AUTHORING-6 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
 
@@ -174,7 +173,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - COMMANDLINES (needs review): if it is accepted, COMMANDLINES-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
-  COMMANDLINES-4 changes the form of the runtime package that holds SYNCAUTHORING-9's `preflight` and SYNCAUTHORING-11's tasks.
+  COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight` (`SetPreflightJob` in `DbDataSync.TaskRunner`) and SYNCAUTHORING-11's tasks.
 - AUTHORING-17, AUTHORING-18, AUTHORING-19 and AUTHORING-6, after the slice: `facts`, the connection test before publish and Set up for development
   (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in the Designer.
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
@@ -383,6 +382,53 @@ reading them (**Describe columns**) is SYNCAUTHORING-12's, so Column Mapping say
 dbo.Lines WHERE shipped_on IS NOT NULL` and saves; the draft's check reports the mapping until she writes its `columnMappings:` in Files. Option A, as
 built. Option B, offer **Custom query** only once Describe columns is built. Option C, let Column Mapping take column names typed by hand for a query
 source. Recommendation: A until SYNCAUTHORING-12.
+
+### SYNCAUTHORING-P49: the set's preflight asks every target login for INSERT, UPDATE and DELETE (default, awaiting the owner)
+
+The preflight checks the target with the engine's privilege functions and reports each of `INSERT`, `UPDATE` and `DELETE` the run login lacks as an
+error, whatever the mapping's writer does. Scenario: Ana's replication `audit` reloads `dw.dbo.audit` with `DeleteInsert`, which deletes and inserts
+and never updates; the DBA granted the login `INSERT` and `DELETE` only. The preflight reports "may not UPDATE dw.dbo.audit" as an error, so the
+deploy to `prod` stops until she confirms it. Option A, as built. Option B, each writer declares the privileges it needs (as it declares `NeedsKey`),
+and the preflight asks only for those. Recommendation: B, as a small task of this subject; A until then.
+
+### SYNCAUTHORING-P50: the preflight reads privileges on SQL Server and PostgreSQL only (default, awaiting the owner)
+
+The privilege functions are read on SQL Server (`HAS_PERMS_BY_NAME`) and PostgreSQL (`has_table_privilege`, `has_schema_privilege`, the table's owner
+for an alter). On MySQL, MariaDB, Oracle, DuckDB, Flight SQL and a YAML driver the preflight says the privileges are not read: the source's login
+is still checked by the read that returns no row, and whether the target's login may write is not checked. Scenario: Ana's set writes to Oracle with
+a login that may only select; the preflight reports information only, and the first pass fails on its first insert. Option A, as built. Option B,
+add MySQL (`information_schema.table_privileges`, `SHOW GRANTS`) and Oracle (`session_privs`, `all_tab_privs`), each with a conformance test on its
+engine. Recommendation: A now, B when a set writes to one of those engines in production.
+
+### SYNCAUTHORING-P51: how much a missing target table or column weighs in the preflight (default, awaiting the owner)
+
+A target table that is not there is an error, with the statement that creates it, unless the mapping says `createTargetTableIfMissing` and the run
+login may create it, when it is a warning (the first pass creates it). A mapped target column that is not there is an error unless the mapping says
+`alterTargetTableColumnsIfMissingOrChanged`, when it is a warning. Scenario: Ana's mapping `orders` targets `dw.dbo.orders`, which is not in `prod`;
+with `createTargetTableIfMissing` off the deploy stops on "The target table dw.dbo.orders is not there: apply the target side's provisioning (the
+set's `provision` task, createTargetTable) before the first pass", and she applies the provisioning or confirms the error. Option A, as built.
+Option B, a missing target table is always a warning, since `provision` creates it after the version is served. Option C, always an error.
+Recommendation: A, since a pass refuses a missing table and a confirmed error says so in the Runner's record.
+
+### SYNCAUTHORING-P52: what the preflight's read of the source compiles, and what a refused read says (default, awaiting the owner)
+
+The read that returns no row is `SELECT <the mapped columns that exist> FROM <table> WHERE (<filter>) AND 1 = 0`: a column's `transform`, a
+relationship's joined table and a query source's filter are not part of it (a query source is read as `SELECT * FROM (<query>) preflight_query WHERE
+1 = 0`). When the database refuses it, the finding gives the suite's classified words for a driver failure (`The statement was not accepted by the
+server. [db 42703]`), the statement and, for a filter, the table's columns; the database's own message is left out, as every driver failure leaves it
+out unless the host shows details. Scenario: Ana's filter `regoin > 0` fails with "The source filter of the mapping 'main' on crm.dbo.orders fails on
+the database: The statement was not accepted by the server. [db 42703] The statement, which reads no row: SELECT ... WHERE (regoin > 0) AND 1 = 0.
+The columns of crm.dbo.orders are id, name, region." Option A, as built. Option B, also compile each `transform` in the select list. Option C, show
+the database's own message for this read, which names the column and holds no row's value. Recommendation: A with C.
+
+### SYNCAUTHORING-P53: the preflight's parts and its input (default, awaiting the owner)
+
+Each mapping records one `preflight-findings` step keyed `<replication>/<mapping>`; a replication that keeps its state on the target records one
+more, `<replication> tracking`, checked once per target connection and database its mappings use. The input `replication` (empty by default, which
+is how the console starts it) checks one replication; a replication that is switched off is checked only when it is named. Scenario: the set
+`erp-sync` has `orders` (two mappings, `tracking: { mode: target }`) and `events` (switched off); the console's preflight records `orders/orders`,
+`orders/lines` and `orders tracking`, and nothing of `events`. Option A, as built. Option B, one part per replication holding all its mappings'
+findings. Recommendation: A, since SYNCAUTHORING-12 shows the findings per mapping.
 
 ## Open designs
 

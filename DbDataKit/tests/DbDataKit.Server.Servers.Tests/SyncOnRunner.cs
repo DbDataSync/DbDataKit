@@ -279,8 +279,15 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         Step("replication set published");
     }
 
+    /// <summary>A runtime version in the line of dbdatasync as built (<c>2026.11.0</c> for a build numbered <c>2026.11.23.1232-alpha.17</c>), so a set a Workspace server builds with dbdatasync's own range (<c>2026.11.x</c>) runs on it.</summary>
+    private static string RuntimeVersion()
+    {
+        var parts = (System.Diagnostics.FileVersionInfo.GetVersionInfo(Programs.Sync).ProductVersion ?? "").Split('-', '+')[0].Split('.');
+        return parts.Length >= 2 && parts.Take(2).All(p => p.Length > 0 && p.All(char.IsAsciiDigit)) ? $"{parts[0]}.{parts[1]}.0" : "1.0.0";
+    }
+
     private string RuntimeManifest() =>
-        "schema: package/1\nname: " + RuntimePackage + "\ndescription: \"The dbdatasync engine for the test\"\nruntime: true\nversion: \"1.0.0\"\nplatform: " + (OperatingSystem.IsWindows() ? "win-x64" : "linux-x64") + "\n" +
+        "schema: package/1\nname: " + RuntimePackage + "\ndescription: \"The dbdatasync engine for the test\"\nruntime: true\nversion: \"" + RuntimeVersion() + "\"\nplatform: " + (OperatingSystem.IsWindows() ? "win-x64" : "linux-x64") + "\n" +
         "launch: { kind: executable, command: dotnet, args: [\"{runtime}/bin/DbDataSync.TaskRunner.dll\", \"--runner\"] }\nbuilt_against: { dotnet: \"10.0\", kit: \"1\", protocol: dbdatakit.runner.v1 }\n";
 
     private static void CopyDirectory(string from, string to)
@@ -412,6 +419,23 @@ internal sealed class SyncOnRunner : IAsyncDisposable
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
         return (response.StatusCode, text.Length > 0 ? JsonNode.Parse(text) : null);
+    }
+
+    /// <summary>The console in this process, paired with the runner as <see cref="RunnerId"/>.</summary>
+    public WebApplication Console => console;
+
+    /// <summary>The administrator every call is made as.</summary>
+    public string PersonId => personId;
+
+    /// <summary>A call to the console's own API as the signed-in administrator.</summary>
+    public Task<(HttpStatusCode Status, JsonNode? Body)> ConsoleCall(HttpMethod method, string path, object? body = null) => As(method, path, body);
+
+    /// <summary>Runs a statement against the source database (SQL Server).</summary>
+    public async Task ExecuteSourceAsync(string sql)
+    {
+        await using var source = new SqlConnection(SourceConnectionString);
+        await source.OpenAsync();
+        await Exec(source, sql);
     }
 
     /// <summary>A call to the runner's management API as a signed-in administrator, through the console's relay (what the Runner's screens call).</summary>
