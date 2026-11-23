@@ -531,7 +531,44 @@ public static class ConsoleCli
             (args, context) => SetupInviteAsync(args, context, environment),
             DataSchemas.Object([("command", DataSchemas.String), ("product", DataSchemas.String), ("token_id", DataSchemas.String), ("expires", DataSchemas.String), ("role", DataSchemas.StringList), ("group", DataSchemas.String)],
                 "command", "product", "token_id", "expires", "role")),
+        new Verb("single-server", "Register, start and join every suite service installed beside this program; --stop stops them all. Needs elevation", EffectClass.TargetWrites,
+            "[--stop] [--skip-folder-permissions-check]",
+            (args, context) => SetupSingleServerAsync(args, context, environment), DataSchemas.None),
     ]);
+
+    /// <summary>
+    /// <c>setup single-server</c>: the console and the Gateway, Runner and Workspace installed beside this program registered with the machine's service
+    /// manager, started and joined to the console, each on its machine folder (under <c>%ProgramData%\DbDataKit</c> or <c>/var/lib/dbdatakit</c>, or the
+    /// folder <c>DBDATAKIT_DATA</c> names); <c>--stop</c> stops every suite service of the machine.
+    /// Design: docs/install.md#setting-up-one-machine-or-inviting-another
+    /// </summary>
+    private static async Task<int> SetupSingleServerAsync(string[] args, CliContext context, Func<string, string?>? environment)
+    {
+        const string usage = "Usage: setup single-server [--stop] [--skip-folder-permissions-check]";
+        var parsed = CliArgs.Parse(args, new HashSet<string> { "stop", FolderPermissions.FlagName }, new HashSet<string>());
+        if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0 || (parsed.Has("stop") && parsed.Has(FolderPermissions.FlagName)))
+        {
+            await context.Error.WriteLineAsync(usage);
+            return CliExit.Usage;
+        }
+
+        ISuiteServiceHost host = OperatingSystem.IsWindows()
+            ? new WindowsSuiteServiceHost(new DbDataKit.Hosting.WindowsService.WindowsServiceControlManager(), new DbDataKit.Security.Acl.FileSystemAclService(), new ElevationDetector())
+            : new SystemdSuiteServiceHost();
+        var consoleFolder = SuiteEnvironment.ResolveServiceFolder(ConsoleSettings.ServiceName, environment);
+        var setup = new SingleServerSetup(host, new ConsoleSingleServer(consoleFolder, environment));
+        var options = new SingleServerSetupOptions { SkipFolderPermissionsCheck = parsed.Has(FolderPermissions.FlagName) };
+        if (parsed.Has("stop")) return await setup.StopAllAsync(options, context.Out, context.Cancellation);
+
+        var binary = Environment.ProcessPath ?? "";
+        if (Path.GetFileNameWithoutExtension(binary).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            await context.Error.WriteLineAsync("Run setup single-server from the dbdatakit program (not 'dotnet dbdatakit.dll'): the services are registered to run the programs beside it.");
+            return CliExit.Failure;
+        }
+        var (members, missing) = SuiteDiscovery.Find(binary, service => SuiteEnvironment.ResolveServiceFolder(service.DataFolder, environment));
+        return await setup.RunAsync(members, options, context.Out, context.Cancellation, missing);
+    }
 
     /// <summary>
     /// <c>setup invite</c>: a join token in the console's state and the <c>pair</c> command that uses it, printed once. It opens the console's own state and

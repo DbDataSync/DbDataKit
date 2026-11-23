@@ -129,7 +129,9 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
     public void Reconfigure(ServiceInstallSpec spec, SecureString? password)
     {
         using var scm = OpenManager(ScManagerConnect);
-        var h = OpenServiceW(scm.Handle, spec.Name, ServiceChangeConfig | ServiceQueryConfig);
+        // failure actions that restart the service need SERVICE_START on the handle as well (ChangeServiceConfig2, SERVICE_CONFIG_FAILURE_ACTIONS):
+        // without it the command line is changed and the failure actions are refused with access denied
+        var h = OpenServiceW(scm.Handle, spec.Name, ServiceChangeConfig | ServiceQueryConfig | ServiceStart);
         if (h == IntPtr.Zero) throw Fail(Marshal.GetLastWin32Error(), "open", spec.Name);
         using var svc = new ScHandle(h);
 
