@@ -84,14 +84,21 @@ public sealed class ConnectionGrant
         DryRun = dryRun,
     };
 
-    /// <summary>The opener a remote run uses when the host gives none: asks the runner for the slot's connection and its login, and makes the handle with <paramref name="factory"/> (null: the grant itself).</summary>
-    internal static SlotOpener Opener(RunnerApi.RunnerApiClient client, Metadata headers, Func<ConnectionGrant, Type, object>? factory, bool dryRun = false) =>
-        async (slot, type, ct) =>
+    /// <summary>The opener a remote run uses when the host gives none: asks the runner for the slot's connection and its default login, and makes the handle with <paramref name="factory"/> (null: the grant itself).</summary>
+    internal static SlotOpener Opener(RunnerApi.RunnerApiClient client, Metadata headers, Func<ConnectionGrant, Type, object>? factory, bool dryRun = false)
+    {
+        var opener = RoleOpener(client, headers, factory, dryRun);
+        return (slot, type, ct) => opener(slot, "default", type, ct);
+    }
+
+    /// <summary>The same opener for a login role the job names (<c>Slot&lt;T&gt;.OpenAsync(role, ct)</c>).</summary>
+    internal static SlotRoleOpener RoleOpener(RunnerApi.RunnerApiClient client, Metadata headers, Func<ConnectionGrant, Type, object>? factory, bool dryRun = false) =>
+        async (slot, role, type, ct) =>
         {
             ConnectionGrant grant;
             try
             {
-                var reply = await client.ResolveConnectionAsync(new ResolveConnectionRequest { Slot = slot, Role = "default" }, headers, cancellationToken: ct).ResponseAsync.ConfigureAwait(false);
+                var reply = await client.ResolveConnectionAsync(new ResolveConnectionRequest { Slot = slot, Role = role }, headers, cancellationToken: ct).ResponseAsync.ConfigureAwait(false);
                 grant = From(reply, slot, dryRun);
             }
             catch (RpcException ex)

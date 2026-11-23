@@ -81,10 +81,15 @@ internal interface IKeyed
 public abstract class Slots
 {
     internal SlotOpener? Opener { get; set; }
+
+    internal SlotRoleOpener? RoleOpener { get; set; }
 }
 
 /// <summary>Opens the connection a slot is bound to: by slot name, whatever the channel binds it to. The job never sees a secret.</summary>
 public delegate Task<object> SlotOpener(string slot, Type connectionType, CancellationToken ct);
+
+/// <summary>Opens the connection a slot is bound to with the login of one role (<c>default</c>, <c>read</c> or <c>write</c>), as the runner resolves it: a read request gets the connection's read login, else its default one, never the write login.</summary>
+public delegate Task<object> SlotRoleOpener(string slot, string role, Type connectionType, CancellationToken ct);
 
 /// <summary>What the manifest generator and the binder need of a <see cref="Slot{TConnection}"/> without knowing the connection type.</summary>
 public abstract class SlotBase(string name, string kind, Type connectionType, string? env = null)
@@ -106,6 +111,15 @@ public abstract class SlotBase(string name, string kind, Type connectionType, st
         var opener = Owner?.Opener ?? throw new InvalidOperationException($"The slot '{Name}' is not bound: a slot opens only inside a running job (JobRunner.RunAsync).");
         return await opener(Name, ConnectionType, ct).ConfigureAwait(false);
     }
+
+    private protected async Task<object> OpenCoreAsync(string role, CancellationToken ct)
+    {
+        if (role is not ("default" or "read" or "write")) throw new ArgumentException($"The login role '{role}' is not one of default, read or write.", nameof(role));
+        if (role == "default") return await OpenCoreAsync(ct).ConfigureAwait(false);
+        if (Owner is null) throw new InvalidOperationException($"The slot '{Name}' is not bound: a slot opens only inside a running job (JobRunner.RunAsync).");
+        var opener = Owner.RoleOpener ?? throw new InvalidOperationException($"The slot '{Name}' cannot be opened with the {role} login: this run opens its slots with an opener of its own, which takes no role.");
+        return await opener(Name, role, ConnectionType, ct).ConfigureAwait(false);
+    }
 }
 
 /// <summary>A place a connection is plugged in: its name, and the type of handle the job gets (<typeparamref name="TConnection"/>).</summary>
@@ -121,6 +135,9 @@ public sealed class Slot<TConnection> : SlotBase
     }
 
     public async Task<TConnection> OpenAsync(CancellationToken ct) => (TConnection)await OpenCoreAsync(ct).ConfigureAwait(false);
+
+    /// <summary>Opens the slot with the login of <paramref name="role"/> (<c>default</c>, <c>read</c> or <c>write</c>). A <c>read</c> request gets the bound connection's read login, else its default one; the runner refuses a <c>write</c> request on a read-only connection.</summary>
+    public async Task<TConnection> OpenAsync(string role, CancellationToken ct) => (TConnection)await OpenCoreAsync(role, ct).ConfigureAwait(false);
 
     internal static string DefaultKind(Type type)
     {
