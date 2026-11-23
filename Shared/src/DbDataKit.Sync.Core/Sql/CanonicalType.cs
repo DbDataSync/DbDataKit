@@ -83,3 +83,13 @@ public sealed record CanonicalType(
 /// is lost — this is the output that stops a silent truncation, so it is a return value, not a doc
 /// comment.</param>
 public sealed record RenderedColumnType(string Sql, string? Fidelity);
+
+/// <summary>
+/// Sync's <see cref="CanonicalType"/> as the shared dialects' <see cref="DbDataKit.Dialect.CanonicalType"/>, for a caller that judges with the shared
+/// rules whether one type fits another (<c>DbDataKit.Transfer.FidelityRules</c>) after Sync's own dialect has read each side's native type.
+/// </summary>
+public static class CanonicalTypes
+{
+    /// <summary>The same shape in the shared form; a length, precision or scale Sync leaves open takes the shared table's default, as rendering does.</summary>
+    public static DbDataKit.Dialect.CanonicalType ToShared(CanonicalType type) => SharedTypes.ToShared(type);
+}

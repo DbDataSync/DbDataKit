@@ -4,20 +4,33 @@ using DbDataKit.Catalog;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
+using DbDataSync.Core.Config;
+using DbDataSync.Core.Secrets;
+using DbDataSync.Drivers.Abstractions;
+using DbDataSync.Drivers.Descriptor;
+using DbDataSync.Drivers.Generic;
+using DbDataSync.Provisioning;
+using Sql = DbDataSync.Core.Sql;
 
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>
-/// The offline checks of a Sync draft: each table mapping read against the draft's <c>catalog-cache.yaml</c> and its connection files, with no
-/// connection and no program, in the Workspace's own process. Per mapping: the tables and the mapped columns are in the cache, the columns a source filter
-/// names are columns of its table (a filter the dialect's lexer cannot read is not checked offline), every mapped source type is one the driver's type map
-/// knows, the key columns are not nullable, each source type fits the target column's cached type, and the mapping's key is the target's primary key or one of
-/// its unique keys.
+/// The offline checks of a Sync draft: each table mapping read against the draft's <c>catalog-cache.yaml</c>, its connection files and its driver
+/// descriptors (<c>drivers/&lt;id&gt;/driver.yaml</c>), with no connection and no program, in the Workspace's own process. Per mapping: the tables and
+/// the mapped columns are in the cache, the columns a source filter names are columns of its table (a filter the lexer cannot read is not checked
+/// offline), every mapped source type is one the driver reads, each source type fits the target column's cached type, the key columns are not nullable,
+/// the mapping's key is the target's primary key or one of its unique keys, and a reader or writer that matches rows on a key has one.
+/// <para>
+/// Types are read by Sync's own code, so the check and the engine agree on a type: a side's columns through Sync's column reader over the cache
+/// (<see cref="MappingColumnReader"/>, <see cref="SyncCatalogColumns"/>), each native type through the driver's Sync dialect (the built-in engines' dialects
+/// over the shared type tables, the type map of a <c>driver.yaml</c>, ANSI first for a Flight SQL server), then the two sides compared by the shared
+/// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataSync.Drivers.Generic</c>), in their own
+/// words; an engine's own reader or writer (change tracking, CDC, a logical slot, an engine's merge) is reported as not checked offline.
+/// </para>
 /// <para>
 /// A table or column the mapping names that the cache does not hold is an error, so a build never carries a mapping the cache contradicts: the author
 /// refreshes the cache or corrects the name. A type that does not fit and a key that does not agree are warnings, since the live checks of the set's
-/// <c>preflight</c> judge them again on the databases themselves. A connection whose driver is Sync's own (a YAML driver) has its type map in Sync, which the Workspace does not
-/// load, so its types and filters are reported as not checked offline. Files that do not parse are left to the program's check, which names them.
+/// <c>preflight</c> judge them again on the databases themselves. Files that do not parse are left to the program's check, which names them.
 /// Design: docs/authoring-metadata.md#a-sync-project
 /// </para>
 /// </summary>
@@ -26,7 +39,8 @@ public static class SyncOfflineCheck
     /// <summary>The draft has no catalog cache, so none of the offline checks ran.</summary>
     public const string NoCache = "DBD-WS-SYNC-NOCACHE";
 
-    /// <summary>Something was not checked offline: a connection with no entry in the cache, a driver whose type map is Sync's own, a filter the lexer cannot read.</summary>
+    /// <summary>Something was not checked offline: a connection with no entry in the cache, a driver with no <c>driver.yaml</c> in the draft, a filter the
+    /// lexer cannot read, a reader or writer that is an engine's own.</summary>
     public const string NotChecked = "DBD-WS-SYNC-NOTCHECKED";
 
     /// <summary>A table a mapping names is not in the cache.</summary>
@@ -41,13 +55,30 @@ public static class SyncOfflineCheck
     /// <summary>A source column's type does not fit, or may not fit, the target column's cached type.</summary>
     public const string Types = "DBD-WS-SYNC-TYPES";
 
-    /// <summary>The mapping's key: a nullable key column, or a key that is not the target's primary key or a unique key.</summary>
+    /// <summary>The mapping's key: a nullable key column, a key that is not the target's primary key or a unique key, or no key where the reader or writer
+    /// matches rows on one.</summary>
     public const string Key = "DBD-WS-SYNC-KEY";
 
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
-    /// <summary>The engines whose Sync driver reads its types through the shared dialect of the same name.</summary>
-    private static readonly HashSet<string> BuiltInEngines = new(StringComparer.Ordinal) { "sqlserver", "postgres", "mysql", "oracle", "duckdb" };
+    /// <summary>The Sync dialect of each built-in engine, under the name a connection file gives it.</summary>
+    private static readonly Dictionary<string, Sql.SqlDialect> BuiltInEngines = new(StringComparer.Ordinal)
+    {
+        ["sqlserver"] = Sql.MsSqlDialect.Instance,
+        ["postgres"] = Sql.PostgresDialect.Instance,
+        ["mysql"] = Sql.MySqlDialect.Instance,
+        ["oracle"] = Sql.OracleDialect.Instance,
+        ["duckdb"] = Sql.DuckDbDialect.Instance,
+    };
+
+    /// <summary>The readers and writers of Sync's generic drivers, which every engine's driver and every <c>driver.yaml</c> offers. Any other kind is an
+    /// engine's own, and whether it needs a key is not known offline.</summary>
+    private static readonly HashSet<string> GenericKinds = new(StringComparer.Ordinal)
+    {
+        GenericDriverKinds.Watermark, GenericDriverKinds.TriggerAudit, GenericDriverKinds.BatchReload, GenericDriverKinds.KeyReconcile,
+        GenericDriverKinds.DeleteInsert, GenericDriverKinds.ChangeApply, GenericDriverKinds.KeyReconcileDelete, GenericDriverKinds.KeyReconcileScd2Close,
+        GenericDriverKinds.Snapshot, GenericDriverKinds.Scd2,
+    };
 
     /// <summary>Words a filter uses that are neither columns nor reserved in every dialect: literals, operators spelled as words, date parts, the clock.</summary>
     private static readonly HashSet<string> FilterWords = new(StringComparer.OrdinalIgnoreCase)
@@ -84,15 +115,32 @@ public static class SyncOfflineCheck
         return run.Found;
     }
 
-    private sealed record Side(string Connection, string Database, string Schema, string Table, string? Query, string? Filter, int Line, int FilterLine, int TableLine);
+    private sealed record Side(string Connection, string Database, string Schema, string Table, string? Query, string? Filter, int Line, int FilterLine, int TableLine)
+    {
+        public TableRef Ref => new() { ConnectionName = Connection, Database = Database, Schema = Schema, Table = Table };
+    }
 
-    private sealed record ConnectionInfo(string? Engine, ISqlDialect? Dialect);
+    /// <summary>How a filter's text is read: the lexer's syntax, the reserved words, and how a quoted name is unwrapped.</summary>
+    internal sealed record FilterReader(string Name, SqlSyntax Syntax, Func<string, bool> IsReserved, Func<string, IReadOnlyList<string>> Split)
+    {
+        public static FilterReader Of(ISqlDialect dialect) => new(dialect.Id.Value, dialect.Syntax, dialect.Identifiers.IsReserved, dialect.SplitQualifiedName);
+    }
+
+    /// <param name="Engine">The connection file's <c>engine</c>: a built-in engine's name, <c>flightsql</c>, or a driver's id.</param>
+    /// <param name="Dialect">The Sync dialect the engine's driver builds its statements with; null when the check cannot know it.</param>
+    /// <param name="ToCanonical">How the driver reads a native type, as the engine does; null when the types are not checked offline.</param>
+    /// <param name="Filter">How the driver's filters are read; null when they are not checked offline.</param>
+    /// <param name="TypeMap">How a finding names the type map: "the sqlserver driver's type map".</param>
+    /// <param name="Unchecked">Why the types and filters are not checked offline, when they are not.</param>
+    private sealed record ConnectionInfo(string Engine, Sql.SqlDialect? Dialect, Func<string, Sql.CanonicalType>? ToCanonical, FilterReader? Filter, string TypeMap, string? Unchecked);
 
     private sealed class Run(string root, CatalogCacheFile cache)
     {
         public List<ProjectDiagnostic> Found { get; } = [];
         private readonly Dictionary<string, ConnectionInfo?> connections = new(StringComparer.Ordinal);
         private readonly HashSet<string> noted = new(StringComparer.Ordinal);
+        private readonly MappingColumnReader reader = new(new SyncCatalogColumns(cache));
+        private Dictionary<string, (DriverDescriptorYaml? Descriptor, string File, string? Error)>? descriptors;
 
         private static string Relative(string root, string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
 
@@ -114,20 +162,85 @@ public static class SyncOfflineCheck
             if (noted.Add(once)) Found.Add(new(severity, code, message, file, line));
         }
 
+        /// <summary>The draft's driver descriptors by their id, read once: where the engine loads them, <c>drivers/&lt;folder&gt;/driver.yaml</c>. One that does
+        /// not read is kept under its folder's name with the reason.</summary>
+        private Dictionary<string, (DriverDescriptorYaml? Descriptor, string File, string? Error)> Descriptors()
+        {
+            if (descriptors is not null) return descriptors;
+            descriptors = new(StringComparer.Ordinal);
+            var folder = Path.Combine(root, "drivers");
+            if (!Directory.Exists(folder)) return descriptors;
+            foreach (var dir in Directory.EnumerateDirectories(folder).Order(StringComparer.Ordinal))
+            {
+                var path = Path.Combine(dir, "driver.yaml");
+                if (!File.Exists(path)) continue;
+                var file = Relative(root, path);
+                try
+                {
+                    var descriptor = DriverDescriptors.Read(path);
+                    descriptors.TryAdd(descriptor.Id, (descriptor, file, null));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or YamlDotNet.Core.YamlException)
+                {
+                    descriptors.TryAdd(Path.GetFileName(dir), (null, file, ex.Message));
+                }
+            }
+            return descriptors;
+        }
+
         private ConnectionInfo? Connection(string name)
         {
             if (connections.TryGetValue(name, out var known)) return known;
             ConnectionInfo? info = null;
             var path = Path.Combine(root, "config", "connections", name + ".yaml");
-            if (SyncProjectKind.IsName(name) && File.Exists(path) && Read(path) is { } map)
-            {
-                var engine = Text(map, "engine");
-                var dialect = Text(map, "dialect");
-                var id = engine == "flightsql" ? dialect : engine;
-                info = new(engine, id is not null && BuiltInEngines.Contains(id) ? DialectCatalog.Builtin.Get(id) : null);
-            }
+            if (SyncProjectKind.IsName(name) && File.Exists(path) && Read(path) is { } map && Text(map, "engine") is { Length: > 0 } engine)
+                info = Resolve(engine, Text(map, "dialect"));
             connections[name] = info;
             return info;
+        }
+
+        /// <summary>The driver a connection file names, as the engine resolves it: a built-in engine, Flight SQL with or without the dialect of the engine
+        /// behind it, or a driver's id, which is a <c>driver.yaml</c> of the draft or a driver the check cannot read.</summary>
+        private ConnectionInfo Resolve(string engine, string? dialectName)
+        {
+            var ansi = DialectCatalog.Builtin.Get("ansi");
+            if (BuiltInEngines.TryGetValue(engine, out var builtIn))
+                return new(engine, builtIn, builtIn.ToCanonicalType, FilterReader.Of(DialectCatalog.Builtin.Get(engine)), $"the {engine} driver's type map", null);
+            if (engine == "flightsql")
+            {
+                // A Flight SQL column reports an ANSI type name, whatever engine the server fronts; a name ANSI does not have is read as that engine's.
+                if (dialectName is null)
+                    return new(engine, Sql.AnsiDialect.Instance, Sql.AnsiDialect.Instance.ToCanonicalType, FilterReader.Of(ansi), "the flightsql driver's type map", null);
+                if (BuiltInEngines.TryGetValue(dialectName, out var inner))
+                    return new(engine, inner, native => Sql.AnsiDialect.Instance.ToCanonicalType(native) is { Kind: not Sql.CanonicalTypeKind.Unmappable } read ? read : inner.ToCanonicalType(native),
+                        FilterReader.Of(DialectCatalog.Builtin.Get(dialectName)), $"the flightsql driver's type map (with the {dialectName} dialect)", null);
+                return new(engine, null, null, null, "", $"the dialect '{dialectName}' is not one a flightsql connection takes");
+            }
+            if (!Descriptors().TryGetValue(engine, out var found))
+                return new(engine, null, null, null, "",
+                    $"the driver '{engine}' has no driver.yaml under drivers/ in the draft (a compiled driver, or one installed where the set runs), so its type map is not known here");
+            if (found.Descriptor is not { } descriptor)
+                return new(engine, null, null, null, "", $"{found.File} does not read ({found.Error})");
+            Sql.SqlDialect dialect;
+            try { dialect = new DescriptorDialect(descriptor.Dialect, descriptor.TypeMap); }
+            catch (NotSupportedException ex) { return new(engine, null, null, null, "", $"{found.File} does not read ({ex.Message})"); }
+            return new(engine, dialect, dialect.ToCanonicalType, DescriptorFilter(descriptor, dialect, ansi), $"the {engine} driver's type map ({found.File})", null);
+        }
+
+        /// <summary>
+        /// A <c>driver.yaml</c> names how its engine quotes a name but not the rest of its grammar, so its filters are read by the ANSI lexer with that quoting:
+        /// brackets as well as double quotes (SQL Server's way), or backticks with double quotes as strings (MySQL's way).
+        /// </summary>
+        private static FilterReader DescriptorFilter(DriverDescriptorYaml descriptor, Sql.SqlDialect dialect, ISqlDialect ansi)
+        {
+            var syntax = descriptor.Dialect.QuoteIdentifier switch
+            {
+                "bracket" => ansi.Syntax | SqlSyntax.BracketIdentifier,
+                "backtick" => (ansi.Syntax & ~SqlSyntax.DoubleQuoteIdentifier) | SqlSyntax.BacktickIdentifier | SqlSyntax.DoubleQuoteString,
+                _ => ansi.Syntax,
+            };
+            return new(descriptor.Id, syntax, ansi.Identifiers.IsReserved,
+                quoted => quoted.StartsWith('"') && descriptor.Dialect.QuoteIdentifier != "doubleQuote" ? ansi.SplitQualifiedName(quoted) : dialect.SplitQualifiedName(quoted));
         }
 
         private static Side? SideOf(YamlNode? list, YamlMapping? inherited, bool source)
@@ -159,6 +272,12 @@ public static class SyncOfflineCheck
         private static string Where(CacheConnection connection) => connection.Read is { } r ? $" (read from {r.Server}{(r.Channel is { } c ? $", channel {c}" : "")} at {r.At})" : "";
 
         private static string Label(Side side) => string.Join('.', new[] { side.Database, side.Schema, side.Table }.Where(p => p.Length > 0));
+
+        /// <summary>A side's columns as Sync's column reader reads them from the cache: the answer the engine's provisioning and key rules start from.
+        /// Null when the table is not there. The cache answers in memory, so the read completes before it returns.</summary>
+        private List<ColumnMetadata>? ColumnsOf(Side side) =>
+            reader.ReadAsync(side.Ref, CancellationToken.None).GetAwaiter().GetResult().Shape?
+                .Select(c => new ColumnMetadata(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity, c.KeyOrdinal)).ToList();
 
         public void Mapping(string replicationFolder, string mappingPath)
         {
@@ -192,9 +311,11 @@ public static class SyncOfflineCheck
             }
 
             CacheTable? targetTable = null;
-            if (Cached(target, file) is { } targetCache) targetTable = Find(targetCache, target.Database, target.Schema, target.Table);   // a target not there yet is one provisioning creates
-            if (sourceTable is not null && targetTable is not null) TypesAgree(file, source, target, sourceTable, targetTable, sourceInfo, targetInfo, columns);
+            var targetCache = Cached(target, file);
+            if (targetCache is not null) targetTable = Find(targetCache, target.Database, target.Schema, target.Table);   // a target not there yet is one provisioning creates
+            if (sourceTable is not null && targetTable is not null) TypesAgree(file, source, target, sourceInfo, targetInfo, columns);
             Keys(file, mapping, sourceTable, targetTable, target, columns);
+            KeysNeeded(file, task, replicationFolder, mappingPath, mapping, source, target, sourceTable is not null, targetTable is not null, targetCache is not null, sourceInfo, targetInfo);
         }
 
         private void SourceColumns(string file, YamlMapping mapping, Side source, CacheConnection sourceCache, CacheTable table, ConnectionInfo? info, List<YamlMapping> columns)
@@ -226,43 +347,50 @@ public static class SyncOfflineCheck
                     Found.Add(new("error", Column, $"The source column '{name}' is not a column of {fromLabel} in {CatalogCache.FileName}{Where(sourceCache)}.", file, at));
                     continue;
                 }
-                if (info?.Dialect is not { } dialect || !checkedTypes.Add(fromLabel + "." + cached.Name)) continue;
-                var mapped = dialect.ToCanonical(cached.Type);
-                if (!mapped.IsMapped)
-                    Found.Add(new("warning", UnknownType, $"The source column '{name}' of {fromLabel} has the type {cached.Type}, which the {info.Engine} driver's type map does not know{(mapped.Note is { Length: > 0 } n ? $" ({n})" : "")}. Leave the column out, or give it a transform that reads it as a type the driver knows.", file, at));
+                if (info?.ToCanonical is not { } read || !checkedTypes.Add(fromLabel + "." + cached.Name)) continue;
+                var mapped = read(cached.Type);
+                if (mapped.Kind == Sql.CanonicalTypeKind.Unmappable)
+                    Found.Add(new("warning", UnknownType, $"The source column '{name}' of {fromLabel} has the type {cached.Type}, which {info.TypeMap} does not know{(mapped.SourceNote is { Length: > 0 } n ? $" ({n})" : "")}. Leave the column out, or give it a transform that reads it as a type the driver knows.", file, at));
             }
-            if (info?.Dialect is null)
+            if (info?.ToCanonical is null)
                 Note("types:" + source.Connection, "info", NotChecked,
-                    $"The connection '{source.Connection}' uses the driver '{info?.Engine ?? "unknown"}', whose type map is Sync's own: its source types and filters are not checked offline, only by the set's preflight.", file, source.Line);
-            if (source.Filter is { Length: > 0 } filter && info?.Dialect is { } filterDialect) Filter(file, source, sourceCache, table, filter, filterDialect);
+                    $"The connection '{source.Connection}' uses the driver '{info?.Engine ?? "unknown"}': {info?.Unchecked ?? "its connection file does not name an engine"}. Its source types and filters are not checked offline, only by the set's preflight.", file, source.Line);
+            if (source.Filter is { Length: > 0 } filter && info?.Filter is { } filterReader) Filter(file, source, sourceCache, table, filter, filterReader);
         }
 
-        private void Filter(string file, Side source, CacheConnection sourceCache, CacheTable table, string filter, ISqlDialect dialect)
+        private void Filter(string file, Side source, CacheConnection sourceCache, CacheTable table, string filter, FilterReader dialect)
         {
             var (names, unreadable) = FilterColumns(filter, dialect, n => ColumnOf(table, n) is not null);
             if (unreadable is not null)
             {
-                Found.Add(new("info", NotChecked, $"The source filter is not checked offline: the {dialect.Id.Value} lexer cannot read it ({unreadable}).", file, source.FilterLine));
+                Found.Add(new("info", NotChecked, $"The source filter is not checked offline: the {dialect.Name} lexer cannot read it ({unreadable}).", file, source.FilterLine));
                 return;
             }
             foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
                 Found.Add(new("error", Column, $"The source filter names '{name}', which is not a column of {Label(source)} in {CatalogCache.FileName}{Where(sourceCache)}.", file, source.FilterLine));
         }
 
-        private void TypesAgree(string file, Side source, Side target, CacheTable sourceTable, CacheTable targetTable, ConnectionInfo? sourceInfo, ConnectionInfo? targetInfo, List<YamlMapping> columns)
+        /// <summary>
+        /// Each mapped source column's type, as the source's driver reads it (the type provisioning would give the target column), against the target
+        /// column's type as the target's driver reads it, judged by the shared <see cref="FidelityRules"/>.
+        /// </summary>
+        private void TypesAgree(string file, Side source, Side target, ConnectionInfo? sourceInfo, ConnectionInfo? targetInfo, List<YamlMapping> columns)
         {
-            if (sourceInfo?.Dialect is not { } from || targetInfo?.Dialect is not { } to) return;
+            if (sourceInfo?.ToCanonical is not { } fromSource || targetInfo?.ToCanonical is not { } fromTarget) return;
+            if (ColumnsOf(source) is not { } sourceColumns || ColumnsOf(target) is not { } targetColumns) return;
             foreach (var column in columns)
             {
                 // a transform's result, or a column of a joined table, has a type the cache does not give
                 if (Text(column, "transform") is { Length: > 0 } || Text(column, "relationship") is { Length: > 0 }) continue;
                 if (Text(column, "sourceColumn") is not { Length: > 0 } sourceName || Text(column, "targetColumn") is not { Length: > 0 } targetName) continue;
-                if (ColumnOf(sourceTable, sourceName) is not { } s || ColumnOf(targetTable, targetName) is not { } t) continue;
-                var sourceType = from.ToCanonical(s.Type);
-                var targetType = to.ToCanonical(t.Type);
-                if (!sourceType.IsMapped || !targetType.IsMapped) continue;
-                var fit = FidelityRules.Assess(sourceType.Result!, targetType.Result!);
-                var pair = $"'{sourceName}' ({s.Type} on {Label(source)}) into '{targetName}' ({t.Type} on {Label(target)})";
+                var s = sourceColumns.FirstOrDefault(c => string.Equals(c.Name, sourceName, StringComparison.OrdinalIgnoreCase));
+                var t = targetColumns.FirstOrDefault(c => string.Equals(c.Name, targetName, StringComparison.OrdinalIgnoreCase));
+                if (s is null || t is null) continue;
+                var sourceType = fromSource(s.NativeType);
+                var targetType = fromTarget(t.NativeType);
+                if (sourceType.Kind == Sql.CanonicalTypeKind.Unmappable || targetType.Kind == Sql.CanonicalTypeKind.Unmappable) continue;
+                var fit = FidelityRules.Assess(Sql.CanonicalTypes.ToShared(sourceType), Sql.CanonicalTypes.ToShared(targetType));
+                var pair = $"'{sourceName}' ({s.NativeType} on {Label(source)}) into '{targetName}' ({t.NativeType} on {Label(target)})";
                 if (!fit.IsMapped)
                     Found.Add(new("warning", Types, $"The column {pair} is not a type the target column can hold{(fit.Note is { Length: > 0 } n ? $": {n}" : "")}.", file, LineOf(column, "targetColumn")));
                 else if (fit.Fidelity == Fidelity.Lossy)
@@ -278,7 +406,7 @@ public static class SyncOfflineCheck
                 : (mapping.Get("sourceColumns") as YamlSequence)?.Items.OfType<YamlMapping>().Where(c => Text(c, "isPrimaryKey") == "true").Select(c => Text(c, "name")).OfType<string>().ToList() is { Count: > 0 } own ? own
                 : sourceTable?.Columns.Where(c => c.Key).Select(c => c.Name).ToList() ?? [];
             if (key.Count == 0) return;
-            var at = mapping.GetEntry("primaryKey") is { } entry ? entry.Value.Line : LineOf(mapping, "targets");
+            var at = KeyLine(mapping);
             if (sourceTable is not null)
                 foreach (var name in key)
                     if (ColumnOf(sourceTable, name) is { Nullable: true } c)
@@ -302,6 +430,131 @@ public static class SyncOfflineCheck
             if (candidates.Any(k => wanted.SetEquals(k))) return;
             Found.Add(new("warning", Key, $"The mapping's key ({string.Join(", ", targetKey)}) is not the primary key ({(primary.Count > 0 ? string.Join(", ", primary) : "none")}) or a unique key of the target {Label(target)} in {CatalogCache.FileName}: rows would be matched on columns the target does not keep unique.", file, at));
         }
+
+        private static int KeyLine(YamlMapping mapping) => mapping.GetEntry("primaryKey") is { } entry ? entry.Value.Line : LineOf(mapping, "targets");
+
+        /// <summary>The replication and the mapping as Sync's configuration model reads them, or null when a file does not read (the program's check names it).</summary>
+        private static (ReplicationTaskConfig Task, TableMappingConfig Mapping)? LoadConfig(YamlMapping? taskYaml, string replicationFolder, string mappingPath)
+        {
+            // a task with no change-processing reader has no pipeline to resolve; the program's check refuses it
+            if (taskYaml?.Get("changeProcessing") is not YamlMapping { } processing || processing.Get("reader") is not YamlMapping) return null;
+            try
+            {
+                var repository = ConfigRepository.ReadOnly(Path.GetDirectoryName(Path.GetDirectoryName(replicationFolder))!, SecretStore.ForProviders());
+                var replication = Path.GetFileName(replicationFolder);
+                var task = repository.LoadReplicationTask(replication);
+                var mapping = repository.LoadTableMapping(replication, Path.GetFileNameWithoutExtension(mappingPath));
+                return (task, mapping);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ConfigValidationException or YamlDotNet.Core.YamlException
+                or ArgumentException or FormatException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The readers and writers the mapping runs (its change processing, its bulk load, and its reconcile sweep when that is on), each asked whether it
+        /// matches rows on a key and whether the cache gives it one. A target that is not in the cache is checked as provisioning would create it: the mapped
+        /// columns with the source's key.
+        /// </summary>
+        private void KeysNeeded(string file, YamlMapping? taskYaml, string replicationFolder, string mappingPath, YamlMapping yaml, Side source, Side target, bool sourceInCache, bool targetInCache, bool targetConnectionCached, ConnectionInfo? sourceInfo, ConnectionInfo? targetInfo)
+        {
+            if (LoadConfig(taskYaml, replicationFolder, mappingPath) is not { } loaded) return;
+            var (task, mapping) = loaded;
+            var stages = new List<(string Role, string Kind, IReadOnlyDictionary<string, string> Options)>
+            {
+                ("reader", PipelineResolution.Reader(task, mapping).Kind, PipelineResolution.Reader(task, mapping).Options),
+                ("writer", PipelineResolution.Writer(task, mapping).Kind, PipelineResolution.Writer(task, mapping).Options),
+            };
+            if (PipelineResolution.BulkLoadReader(task, mapping) is { } bulkReader) stages.Add(("reader", bulkReader.Kind, bulkReader.Options));
+            if (PipelineResolution.BulkLoadWriter(task, mapping) is { } bulkWriter) stages.Add(("writer", bulkWriter.Kind, bulkWriter.Options));
+            if (PipelineResolution.Reconcile(task, mapping).Enabled)
+            {
+                stages.Add(("reader", PipelineResolution.ReconcileReaderKind(task, mapping), new Dictionary<string, string>()));
+                stages.Add(("writer", PipelineResolution.ReconcileWriterKind(task, mapping), PipelineResolution.Writer(task, mapping).Options));
+            }
+
+            IReadOnlyList<ColumnMetadata>? sourceColumns = sourceInCache && ColumnsOf(source) is { } read ? read.WithKey(mapping.PrimaryKey) : null;
+            var targetColumns = targetInCache ? TargetAsCached(target, mapping) : targetConnectionCached ? TargetAsProvisioned(sourceColumns, sourceInfo, mapping) : null;
+            foreach (var (role, kind, options) in stages.DistinctBy(s => (s.Role, s.Kind)))
+            {
+                if (string.IsNullOrEmpty(kind)) continue;
+                if (!GenericKinds.Contains(kind))
+                {
+                    Note($"kind:{replicationFolder}:{role}:{kind}", "info", NotChecked,
+                        $"The {role} '{kind}' is a driver's own: whether it needs a key is not checked offline, only by the set's preflight.", file, null);
+                    continue;
+                }
+                if (KeyProblem(kind, options, mapping, source, target, sourceColumns, targetColumns, targetInfo) is not { } problem) continue;
+                var onTarget = kind is GenericDriverKinds.ChangeApply or GenericDriverKinds.KeyReconcileDelete;
+                var where = onTarget && !targetInCache
+                    ? $"The target {Label(target)} is not in {CatalogCache.FileName}, so it is checked as provisioning would create it, with the source's key. "
+                    : "";
+                Found.Add(new("warning", Key, $"{where}The {role} '{kind}' would refuse this mapping: {problem}", file, onTarget ? KeyLine(yaml) : source.TableLine));
+            }
+        }
+
+        /// <summary>Why a generic reader or writer would refuse the mapping for want of a key, in the words of Sync's code where it has a rule to call; null when it has a key or the cache cannot tell.</summary>
+        private static string? KeyProblem(string kind, IReadOnlyDictionary<string, string> options, TableMappingConfig mapping, Side source, Side target,
+            IReadOnlyList<ColumnMetadata>? sourceColumns, List<CachedColumn>? targetColumns, ConnectionInfo? targetInfo)
+        {
+            switch (kind)
+            {
+                case GenericDriverKinds.TriggerAudit when sourceColumns is not null:
+                    var plan = TriggerAuditPlan.Build(Label(source), new TriggerAuditState(false, false, [.. sourceColumns.InKeyOrder().Select(c => c.Name)]), []);
+                    return plan.State == ProvisioningState.Unsupported ? string.Join(" ", plan.Warnings) : null;
+                case GenericDriverKinds.KeyReconcile when sourceColumns is not null:
+                    return Refused(() => KeyReconcileReader.KeyColumnMappings(mapping.ColumnMappings, sourceColumns, mapping.Name));
+                case GenericDriverKinds.ChangeApply when targetColumns is not null:
+                    // a mapped column whose source is not in the cache is not in a table provisioning would create; the column checks name it
+                    var written = mapping.ColumnMappings.Where(m => targetColumns.Any(c => string.Equals(c.Name, m.TargetColumn, StringComparison.OrdinalIgnoreCase))).ToList();
+                    return Refused(() => ChangeApplyWriter.RequireKey(
+                        TargetShape.FromCachedColumns(targetInfo?.Dialect ?? Sql.AnsiDialect.Instance, mapping.Name, targetColumns, target.Ref, written), mapping.Name));
+                case GenericDriverKinds.KeyReconcileDelete when targetColumns is not null:
+                    // the words of KeyReconcileDeleteWriter, which refuses a target with no key when the sweep applies
+                    return targetColumns.Any(c => c.IsPrimaryKey) ? null
+                        : $"Table mapping '{mapping.Name}' target has no cached primary key — the KeyReconcileDelete writer needs one to anti-join staged keys against. Use Refresh metadata on this mapping.";
+                case GenericDriverKinds.Scd2 or GenericDriverKinds.KeyReconcileScd2Close when sourceColumns is not null:
+                    // the words of Scd2Writer, which refuses a pass with no natural key, stated or derived from the source's key
+                    if (options.TryGetValue(Scd2Writer.NaturalKeyOption, out var stated) && !string.IsNullOrWhiteSpace(stated)) return null;
+                    return NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings).Count > 0 ? null
+                        : $"The SCD Type 2 writer needs a '{Scd2Writer.NaturalKeyOption}': the column(s) that identify a row across its versions. None was derived — the source table has no primary key, or its key columns are not all mapped. Set it on this table mapping's Pipeline tab.";
+                default:
+                    return null;
+            }
+        }
+
+        private static string? Refused(Action rule)
+        {
+            try { rule(); return null; }
+            catch (InvalidOperationException ex) { return ex.Message; }
+            catch (MetadataNotCachedException) { return null; }   // a side with no columns to judge: the column checks name it
+        }
+
+        /// <summary>The target's cached columns, with each mapped column the table lacks as the column provisioning would add: nullable, outside the key.</summary>
+        private List<CachedColumn>? TargetAsCached(Side target, TableMappingConfig mapping)
+        {
+            if (ColumnsOf(target) is not { } columns) return null;
+            var result = columns.Select(c => new CachedColumn(c.Name, c.NativeType, c.IsNullable, c.IsPrimaryKey, c.IsIdentity, c.KeyOrdinal)).ToList();
+            foreach (var name in mapping.ColumnMappings.Select(m => m.TargetColumn).Distinct(StringComparer.OrdinalIgnoreCase))
+                if (!result.Any(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    result.Add(new CachedColumn(name, "", isNullable: true, isPrimaryKey: false, isIdentity: false));
+            return result;
+        }
+
+        /// <summary>The table provisioning would create for a target that is not there yet, by the engine's own column builder: each mapped source column
+        /// under its target name, with the source's key.</summary>
+        private static List<CachedColumn>? TargetAsProvisioned(IReadOnlyList<ColumnMetadata>? sourceColumns, ConnectionInfo? sourceInfo, TableMappingConfig mapping)
+        {
+            if (sourceColumns is null) return null;
+            var mapped = mapping.ColumnMappings
+                .Where(m => m.Relationship is null && sourceColumns.Any(c => string.Equals(c.Name, m.SourceColumn, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (mapped.Count == 0) return null;
+            var (built, _) = ProvisioningColumnBuilder.Build(sourceInfo?.Dialect ?? Sql.AnsiDialect.Instance, sourceColumns, mapped);
+            return [.. built.Select(c => new CachedColumn(c.Name, c.TypeOverride ?? "", c.IsNullable, c.IsPrimaryKey, isIdentity: false, c.KeyOrdinal))];
+        }
     }
 
     /// <summary>
@@ -309,7 +562,7 @@ public static class SyncOfflineCheck
     /// keyword, a function's name, a qualifier, a type (after <c>AS</c> or <c>::</c>, or before a typed literal); inside a function's parentheses a word that is
     /// no column is taken for an argument the function names (a date part), since a lexer cannot tell the two apart.
     /// </summary>
-    internal static (List<string> Unknown, string? Unreadable) FilterColumns(string filter, ISqlDialect dialect, Func<string, bool> isColumn)
+    internal static (List<string> Unknown, string? Unreadable) FilterColumns(string filter, FilterReader dialect, Func<string, bool> isColumn)
     {
         var tokens = SqlLexer.Tokenize(filter, dialect.Syntax).Where(t => !t.IsTrivia).ToList();
         if (tokens.Any(t => !t.Terminated)) return ([], "a string, a quoted name or a comment is not closed");
@@ -327,7 +580,7 @@ public static class SyncOfflineCheck
             if (token is { Kind: SqlTokenKind.Punctuation, Text: "(" })
             {
                 calls.Push(previous.Kind == SqlTokenKind.QuotedIdentifier
-                    || previous.Kind == SqlTokenKind.Word && !dialect.Identifiers.IsReserved(previous.Text) && !FilterWords.Contains(previous.Text));
+                    || previous.Kind == SqlTokenKind.Word && !dialect.IsReserved(previous.Text) && !FilterWords.Contains(previous.Text));
                 continue;
             }
             if (token is { Kind: SqlTokenKind.Punctuation, Text: ")" })
@@ -341,13 +594,13 @@ public static class SyncOfflineCheck
             string name;
             if (token.Kind == SqlTokenKind.QuotedIdentifier)
             {
-                try { name = dialect.SplitQualifiedName(token.Text) is [var only] ? only : token.Text; }
+                try { name = dialect.Split(token.Text) is [var only] ? only : token.Text; }
                 catch (FormatException) { return ([], "a quoted name cannot be read"); }
             }
             else
             {
                 name = token.Text;
-                if (name.StartsWith('@') || dialect.Identifiers.IsReserved(name) || FilterWords.Contains(name)) continue;
+                if (name.StartsWith('@') || dialect.IsReserved(name) || FilterWords.Contains(name)) continue;
                 if (previous.IsWord("AS") || next.Kind == SqlTokenKind.String) continue;   // CAST(x AS int), DATE '2026-01-01'
                 if (previous is { Kind: SqlTokenKind.Operator, Text: ":" } && i > 1 && tokens[i - 2] is { Kind: SqlTokenKind.Operator, Text: ":" }) continue;   // x::date
             }
