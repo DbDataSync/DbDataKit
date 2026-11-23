@@ -2,15 +2,19 @@
 
 ## Built so far
 
-- Nothing yet: reading the code the list marks **Moves**.
+- `Shared/src/DbDataKit.Deploy` with its tests (`Shared/tests/DbDataKit.Deploy.Tests`, 37 + the dependency test).
+- `RunnerPublishClient.ForLink` in `DbDataKit.Runner.Client`.
+- The adapter in `DbDataKit.Authoring.Server` (`WorkspacePublishing`, `WorkspaceGatewayPublish`, `WorkspaceOrigin`, `PublishProducts`, the
+  contract route's checks through `ContractPlans`).
+- `DbDataWorkspace.Tests`: 197, 0 failed (22 skipped: engines, child programs, the app store); with an app store, `WorkspacePublishTests` and
+  `WorkspaceBuildTests` 16, 0 failed.
+- The subject file: the -2 row is gone, -3 and -6 depend on nothing, "What bears on WORKSPACEISOLATION-3" names where each part is.
 
-## Plan
+## Not yet
 
-- New library `Shared/src/DbDataKit.Deploy` (tests `Shared/tests/DbDataKit.Deploy.Tests`): the moved code takes an `IDefinitionsLink` (the link it
-  calls through) and a `ConsoleIdentity` (the key it signs definitions with, and the id written as `managedBy`).
-- `DbDataKit.Runner.Client` gains `RunnerPublishClient.ForLink(IDefinitionsLink)` so the Runner calls can go through a given link.
-- `DbDataKit.Authoring.Server` keeps its public surface as an adapter: it finds the target and the key, makes a pinned link, calls the library and
-  turns its `DeployException` into a `WorkspacePublishException`.
+- Gateway's `ManagementWorkspacePublishTests`, the console's `DbDataKit.Server.Servers.Tests`, the Runner's client tests, `DbDataKit.Authoring.Server.Tests`;
+  builds of `DbDataSync.Cli` and `DbDataBuild.Cli` (they reference `DbDataKit.Runner.Client`).
+- The repository checks.
 
 ## Open questions
 
