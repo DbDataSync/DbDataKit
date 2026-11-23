@@ -21,6 +21,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     private WebApplication console = null!;
     private WebApplication workspace = null!;
     private PairedRunner runner = null!;
+    private InProcessTasks tasks = null!;
     private HttpClient http = null!;
     private string session = null!;
     private string personId = null!;
@@ -30,7 +31,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
 
     /// <summary>
     /// The stand-in of <c>dbdatasync</c> and <c>dbdatabuild</c> for the verbs the Workspace runs to check and package a project: a draft with a file named <c>broken</c> is refused in the program's way (the file, on the error output, exit
-    /// 1); otherwise the package is a <c>package/1</c> manifest whose task reads the connection slot <c>source</c>, with the project's files under <c>files/</c>.
+    /// 1); otherwise the package is a <c>package/1</c> manifest whose manual tasks <c>load</c> and <c>provision</c> read the connection slot <c>source</c>, with the project's files under <c>files/</c>.
     /// </summary>
     private const string Tool = """
         #!/bin/bash
@@ -41,7 +42,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         if [ "$verb" = "project show" ]; then echo '{"diagnostics":[]}'; exit 0; fi
         if [ -n "$out" ]; then
           mkdir -p "$out/files/repo" "$out/files/bin"; printf 'a stand-in assembly' > "$out/files/bin/Orders.dll"; for f in "$root"/*; do case "$(basename "$f")" in .git) ;; *) cp -r "$f" "$out/files/repo/";; esac; done
-          printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
+          printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n  - name: provision\n    entry: { type: Orders.Provision }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
         fi
         if [ "$verb" = "project publish" ]; then echo "{\"data\":{\"package\":\"$pkg\",\"files\":1,\"tasks\":[{\"name\":\"load\",\"plan\":\"refresh\"}]}}"; exit 0; fi
         echo "{\"package\":\"$pkg\",\"mode\":\"check\",\"files\":1,\"replications\":[{\"replication\":\"orders\",\"task\":\"load\"}]}"
@@ -61,7 +62,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
             }
         }
 
-        runner = await PairedRunner.StartAsync();
+        runner = await PairedRunner.StartAsync(tasks: state => tasks = new InProcessTasks(state, StepsOf));
         var workspaceDirectory = Path.Combine(directory, "workspace");
         Directory.CreateDirectory(workspaceDirectory);
         workspace = WorkspaceServer.Build(new WorkspaceSettings(workspaceDirectory, new Uri("https://127.0.0.1:0"))
@@ -245,5 +246,157 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         using var response = await http.SendAsync(request);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Contains("needs the approver role on Workspace", await response.Content.ReadAsStringAsync());
+    }
+
+    // ---- the runs of what a deploy put on the runner (Design: docs/publishing.md#runs-of-a-deployed-build) ----
+
+    /// <summary>What each task records while it runs on the runner, as the real ones do: provision its report of statements, load a pass of a mapping, contract its plan (dropping one column) or, approved, what it ran.</summary>
+    private static IReadOnlyList<(string Step, string Result)> StepsOf(DbDataKit.Runner.Execution.TaskRunRequest request) => request.Task.Task switch
+    {
+        "provision" => [("provision-applied", new JsonObject { ["steps"] = new JsonArray(new JsonObject { ["title"] = $"Create the table of {request.Inputs.GetValueOrDefault("mapping")}", ["succeeded"] = true }) }.ToJsonString())],
+        "load" => [("pass-record", new JsonObject { ["mapping"] = "orders", ["kind"] = "Primary", ["status"] = "Succeeded", ["rowsRead"] = 3, ["rowsWritten"] = 3 }.ToJsonString())],
+        "contract" => [("contract-report", new JsonObject
+        {
+            ["model"] = "territories", ["schema"] = request.Inputs.GetValueOrDefault("schema") ?? "territories", ["engine"] = "sqlserver", ["hash"] = "c0ffee11", ["dryRun"] = !request.Inputs.ContainsKey("approve"),
+            ["applied"] = request.Inputs.ContainsKey("approve"), ["blocked"] = new JsonArray(), ["notes"] = new JsonArray(),
+            ["steps"] = new JsonArray(new JsonObject { ["object"] = "territory.region", ["description"] = "drop the column region of territory", ["text"] = "ALTER TABLE territory DROP COLUMN region", ["requiresEveryRowToHaveAValue"] = false }),
+            ["dropped"] = new JsonArray(new JsonObject { ["description"] = "drop the column region of territory", ["columnId"] = "mssql://mdm/territories.territory/region", ["datasetId"] = "mssql://mdm/territories.territory" }),
+        }.ToJsonString())],
+        _ => [],
+    };
+
+    /// <summary>The run <paramref name="runId"/> read back through the console until it ended, with the steps named <paramref name="step"/>.</summary>
+    private async Task<JsonNode> RunThroughConsoleAsync(string deploy, string runId, string step)
+    {
+        for (var i = 0; i < 300; i++)
+        {
+            var read = await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs/{runId}?step={step}");
+            Assert.True(read.Status == HttpStatusCode.OK, read.Body?.ToJsonString());
+            if (read.Body!["run"]!["finished"] is not null) return read.Body["run"]!;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException("the run did not end");
+    }
+
+    [Fact]
+    public async Task A_sync_build_the_console_deployed_runs_its_provision_and_its_replication_through_the_console_and_the_workspace_server_is_never_asked()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["bind"] = new JsonObject { ["source"] = "erp" } });
+        Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
+
+        // the Provisioning tab finds the version in the console's record of the draft's deploys: the package's tasks are there too
+        var listed = (await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=orders&workspace={draft}")).Body!["deploys"]!.AsArray();
+        var record = Assert.Single(listed)!;
+        var deploy = (string)record["id"]!;
+        Assert.Equal(["load", "provision"], record["tasks"]!.AsArray().Select(t => (string?)t).Order());
+
+        // Apply on the Provisioning tab: the manual task provision of the staged version, run for the person, its report read back through the console
+        var applied = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "provision", ["inputs"] = new JsonObject { ["replication"] = "orders", ["mapping"] = "orders", ["action"] = "create" } });
+        Assert.True(applied.Status == HttpStatusCode.Accepted, applied.Body?.ToJsonString());
+        Assert.Equal(("provision", "orders", "dev", "1", runnerId), ((string?)applied.Body!["run"]!["task"], (string?)applied.Body["run"]!["package"], (string?)applied.Body["run"]!["channel"], (string?)applied.Body["run"]!["version"], (string?)applied.Body["run"]!["instance"]));
+        var provision = await RunThroughConsoleAsync(deploy, (string)applied.Body["run"]!["run_id"]!, "provision-applied");
+        Assert.Equal("succeeded", (string?)provision["outcome"]);
+        Assert.Equal("Create the table of orders", (string?)provision["steps"]![0]!["result"]!["steps"]![0]!["title"]);
+        var asked = tasks.Requests.Single(r => r.Task.Task == "provision");
+        Assert.Equal(("1", "orders", "create"), (asked.PackageVersion, asked.Inputs["mapping"], asked.Inputs["action"]));
+        Assert.Contains("Ada Admin", asked.RequestedBy);
+
+        // Run now on the Runs tab runs the version the channel serves: the build is published served, then the replication's task runs and its pass comes back
+        var served = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["serve"] = true });
+        Assert.True(served.Status == HttpStatusCode.OK, served.Body?.ToJsonString());
+        var newest = (string)(await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=orders&workspace={draft}")).Body!["deploys"]![0]!["id"]!;
+        var ran = await As(HttpMethod.Post, $"/api/deploys/{newest}/runs", new JsonObject { ["task"] = "load", ["served"] = true, ["inputs"] = new JsonObject { ["run_all"] = "true" } });
+        Assert.True(ran.Status == HttpStatusCode.Accepted, ran.Body?.ToJsonString());
+        Assert.Equal("served", (string?)ran.Body!["run"]!["version"]);
+        var load = await RunThroughConsoleAsync(newest, (string)ran.Body["run"]!["run_id"]!, "pass-record");
+        Assert.Equal("succeeded", (string?)load["outcome"]);
+        Assert.Equal(("orders", "Succeeded", 3), ((string?)load["steps"]![0]!["result"]!["mapping"], (string?)load["steps"]![0]!["result"]!["status"], (int)load["steps"]![0]!["result"]!["rowsWritten"]!));
+
+        // Test of a connection: the runner tries the login bound to the slot, and says how far it got (it holds no connection erp, so not far); no value comes back
+        var tested = await As(HttpMethod.Post, $"/api/deploys/{deploy}/binding-test", new JsonObject { ["slot"] = "source" });
+        Assert.True(tested.Status == HttpStatusCode.OK, tested.Body?.ToJsonString());
+        Assert.Equal(("source", "orders", "dev"), ((string?)tested.Body!["test"]!["slot"], (string?)tested.Body["test"]!["package"], (string?)tested.Body["test"]!["channel"]));
+        Assert.False((bool)tested.Body["test"]!["ok"]!);
+
+        // each is audited under the person, on the runner
+        var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.RunVerb));
+        Assert.Equal(2, audited.Count(a => a.Entry.ActorId == personId && a.Entry.Outcome == AuditEvent.Ok && a.Entry.TargetId == runnerId));
+        Assert.NotEmpty(console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.BindingTestVerb)));
+
+        // the Workspace server knows nothing of where the build went: it has no target, and its own run route cannot find a staged version
+        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
+        var own = await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" });
+        Assert.Equal(HttpStatusCode.Conflict, own.Status);
+        Assert.Contains("has not been staged on a Runner", (string?)own.Body!["error"]);
+    }
+
+    [Fact]
+    public async Task A_run_is_refused_in_words_for_a_deploy_that_put_nothing_on_a_runner_and_for_a_person_who_may_not_approve()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        var refused = await DeployAsync("orders", draft, build);   // no channel: refused, and kept
+        Assert.Equal(HttpStatusCode.BadRequest, refused.Status);
+        var deploy = (string)refused.Body!["deploy"]!["id"]!;
+
+        var run = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "provision" });
+        Assert.Equal(HttpStatusCode.Conflict, run.Status);
+        Assert.StartsWith("This deploy was refused", (string?)run.Body!["error"]);
+        Assert.Equal(HttpStatusCode.NotFound, (await As(HttpMethod.Post, "/api/deploys/no-such-deploy/runs", new JsonObject { ["task"] = "provision" })).Status);
+
+        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev" });
+        var id = (string)staged.Body!["deploy"]!["id"]!;
+        var viewer = console.Services.GetRequiredService<ISessionStore>().Create(console.Services.GetRequiredService<IUserAccounts>().CreateUser("Vic Viewer", null, UserRole.Viewer).Id).Id;
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/deploys/{id}/runs") { Content = new StringContent(new JsonObject { ["task"] = "provision" }.ToJsonString(), Encoding.UTF8, "application/json") };
+        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={viewer}");
+        using var response = await http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("needs the approver role on Workspace", await response.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Package == "orders");
+    }
+
+    [Fact]
+    public async Task A_store_models_contract_is_read_then_run_as_approved_through_the_console_after_the_gateways_it_manages_were_asked()
+    {
+        var (draft, build) = await BuildAsync("territories", "store");
+        var staged = await DeployAsync("territories", draft, build, new JsonObject { ["channel"] = "dev", ["model"] = "territories", ["bind"] = new JsonObject { ["storage"] = "mdm" } });
+        Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
+        var deploy = (string)staged.Body!["deploy"]!["id"]!;
+
+        // the plan: contract without an approval, its report read back with its hash
+        var planned = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "contract", ["inputs"] = new JsonObject { ["schema"] = "mdm_territories" } });
+        Assert.True(planned.Status == HttpStatusCode.Accepted, planned.Body?.ToJsonString());
+        var planRun = (string)planned.Body!["run"]!["run_id"]!;
+        var plan = await RunThroughConsoleAsync(deploy, planRun, "contract-report");
+        Assert.Equal("c0ffee11", (string?)plan["steps"]![0]!["result"]!["hash"]);
+
+        // an approval is never a plain run: it goes through .../contract
+        var plain = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "contract", ["inputs"] = new JsonObject { ["approve"] = "c0ffee11" } });
+        Assert.Equal(HttpStatusCode.Conflict, plain.Status);
+        Assert.Contains("through .../contract", (string?)plain.Body!["error"]);
+        // a hash the plan did not have
+        var wrong = await As(HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = planRun, ["approve"] = "deadbeef" });
+        Assert.Equal(HttpStatusCode.Conflict, wrong.Status);
+        Assert.Contains("did not read a plan with the hash deadbeef", (string?)wrong.Body!["error"]);
+
+        // a server the console manages that does not answer may be a Gateway whose consumers read the column: the step is refused naming it, until the person allows it
+        console.Services.GetRequiredService<ConsoleInstances>().Registry.Add(new PairedServer(new Uri("https://127.0.0.1:1"), "gateway-gone", new string('0', 64), 1, "Gateway gone", ServerRole.Admin));
+        var blocked = await As(HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = planRun, ["approve"] = "c0ffee11" });
+        Assert.Equal(HttpStatusCode.Conflict, blocked.Status);
+        Assert.Contains("'Gateway gone'", (string?)blocked.Body!["error"]);
+        Assert.Contains("gateway:Gateway gone", (string?)blocked.Body["error"]);
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Task == "contract" && r.Inputs.ContainsKey("approve"));
+
+        var contracted = await As(HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = planRun, ["approve"] = "c0ffee11", ["allowConsumer"] = new JsonArray("gateway:Gateway gone") });
+        Assert.True(contracted.Status == HttpStatusCode.Accepted, contracted.Body?.ToJsonString());
+        Assert.Equal(1, (int)contracted.Body!["checked"]!);
+        var ran = await RunThroughConsoleAsync(deploy, (string)contracted.Body["run"]!["run_id"]!, "contract-report");
+        Assert.True((bool)ran["steps"]![0]!["result"]!["applied"]!);
+        var asked = tasks.Requests.Single(r => r.Task.Task == "contract" && r.Inputs.ContainsKey("approve"));
+        Assert.Equal(("c0ffee11", "mdm_territories"), (asked.Inputs["approve"], asked.Inputs["schema"]));
+        var allowances = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.AllowConsumerVerb));
+        Assert.Contains(allowances, a => a.Entry.ActorId == personId && a.Entry.Detail!.Contains("gateway:Gateway gone"));
     }
 }
