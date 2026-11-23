@@ -75,6 +75,7 @@ public static class ServerProducts
         new("GET", "api/v1/posture-choices", ServerRole.Viewer),                                                    // R19: the loosened defaults with their effect and the recorded choices
         new("GET", "api/v1/runs/{id}/units", ServerRole.Viewer),                                            // R25: the table of units of a run
         new("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer),                                            // R25: the steps of its attempt chain
+        new("GET", "api/v1/tasks/{name}/{name}/{name}/steps/{name}", ServerRole.Viewer),                    // the results of a task's completed steps of one name: what a run started from a Workspace project's screens recorded
         // what the kit leaves to a person and the checkpoints (operator: they name what a task refused or where it got to)
         new("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator),                      // R25
         new("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator),                  // R25
