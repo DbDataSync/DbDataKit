@@ -123,6 +123,48 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         }    }
 
     /// <summary>
+    /// Activates the version a deploy staged in production for its preflight (<see cref="ConsoleDeployPreflight"/>), once the preflight has ended: with no error, or with <paramref name="confirm"/> when it found errors. The Runner keeps the
+    /// confirmation in its record of the activation. A deploy that waited for no preflight, or whose version is active already, is refused in words.
+    /// </summary>
+    public async Task<DeployRunOutcome> ActivateAsync(string deployId, bool confirm, RelayPerson person, CancellationToken ct)
+    {
+        Deployed? deployed = null;
+        try
+        {
+            deployed = await FindAsync(deployId, person, ServerRole.Approver, ct);
+            JsonObject answer;
+            try { answer = JsonNode.Parse(deployed.Record.Answer ?? "{}") as JsonObject ?? []; }
+            catch (JsonException) { answer = []; }
+            if (answer["preflight"] is not JsonObject before || (bool?)before["declared"] != true)
+                throw new Refusal(409, $"This deploy did not stage version {deployed.Version} of {deployed.Package} for a preflight, so the console has nothing of it to activate. A version is activated by the deploy, or on the Runner's Packages screen.");
+            if ((string?)before["activation"] is "activated" or "already-served")
+                throw new Refusal(409, $"Version {deployed.Version} of {deployed.Package} was activated in {deployed.Channel} already.");
+            var calls = CallsOf(deployed, person);
+            JsonObject report;
+            if ((string?)before["run"] is { } runText && Guid.TryParse(runText, out var run))
+                report = ConsoleDeployPreflight.Report(run, await calls.RunOfAsync(deployed.Package, deployed.Channel, run, DbDataKit.Runner.Preflight.StepName, ct), deployed.Runner.InstanceId);
+            else
+                // the preflight could not be started: nothing is known of what it would find, which only a confirmation lets past
+                report = new JsonObject
+                {
+                    ["run"] = null, ["state"] = "finished", ["errors"] = 1, ["warnings"] = 0,
+                    ["findings"] = new JsonArray(new JsonObject { ["severity"] = DbDataKit.Runner.Preflight.Error, ["message"] = $"No preflight ran: {(string?)before["error"]}", ["about"] = null }),
+                };
+            report["declared"] = true;
+            var activation = await ConsoleDeployPreflight.ActivateAsync(calls, deployed.Package, deployed.Channel, deployed.Version, report, confirm, person, ct);
+            deploys.Settle(deployed.Record, answer, report, activation, confirm, person, deployed.Runner);
+            var body = new JsonObject { ["activation"] = activation.State, ["message"] = activation.Message, ["active"] = activation.Active, ["preflight"] = report.DeepClone(), ["deploy"] = ConsoleDeploys.Describe(deploys.Store.Get(deployed.Record.Id)!) };
+            if (activation.Status >= 400) body["error"] = activation.Message;
+            return new(activation.Status, body);
+        }
+        catch (Exception ex) when (ex is Refusal or DeployException)
+        {
+            if (deployed is not null) Audit(person, ConsoleDeployPreflight.ActivateVerb, deployed, DbDataKit.Runner.Preflight.TaskName, false, AuditEvent.Refused, new { error = ex.Message });
+            return DeployRunOutcome.Error(StatusOf(ex), ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Runs the contract plan of a Store model a person read and approved: <paramref name="planRun"/> is the run of <c>contract</c> without an approval whose report has the hash <paramref name="approve"/>. The columns that report drops are
     /// checked against the lineage of every Gateway the console manages, read as the person: a published consumer that reads one refuses the step by name, unless <paramref name="allowed"/> names it (<c>&lt;name&gt;@&lt;channel&gt;</c>,
     /// recorded in the audit); a Gateway that does not answer refuses it too (<c>gateway:&lt;name&gt;</c> allows that). Then <c>contract</c> runs with that hash on the version the deploy staged, which runs exactly that plan or nothing.

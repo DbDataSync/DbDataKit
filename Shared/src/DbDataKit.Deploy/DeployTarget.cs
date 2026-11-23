@@ -33,9 +33,11 @@ public sealed record DeployTarget(string Name, string Url, string InstanceId, st
 /// <summary>
 /// What a person says when they deploy what a kind made: for a Runner the <see cref="Channel"/>, whether the version is served at once (<see cref="Serve"/>) or staged (the default), the <see cref="ExpectedVersion"/> and the connections
 /// <see cref="Bind"/> fills (slot to connection name); for a Gateway the <see cref="DataSource"/> its tables are on (the models' own storage connection when none is named) and <see cref="Adopt"/>, the data sources made by hand that the person
-/// confirmed the models may go on (the Gateway records the adoption). <see cref="Model"/> names one model of a Store build, and <see cref="Note"/> is kept with the version.
+/// confirmed the models may go on (the Gateway records the adoption). <see cref="Model"/> names one model of a Store build, and <see cref="Note"/> is kept with the version. <see cref="Hold"/>, for a staged Runner package, asks the Runner
+/// to keep the version from activating by itself until an administrator activates it, and says what it waits for.
 /// </summary>
-public sealed record DeployOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null);
+public sealed record DeployOptions(string? Channel = null, bool Serve = false, int? ExpectedVersion = null, IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null,
+    string? Hold = null);
 
 /// <summary>Whether a kind of project may be deployed to a target: the kind's routes (<see cref="IProjectKind.Publishes"/>) must list the target's product.</summary>
 public static class DeployRoutes

@@ -77,6 +77,19 @@ public sealed class DeployStore(StateDatabase database)
         return record;
     }
 
+    /// <summary>
+    /// Records what became of a deploy after it was kept: the mode the version is in now and the answer with what was done since (a staged version that waited for its preflight and was then activated). The deploy's other columns
+    /// are what was sent and stay as they were. False when there is no such deploy.
+    /// </summary>
+    public bool Revise(string id, string? mode, string? answer) =>
+        database.Retry(() =>
+        {
+            using var connection = database.OpenConnection();
+            using var update = database.Command(Module, connection, "UPDATE {table:deploy} SET deploy_mode = $mode, answer_text = $answer WHERE id = $id;");
+            update.Bind(database, "id", id).Bind(database, "mode", mode, System.Data.DbType.String).Bind(database, "answer", answer, System.Data.DbType.String);
+            return update.ExecuteNonQuery() == 1;
+        });
+
     /// <summary>A new id for a deploy, ordered by time.</summary>
     public static string NewId() => Guid.CreateVersion7().ToString("N");
 

@@ -50,6 +50,9 @@ public enum ActivationState
     /// <summary>Runs of these tasks were still in flight when the longest wait ran out; nothing changed, the next try waits again.</summary>
     WaitingForRuns,
 
+    /// <summary>The publisher asked the staged version to wait for an administrator (a preflight on it first); it is not activated by itself, and nothing changed.</summary>
+    Held,
+
     /// <summary>Another caller activated the version first; nothing was done here.</summary>
     AlreadyDone,
 
@@ -120,6 +123,9 @@ public sealed class PackageActivator
 
         if (request.ExpectedVersion is { } expected && expected != (head.Active ?? 0))
             throw new DefinitionConflictException($"The {Kind} '{name}' has version {head.Active ?? 0} active, not {expected}: it changed since you looked. Read it again and decide.", expected, head.Active ?? 0);
+        // a held version is looked at before anything else: the automatic pass neither holds its runs nor waits for them, so a run of the staged version (its preflight) goes on
+        if (request.Mode == ActivationMode.Automatic && _publisher.HoldOf(Kind, name, channel) is { } held)
+            return new ActivationOutcome(ActivationState.Held, null, [], [], $"Version {staged} of '{name}' waits for an administrator to activate it: {held.Reason}.");
         var next = Load(name, staged);
         var previous = head.Active is { } active ? Load(name, active) : null;
         var plans = Plans(previous, next);
@@ -158,6 +164,7 @@ public sealed class PackageActivator
                 }
 
                 if (result.AlreadyDone) return new ActivationOutcome(ActivationState.AlreadyDone, _publisher.Head(Kind, name, channel)?.Active, losses, [], $"Another runner activated '{name}' first.", result.Progress);
+                if (result.Held is { } heldNow) return new ActivationOutcome(ActivationState.Held, null, losses, [], $"Version {staged} of '{name}' waits for an administrator to activate it: {heldNow.Reason}.", result.Progress);
                 if (!result.Activated) return new ActivationOutcome(ActivationState.NotReady, null, losses, [], $"Version {staged} of '{name}' is not ready everywhere: {result.Progress.Describe()}.", result.Progress);
                 return new ActivationOutcome(ActivationState.Activated, result.Version!.Version, losses, [], $"Version {result.Version.Version} of '{name}' is active.", result.Progress);
             }
@@ -169,7 +176,9 @@ public sealed class PackageActivator
                 return new ActivationOutcome(ActivationState.Activated, result.Version!.Version, losses, [], $"Version {result.Version.Version} of '{name}' is active (anyway: {result.Progress.Describe()}).", result.Progress);
             }
 
-            var done = await Task.Run(() => _publisher.Activate(Kind, name, request.Actor, channel, request.ExpectedVersion, lossNote, Migrate), ct).ConfigureAwait(false);
+            // what the administrator said with the activation (a preflight's findings they confirmed) is kept in the event, beside the losses they confirmed
+            var note = string.Join("; ", new[] { string.IsNullOrWhiteSpace(request.Reason) ? null : "reason: " + request.Reason.Trim(), lossNote }.Where(n => n is not null));
+            var done = await Task.Run(() => _publisher.Activate(Kind, name, request.Actor, channel, request.ExpectedVersion, note.Length == 0 ? null : note, Migrate), ct).ConfigureAwait(false);
             return new ActivationOutcome(ActivationState.Activated, done.Version, losses, [], $"Version {done.Version} of '{name}' is active.");
         }
         finally
