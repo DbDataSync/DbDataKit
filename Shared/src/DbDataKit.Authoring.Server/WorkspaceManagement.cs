@@ -1,5 +1,5 @@
 using DbDataKit.DataModel.Runner;
-using DbDataKit.Lineage;
+using DbDataKit.Deploy;
 using DbDataKit.Catalog;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -678,15 +678,15 @@ public static class WorkspaceManagement
                 // the plan the person read, from the Runner: its run of contract, its report, the hash it approved
                 if (await publishing.RunOfAsync(staged.Target, staged.Package, staged.Channel, planId, "contract-report", Actor(token), context.RequestAborted) is not { } read || (string?)read["task"] != ModelDeployPackage.ContractTask)
                     return Results.Json(new { error = $"{staged.Target} has no run {planId} of contract of {staged.Package}. Read the plan again." }, statusCode: StatusCodes.Status409Conflict);
-                var report = (read["steps"] as JsonArray)?.Select(x => x?["result"]).OfType<JsonObject>().LastOrDefault();
-                if (report is null || report["dryRun"]?.GetValue<bool>() != true || !string.Equals((string?)report["hash"], approve, StringComparison.OrdinalIgnoreCase))
-                    return Results.Json(new { error = $"The run {planId} did not read a plan with the hash {approve}. Read the plan again and approve the hash it gives." }, statusCode: StatusCodes.Status409Conflict);
-                if (report["blocked"] is JsonArray { Count: > 0 } blocked)
-                    return Results.Json(new { error = "The plan has items a contract does not do, so it is not run: " + string.Join(" ", blocked.Select(b => (string?)b)), hash = approve }, statusCode: StatusCodes.Status409Conflict);
-                var changes = (report["dropped"] as JsonArray ?? []).OfType<JsonObject>()
-                    .Select(c => new ContractedColumn((string)c["description"]!, (string)c["columnId"]!, (string?)c["datasetId"])).ToList();
+                // the checks of the plan and of its consumers are the shared deploy library's (ContractPlans)
+                var reading = ContractPlans.Read(read, planId, approve!);
+                if (reading.Plan is not { } plan)
+                    return reading.Blocked
+                        ? Results.Json(new { error = reading.Refusal, hash = approve }, statusCode: StatusCodes.Status409Conflict)
+                        : Results.Json(new { error = reading.Refusal }, statusCode: StatusCodes.Status409Conflict);
+                var changes = plan.Dropped;
                 var (graphs, unreachable) = changes.Count == 0 ? ([], []) : await publishing.GatewayLineageAsync(context.RequestAborted);
-                var verdict = ContractGuard.Check(changes, graphs, unreachable, allowed, "allow");
+                var verdict = ContractPlans.CheckConsumers(plan, graphs, unreachable, allowed);
                 if (verdict.Refusals.Count > 0)
                 {
                     Audit(token, "build.contract", what, "refused: consumers");
@@ -694,7 +694,7 @@ public static class WorkspaceManagement
                 }
                 foreach (var used in verdict.AllowancesUsed) Audit(token, "build.contract.allow-consumer", what, used);
                 var steps = new List<string>();
-                var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["approve"] = approve!, ["schema"] = (string?)report["schema"] ?? "" };
+                var inputs = ContractPlans.Inputs(plan, approve!);
                 var answer = await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, ModelDeployPackage.ContractTask, inputs, Actor(token), steps.Add, context.RequestAborted);
                 Audit(token, "build.contract", what, $"queued {(string)answer["run_id"]!} for {approve![..Math.Min(12, approve.Length)]}");
                 return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer, ["checked"] = changes.Count, ["gateways"] = graphs.Count }, statusCode: StatusCodes.Status202Accepted);

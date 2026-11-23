@@ -38,11 +38,10 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-2 | The code the list marks for moving goes to a new shared library for deploying a build and the calls around a deploy, with an adapter in the Workspace so its tests pass unchanged | WORKSPACEISOLATION-1 | M | the moved code's tests run in `Shared/tests`; the Workspace's tests pass unchanged |
-| WORKSPACEISOLATION-3 | The Workspace service serves a build's package (manifest and files by hash) and its build record (the manifest hash and the commit) to the control service. The control service runs the checks and deploys to a Runner or Gateway as the person, signing with its own key a message that holds the build record; for trusted code, the approver's signature is added once PUBLISHING-3 is built. The Workspace service holds no signing key | WORKSPACEISOLATION-2 | L | a test publishes a build, a sync and a store project and an app through the control service; the checks refuse a bad package with the same message as today; the target records the person, the signature and the build record; the Workspace service made no outbound call |
+| WORKSPACEISOLATION-3 | The Workspace service serves a build's package (manifest and files by hash) and its build record (the manifest hash and the commit) to the control service. The control service runs the checks and deploys to a Runner or Gateway as the person, signing with its own key a message that holds the build record; for trusted code, the approver's signature is added once PUBLISHING-3 is built. The Workspace service holds no signing key | none | L | a test publishes a build, a sync and a store project and an app through the control service; the checks refuse a bad package with the same message as today; the target records the person, the signature and the build record; the Workspace service made no outbound call |
 | WORKSPACEISOLATION-4 | The publish panel on the Workspace screens calls the control service's deploy (the Designer's **Build and publish…** opens this panel; SYNCAUTHORING-17 waits for this task) | WORKSPACEISOLATION-3 | M | Playwright: publish from the panel; the target shows the version |
 | WORKSPACEISOLATION-5 | Runs, run results, binding tests and lineage reads go through the control service | WORKSPACEISOLATION-3 | M | the Runs tab's tests pass with the Workspace service unable to reach the Runner |
-| WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console route AUTHORING-21 builds first for the Runner read | WORKSPACEISOLATION-2 | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
+| WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console route AUTHORING-21 builds first for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
 | WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
 | WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-5, WORKSPACEISOLATION-6, WORKSPACEISOLATION-7, WORKSPACEISOLATION-11 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
@@ -55,8 +54,8 @@ Every route, class and member of the Workspace's publish, run, check and catalog
 `DbDataKit.Authoring.Server` and `DbDataWorkspace`. Each one is marked:
 
 - **Stays**: it builds or checks a draft, on the Workspace service.
-- **Moves**: it goes to a shared library the control service uses (WORKSPACEISOLATION-2), with an adapter in the Workspace until
-  WORKSPACEISOLATION-8.
+- **Moves**: it is in the shared library `DbDataKit.Deploy` (`Shared/src`), which the control service can use; the Workspace reaches it through
+  an adapter until WORKSPACEISOLATION-8.
 - **Removed**: it calls another service or holds a publisher key. It goes with WORKSPACEISOLATION-8, once the task named has moved its work.
 
 Where a part's place is open, the row names its proposal (below, under "Proposed decisions").
@@ -187,20 +186,26 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - Child programs: 5 (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, and the external `dotnet` and `bun`). All stay until COMMANDLINES replaces ours;
   `script test` and `package test` leave the Workspace service for a Runner.
 
-### What bears on WORKSPACEISOLATION-2 and WORKSPACEISOLATION-3
+### What bears on WORKSPACEISOLATION-3
 
-- What moves composes libraries that are already shared: `DefinitionsClient` and `DefinitionSigning` (`DbDataKit.State.Api`), `PublishArtifacts`
-  (`DbDataKit.State`), `RunnerPublishClient` (`DbDataKit.Runner.Client`), `PackageManifestReader` (`DbDataKit.Runner.Abstractions`), `ContractGuard`
-  and `LineageJson` (`DbDataKit.Lineage`), `CatalogCache` (`DbDataKit.Catalog.Cache`) and `ModelDeployPackage` (`DbDataKit.DataModel.Runner`).
-  WORKSPACEISOLATION-2 moves only the code around them, about 600 lines: `WorkspaceGatewayPublish`, the publish, run, lineage and schema methods
-  without their key and target parts, `RouteFor`, the options, the refusal, the origin token and the contract checks. Its size can be S rather than M.
-  It goes into a new library under `Shared/src` for deploying a build to a Runner or a Gateway and the calls around a deploy (runs, binding tests,
-  lineage, the schema read); the control service's host references it, and `DbDataKit.Authoring.Server` reaches it through an adapter until
-  WORKSPACEISOLATION-8. -2 names it.
-- Each method that moves takes a target's name today and finds the key itself. To serve both callers, the moved code takes the link it calls through and
-  the key it signs with: the Workspace's adapter passes its publisher key until WORKSPACEISOLATION-8, and the control service passes a link as the
-  person and its own key. The console already makes such links (`ConsolePromotions`, used by `ConsoleBindingCompare`). This shape, chosen in -2,
-  decides most of what -3 adds.
+- What moved is in `DbDataKit.Deploy` (`Shared/src`, tests in `Shared/tests/DbDataKit.Deploy.Tests`). It composes the libraries that were already
+  shared: `DefinitionsClient` and `DefinitionSigning` (`DbDataKit.State.Api`), `RunnerPublishClient` (`DbDataKit.Runner.Client`, which takes a given
+  link with `ForLink`), `PackageManifestReader` (`DbDataKit.Runner.Abstractions`), `ContractGuard` and `LineageJson` (`DbDataKit.Lineage`). It does
+  not reference `DbDataKit.Authoring.Server`, the app bundler or a child program (a test says so), so the control service's host can reference it.
+  Where each moved part is:
+  - `AppDeploy`: an app to a Gateway (`Read`, then `SendAsync`; `PreviewChannel`).
+  - `ArtifactDeploy`: what a kind made, by its route: a Runner package (`model-package` takes the one model's folder the caller chose), Store models,
+    a Build project's semantic models and views.
+  - `GatewayDefinitionsPublish`: the former `WorkspaceGatewayPublish`. It writes the key's id as `managedBy` (WORKSPACEISOLATION-P6).
+  - `RunnerCalls`: runs of a staged or served version, a run and its steps, a binding test.
+  - `GatewayCalls`: a data source's catalog (`ReadSchemaAsync`) and the lineage of a list of Gateways (`LineageAsync`).
+  - `ContractPlans`: the contract route's checks (the plan's run and hash, the consumers through `ContractGuard`, the inputs of the run).
+  - `DeployRoutes.RouteFor` (it takes the kind's name and its routes, which the control service can read from `GET /api/v1/project-kinds`),
+    `DeployTarget`, `DeployOptions`, `DeployException`, `DeployProducts` and `DeployOrigin`.
+- Every moved call takes the link it calls through (`IDefinitionsLink`, paths relative to `/api/v1/`) and the key it signs with (`ConsoleIdentity`).
+  The Workspace's adapter (`WorkspacePublishing`, `WorkspaceGatewayPublish`) passes a link that signs with its publisher key over the pinned
+  certificate until WORKSPACEISOLATION-8; the control service passes a link as the person (`ConsolePromotions.LinkFor`, as `ConsoleBindingCompare`
+  does) and its own key.
 - A build has more than one thing to send. A Build build has a Runner package and Gateway models with their views; a Store build has Gateway models and
   one Runner package per model (`ModelPackageFolder`). WORKSPACEISOLATION-3 serves each of them, with the build record.
 - A Runner or a Gateway checks a signed version against its trust store (`DefinitionSignatures`), where an administrator adds the publisher keys a group
