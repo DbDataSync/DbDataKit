@@ -6,14 +6,14 @@ using DbDataKit.State;
 namespace DbDataKit.Server;
 
 /// <summary>What became of an activation the console asked for after a preflight: the HTTP status, a word for it (<c>activated</c>, <c>refused</c>, <c>waiting</c>, <c>already-served</c>), the version active now and the words.</summary>
-internal sealed record PreflightActivation(int Status, string State, int? Active, string Message);
+public sealed record PreflightActivation(int Status, string State, int? Active, string Message);
 
 /// <summary>
 /// The preflight before a version is served in production (Design: docs/publishing.md#preflight-before-activation). A deploy that serves a Runner package in <c>prod</c>, when the package declares the read-only manual task
 /// <see cref="Preflight.TaskName"/>, stages the version held (the Runner does not activate it by itself), runs the preflight on that staged version as the person, reads its findings, and activates only when none is an error; an
 /// error refuses the activation until the person confirms it, and the confirmation goes to the Runner with the activation, which keeps it in its record. A package that declares no preflight is served as before.
 /// </summary>
-internal static class ConsoleDeployPreflight
+public static class ConsoleDeployPreflight
 {
     /// <summary>The audit verbs: the activation of a held version, and a person's confirmation of a preflight's errors.</summary>
     public const string ActivateVerb = "build.activate";
@@ -73,7 +73,7 @@ internal static class ConsoleDeployPreflight
     /// Activates the held version after its preflight: refused while the run has not ended, and while it found an error the person has not confirmed; otherwise the Runner activates it with the reason (the confirmation, when there was
     /// one), which it keeps in its record of the activation.
     /// </summary>
-    public static async Task<PreflightActivation> ActivateAsync(RunnerCalls calls, string package, string channel, int version, JsonObject report, bool confirmed, RelayPerson person, CancellationToken ct)
+    public static async Task<PreflightActivation> ActivateAsync(RunnerCalls calls, string package, string channel, int version, JsonObject report, bool confirmed, RelayPerson person, CancellationToken ct, TimeSpan? readyWait = null)
     {
         var who = person.Name ?? person.Id;
         var errors = (int?)report["errors"] ?? 0;
@@ -85,17 +85,30 @@ internal static class ConsoleDeployPreflight
         var reason = errors > 0
             ? $"{who} confirmed the activation through the console although preflight run {report["run"]} found {errors} error{(errors == 1 ? "" : "s")}: {ErrorsInWords(report)}"
             : $"preflight run {report["run"]} found no error ({report["warnings"]} warning(s)); activated through the console for {who}";
-        try
+        // the Runner's instances prepare a staged version on their own pass; an activation asked before they are ready is asked again until they are, or the wait runs out
+        var until = DateTimeOffset.UtcNow + (readyWait ?? TimeSpan.FromSeconds(30));
+        while (true)
         {
-            var active = await calls.ActivateAsync(package, channel, reason, ct);
-            return active is null
-                ? new(202, "waiting", null, $"The Runner activates version {version} of {package} in {channel} once the runs in flight have ended.")
-                : new(200, "activated", active, $"Version {active} of {package} is active in {channel}.");
-        }
-        catch (DeployException ex) when (ex.Status == 404)
-        {
-            // nothing is staged: the same content was served already, or someone activated it first
-            return new(200, "already-served", version, $"Nothing of {package} is staged in {channel} any more ({ex.Message}); version {version} was served already.");
+            try
+            {
+                var active = await calls.ActivateAsync(package, channel, reason, ct);
+                return active is null
+                    ? new(202, "waiting", null, $"The Runner activates version {version} of {package} in {channel} once the runs in flight have ended.")
+                    : new(200, "activated", active, $"Version {active} of {package} is active in {channel}.");
+            }
+            catch (DeployException ex) when (ex.Status == 404)
+            {
+                // nothing is staged: the same content was served already, or someone activated it first
+                return new(200, "already-served", version, $"Nothing of {package} is staged in {channel} any more ({ex.Message}); version {version} was served already.");
+            }
+            catch (DeployException ex) when (ex.Message.Contains("not ready everywhere", StringComparison.Ordinal) && DateTimeOffset.UtcNow < until)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+            }
+            catch (DeployException ex)
+            {
+                return new(ex.Status is >= 400 and < 600 ? ex.Status : 502, "refused-by-runner", null, $"{ex.Message} Version {version} stays staged in {channel}.");
+            }
         }
     }
 }
