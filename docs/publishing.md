@@ -28,6 +28,71 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 
 **The client.** `DefinitionsClient` (`DbDataKit.State.Api`) is the caller's side over an `IDefinitionsLink`: `HEAD` and `PUT artifacts/{sha256}` for the files the group lacks, `PUT definitions/{kind}/{name}` (the manifest, channel, mode, `expected_version`, `depends_on`, format, extra body fields), `PUT bindings/...`, the reads (`NamesAsync`: a caller that only publishes lists the names it owns and no others, an administrator or viewer all of them), the adopt call (`AdoptAsync`), and the signature: it asks `GET trust/{kind}` and signs when the group trusts its key, goes unsigned when the group does not require signatures, and refuses before sending, naming the key and the administrator's call, when the group requires them and does not trust it. Build's `ProxyPublisher` publishes its data sources and models with it, and so does the Workspace server (`WorkspaceGatewayPublish`, `DbDataKit.Authoring.Server`, plan 33 SW01) for a Store project's entity models and a Build project's data source documents and semantic models: it names the data sources a model needs as slots when the publishing client did not make them, binds them itself where the Gateway lets a publishing client (its own data sources), and says what an administrator binds otherwise. The Workspace's app publish (and the apps API's `PUT /api/v1/apps/{name}`, which the removed `apps publish --to` called) is not on the shared route yet: an app version is one JSON text with every file in base64 until PB04 stores it as a manifest and files by hash, and moving it before then would be a partial route to migrate.
 
+## Deploying a build from the control service
+
+The control service deploys a build of a Workspace project to a Runner or a Gateway as the person who asks. The Workspace service builds the project
+and serves what the build holds; it never calls the Runner or the Gateway.
+
+1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
+   kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
+   Store build; a `note`).
+2. The console checks that the person holds the approver role on the Workspace server, and that the target is a registered Runner or Gateway.
+3. The console reads `GET /api/v1/projects/{project}/workspaces/{workspace}/builds/{build}/contents` from the Workspace server, as the person. The
+   answer has the build record and the items the build holds to send. A build that did not succeed is refused: "This build is failed, so there is
+   nothing to publish. Only a build that succeeded is published."
+4. The console picks the item that the kind's route to the target's product takes (`GET /api/v1/project-kinds`). A kind that does not go to that
+   product is refused with the kind, the target and the products the kind goes to.
+5. The console reads each file of the item by its SHA-256 (`GET .../builds/{build}/files/{sha256}`), lays the files out under their paths, and refuses a
+   file whose bytes do not have the hash or the size the build listed.
+6. The console sends the item to the target over the target's publish API, through the relay as the person. The target decides what the person may
+   do there and records them as the publisher. Each version is signed with the console's publisher key over its manifest, its files and the build
+   record, when the target trusts that key (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the
+   deploy before anything is sent, and the message names the key.
+7. The console keeps the deploy (the `deploys` state module) and audits it as `build.deploy`. `GET /api/deploys?workspace_server=&project=&workspace=&build=`
+   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words.
+
+What a build holds to send, by the routes of its kind:
+
+| Item | Product | Files in the build's folder |
+| --- | --- | --- |
+| `package` | Runner | `artifact/package.yaml` and `artifact/files/` (a Sync set, a Build project's refresh plans, an integration) |
+| `semantic-model` | Gateway | `artifact/gateway/` (a Build project's semantic models and views) |
+| `model` | Gateway | `artifact/models/` (a Store project's models) |
+| `model-package/<model>` | Runner | `artifact/runner/<model>/` (one deploy package per Store model; the person names the model when the build has several) |
+| `app` | Gateway | `app/` (a built app) |
+
+Each item lists its files with their SHA-256 and size, and `manifest_sha256`: the SHA-256 of the item's list of files (each path under the item's
+folder, a tab, the file's SHA-256 and a line feed, in path order). Two builds of the same content have the same `manifest_sha256`.
+
+Example: Ana stages build `4f1c...` of the Sync project `orders` on the Runner `jobs` in `dev`, with the slot `source` bound to `erp`:
+
+```
+POST /api/deploys
+{"workspaceServer": "Workspace", "project": "orders", "workspace": "draft-1", "build": "4f1c...", "target": "jobs",
+ "channel": "dev", "bind": {"source": "erp"}}
+```
+
+The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
+An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
+
+## The build record
+
+A version deployed from a build carries the record of that build (`build-record/1`), as one line of JSON:
+
+```json
+{"schema":"build-record/1","server":"<Workspace server id>","project":"orders","kind":"sync","workspace":"draft-1","build":"4f1c...",
+ "commit":"9a2e...","uncommitted_changes":false,"item":"package","manifest_sha256":"c0ff...",
+ "checks":{"passed":true,"findings":[{"severity":"warning","code":"...","message":"...","file":"config/task.yaml","line":4}]}}
+```
+
+- `checks` is what the kind's validators found when the build ran; `passed` is true only for a build that succeeded.
+- The signature covers the record. A signed version with a record is signed over the message `dbdatakit-definition/2`: the kind, the name, the
+  manifest's SHA-256, the line `build`, a tab and the record's SHA-256, then each file's path and SHA-256. A version without a record is signed over
+  `dbdatakit-definition/1`, as before.
+- The Runner or Gateway keeps the record's text with the version, as it was sent (`definition_version.build_record`). `GET definitions/{kind}/{name}`
+  lists it with each version, and `GET definitions/{kind}/{name}/versions/{n}` returns it. An instance verifies the signature again over the stored
+  record when it prepares the version, and a promotion to another group carries the record with the signature.
+
 ## The registry of kinds
 
 `DefinitionKinds.Register(new DefinitionKind(name, targetTypes, defaultMode, requiresApproval) { Formats, FormatOf, slots, validator })`. A publisher built for a target type refuses a kind that does not list it. Registered today:

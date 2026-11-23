@@ -32,6 +32,7 @@
     <DbDataKitReference Include="Runner.Abstractions" />   <!-- package/1 manifests: what the console promotes and releases -->
     <DbDataKitReference Include="Runner" />   <!-- the runner's types the console reads from a paired Runner (it hosts no engine since plan 35 I2) -->
     <DbDataKitReference Include="Runner.Api" />   <!-- the runner's management API types: what a paired Runner answers -->
+    <DbDataKitReference Include="Deploy" />   <!-- the deploy of a build to a Runner or a Gateway, and what a build holds to send -->
     <DbDataKitReference Include="Agents" />
     <DbDataKitReference Include="Views" />   <!-- the view schemas an agent's view in an answer is checked against; plan 27a AG22 -->
     <DbDataKitReference Include="Agents.Providers" />   <!-- the agent runtime the console hosts for back-end agents; plan 27a AG14 -->

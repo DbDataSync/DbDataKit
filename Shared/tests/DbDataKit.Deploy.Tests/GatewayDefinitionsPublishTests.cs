@@ -33,6 +33,29 @@ public sealed class GatewayDefinitionsPublishTests
     }
 
     [Fact]
+    public async Task A_model_deployed_from_a_build_carries_its_build_record_and_is_signed_over_it_when_the_gateway_trusts_the_key()
+    {
+        const string record = """{"schema":"build-record/1","build":"b1"}""";
+        using var link = new FakeLink
+        {
+            Answer = (method, path, _) => (method, path) switch
+            {
+                ("GET", "definitions/data-source") => (200, new JsonObject { ["definitions"] = new JsonArray(new JsonObject { ["name"] = "mine" }) }),
+                ("GET", "trust/entity-model") => (200, new JsonObject { ["required"] = false, ["keys"] = new JsonArray(new JsonObject { ["key_id"] = Publisher.Key.Fingerprint }) }),
+                ("PUT", "definitions/entity-model/territories") => (201, new JsonObject { ["version"] = 1, ["created"] = true }),
+                _ => null,
+            },
+        };
+
+        await new GatewayDefinitionsPublish(link, Publisher, _ => { }, default, record).PublishEntityModelsAsync([("territories.yaml", Territories("mine"))], null, null);
+
+        var sent = JsonNode.Parse(link.Calls.Single(c => c.Method == "PUT").Body!)!;
+        Assert.Equal(record, (string?)sent["build"]);
+        var signature = ((string)sent["signature"]!).Split(':');
+        Assert.True(ConsoleSigningKey.Verify(Publisher.Key.PublicKey, DbDataKit.State.Api.DefinitionSigning.Message("entity-model", "territories", (string)sent["manifest"]!, [], record), DbDataKit.State.Api.Url.Decode(signature[2])!));
+    }
+
+    [Fact]
     public async Task A_slot_the_gateway_lets_the_caller_bind_is_bound_and_the_model_published_again()
     {
         var tries = 0;

@@ -48,7 +48,8 @@ public sealed class ArtifactDeployTests : IDisposable
 
         var answer = await ArtifactDeploy.DeployAsync("sync", new ProjectPublishRoute(DeployProducts.Runner, "package", "a package"), link, Publisher, Runner, folder, options, "Ada", steps.Add);
 
-        Assert.Equal(["PUT bindings/dev/integration/sales", "HEAD artifacts", "PUT artifacts", "PUT definitions/integration/sales"],
+        // the runner is asked whether it trusts the publisher's key for packages; this one does not say, so the version goes unsigned
+        Assert.Equal(["PUT bindings/dev/integration/sales", "HEAD artifacts", "PUT artifacts", "GET trust/integration", "PUT definitions/integration/sales"],
             link.Calls.Select(c => c.Method + " " + (c.Path.StartsWith("artifacts/", StringComparison.Ordinal) ? "artifacts" : c.Path)));
         var publish = JsonNode.Parse(link.Calls[^1].Body!)!;
         Assert.Equal(("dev", "stage", "build 3 [workspace:w/sales/main]"), ((string?)publish["channel"], (string?)publish["mode"], (string?)publish["note"]));

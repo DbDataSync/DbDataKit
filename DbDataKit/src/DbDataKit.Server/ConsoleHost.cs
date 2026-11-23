@@ -125,6 +125,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleCatalogRead>();   // the shape of a Workspace project's connection, read from a Runner channel as the signed-in person
         builder.Services.AddSingleton<ConsoleBindingCompare>();   // plan 27a IX25: compare, adopt and publish of bindings and connections against a Runner or a Gateway, and the combined posture list
         builder.Services.AddSingleton<ConsolePromotions>();   // plan 30 PB06: a package promoted from one runner group to another as the signed-in person
+        builder.Services.AddSingleton<ConsoleDeploys>();   // the deploy of a build from a Workspace server to a Runner or a Gateway, as the person, signed with the console's publisher key
         builder.Services.AddSingleton<ConsoleReleases>();   // plan 21 CH02: releases, one approval, run as the person who starts them
         builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());

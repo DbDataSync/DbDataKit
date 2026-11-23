@@ -12,14 +12,14 @@ namespace DbDataKit.Deploy;
 /// The deploy of what a Store or a Build project made to a Gateway, over the shared publish API: <see cref="DefinitionsClient"/> against the Gateway's <c>/api/v1/definitions/{kind}/{name}</c>, artifacts by hash, bindings, and the signature
 /// of <c>identity</c>, which the Gateway checks when its group trusts that key. Every call goes through <c>link</c>, which says who is calling. The publisher holds no database login: a data source document is sent
 /// without one, and the login an administrator set on the Gateway is kept when the document is sent again. What the Gateway says in refusal comes back in its words. The id of <c>identity</c> is written as the owner
-/// (<c>managedBy</c>) of what is sent.
+/// (<c>managedBy</c>) of what is sent. <c>build</c>, when given, is the record of the build the definitions come from: each version carries it, under the signature.
 /// <para>
 /// Data sources: a model names the data sources it needs. One the caller already owns (it made it, or this deploy makes it from the build's <c>data-sources/</c>) needs nothing more. One it did not make is a <b>slot</b> of the version (<c>slots</c> in the manifest):
 /// the Gateway refuses the version naming the slot until the group binds it, and the deploy binds it itself only where the Gateway lets the caller (a data source the caller made); a data source made by hand is bound by an administrator of the Gateway, once,
 /// and the refusal says so and carries the data source for the person's confirmation (<c>adopt</c>), which is the other way.
 /// </para>
 /// </summary>
-public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, ConsoleIdentity identity, Action<string> step, CancellationToken ct = default)
+public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, ConsoleIdentity identity, Action<string> step, CancellationToken ct = default, string? build = null)
 {
     public const string ModelKind = "semantic-model";
 
@@ -32,6 +32,9 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly DefinitionsClient client = new(link, identity.Key);
+
+    /// <summary>Publishes with the build record this deploy carries.</summary>
+    private Task<DefinitionsAnswer> PublishAsync(DefinitionPublishRequest request) => client.PublishAsync(request with { Build = build }, ct);
 
     /// <summary>The Store project's models (<paramref name="models"/>: file name and text) to the Gateway as <c>entity-model</c> definitions, on the data source the model's storage names unless <paramref name="dataSource"/> names another.</summary>
     public async Task<JsonArray> PublishEntityModelsAsync(IReadOnlyList<(string File, string Text)> models, string? dataSource, IReadOnlyList<string>? adopt)
@@ -141,7 +144,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
                     versions[model] = (await ServedAsync(ModelKind, model, $"reading the model {model} the {kind} {definition} queries"))?.Active;
                 var dependsOn = DbDataKit.Views.ViewDefinitions.DependsOn(kind, definition, text, m => versions.GetValueOrDefault(m.ToLowerInvariant()));
                 var held = await ServedAsync(kind, definition, $"reading the {kind} {definition}");
-                var answer = await client.PublishAsync(new DefinitionPublishRequest(kind, definition, text, ExpectedVersion: held?.Latest ?? 0, DependsOn: [.. dependsOn]), ct);
+                var answer = await PublishAsync(new DefinitionPublishRequest(kind, definition, text, ExpectedVersion: held?.Latest ?? 0, DependsOn: [.. dependsOn]));
                 if (!answer.Ok) throw Refused(answer, $"the {kind} {definition}");
                 step($"Published the {kind} {definition} to the Gateway.");
                 published.Add(new JsonObject { ["kind"] = kind, ["name"] = definition, ["version"] = (int?)answer.Body["version"], ["unchanged"] = (bool?)answer.Body["unchanged"], ["depends_on"] = new JsonArray([.. dependsOn.Select(d => (JsonNode?)d)]) });
@@ -181,7 +184,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
         if (!ManagedByLine().IsMatch(text)) text += $"managed_by: {identity.Id}\n";
         step($"Sent the data source document of '{name}' (no login in it).");
         var request = new DefinitionPublishRequest(DataSourceKind, name, text, ExpectedVersion: held?.Latest ?? 0);
-        var answer = await client.PublishAsync(request, ct);
+        var answer = await PublishAsync(request);
         // every secret the document names (the login kept from the Gateway's file) is a slot the channel binds; the deploy binds it itself where the Gateway lets this caller (a secret it stored), an administrator otherwise
         var slots = DbDataKit.Connections.ConnectionSecretSlots.OfText(text, name).Select(s => s.Slot).ToArray();
         if (!answer.Ok && answer.Body["code"]?.GetValue<string>() == "unboundslot" && slots.Length > 0)
@@ -195,7 +198,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
                     409);
             }
             step($"Bound the {(slots.Length == 1 ? "secret" : "secrets")} {string.Join(", ", slots.Select(s => "'" + s + "'"))} of the data source '{name}' on the Gateway.");
-            answer = await client.PublishAsync(request, ct);
+            answer = await PublishAsync(request);
         }
         if (!answer.Ok) throw Refused(answer, $"the data source {name}");
         return new JsonObject { ["name"] = name, ["version"] = (int?)answer.Body["version"], ["created"] = (bool?)answer.Body["created"] ?? held is null };
@@ -207,7 +210,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
     /// </summary>
     private async Task<DefinitionsAnswer> PublishBindingSlotsAsync(DefinitionPublishRequest request, string[] slots, string doing)
     {
-        var answer = await client.PublishAsync(request, ct);
+        var answer = await PublishAsync(request);
         if (answer.Ok) return answer;
         if (answer.Body["code"]?.GetValue<string>() != "unboundslot" || slots.Length == 0) throw Refused(answer, doing);
 
@@ -220,7 +223,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
                 409, new JsonObject { ["data_source"] = unbound, ["made_by"] = "hand", ["publish_adopt"] = true, ["field"] = "adopt", ["slot"] = unbound, ["bind"] = call });
         }
         step($"Bound {string.Join(", ", slots.Select(s => "'" + s + "'"))} for {request.Name} on the Gateway.");
-        var again = await client.PublishAsync(request, ct);
+        var again = await PublishAsync(request);
         if (!again.Ok) throw Refused(again, doing);
         return again;
     }
