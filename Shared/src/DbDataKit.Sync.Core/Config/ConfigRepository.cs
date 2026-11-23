@@ -430,19 +430,29 @@ public sealed class ConfigRepository
 
     public TableMappingConfig SaveTableMapping(string replicationName, TableMappingConfig mapping, GitAuthor author)
     {
+        var text = TableMappingText(replicationName, mapping);
+        var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mapping.Name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        WriteAtomically(path, text);
+        Git.CommitChanges([path], $"Save table mapping '{mapping.Name}' on replication '{replicationName}'", author);
+
+        return mapping;
+    }
+
+    /// <summary>
+    /// The text <see cref="SaveTableMapping"/> would write for <paramref name="mapping"/>, after the same checks against its replication, without
+    /// writing it: for a caller that hands the file to someone else to save (an authoring screen keeps it as an unsaved edit). A mapping the
+    /// checks refuse throws <see cref="ConfigValidationException"/>, as a save does.
+    /// </summary>
+    public string TableMappingText(string replicationName, TableMappingConfig mapping)
+    {
         ConfigValidation.ValidateName(replicationName, nameof(replicationName));
         ConfigValidation.ValidateName(mapping.Name, nameof(mapping.Name));
 
         var task = LoadReplicationTask(replicationName);
         ValidateTableMapping(task, mapping);
-
-        var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mapping.Name);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        mapping.SchemaVersion = ConfigSchema.MappingCurrent;   // a save writes the current format, never the one that was read (plan 33 6d)
-        WriteAtomically(path, YamlConfigSerializer.Serialize(mapping));
-        Git.CommitChanges([path], $"Save table mapping '{mapping.Name}' on replication '{replicationName}'", author);
-
-        return mapping;
+        mapping.SchemaVersion = ConfigSchema.MappingCurrent;   // a save writes the current format, never the one that was read
+        return YamlConfigSerializer.Serialize(mapping);
     }
 
     public TableMappingConfig LoadTableMapping(string replicationName, string mappingName)

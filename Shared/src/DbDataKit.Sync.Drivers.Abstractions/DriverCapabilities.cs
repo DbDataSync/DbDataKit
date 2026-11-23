@@ -61,11 +61,13 @@ public sealed record DriverCapabilities(
 /// itself never does: every reader can be asked for one regardless of what it declares here, so a UI
 /// offering intents from this list adds <c>InitialLoad</c> itself rather than expecting it in this set.
 /// </param>
+/// <param name="NeedsKey">The key the reader reports rows by (<see cref="IChangeReader.NeedsKey"/>).</param>
 public sealed record ReaderCapability(
     string Kind, bool SupportsSegmentation, bool DetectsDeletes, IReadOnlyList<ParameterDescriptor> Parameters,
-    IReadOnlyList<ReadIntent> SupportedIntents, bool DetectsKeyChanges = true);
+    IReadOnlyList<ReadIntent> SupportedIntents, bool DetectsKeyChanges = true, KeyNeed NeedsKey = KeyNeed.None);
 
 public sealed record StagingCapability(string Kind, IReadOnlyList<ParameterDescriptor> Parameters);
 
+/// <param name="NeedsKey">The key the writer matches rows on (<see cref="IChangeWriter.NeedsKey"/>).</param>
 public sealed record WriterCapability(
-    string Kind, bool SupportsReconciliation, IReadOnlyList<ParameterDescriptor> Parameters);
+    string Kind, bool SupportsReconciliation, IReadOnlyList<ParameterDescriptor> Parameters, KeyNeed NeedsKey = KeyNeed.None);

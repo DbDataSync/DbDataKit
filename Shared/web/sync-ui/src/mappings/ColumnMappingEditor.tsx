@@ -16,6 +16,10 @@ interface Props {
   /** The target's columns, from the catalog cache; undefined when the cache does not have the table. */
   catalogTargetColumns: ColumnMetadata[] | undefined
   relationships: RelationshipConfig[]
+  /** The target type each source column gets when nothing is set, by source column (`sync/inferred-columns`); absent while it is not known. */
+  inferredTypes?: Record<string, string>
+  /** Whether the source is a query: its columns are not in the catalog cache. */
+  querySource?: boolean
 }
 
 const COLUMNS = '1fr 22px 1fr 0.95fr 1.15fr 74px'
@@ -26,10 +30,10 @@ const COLUMNS = '1fr 22px 1fr 0.95fr 1.15fr 74px'
  * reference is spelled differently in each reader's statement).
  *
  * When the target does not exist yet its columns are the source's: provisioning builds the `CREATE TABLE` from the column mappings, so what is
- * listed here is what gets created. The target type is empty unless a person sets one, and then the type is inferred from the source's when the
- * target is provisioned.
+ * listed here is what gets created. A target type nobody set is shown as the type the Workspace infers from the source column's
+ * (`sync/inferred-columns`, the code provisioning runs), and stays unset in the file, so it follows the source until a person sets one.
  */
-export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange, targetExists, sourceColumns, catalogTargetColumns, relationships }: Props) {
+export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange, targetExists, sourceColumns, catalogTargetColumns, relationships, inferredTypes, querySource = false }: Props) {
   const targetColumns = targetExists === false ? sourceColumns : catalogTargetColumns
   const sourceConnection = useCacheConnection(resolvedSource.connectionName || undefined).data
   const relationshipColumnsByName: Record<string, ColumnMetadata[]> = {}
@@ -45,7 +49,9 @@ export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange
       <div className="card" data-testid="column-mappings-table">
         <div className="card-head tight"><span className="card-title sm">Column mappings</span></div>
         <div className="empty" data-testid="column-mappings-waiting">
-          {!target.table || !resolvedSource.table
+          {querySource
+            ? 'The columns a query returns are not in the catalog cache, so they are not listed here: the column mappings of a query source are edited in Files.'
+            : !target.table || !resolvedSource.table
             ? 'Select a source and target table to map columns.'
             : 'The catalog cache does not have both tables: their columns are listed once their connections\' catalogs are read into the draft.'}
         </div>
@@ -63,6 +69,8 @@ export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange
     const sep = value.indexOf('\u0000')
     return sep < 0 ? { relationship: null, sourceColumn: value } : { relationship: value.slice(0, sep), sourceColumn: value.slice(sep + 1) }
   }
+  // a column through a relationship is not the source table's, so no type is inferred for it here
+  const inferredOf = (m: ColumnMapping) => (m.relationship ? undefined : inferredTypes?.[m.sourceColumn])
   const isPk = (name: string) => targetColumns.find((c) => c.name === name)?.isPrimaryKey
   const mapped = new Set(mappings.map((m) => m.targetColumn))
   const unmapped = targetColumns.filter((tc) => !mapped.has(tc.name))
@@ -157,7 +165,7 @@ export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange
             )}
           </span>
           <span>
-            <EditableValue value={m.targetType ?? null} placeholder="inferred" label={`${m.targetColumn} target type`} onChange={(next) => updateRow(i, { targetType: next })} monospace testId={`column-mapping-type-${i}`} />
+            <EditableValue value={m.targetType ?? null} placeholder={inferredOf(m) ?? 'inferred'} label={`${m.targetColumn} target type`} onChange={(next) => updateRow(i, { targetType: next })} monospace testId={`column-mapping-type-${i}`} />
           </span>
           <span style={{ minWidth: 0 }}>
             <EditableValue value={m.transform ?? null} placeholder="none" label={`${m.targetColumn} transform`} onChange={(next) => updateRow(i, { transform: next })} monospace testId={`column-mapping-transform-${m.targetColumn}`} />

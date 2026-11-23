@@ -66,6 +66,10 @@ public interface IChangeReader
     /// </summary>
     bool CapturesChangeOrder => false;
 
+    /// <summary>The key this reader reports rows by and refuses a source table without; <see cref="KeyNeed.None"/> for a reader that reads
+    /// rows that exist and matches nothing.</summary>
+    KeyNeed NeedsKey => KeyNeed.None;
+
     /// <param name="columnMappings">
     /// What this read is being asked to produce. A reader projects these columns rather than selecting
     /// everything, and applies each one's <see cref="ColumnMapping.Transform"/> — a SQL expression in

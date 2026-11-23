@@ -2,6 +2,7 @@ import { Field } from '@dbdatakit/shell'
 import { EndpointSideCard } from '../components/EndpointSidePair'
 import { useDatabases, useTables } from '../metadata'
 import { tableExists } from '../tableExists'
+import { QuerySourcePanel } from './QuerySourcePanel'
 import type { ConnectionView, EndpointRef, TableSpec } from '../types'
 
 interface Props {
@@ -18,6 +19,20 @@ interface Props {
    * name the catalog does not have is a typo: there is no creating a table to read from.
    */
   allowNewTable?: boolean
+  /**
+   * The source side only: **Custom query, not a table**. On, the query (`query:` of the source) replaces the schema and table pickers, which a query
+   * has no answer for; the connection and database stay, since a query still runs somewhere.
+   */
+  query?: {
+    isQuerySource: boolean
+    onToggleQuerySource: () => void
+    value: string
+    onChange: (next: string) => void
+    allowSubquery: boolean
+    onAllowSubqueryChange: (next: boolean) => void
+    open: boolean
+    onOpenChange: (open: boolean) => void
+  }
 }
 
 const readOnly = { display: 'flex', alignItems: 'center', background: 'var(--sunken)', borderColor: 'var(--chrome-edge)', color: 'var(--ink-3)' } as const
@@ -27,7 +42,7 @@ const readOnly = { display: 'flex', alignItems: 'center', background: 'var(--sun
  * it (**Override for this table**: off shows the inherited connection and database read only, on makes them pickers). The table picker lists the
  * tables the draft's catalog cache has for the resolved endpoint, whichever way the toggle is.
  */
-export function MappingSide({ side, label, inherited, spec, connections, onChange, testIdPrefix, allowNewTable = false }: Props) {
+export function MappingSide({ side, label, inherited, spec, connections, onChange, testIdPrefix, allowNewTable = false, query }: Props) {
   const overriding = spec.connectionName !== null || spec.database !== null
   const connectionName = spec.connectionName ?? inherited?.connectionName ?? ''
   const database = spec.database ?? inherited?.database ?? ''
@@ -93,7 +108,18 @@ export function MappingSide({ side, label, inherited, spec, connections, onChang
         </Field>
       </div>
 
-      {allowNewTable ? (
+      {query && (
+        <div className="row" style={{ gap: 7 }}>
+          <button type="button" className={`toggle ${query.isQuerySource ? 'on' : ''}`} onClick={query.onToggleQuerySource} aria-pressed={query.isQuerySource}
+            data-testid={`${testIdPrefix}-query-source-toggle`} />
+          <span style={{ font: '500 11.5px var(--ui)', color: 'var(--ink-4)' }}>Custom query, not a table</span>
+        </div>
+      )}
+
+      {query?.isQuerySource ? (
+        <QuerySourcePanel query={query.value} onChange={query.onChange} allowSubquery={query.allowSubquery} onAllowSubqueryChange={query.onAllowSubqueryChange}
+          open={query.open} onOpenChange={query.onOpenChange} testIdPrefix={testIdPrefix} />
+      ) : allowNewTable ? (
         <>
           <div className="form-grid">
             <Field label="Schema">

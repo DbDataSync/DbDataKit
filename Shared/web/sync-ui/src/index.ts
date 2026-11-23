@@ -1,9 +1,40 @@
 // @dbdatakit/sync-ui: the Designer of a Workspace sync project, the authoring screens of a replication and the draft model they edit.
 export { syncDesigner, replicationOfRest } from './designer'
-export { useSyncDraft } from './useSyncDraft'
-export type { FileProblem, FileView, SyncDraft } from './useSyncDraft'
-export { editTask, editText, mappingPath, mappingsOf, newMappingText, newTaskText, readConnection, readMapping, readTask, taskPath, SYNC_MAPPING_CURRENT } from './model'
+export { useSyncDraft, useSyncScripts } from './useSyncDraft'
+export type { FileProblem, FileView, SyncDraft, SyncScripts } from './useSyncDraft'
+export { editTask, editText, mappingPath, mappingsOf, newMappingText, newTaskText, readConnection, readMapping, readScript, readTask, scriptPathsOf, taskPath, SYNC_MAPPING_CURRENT } from './model'
 export { useCatalog, useColumns, useDatabases, useReadLine, useTables } from './metadata'
 export { EndpointSideCard, EndpointSidePair } from './components/EndpointSidePair'
 export { ColumnMultiPicker } from './components/ColumnMultiPicker'
 export type * from './types'
+export { runsAgainstAConnection } from './types'
+
+// the client of the Workspace's sync routes and what they answer
+export { syncApi, unsavedOf, isQuestionPath } from './api/syncApi'
+export type { Unsaved } from './api/syncApi'
+export { useBulkCreate, useCapabilities, useInferredColumns, useScriptSlots, useUnsaved } from './api/hooks'
+export { CHANGE_WRITER_KIND, RECONCILE_ONLY_KINDS, writerForReader, writerNote } from './api/types'
+export type * from './api/types'
+export { readerNotes } from './api/readerNotes'
+
+// the restored components of a replication's Overview, its Quality Checks tab and its rail
+export { ParameterForm } from './components/ParameterForm'
+export { ScriptBindingsCard, ScriptBindingsView } from './components/ScriptBindings'
+export { UnpublishedNotice, unpublishedOf } from './components/UnpublishedChanges'
+export type { PublishState, Unpublished } from './components/UnpublishedChanges'
+export { TrackingCard } from './replication/TrackingCard'
+export { ReconcileConfigCard, reconcileOf, DEFAULT_RECONCILE } from './replication/ReconcileConfigCard'
+export { SegmentingStrategiesCard, SegmentingStrategiesView } from './replication/SegmentingStrategiesCard'
+export { ReplicationChecksPanel } from './replication/ReplicationChecksPanel'
+export { ReplicationProvisioningPanel } from './replication/ReplicationProvisioningPanel'
+export { groupPlan } from './replication/provisioningGroups'
+export type { ApplyTarget, GroupedPlan, ProvisioningGroup } from './replication/provisioningGroups'
+
+// the restored components of a mapping's editor
+export { SourceFilterCard } from './mappings/SourceFilterCard'
+export { QuerySourcePanel } from './mappings/QuerySourcePanel'
+export { DefaultSegmentingCard } from './mappings/DefaultSegmentingCard'
+export { ProvisioningCard, pendingSteps } from './mappings/ProvisioningCard'
+export { ChecksCard, ChecksView } from './mappings/ChecksCard'
+export { MappingPipelineCard } from './mappings/MappingPipelineCard'
+export type { PipelineOverrides } from './mappings/MappingPipelineCard'

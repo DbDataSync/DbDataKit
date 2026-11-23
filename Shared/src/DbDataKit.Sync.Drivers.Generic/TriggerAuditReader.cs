@@ -75,7 +75,13 @@ public sealed class TriggerAuditReader(
         return new CapturedPosition(target.ToString(), PositionTimeUtc: null);
     }
 
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
+    public IReadOnlyList<ParameterDescriptor> Parameters => Options;
+
+    /// <summary>A shadow table's rows are its source rows' keys, so a table with no primary key has nothing to report a change by.</summary>
+    public KeyNeed NeedsKey => KeyNeed.SourceKey;
+
+    /// <summary>The settings of every trigger-audit reader, whatever its engine: the built-in drivers' capability table names them.</summary>
+    public static IReadOnlyList<ParameterDescriptor> Options { get; } =
     [
         new()
         {

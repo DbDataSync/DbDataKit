@@ -28,6 +28,9 @@ public sealed class KeyReconcileReader(SqlDialect dialect, ISegmentValueBinder b
     /// covers the rest — same posture as <see cref="BatchReloadReader.DetectsDeletes"/>.</summary>
     public bool DetectsDeletes => false;
 
+    /// <summary>The sweep reads the source's primary key of every row in scope (<see cref="KeyColumnMappings"/>).</summary>
+    public KeyNeed NeedsKey => KeyNeed.SourceKey;
+
     // No IReadIntentDeclaring: same reasoning as BatchReloadReader — every pass reads the whole scope
     // regardless of intent, so there is nothing honest left to declare about Changes/
     // ChangesFromEarliest/ChangesFromLatest.

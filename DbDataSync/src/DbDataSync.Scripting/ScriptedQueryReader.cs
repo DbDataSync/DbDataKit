@@ -37,26 +37,12 @@ public sealed class ScriptedQueryReader(ScriptHost scriptHost, SqlDialect dialec
     /// <summary>The reader option naming the script. A pipeline-stage choice, so it is bound the way
     /// every other stage option is rather than through the script hierarchy — the Kind and its script
     /// are one decision and belong in one place.</summary>
-    public const string ScriptOption = "script";
+    public const string ScriptOption = BuiltInDriverOptions.Script;
 
-    /// <summary>
-    /// Named rather than a dropdown of script names: which scripts exist is the registry's question
-    /// and the driver layer cannot see it. The SPA fills the choices in from the scripts endpoint —
-    /// see <c>ParameterForm</c>'s handling of a script-typed name.
-    /// </summary>
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
-    [
-        new()
-        {
-            Name = ScriptOption,
-            Label = "Query builder script",
-            Description = "The script that builds this reader's statements. Bound by name, not through the hierarchy.",
-            Type = ParameterType.Dropdown,
-            Required = true,
-        },
-    ];
+    /// <summary>Listed in the built-in drivers' capability table, so a screen offers the same setting this reader reads.</summary>
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.ScriptedQuery;
 
-    public string Kind => "ScriptedQuery";
+    public string Kind => BuiltInDriverKinds.ScriptedQuery;
 
     /// <summary>
     /// **False, even though a scripted query is the reader most likely to surface deletes.**

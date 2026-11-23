@@ -132,6 +132,8 @@ export function DraftProvider({ project, id, kind, canEdit, enabled = true, chil
     await client.invalidateQueries({ queryKey: findingsKey(project, id) })
     await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
     await client.invalidateQueries({ queryKey: ['workspace', 'catalog', project, id] })
+    // a replication's provisioning plan is made from the saved files
+    await client.invalidateQueries({ queryKey: ['workspace', 'provisioning-plan', project, id] })
   }, [client, project, id])
 
   // a save sends the text of the moment; someone who typed on while it ran keeps what they typed

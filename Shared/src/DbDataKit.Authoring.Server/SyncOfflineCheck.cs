@@ -25,7 +25,8 @@ namespace DbDataKit.Authoring.Server;
 /// (<see cref="MappingColumnReader"/>, <see cref="SyncCatalogColumns"/>), each native type through the driver's Sync dialect (the built-in engines' dialects
 /// over the shared type tables, the type map of a <c>driver.yaml</c>, ANSI first for a Flight SQL server), then the two sides compared by the shared
 /// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataSync.Drivers.Generic</c>), in their own
-/// words; an engine's own reader or writer (change tracking, CDC, a logical slot, an engine's merge) is reported as not checked offline.
+/// words; an engine's own reader or writer (change tracking, a logical slot, an engine's merge) by the key the built-in drivers' table
+/// (<see cref="BuiltInDriverCapabilities"/>) says it needs. A Kind of a driver the project carries is reported as not checked offline.
 /// </para>
 /// <para>
 /// A table or column the mapping names that the cache does not hold is an error, so a build never carries a mapping the cache contradicts: the author
@@ -40,7 +41,7 @@ public static class SyncOfflineCheck
     public const string NoCache = "DBD-WS-SYNC-NOCACHE";
 
     /// <summary>Something was not checked offline: a connection with no entry in the cache, a driver with no <c>driver.yaml</c> in the draft, a filter the
-    /// lexer cannot read, a reader or writer that is an engine's own.</summary>
+    /// lexer cannot read, the key of a reader or writer that is not a built-in driver's.</summary>
     public const string NotChecked = "DBD-WS-SYNC-NOTCHECKED";
 
     /// <summary>A table a mapping names is not in the cache.</summary>
@@ -113,6 +114,18 @@ public static class SyncOfflineCheck
         var run = new Run(root, cache);
         foreach (var (replication, mapping) in mappings) run.Mapping(replication, mapping);
         return run.Found;
+    }
+
+    /// <summary>
+    /// How a connection's driver reads a native type and which dialect writes its DDL, as the engine resolves the driver from the connection file:
+    /// a built-in engine, Flight SQL (an ANSI type name first, then the dialect of the engine behind it), or a <c>driver.yaml</c> of the draft. The
+    /// reason instead when the draft does not say (a compiled driver, a connection file that does not read).
+    /// </summary>
+    internal static (Sql.SqlDialect? Dialect, Func<string, TypeMapping<CanonicalType>>? ReadType, string? Unknown) TypesOf(string root, string connection)
+    {
+        var info = new Run(root, new CatalogCacheFile("", new Dictionary<string, CacheConnection>())).Connection(connection);
+        if (info is null) return (null, null, $"config/connections/{connection}.yaml does not name an engine");
+        return (info.Dialect, info.ToCanonical, info.Unchecked ?? (info.ToCanonical is null ? "its types are not known offline" : null));
     }
 
     private sealed record Side(string Connection, string Database, string Schema, string Table, string? Query, string? Filter, int Line, int FilterLine, int TableLine)
@@ -188,7 +201,7 @@ public static class SyncOfflineCheck
             return descriptors;
         }
 
-        private ConnectionInfo? Connection(string name)
+        internal ConnectionInfo? Connection(string name)
         {
             if (connections.TryGetValue(name, out var known)) return known;
             ConnectionInfo? info = null;
@@ -480,19 +493,62 @@ public static class SyncOfflineCheck
             foreach (var (role, kind, options) in stages.DistinctBy(s => (s.Role, s.Kind)))
             {
                 if (string.IsNullOrEmpty(kind)) continue;
-                if (!GenericKinds.Contains(kind))
+                var onTarget = kind is GenericDriverKinds.ChangeApply or GenericDriverKinds.KeyReconcileDelete;
+                string? problem;
+                if (GenericKinds.Contains(kind))
+                    problem = KeyProblem(kind, options, mapping, source, target, sourceColumns, targetColumns, targetInfo);
+                else if (EngineKeyNeed(role == "reader" ? source.Connection : target.Connection, role, kind) is { } need)
+                {
+                    // an engine's own reader or writer, whose key need the built-in drivers' table states: the same rules as the generic Kinds that need that key
+                    onTarget = need == KeyNeed.TargetKey;
+                    problem = need switch
+                    {
+                        KeyNeed.SourceKey when sourceInCache && ColumnsOf(source) is { } raw && !raw.Any(c => c.IsPrimaryKey) =>
+                            $"the source table {Label(source)} has no primary key in {CatalogCache.FileName}, and the {role} reports rows by the source's primary key.",
+                        KeyNeed.TargetKey when targetColumns is not null => TargetKeyProblem(kind, mapping, target, targetColumns),
+                        KeyNeed.NaturalKey => KeyProblem(GenericDriverKinds.Scd2, options, mapping, source, target, sourceColumns, targetColumns, targetInfo),
+                        _ => null,
+                    };
+                }
+                else
                 {
                     Note($"kind:{replicationFolder}:{role}:{kind}", "info", NotChecked,
-                        $"The {role} '{kind}' is a driver's own: whether it needs a key is not checked offline, only by the set's preflight.", file, null);
+                        $"The {role} '{kind}' is not a Kind of the built-in driver of its connection (a driver the project carries, or one installed where the set runs): whether it needs a key is not checked offline, only by the set's preflight.", file, null);
                     continue;
                 }
-                if (KeyProblem(kind, options, mapping, source, target, sourceColumns, targetColumns, targetInfo) is not { } problem) continue;
-                var onTarget = kind is GenericDriverKinds.ChangeApply or GenericDriverKinds.KeyReconcileDelete;
+                if (problem is null) continue;
                 var where = onTarget && !targetInCache
                     ? $"The target {Label(target)} is not in {CatalogCache.FileName}, so it is checked as provisioning would create it, with the source's key. "
                     : "";
                 Found.Add(new("warning", Key, $"{where}The {role} '{kind}' would refuse this mapping: {problem}", file, onTarget ? KeyLine(yaml) : source.TableLine));
             }
+        }
+
+        /// <summary>The key an engine's own reader or writer needs, from the built-in drivers' table for the driver of the side's connection; null when the
+        /// driver is not built in, the Kind is not one of its own, or the connection does not read.</summary>
+        private KeyNeed? EngineKeyNeed(string connection, string role, string kind)
+        {
+            string driverType;
+            try { driverType = ConfigRepository.ReadOnly(Path.Combine(root, "config"), SecretStore.ForProviders()).LoadConnection(connection).DriverType; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ConfigValidationException or YamlDotNet.Core.YamlException or ArgumentException)
+            {
+                return null;
+            }
+            if (BuiltInDriverCapabilities.For(driverType) is not { } driver) return null;
+            return role == "reader"
+                ? driver.Readers.FirstOrDefault(r => r.Kind == kind)?.NeedsKey
+                : driver.Writers.FirstOrDefault(w => w.Kind == kind)?.NeedsKey;
+        }
+
+        /// <summary>Why a writer that matches rows on the target's primary key would refuse the mapping: the target has none, or a key column is not mapped.</summary>
+        private static string? TargetKeyProblem(string kind, TableMappingConfig mapping, Side target, List<CachedColumn> targetColumns)
+        {
+            var key = targetColumns.Where(c => c.IsPrimaryKey).Select(c => c.Name).ToList();
+            if (key.Count == 0)
+                return $"Table mapping '{mapping.Name}': target table '{target.Schema}.{target.Table}' has no primary key, and the '{kind}' writer matches rows on it.";
+            var missing = key.Where(k => !mapping.ColumnMappings.Any(m => string.Equals(m.TargetColumn, k, StringComparison.OrdinalIgnoreCase))).ToList();
+            return missing.Count == 0 ? null
+                : $"Table mapping '{mapping.Name}': the column mappings must include the target primary key column(s) {string.Join(", ", missing)}; the '{kind}' writer matches rows on them.";
         }
 
         /// <summary>Why a generic reader or writer would refuse the mapping for want of a key, in the words of Sync's code where it has a rule to call; null when it has a key or the cache cannot tell.</summary>

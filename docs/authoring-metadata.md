@@ -351,8 +351,8 @@ What is left unchecked offline, and what the check says:
 - A connection whose driver the draft does not hold as `drivers/<id>/driver.yaml` (a compiled driver, or one installed where the set runs): the check
   names the connection once, and its source types and filters are not checked offline. A driver with a `driver.yaml` in the draft has its source types
   read through that file's type map.
-- A reader or writer that is an engine's own (SQL Server's change tracking, CDC and merge, PostgreSQL's logical slot): whether it needs a key is not
-  checked offline. The check says so once per replication.
+- A reader or writer that the connection's built-in driver does not have (a Kind of a driver the project carries, or of one installed where the set
+  runs): whether it needs a key is not checked offline. The check says so once per replication.
 
 **A key where the reader or writer needs one.** The check works out which readers and writers each mapping runs, as the engine does: its change
 processing, its bulk load, and its reconcile sweep when that is on. It asks each one that matches rows on a key whether the cache gives it one:
@@ -360,6 +360,14 @@ processing, its bulk load, and its reconcile sweep when that is on. It asks each
 - `ChangeApply` and `KeyReconcileDelete` need the target's primary key.
 - `TriggerAudit` and `KeyReconcile` need the source's primary key.
 - `Scd2` needs a natural key, stated as its `naturalKey` option or derived from the source's key.
+- `MsSqlChangeTracking` and `PgLogicalSlot` need the source's primary key: change tracking reports a change by it, and a logical slot reports a
+  delete by the table's replica identity, which is the primary key unless a DBA set another.
+- `MsSqlMerge` and `MsSqlMergeReconcile` need the target's primary key, with every key column mapped.
+
+Which key a reader or writer needs comes from the built-in drivers' table (`BuiltInDriverCapabilities` in `DbDataKit.Sync.Drivers.Generic`), the
+same table the Workspace answers a connection's capabilities from. Example: Ana picks `MsSqlChangeTracking` for `crm.dbo.audit_log`, which the cache shows without a
+primary key. The check warns on the mapping's source table: "The reader 'MsSqlChangeTracking' would refuse this mapping: the source table
+crm.dbo.audit_log has no primary key in catalog-cache.yaml".
 
 Example: the replication `orders` reads with `Watermark` and names no writer, so it writes with `ChangeApply`. The cached `dw.public.orders` has no
 primary key. The check warns on the mapping: "The writer 'ChangeApply' would refuse this mapping: Table mapping 'orders': target table 'public.orders'

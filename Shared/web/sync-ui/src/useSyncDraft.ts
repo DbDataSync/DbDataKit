@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { connectionsOf, connectionPath, useDraft, useDraftFile, useDraftFiles, type DraftFile } from '@dbdatakit/workspace'
-import { editTask, editText, mappingPath, mappingsOf, readConnection, readMapping, readTask, taskPath, type Read } from './model'
-import type { ConnectionView, ReplicationTaskConfig, TableMappingConfig } from './types'
+import { editTask, editText, mappingPath, mappingsOf, readConnection, readMapping, readScript, readTask, scriptPathsOf, taskPath, type Read } from './model'
+import type { ConnectionView, ReplicationTaskConfig, ScriptView, TableMappingConfig } from './types'
 
 /** A file of the replication as a typed view: the value the screens edit, or why it cannot be shown here (it opens in Files). */
 export interface FileView<T> {
@@ -77,4 +77,26 @@ export function useSyncDraft(replication: string): SyncDraft {
   }
 
   return { replication, task, setTask, mappingNames, mappings, mappingOf, setMapping, connections, problems }
+}
+
+/** The set's scripts, read only (they are edited in Files): each manifest that reads, in path order, and why the others do not. */
+export interface SyncScripts {
+  scripts: ScriptView[]
+  problems: FileProblem[]
+  loading: boolean
+}
+
+/**
+ * The draft's scripts as the Designer's pickers offer them (a binding's script, a segmenting or verification script): the manifests of
+ * `config/scripts/`, unsaved edits included, read through the frame like every other file of the draft.
+ */
+export function useSyncScripts(): SyncScripts {
+  const draft = useDraft()
+  const paths = useMemo(() => scriptPathsOf(draft.paths), [draft.paths])
+  const views = useDraftFiles(paths).map((f) => view(f, draft.isNew(f.path), (text) => readScript(f.path, text)))
+  return {
+    scripts: views.flatMap((v) => (v.value ? [v.value] : [])),
+    problems: views.flatMap((v) => (v.problem ? [{ path: v.path, message: v.problem }] : [])),
+    loading: draft.filesLoading || views.some((v) => v.loading),
+  }
 }
