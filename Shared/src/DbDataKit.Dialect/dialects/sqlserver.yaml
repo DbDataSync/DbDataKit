@@ -36,6 +36,7 @@ types:
   - { native: "int", canonical: "int16(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 16-bit widened to int" }
   - { native: "bigint", canonical: "int32(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 32-bit widened to bigint" }
   - { native: "decimal(20,0)", canonical: "int64(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 64-bit widened to decimal(20,0)" }
+  - { native: "decimal(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as decimal(38,9), so digits beyond it are rounded" }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 18, s: 0 }, p_max: 38 }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 18, s: 0 } }
   - { native: "decimal(38,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 38 is reduced to 38", p_min: 39, s_max: 38 }
@@ -56,13 +57,13 @@ types:
   - { native: "text", canonical: "string", direction: to_canonical }
   - { native: "ntext", canonical: "string(unicode)", direction: to_canonical }
   - { native: "sysname", canonical: "string(unicode,128)", direction: to_canonical }
+  - { native: "binary({n})", canonical: "binary(fixed,{n})", defaults: { n: 1 }, n_max: 8000 }
   - { native: "varbinary({n})", canonical: "binary({n})", defaults: { n: 1 }, n_max: 8000 }
   - { native: "varbinary(max)", canonical: "binary" }
   - { native: "varbinary(max)", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "length above 8000 becomes varbinary(max)", n_min: 8001 }
-  - { native: "binary({n})", canonical: "binary({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-length binary becomes variable-length" }
   - { native: "image", canonical: "binary", direction: to_canonical }
-  - { native: "timestamp", canonical: "binary(8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
-  - { native: "rowversion", canonical: "binary(8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
+  - { native: "timestamp", canonical: "binary(fixed,8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
+  - { native: "rowversion", canonical: "binary(fixed,8)", direction: to_canonical, fidelity: lossy, note: "rowversion becomes plain binary(8); the engine-managed behaviour is not recreated" }
   - { native: "date", canonical: "date" }
   - { native: "time({s})", canonical: "time({s})", defaults: { s: 7 }, s_max: 7 }
   - { native: "smalldatetime", canonical: "timestamp(0)", direction: to_canonical }

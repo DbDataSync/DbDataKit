@@ -12,9 +12,9 @@ public class TypeTests
     public static readonly string[] CanonicalTypes =
     [
         "boolean", "int8", "int8(unsigned)", "int16", "int16(unsigned)", "int32", "int32(unsigned)", "int64", "int64(unsigned)",
-        "decimal(18,2)", "decimal(10)", "decimal(38,10)", "decimal(50,5)", "float", "double",
+        "decimal(18,2)", "decimal(10)", "decimal(38,10)", "decimal(50,5)", "decimal", "float", "double",
         "string(50)", "string(unicode,50)", "string", "string(unicode)", "string(5000)", "string(unicode,5000)", "string(unicode,20000)",
-        "binary(16)", "binary", "binary(9000)",
+        "binary(16)", "binary", "binary(9000)", "binary(fixed,16)", "binary(fixed,300)",
         "date", "time", "time(3)", "time(7)", "timestamp", "timestamp(0)", "timestamp(3)", "timestamp(7)", "timestamp(tz)", "timestamp(tz,3)", "timestamp(tz,9)",
         "guid", "json", "xml", "interval", "list", "unmappable",
     ];
@@ -142,6 +142,104 @@ public class TypeTests
                 }
             }
         }
+    }
+
+    // Unsigned integers keep their range on every engine: an engine with unsigned types writes them, the others widen to the next signed type.
+    [Theory]
+    [InlineData("sqlserver", "sqlserver", "tinyint", "tinyint", Fidelity.Exact)]
+    [InlineData("sqlserver", "postgres", "tinyint", "smallint", Fidelity.Widened)]
+    [InlineData("sqlserver", "mysql", "tinyint", "tinyint unsigned", Fidelity.Exact)]
+    [InlineData("sqlserver", "duckdb", "tinyint", "utinyint", Fidelity.Exact)]
+    [InlineData("sqlserver", "oracle", "tinyint", "number(3)", Fidelity.Exact)]
+    [InlineData("mysql", "sqlserver", "int unsigned", "bigint", Fidelity.Widened)]
+    [InlineData("mysql", "postgres", "bigint unsigned", "numeric(20,0)", Fidelity.Widened)]
+    [InlineData("mysql", "mysql", "bigint unsigned", "bigint unsigned", Fidelity.Exact)]
+    [InlineData("duckdb", "duckdb", "ubigint", "ubigint", Fidelity.Exact)]
+    public void An_unsigned_integer_keeps_its_range(string source, string engine, string sourceNative, string native, Fidelity fidelity)
+    {
+        var read = D(source).ToCanonical(sourceNative);
+        Assert.True(read.Result!.Unsigned);
+        var written = D(engine).ColumnType(read.Result);
+        Assert.Equal(native, written.Result);
+        Assert.Equal(fidelity, written.Fidelity);
+    }
+
+    // A time or timestamp with no stated precision is written with microseconds; MySQL reads a type with no precision as whole seconds, its own default.
+    [Theory]
+    [InlineData("time", "time(6)", Fidelity.Exact)]
+    [InlineData("timestamp", "datetime(6)", Fidelity.Exact)]
+    [InlineData("timestamp(tz)", "timestamp(6)", Fidelity.Lossy)]
+    [InlineData("time(3)", "time(3)", Fidelity.Exact)]
+    [InlineData("timestamp(0)", "datetime(0)", Fidelity.Exact)]
+    public void MySql_writes_a_time_with_no_precision_with_microseconds(string canonical, string native, Fidelity fidelity)
+    {
+        var m = D("mysql").ColumnType(CanonicalType.Parse(canonical));
+        Assert.Equal(native, m.Result);
+        Assert.Equal(fidelity, m.Fidelity);
+    }
+
+    [Theory]
+    [InlineData("datetime", "timestamp(0)")]
+    [InlineData("time", "time(0)")]
+    [InlineData("timestamp", "timestamp(tz,0)")]
+    public void MySql_reads_a_time_with_no_precision_as_whole_seconds(string native, string canonical) =>
+        Assert.Equal(CanonicalType.Parse(canonical), D("mysql").ToCanonical(native).Result);
+
+    // A decimal with no precision (PostgreSQL's unconstrained numeric) is written exactly where the engine has such a type, and with 38 digits, 9
+    // after the point, elsewhere, with a note.
+    [Theory]
+    [InlineData("postgres", "numeric", Fidelity.Exact)]
+    [InlineData("sqlserver", "decimal(38,9)", Fidelity.Lossy)]
+    [InlineData("fabric", "decimal(38,9)", Fidelity.Lossy)]
+    [InlineData("mysql", "decimal(38,9)", Fidelity.Lossy)]
+    [InlineData("oracle", "number(38,9)", Fidelity.Lossy)]
+    [InlineData("duckdb", "decimal(38,9)", Fidelity.Lossy)]
+    [InlineData("ansi", "numeric(38,9)", Fidelity.Lossy)]
+    public void A_decimal_with_no_precision_keeps_its_fractions(string engine, string native, Fidelity fidelity)
+    {
+        var read = D("postgres").ToCanonical("numeric").Result!;
+        Assert.Null(read.Precision);
+        var m = D(engine).ColumnType(read);
+        Assert.Equal(native, m.Result);
+        Assert.Equal(fidelity, m.Fidelity);
+        if (fidelity != Fidelity.Exact) Assert.Contains("no precision", m.Note);
+    }
+
+    // SQL Server's and MySQL's binary(n) keep their fixed length; an engine with one binary type writes a fixed binary as that type.
+    [Theory]
+    [InlineData("sqlserver", "binary(16)", "binary(fixed,16)", Fidelity.Exact)]
+    [InlineData("sqlserver", "rowversion", "binary(fixed,8)", Fidelity.Lossy)]
+    [InlineData("sqlserver", "timestamp", "binary(fixed,8)", Fidelity.Lossy)]
+    [InlineData("sqlserver", "varbinary(16)", "binary(16)", Fidelity.Exact)]
+    [InlineData("mysql", "binary(16)", "binary(fixed,16)", Fidelity.Exact)]
+    [InlineData("mysql", "binary", "binary(fixed,1)", Fidelity.Exact)]
+    public void Fixed_binary_is_read_as_fixed(string engine, string native, string canonical, Fidelity fidelity)
+    {
+        var m = D(engine).ToCanonical(native);
+        Assert.Equal(CanonicalType.Parse(canonical), m.Result);
+        Assert.Equal(fidelity, m.Fidelity);
+    }
+
+    [Theory]
+    [InlineData("sqlserver", "binary(16)", Fidelity.Exact)]
+    [InlineData("fabric", "binary(16)", Fidelity.Exact)]
+    [InlineData("mysql", "binary(16)", Fidelity.Exact)]
+    [InlineData("postgres", "bytea", Fidelity.Widened)]
+    [InlineData("oracle", "raw(16)", Fidelity.Exact)]
+    [InlineData("duckdb", "blob", Fidelity.Widened)]
+    public void Fixed_binary_is_written_as_fixed_where_the_engine_has_it(string engine, string native, Fidelity fidelity)
+    {
+        var m = D(engine).ColumnType(CanonicalType.Parse("binary(fixed,16)"));
+        Assert.Equal(native, m.Result);
+        Assert.Equal(fidelity, m.Fidelity);
+    }
+
+    [Fact]
+    public void A_fixed_binary_too_long_for_the_fixed_type_is_written_as_variable_length()
+    {
+        Assert.Equal("varbinary(max)", D("sqlserver").ColumnType(CanonicalType.Parse("binary(fixed,9000)")).Result);
+        Assert.Equal("varbinary(300)", D("mysql").ColumnType(CanonicalType.Parse("binary(fixed,300)")).Result);
+        Assert.Equal("varbinary(16)", D("sqlserver").ColumnType(CanonicalType.Parse("binary(16)")).Result);
     }
 
     [Fact]

@@ -25,6 +25,8 @@ public enum CanonicalKind
 /// <param name="Unicode">String only: true when the text can hold any Unicode (nvarchar). Null = unspecified.</param>
 /// <param name="TimeZone">Timestamp only: true when the value carries an instant/offset (timestamptz).</param>
 /// <param name="Unsigned">Integer kinds only.</param>
+/// <param name="Fixed">Binary only: true when every value has exactly <paramref name="Length"/> bytes (SQL Server's and MySQL's <c>binary(n)</c>).
+/// An engine with one binary type writes a fixed binary as that type.</param>
 public sealed record CanonicalType(
     CanonicalKind Kind,
     int? Length = null,
@@ -32,17 +34,18 @@ public sealed record CanonicalType(
     int? Scale = null,
     bool? Unicode = null,
     bool? TimeZone = null,
-    bool? Unsigned = null)
+    bool? Unsigned = null,
+    bool? Fixed = null)
 {
     public static readonly CanonicalType Unmappable = new(CanonicalKind.Unmappable);
     public static CanonicalType Of(CanonicalKind kind) => new(kind);
     public static CanonicalType String(int? length = null, bool unicode = true) => new(CanonicalKind.String, Length: length, Unicode: unicode ? true : null);
-    public static CanonicalType Binary(int? length = null) => new(CanonicalKind.Binary, Length: length);
+    public static CanonicalType Binary(int? length = null, bool @fixed = false) => new(CanonicalKind.Binary, Length: length, Fixed: @fixed ? true : null);
     public static CanonicalType Decimal(int precision, int scale) => new(CanonicalKind.Decimal, Precision: precision, Scale: scale);
     public static CanonicalType Timestamp(int? scale = null, bool tz = false) => new(CanonicalKind.Timestamp, Scale: scale, TimeZone: tz ? true : null);
     public static CanonicalType Time(int? scale = null) => new(CanonicalKind.Time, Scale: scale);
 
-    /// <summary>Canonical text form, e.g. <c>string(unicode,50)</c>, <c>decimal(18,2)</c>, <c>timestamp(tz,6)</c>, <c>int32(unsigned)</c>.</summary>
+    /// <summary>Canonical text form, e.g. <c>string(unicode,50)</c>, <c>decimal(18,2)</c>, <c>timestamp(tz,6)</c>, <c>int32(unsigned)</c>, <c>binary(fixed,16)</c>.</summary>
     public override string ToString()
     {
         var sb = new StringBuilder(Kind.ToString().ToLowerInvariant());
@@ -50,6 +53,7 @@ public sealed record CanonicalType(
         if (Unicode == true) args.Add("unicode");
         if (TimeZone == true) args.Add("tz");
         if (Unsigned == true) args.Add("unsigned");
+        if (Fixed == true) args.Add("fixed");
         switch (Kind)
         {
             case CanonicalKind.String or CanonicalKind.Binary:
@@ -83,7 +87,7 @@ public sealed record CanonicalType(
             if (!text.EndsWith(')')) { error = $"missing ')' in '{text}'"; return false; }
             args = text[(open + 1)..^1].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         }
-        bool? unicode = null, tz = null, unsigned = null;
+        bool? unicode = null, tz = null, unsigned = null, @fixed = null;
         var nums = new List<int>();
         foreach (var a in args)
         {
@@ -92,6 +96,7 @@ public sealed record CanonicalType(
                 case "unicode": unicode = true; break;
                 case "tz": tz = true; break;
                 case "unsigned": unsigned = true; break;
+                case "fixed": @fixed = true; break;
                 default:
                     if (!int.TryParse(a, NumberStyles.None, CultureInfo.InvariantCulture, out int v)) { error = $"bad argument '{a}' in '{text}'"; return false; }
                     nums.Add(v); break;
@@ -106,7 +111,7 @@ public sealed record CanonicalType(
             case CanonicalKind.Decimal: precision = nums.Count > 0 ? nums[0] : null; scale = nums.Count > 1 ? nums[1] : null; break;
             case CanonicalKind.Time or CanonicalKind.Timestamp: scale = nums.Count > 0 ? nums[0] : null; break;
         }
-        type = new CanonicalType(kind, length, precision, scale, unicode, tz, unsigned);
+        type = new CanonicalType(kind, length, precision, scale, unicode, tz, unsigned, @fixed);
         return true;
     }
 }

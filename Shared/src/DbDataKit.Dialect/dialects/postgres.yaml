@@ -70,6 +70,7 @@ types:
   - { native: "bigint", canonical: "int32(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 32-bit widened to bigint" }
   - { native: "numeric(20,0)", canonical: "int64(unsigned)", direction: from_canonical, fidelity: widened, note: "unsigned 64-bit widened to numeric(20,0)" }
   - { native: "numeric", canonical: "decimal", direction: to_canonical, fidelity: widened, note: "unconstrained numeric has no fixed precision or scale" }
+  - { native: "numeric", canonical: "decimal", direction: from_canonical }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 1000 }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
   - { native: "numeric", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: widened, note: "precision above 1000 becomes unconstrained numeric", p_min: 1001 }
