@@ -5,7 +5,8 @@ tables and columns a connection reaches, what a query returns, whether a connect
 project asks of it. This page says who reads the database for that, with which login, what is kept and where, and what is checked without a
 connection at all. It applies to every kind of project; what a sync project checks is [its own section](#a-sync-project).
 
-**Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a paired Gateway's read-only schema call; the offline readers of the
+**Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a Runner channel (**Refresh from a Runner** on the tab
+**Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a paired Gateway's read-only schema call; the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
@@ -202,6 +203,30 @@ format 1 and to delete it, and she deletes it and refreshes both. The draft's ch
 cache says it came from; the Designer shows what changed (columns added, removed, retyped) before the cache is replaced, and the draft's check then names
 every mapping or model the change touches. The screen makes that comparison itself, against the cache as it holds it, unsaved
 edits included; the read answers only the new entry, and nothing of the draft is sent with the request.
+
+On the Files area, the tab **Catalog** has **Refresh from a Runner**. The person picks a connection of the draft, and either the whole connection or one
+of its cached tables. The channel picker lists the Runners paired with the console and the channels of the project's package on the chosen Runner:
+
+- The cache says the connection was read from a Runner channel, and that channel still binds the slot: that Runner and channel are offered first.
+- Otherwise: the first channel that is not `prod` and binds the slot is offered.
+- A channel that does not bind the slot is named, with how to bind it ([Before anything is published](#before-anything-is-published-set-up-for-development)).
+- The person picks `prod`: a warning says the read is of production, with production's login, names and types only. **Refresh** still reads.
+
+**Refresh** asks the console ([How a screen asks for a read](#how-a-screen-asks-for-a-read)). When the read takes longer than 10 seconds, the tab
+shows a link to the run and keeps following it. When the read ends, the tab lists every table and column added, removed or retyped, then:
+
+- **Accept** puts the new cache in the draft as an unsaved edit, read the same way by the Designer and the other tabs. **Save** keeps it in the draft.
+- **Dismiss** leaves the cache as it was.
+
+A read of one table replaces that table and keeps the connection's other tables. A read of the whole connection replaces the connection. The other
+connections of the cache stay as they are. A cache the strict reader refuses (a file of format 1, or a damaged one) is not replaced: delete or fix the
+file, then refresh again.
+
+Example: on the tab **Catalog** of the draft of `crm-to-dw`, Ana picks `crm` and `dbo.accounts`; the picker offers `dev` on `runners-eu`, where the cache
+was read last week. She presses **Refresh**; the tab says "1 column added" and lists `crm.dbo.accounts.segment`. She presses **Accept**: the cache is an
+unsaved edit recorded as read from `dev` today, and the chrome counts one unsaved file until she saves.
+
+The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`) are what a kind's Designer offers on its screens.
 
 **A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
 model's descriptor.

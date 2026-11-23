@@ -53,8 +53,23 @@ export function workspaceServerOf(apiBase: string): string | null {
   return m ? decodeURIComponent(m[1]!) : null
 }
 
-/** The channel the picker offers first: the console's `default`, else none (a channel that binds nothing is not offered by itself). */
-export const defaultChannel = (list: ChannelList | undefined): string => list?.default ?? ''
+/**
+ * The channel the picker offers first: the one the cache says the connection was read in (`readIn`), when the Runner still binds the slot there; else
+ * the console's `default`, the first channel that is not production and binds it; else none (a channel that binds nothing is not offered by itself).
+ */
+export const defaultChannel = (list: ChannelList | undefined, readIn?: string | null): string =>
+  (readIn && list?.channels.some((c) => c.channel === readIn && c.bound) ? readIn : list?.default) ?? ''
+
+/** The Runner the picker offers first: the one the cache says the connection was read from (by its name in the console), else the first one listed. */
+export const defaultRunner = (runners: readonly RunnerChoice[] | undefined, readFrom?: string | null): string =>
+  runners?.find((r) => readFrom !== undefined && readFrom !== null && r.name === readFrom)?.id ?? runners?.[0]?.id ?? ''
+
+/** Where the cache says a connection was last read from a Runner: its server's name and the channel, or null. */
+export function lastRunnerRead(current: string | undefined, connection: string): { server: string; channel: string | null } | null {
+  if (current === undefined) return null
+  const read = readCatalogCache(current).cache?.connections[connection]?.read
+  return read && read.product === 'runner' ? { server: read.server, channel: read.channel } : null
+}
 
 /** The sentence shown when the person picks production: the read goes ahead after it. */
 export const productionWarning = (connection: string, channel: string, runner: string) =>

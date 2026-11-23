@@ -3,14 +3,14 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link as ConsoleLink } from 'react-router-dom'
 import { ErrorBanner, useModule } from '@dbdatakit/shell'
 import {
-  catalogReadApi, defaultChannel, differenceLine, isUnchanged, productionWarning, refreshOutcome, unboundLine, workspaceServerOf,
+  catalogReadApi, defaultChannel, defaultRunner, differenceLine, lastRunnerRead, isUnchanged, productionWarning, refreshOutcome, unboundLine, workspaceServerOf,
   type CatalogDifference, type CatalogReadAnswer, type CatalogReadRequest, type ChannelList, type RunnerChoice,
 } from '../catalogRefresh'
 
 /**
  * The channel picker of a read: the Runner and the channel to read a connection's shape from. The console lists the channels of the project's package on
- * the Runner and which bind the connection's slot; the first one that is not production and binds it is offered first. Picking production shows the
- * warning and the read still goes ahead. A channel that binds no slot is named with how to bind one.
+ * the Runner and which bind the connection's slot; the one the cache says the connection was read in is offered first, else the first one that is not
+ * production and binds it. Picking production shows the warning and the read still goes ahead. A channel that binds no slot is named with how to bind one.
  */
 export function ChannelPicker({ runners, runner, onRunner, list, channel, onChannel, connection }: {
   runners: readonly RunnerChoice[]; runner: string; onRunner: (id: string) => void
@@ -80,14 +80,14 @@ export function CatalogRefresh({ project, connection, table, current, onAccept, 
   const workspace = workspaceServerOf(useModule().apiBase)
   const runners = useQuery({ queryKey: ['console', 'runners'], queryFn: catalogReadApi.runners, enabled: workspace !== null, retry: false })
   const [runner, setRunner] = useState('')
-  const firstRunner = runners.data?.[0]?.id ?? ''
-  const runnerId = runner || firstRunner
+  const last = lastRunnerRead(current, connection)
+  const runnerId = runner || defaultRunner(runners.data, last?.server)
   const channels = useQuery({
     queryKey: ['console', 'catalog-channels', workspace, project, runnerId, connection], queryFn: () => catalogReadApi.channels(workspace!, project, runnerId, connection),
     enabled: workspace !== null && runnerId !== '' && connection !== '', retry: false,
   })
   const [channel, setChannel] = useState('')
-  const offered = defaultChannel(channels.data)
+  const offered = defaultChannel(channels.data, runners.data?.find((r) => r.id === runnerId)?.name === last?.server ? last?.channel : null)
   useEffect(() => { setChannel('') }, [runnerId, connection])
   const channelChosen = channel || offered
   const [asked, setAsked] = useState<CatalogReadRequest | null>(null)

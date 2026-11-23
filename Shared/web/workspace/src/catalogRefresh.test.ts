@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readCatalogCache } from './catalogCache'
-import { differenceLine, refreshOutcome, workspaceServerOf } from './catalogRefresh'
+import { defaultChannel, defaultRunner, differenceLine, lastRunnerRead, refreshOutcome, workspaceServerOf } from './catalogRefresh'
 
 const cache = (connections: string) => ['schema: catalog-cache/2', "generated_at: '2026-11-20T09:00:00Z'", 'connections:', connections, ''].join('\n')
 
@@ -80,5 +80,22 @@ describe('a refresh from a Runner channel', () => {
     expect(outcome.ok).toBe(false)
     if (outcome.ok) return
     expect(outcome.problem).toContain('Delete the file or fix it')
+  })
+})
+
+describe('where a refresh reads by default', () => {
+  const list = {
+    package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: 'dev',
+    channels: [{ channel: 'dev', production: false, bound: true, bound_to: 'crm_dev' }, { channel: 'prod', production: true, bound: true, bound_to: 'crm' }, { channel: 'test', production: false, bound: false, bound_to: null }],
+  }
+  it('reads again where the cache says the connection was read, else the first channel that is not production and binds the slot', () => {
+    expect(defaultChannel(list, 'prod')).toBe('prod')
+    expect(defaultChannel(list, 'test')).toBe('dev')   // no longer bound there
+    expect(defaultChannel(list, null)).toBe('dev')
+    expect(defaultChannel({ ...list, default: null })).toBe('')
+    expect(defaultRunner([{ id: 'r-1', name: 'runners-eu' }, { id: 'r-2', name: 'runners-us' }], 'runners-us')).toBe('r-2')
+    expect(defaultRunner([{ id: 'r-1', name: 'runners-eu' }], 'gone')).toBe('r-1')
+    expect(lastRunnerRead(cache(crm(id)), 'crm')).toEqual({ server: 'runners-eu', channel: 'dev' })
+    expect(lastRunnerRead(cache(dw), 'dw')).toBeNull()   // read through a Gateway
   })
 })
