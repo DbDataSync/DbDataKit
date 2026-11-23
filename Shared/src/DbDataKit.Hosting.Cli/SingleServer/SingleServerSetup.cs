@@ -169,10 +169,12 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
             requested = restart = true;
         }
 
-        // start, or start again so it runs as registered now and reads its join request
-        var startedAt = _clock.GetUtcNow();
-        if (await StartAsync(service, state is SuiteServiceState.Running or SuiteServiceState.Starting, restart, options) is { } problem)
-            return new Outcome(1, false, true, "it could not be started", problem, notes);
+        // Start it, or start it again so it runs as registered now and reads its join request. A service the service manager is starting or gave up
+        // on was not started by this run: it may be one of the manager's retries after a failed start (systemd's Restart=, Windows' failure actions),
+        // still holding what failed or about to fail again, so it is stopped first and this run watches a start of its own.
+        var retrying = state is SuiteServiceState.Starting or SuiteServiceState.Failed;
+        var (startedAt, problem) = await StartAsync(service, state is SuiteServiceState.Running || retrying, restart || retrying, options);
+        if (problem is not null) return new Outcome(1, false, true, "it could not be started", problem, notes);
 
         return await WaitAsync(registration, isConsole, startedAt, requested, options, notes, ct);
     }
@@ -193,18 +195,20 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
         }
     }
 
-    // starts the service, stopping it first when it runs and must start again; what went wrong, or null
-    private async Task<string?> StartAsync(SuiteService service, bool running, bool restart, SingleServerSetupOptions options)
+    // starts the service, stopping it first when it runs and must start again; when this start began (after the stop, so a failure the stopped
+    // process wrote is not taken for this start's), and what went wrong, or null
+    private async Task<(DateTimeOffset StartedAt, string? Problem)> StartAsync(SuiteService service, bool running, bool restart, SingleServerSetupOptions options)
     {
         try
         {
             if (running && restart) await host.StopAsync(service, options.StopTimeout);
+            var startedAt = _clock.GetUtcNow();
             if (!running || restart) host.Start(service);
-            return null;
+            return (startedAt, null);
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or DbDataKit.Hosting.WindowsService.ServiceControlException)
         {
-            return ex.Message;
+            return (_clock.GetUtcNow(), ex.Message);
         }
     }
 
@@ -244,10 +248,9 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
                         // it listens and the console does not list it: it joins with a request, at a start of its own
                         if (await RequestJoinAsync(registration, notes) is { } refused) return refused with { Reached = 3 };
                         requested = true;
-                        startedAt = _clock.GetUtcNow();
+                        (startedAt, var problem) = await StartAsync(service, running: true, restart: true, options);
                         until = startedAt + options.Wait;
-                        if (await StartAsync(service, running: true, restart: true, options) is { } problem)
-                            return new Outcome(3, false, true, "it could not be started again", problem, notes);
+                        if (problem is not null) return new Outcome(3, false, true, "it could not be started again", problem, notes);
                         reached = 2;
                     }
                 }
@@ -303,13 +306,16 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
     private static string Describe(SuiteRegistration registration) =>
         OperatingSystem.IsWindows() ? $"`{registration.Spec.CommandLine}` as {registration.Spec.EffectiveAccount.Name}" : $"`{registration.Unit.ExecStart}` as {registration.Service.LinuxUser}";
 
-    /// <summary>A start that began at or after <paramref name="startedAt"/> wrote its failure: the file holds a reason, not the line of a start going on.</summary>
+    /// <summary>
+    /// A start that began at or after <paramref name="startedAt"/> wrote its failure: the file holds a reason, not the line of a start going on. The file's
+    /// time may read a few milliseconds early (Linux stamps files with a coarser clock), which is allowed for; a start fails long after it began.
+    /// </summary>
     private static bool FailedStart(SuiteService service, string logsRoot, DateTimeOffset startedAt)
     {
         var path = service.FailureFileIn(logsRoot);
         try
         {
-            if (!File.Exists(path) || File.GetLastWriteTimeUtc(path) < startedAt.UtcDateTime.AddSeconds(-1)) return false;
+            if (!File.Exists(path) || File.GetLastWriteTimeUtc(path) < startedAt.UtcDateTime.AddMilliseconds(-50)) return false;
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream, Encoding.UTF8);
             var text = reader.ReadToEnd();

@@ -86,7 +86,8 @@ try {
 
   Heading 'The program folders: the parent''s grants cut, no write for Users'
   $users = (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-545').Translate([Security.Principal.NTAccount]).Value
-  $write = [Security.AccessControl.FileSystemRights]'Write, Modify, FullControl, CreateFiles, AppendData, WriteData, Delete, ChangePermissions, TakeOwnership'
+  # only the bits that change something: FullControl and Modify also hold the read and run bits (and Synchronize) that Users is meant to have
+  $write = [Security.AccessControl.FileSystemRights]'WriteData, AppendData, WriteExtendedAttributes, DeleteSubdirectoriesAndFiles, WriteAttributes, Delete, ChangePermissions, TakeOwnership'
   foreach ($m in $members) {
     $acl = Get-Acl (Join-Path $programs $m.folder)
     Assert $acl.AreAccessRulesProtected "$($m.folder)'s access list does not inherit from its parent"

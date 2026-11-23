@@ -201,6 +201,27 @@ public sealed class SingleServerSetupTests : IDisposable
     }
 
     [Fact]
+    public async Task A_service_the_service_manager_keeps_restarting_after_a_failed_start_is_stopped_and_started_by_the_run_after_the_fix()
+    {
+        var (host, _, members, setup) = Machine();
+        host.Failing.Add("dbdatarunner");
+        Assert.Equal(1, (await RunAsync(setup, members)).Exit);
+        // the port is freed; meanwhile the service manager's retry (systemd's Restart=, Windows' failure actions) is under way and has just failed again
+        host.Failing.Clear();
+        host.States["dbdatarunner"] = SuiteServiceState.Starting;
+        var runner = members.Single(m => m.Service == SuiteServices.Runner);
+        await File.WriteAllTextAsync(SuiteServices.Runner.FailureFileIn(SuiteServices.LogsRootFor(SuiteServices.Runner, runner.DataFolder)),
+            "The start failed at the ports step: Port 7840 cannot be bound: address already in use.\n");
+        host.Calls.Clear();
+
+        var (exit, output) = await RunAsync(setup, members);
+
+        Assert.True(exit == 0, output);
+        Assert.Equal(["stop dbdatarunner", "start dbdatarunner"], host.Calls.Where(c => c.StartsWith("st", StringComparison.Ordinal)));
+        Assert.Contains("dbdatarunner     registered · started · listening · joined\n", output.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
     public async Task A_stopped_service_the_console_lists_is_started_with_no_new_token_and_one_it_does_not_list_joins_again()
     {
         var (host, console, members, setup) = Machine();
