@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { workspaceApi } from './api'
+import { workspaceApi, type FileList } from './api'
 
 /** The query that holds a draft's findings for the overview and the chrome's count; every save, new file, move and delete invalidates it. */
 export const findingsKey = (project: string, id: string) => ['workspace', 'findings', project, id] as const
@@ -140,6 +140,10 @@ export function DraftProvider({ project, id, kind, canEdit, enabled = true, chil
   const write = useCallback(async (path: string, text: string) => {
     await workspaceApi.writeFile(project, id, path, text)
     client.setQueryData(fileKey(project, id, path), text)
+    // a new file joins the list of the server's files before its edit goes, so the draft never shows a moment without it (a screen open on it would
+    // take it for removed and leave); the list read again after the save replaces this
+    client.setQueryData<FileList>(filesKey(project, id), (list) => !list || list.files.some((f) => f.path === path) ? list
+      : { ...list, files: [...list.files, { path, size: text.length }].sort((a, b) => a.path.localeCompare(b.path)) })
     setEdits((e) => (e[path] === text ? (({ [path]: _done, ...rest }) => rest)(e) : e))
   }, [client, project, id])
 

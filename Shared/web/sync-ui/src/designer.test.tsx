@@ -14,7 +14,7 @@ import { CATALOG, DRAFT } from './fixtures'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 /** A Workspace server in memory with one sync project and its draft; it answers the frame's file calls and records what is written. */
-function fakeServer(files: Record<string, string>) {
+function fakeServer(files: Record<string, string>, options: { planSaved?: boolean; slowList?: boolean } = {}) {
   const writes: string[] = []
   const deletes: string[] = []
   const calls: string[] = []
@@ -30,6 +30,8 @@ function fakeServer(files: Record<string, string>) {
     if (!m) return reply({ error: 'no' }, 404)
     const [, project, id, rest] = m
     if (!id) return reply({ workspaces: [{ id: 'ws-p', project, name: 'edit', branch: 'workspace/edit', base: 'abc', created: '', owner: 'ana', mine: true }] })
+    // slowList: the list of files answers a moment later, as a server over a network does, so a save's own answer comes first
+    if (rest === 'files' && options.slowList) return new Promise<Response>((done) => setTimeout(() => done(new Response(JSON.stringify({ files: Object.keys(files).sort().map((p) => ({ path: p, size: files[p].length })), truncated: false, max_file_bytes: 1 }), { headers: { 'Content-Type': 'application/json' } })), 25))
     if (rest === 'files') return reply({ files: Object.keys(files).sort().map((p) => ({ path: p, size: files[p].length })), truncated: false, max_file_bytes: 1 })
     if (rest?.startsWith('files/')) {
       const p = rest.slice('files/'.length)
@@ -58,10 +60,13 @@ function fakeServer(files: Record<string, string>) {
       const asked = JSON.parse(String(init?.body)) as { replication: string; mapping: string }
       return reply({ ...asked, problem: null, columns: [{ sourceColumn: 'id', sourceType: 'int', targetType: 'integer', fidelity: null, problem: null }], naturalKey: { columns: ['id'], problem: null } })
     }
-    if (rest === 'provisioning-plan') return reply({ ok: true, diagnostics: [], data: { replication: 'orders', cache_generated_at: null, cache_server: null, mappings: [{
-      mapping: 'dbo.orders', source: null, target: { connection: 'dw', table: 'dbo.orders' }, excluded: null, source_plan: null,
-      target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE dbo.orders (id integer)', rationale: null, scope: 'table' }], warnings: [] },
-    }] } })
+    // the plan is made from the saved files: with planSaved, every other saved mapping of orders is planned too, its target table to create
+    const folder = 'config/replications/orders/table-mappings/'
+    const others = options.planSaved ? Object.keys(files).filter((p) => p.startsWith(folder) && p !== `${folder}dbo.orders.yaml`).map((p) => p.slice(folder.length, -'.yaml'.length)) : []
+    if (rest === 'provisioning-plan') return reply({ ok: true, diagnostics: [], data: { replication: 'orders', cache_generated_at: null, cache_server: null, mappings: ['dbo.orders', ...others].map((name) => ({
+      mapping: name, source: null, target: { connection: 'dw', table: name }, excluded: null, source_plan: null,
+      target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${name} (id integer)`, rationale: null, scope: 'table' }], warnings: [] },
+    })) } })
     return reply({ error: 'no' }, 404)
   })
   return { files, writes, deletes, calls, bulkCreates, fetcher }
@@ -138,6 +143,36 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(server.writes).toEqual([])
     expect(q('[data-testid="wsp-unsaved"]')?.dataset.count).toBe('1')
     expect(q(`[data-testid="wsp-file"][data-path="${made}"]`)?.dataset.dirty).toBe('true')
+  })
+
+  it('stays on a mapping Create mappings made when it is saved, and asks for the plan again, so its Provisioning tab counts the table to create', async () => {
+    server = fakeServer({ ...DRAFT }, { planSaved: true, slowList: true })
+    vi.stubGlobal('fetch', server.fetcher)
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings')
+    await click('[data-testid="select-table-dbo.customers"]')
+    await click('[data-testid="create-mappings-button"]')
+    await click('[data-testid="mapping-item-dbo.customers"]')
+    expect(q('[data-testid="mapping-tab-provisioning-badge"]')).toBeNull()
+    await click('[data-testid="mapping-tab-verify"]')
+    await click('[data-testid="add-check-button"]')
+    const name = q('[data-testid="check-name-input"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'rows')
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click('[data-testid="save-check-button"]')
+    await click('[data-testid="mapping-tab-segmenting"]')
+    const mode = q('[data-testid="default-segmenting-mode"]') as HTMLSelectElement
+    await act(async () => {
+      mode.value = 'full'
+      mode.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+    await click('[data-testid="save-mapping-button"]')
+    expect(server.writes).toEqual(['config/replications/orders/table-mappings/dbo.customers.yaml'])
+    expect(q('[data-testid="mapping-dirty"]')).toBeNull()
+    expect(where).toBe('/plant/ws-p/designer/replications/orders/mappings/dbo.customers/segmenting')
+    expect(q('[data-testid="mapping-tab-provisioning-badge"]')?.textContent).toBe('1')
   })
 
   it('overrides the target side of a mapping Create mappings made, leaving its source as it was', async () => {
