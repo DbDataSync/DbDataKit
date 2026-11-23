@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseYaml } from '@dbdatakit/shell'
 import { DraftProvider, WorkspaceModule, registerDesigner, useDraft } from '@dbdatakit/workspace'
 import { syncDesigner } from './designer'
+import { unsavedNote } from './replication/PublishCard'
 import { useTables } from './metadata'
 import { CATALOG, DRAFT } from './fixtures'
 
@@ -47,7 +48,8 @@ function fakeServer(files: Record<string, string>) {
 let root: Root
 let host: HTMLDivElement
 let where = ''
-function Where() { where = useLocation().pathname; return null }
+let query = ''
+function Where() { const at = useLocation(); where = at.pathname; query = at.search; return null }
 const settle = async () => { for (let i = 0; i < 12; i++) await act(async () => { await new Promise((r) => setTimeout(r, 5)) }) }
 const q = (sel: string) => host.querySelector(sel) as HTMLElement | null
 const all = (sel: string) => [...host.querySelectorAll(sel)] as HTMLElement[]
@@ -174,6 +176,26 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(q('[data-testid="sd-replication"]')?.dataset.name).toBe('nightly')
     expect(q('[data-testid="enabled-toggle"]')?.getAttribute('aria-pressed')).toBe('false')
     expect(q('[data-testid="wsp-file"][data-path="config/replications/nightly/task.yaml"]')?.dataset.dirty).toBe('true')
+  })
+
+  it('opens the Builds tab of the same draft from Build and publish… in the rail, keeping an unsaved edit and saying a build leaves it out', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders')
+    expect(q('[data-testid="sd-rail"] [data-testid="sd-build-and-publish"]')?.textContent).toBe('Build and publish…')
+    expect(q('[data-testid="sd-publish-unsaved"]')).toBeNull()
+    await click('[data-testid="enabled-toggle"]')
+    expect(q('[data-testid="sd-publish-unsaved"]')?.dataset.count).toBe('1')
+    expect(q('[data-testid="sd-publish-unsaved"]')?.textContent).toBe('One edit of this draft is not saved, so a build leaves it out. Save first to build it.')
+    await click('[data-testid="sd-build-and-publish"]')
+    expect(where).toBe('/plant/ws-p/files')
+    expect(query).toBe('?tab=builds')
+    expect(q('[data-testid="wsp-builds"]')).not.toBeNull()
+    expect(q('[data-testid="wsp-unsaved"]')?.dataset.count).toBe('1')
+    expect(server.writes).toEqual([])
+  })
+
+  it('says how many unsaved edits a build leaves out', () => {
+    expect(unsavedNote(0)).toBeNull()
+    expect(unsavedNote(3)).toBe('3 edits of this draft are not saved, so a build leaves them out. Save first to build them.')
   })
 
   it('asks the Workspace for files only: no Runner, Gateway or run route is called', async () => {

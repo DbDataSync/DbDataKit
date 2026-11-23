@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import YAML from 'yaml'
 import { signInNewAdmin } from './people'
-import { SERVER, mockWorkspace } from './workspace-fake'
+import { RUNNER, SERVER, mockWorkspace } from './workspace-fake'
 
 // The two areas of a draft (Files and Designer, DbDataWorkspace/README.md) and the sync Designer, through the console against a Workspace server
 // mocked in the page (`workspace-fake.ts`), so the story needs the signed-in console only and takes no port. It signs in a new administrator, so its
@@ -291,7 +291,7 @@ test('table mappings: Create mappings from two ticked tables, then Auto-map, the
   await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '1')
 })
 
-const RUNNER = 'runner-eu-1'
+const CATALOG_RUNNER = 'runner-eu-1'
 const READ_AT = '2026-11-23T09:00:00Z'
 
 /** A `catalog-cache/2` file of one connection as the console's read answers it, recorded as read from `runners-eu` in the channel asked. */
@@ -318,7 +318,7 @@ async function mockCatalogRead(page: Page) {
   await page.route('**/api/instances', (route) => route.request().method() === 'GET'
     ? json(route, [
       { id: SERVER, name: 'Workspace server', url: 'https://workspace.invalid', product: 'dbdataworkspace', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
-      { id: RUNNER, name: 'runners-eu', url: 'https://runner.invalid', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
+      { id: CATALOG_RUNNER, name: 'runners-eu', url: 'https://runner.invalid', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
     ])
     : route.fallback())
   await page.route('**/api/workspace-catalog/**', async (route) => {
@@ -326,7 +326,7 @@ async function mockCatalogRead(page: Page) {
     if (url.pathname.endsWith('/channels')) {
       const connection = url.searchParams.get('connection')!
       return json(route, {
-        runner: RUNNER, runner_name: 'runners-eu', connection, package: 'plant', slot: connection.replace(/[^a-z0-9_]/g, '_'), default: 'dev',
+        runner: CATALOG_RUNNER, runner_name: 'runners-eu', connection, package: 'plant', slot: connection.replace(/[^a-z0-9_]/g, '_'), default: 'dev',
         channels: [{ channel: 'dev', production: false, bound: true, bound_to: `${connection}-dev` }, { channel: 'prod', production: true, bound: true, bound_to: connection }],
       })
     }
@@ -341,7 +341,7 @@ async function mockCatalogRead(page: Page) {
             ...tableLines('App', 'Customers', [ID, "{name: 'name', type: 'nvarchar(100)', nullable: true}"]), ...tableLines('App', 'Invoices', INVOICE_COLUMNS),
             ...tableLines('App', 'Orders', INVOICE_COLUMNS), ...tableLines('App', 'Payments', [ID]),
           ])
-      return json(route, { runner: RUNNER, runner_name: 'runners-eu', connection: body.connection, state: 'done', run_id: `run-${reads.length}`, link: `/servers/${RUNNER}/runs?run=run-${reads.length}`, channel: body.channel, production: false, cache })
+      return json(route, { runner: CATALOG_RUNNER, runner_name: 'runners-eu', connection: body.connection, state: 'done', run_id: `run-${reads.length}`, link: `/servers/${CATALOG_RUNNER}/runs?run=run-${reads.length}`, channel: body.channel, production: false, cache })
     }
     return json(route, { error: 'There is no such call.' }, 404)
   })
@@ -403,9 +403,9 @@ test('the Designer\'s Refresh buttons read through the console: an endpoint\'s c
 
   // Files shows the new cache as an unsaved edit; saved, it holds all three reads
   expect(catalog.reads).toEqual([
-    { runner: RUNNER, channel: 'dev', connection: 'target-db' },
-    { runner: RUNNER, channel: 'dev', connection: 'source-db' },
-    { runner: RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Invoices' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'target-db' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'source-db' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Invoices' },
   ])
   await cacheFile.click()
   await expect(area(page)).toHaveAttribute('data-area', 'files')
@@ -417,4 +417,57 @@ test('the Designer\'s Refresh buttons read through the console: an endpoint\'s c
   expect(cache.connections['target-db'].read).toEqual({ server: 'runners-eu', product: 'runner', channel: 'dev', at: READ_AT })
   expect(cache.connections['source-db'].tables.map((t: { name: string }) => t.name).sort()).toEqual(['Customers', 'Invoices', 'Orders', 'Payments'])
   expect(cache.connections['source-db'].tables.find((t: { name: string }) => t.name === 'Invoices').columns.map((c: { name: string }) => c.name)).toContain('segment')
+})
+
+test('Build and publish… on a replication opens the draft\'s Builds tab, a build is staged on a Runner\'s dev through the console with its slot bound, and Back returns to the replication', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Publish', `sync-publish-${Date.now()}@example.com`)
+  const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE } })
+  await makeDraft(page, 'plant', 'sync', 'publish-edit')
+  await expect(page).toHaveURL(/\/designer\/replications\/orders$/)
+  const replicationAddress = page.url()
+
+  // the rail's card: with an unsaved edit it says a build leaves the edit out; saved, it says nothing more
+  const button = page.getByTestId('sd-rail').getByTestId('sd-build-and-publish')
+  await expect(button).toHaveText('Build and publish…')
+  await expect(page.getByTestId('sd-publish-unsaved')).toHaveCount(0)
+  await page.getByTestId('enabled-toggle').click()
+  await expect(page.getByTestId('sd-publish-unsaved')).toHaveAttribute('data-count', '1')
+  await expect(page.getByTestId('sd-publish-unsaved')).toHaveText('One edit of this draft is not saved, so a build leaves it out. Save first to build it.')
+  await page.getByTestId('wsp-save-all').click()
+  await expect(page.getByTestId('wsp-unsaved')).toHaveCount(0)
+  await expect(page.getByTestId('sd-publish-unsaved')).toHaveCount(0)
+  expect(saved(workspace, 'publish-edit', 'config/replications/orders/task.yaml').enabled).toBe(false)
+
+  // Build and publish… opens the Builds tab of the same draft by its address
+  await button.click()
+  await expect(page).toHaveURL(/\/files\?tab=builds$/)
+  await expect(area(page)).toHaveAttribute('data-area', 'files')
+  await expect(page.getByTestId('wsp-builds')).toBeVisible()
+  await shot(page, '20-builds-from-designer')
+
+  // the build, then its publish panel stages it on the Runner's dev with the slot bound, through the console
+  await page.getByTestId('wsp-build').click()
+  const built = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
+  await expect(built).toBeVisible({ timeout: 15_000 })
+  const build = (await built.getAttribute('data-build'))!
+  await expect(page).toHaveURL(new RegExp(`/files\\?tab=builds&build=${build}$`))
+  await built.getByTestId('wsp-publish-target').selectOption(RUNNER)
+  await built.getByTestId('wsp-publish-channel').fill('dev')
+  await built.getByTestId('wsp-publish-bind').fill('source-db=erp')
+  await expect(built.getByTestId('wsp-publish-serve')).not.toBeChecked()
+  await built.getByTestId('wsp-publish').click()
+  await expect(built.getByTestId('wsp-published')).toHaveAttribute('data-version', '1')
+  await expect(built.getByTestId('wsp-published-line')).toHaveText('Staged plant on dev of https://runner.invalid as version 1.')
+  await expect(built.locator('[data-testid="wsp-deploy-record"]')).toHaveAttribute('data-outcome', 'ok')
+  const draft = await page.evaluate(() => location.pathname.split('/').at(-2)!)
+  expect(workspace.published).toEqual([{ project: 'plant', body: { workspaceServer: SERVER, project: 'plant', workspace: draft, build, target: RUNNER, channel: 'dev', bind: { 'source-db': 'erp' } } }])
+  expect(workspace.workspacePublishes).toEqual([])
+  await shot(page, '21-staged-from-designer')
+
+  // the browser's Back returns to the replication
+  await page.goBack()
+  await expect(page).toHaveURL(replicationAddress)
+  await expect(area(page)).toHaveAttribute('data-area', 'designer')
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'orders')
+  await expect(page.getByTestId('enabled-toggle')).toHaveAttribute('aria-pressed', 'false')
 })
