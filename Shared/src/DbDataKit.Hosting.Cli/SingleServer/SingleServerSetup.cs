@@ -132,7 +132,8 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
         }
 
         var state = host.State(service);
-        var listening = SuiteListen.Address(service, member.DataFolder) is { } listen ? await _probe(listen, ct) : null;
+        var listen = SuiteListen.Address(service, member.DataFolder);
+        var listening = listen is not null && state == SuiteServiceState.Running ? await _probe(listen, ct) : null;
         var joined = isConsole ? console.CanMakeTokens : listening is not null && !File.Exists(RequestPath(member)) && console.IsJoined(listening);
         if (check.State == RegistrationState.Same && state == SuiteServiceState.Running && listening is not null && joined)
             return new Outcome(isConsole ? 3 : 4, true, false, null, null, notes);
@@ -158,38 +159,59 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
             return new Outcome(0, false, true, "it could not be registered", ex.Message, notes);
         }
 
-        if (!isConsole && !joined)
+        // A server that never started has no address yet and gets its join request before its first start, and a request left by an earlier run is
+        // replaced, since its token may have ended. Any other server is started as it is, and is given a request only once it listens and the console
+        // does not list the certificate it presents: a server that is stopped but joined then spends no token.
+        var requested = false;
+        if (!isConsole && !joined && (listen is null || File.Exists(RequestPath(member)) || state == SuiteServiceState.Running && listening is not null))
         {
-            try
-            {
-                var request = console.WriteJoinRequest(member);
-                host.GiveToService(registration, request);
-                notes.Add($"wrote the join request {request} with a single-use token");
-                restart = true;
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
-            {
-                return new Outcome(1, false, true, "no join request could be written for it", ex.Message, notes);
-            }
+            if (await RequestJoinAsync(registration, notes) is { } refused) return refused;
+            requested = restart = true;
         }
 
         // start, or start again so it runs as registered now and reads its join request
         var startedAt = _clock.GetUtcNow();
+        if (await StartAsync(service, state is SuiteServiceState.Running or SuiteServiceState.Starting, restart, options) is { } problem)
+            return new Outcome(1, false, true, "it could not be started", problem, notes);
+
+        return await WaitAsync(registration, isConsole, startedAt, requested, options, notes, ct);
+    }
+
+    // writes the join request with a new token; an outcome when that cannot be done
+    private Task<Outcome?> RequestJoinAsync(SuiteRegistration registration, List<string> notes)
+    {
         try
         {
-            if (state is SuiteServiceState.Running or SuiteServiceState.Starting && restart) await host.StopAsync(service, options.StopTimeout);
-            if (state is not (SuiteServiceState.Running or SuiteServiceState.Starting) || restart) host.Start(service);
+            var request = console.WriteJoinRequest(registration.Member);
+            host.GiveToService(registration, request);
+            notes.Add($"wrote the join request {request} with a single-use token");
+            return Task.FromResult<Outcome?>(null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            return Task.FromResult<Outcome?>(new Outcome(1, false, true, "no join request could be written for it", ex.Message, notes));
+        }
+    }
+
+    // starts the service, stopping it first when it runs and must start again; what went wrong, or null
+    private async Task<string?> StartAsync(SuiteService service, bool running, bool restart, SingleServerSetupOptions options)
+    {
+        try
+        {
+            if (running && restart) await host.StopAsync(service, options.StopTimeout);
+            if (!running || restart) host.Start(service);
+            return null;
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or DbDataKit.Hosting.WindowsService.ServiceControlException)
         {
-            return new Outcome(1, false, true, "it could not be started", ex.Message, notes);
+            return ex.Message;
         }
-
-        return await WaitAsync(member, isConsole, startedAt, options, notes, ct);
     }
 
-    private async Task<Outcome> WaitAsync(SetupMember member, bool isConsole, DateTimeOffset startedAt, SingleServerSetupOptions options, List<string> notes, CancellationToken ct)
+    private async Task<Outcome> WaitAsync(SuiteRegistration registration, bool isConsole, DateTimeOffset startedAt, bool requested, SingleServerSetupOptions options,
+        List<string> notes, CancellationToken ct)
     {
+        var member = registration.Member;
         var service = member.Service;
         var logsRoot = SuiteServices.LogsRootFor(service, member.DataFolder);
         var until = startedAt + options.Wait;
@@ -198,7 +220,7 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
         while (true)
         {
             if (FailedStart(service, logsRoot, startedAt))
-                return new Outcome(reached, false, true, $"its start failed: its startup-failure file is above", StartupFailureFile.DescribeLastStart(logsRoot, service), notes);
+                return new Outcome(reached, false, true, "its start failed: its startup-failure file is above", StartupFailureFile.DescribeLastStart(logsRoot, service), notes);
 
             var state = host.State(service);
             if (state == SuiteServiceState.Failed)
@@ -214,9 +236,20 @@ public sealed class SingleServerSetup(ISuiteServiceHost host, ISingleServerConso
                 {
                     if (console.CanMakeTokens) return new Outcome(3, true, true, null, null, notes);
                 }
-                else if (!File.Exists(RequestPath(member)) && console.IsJoined(fingerprint))
+                else if (!File.Exists(RequestPath(member)))
                 {
-                    return new Outcome(4, true, true, null, null, notes);
+                    if (console.IsJoined(fingerprint)) return new Outcome(4, true, true, null, null, notes);
+                    if (!requested)
+                    {
+                        // it listens and the console does not list it: it joins with a request, at a start of its own
+                        if (await RequestJoinAsync(registration, notes) is { } refused) return refused with { Reached = 3 };
+                        requested = true;
+                        startedAt = _clock.GetUtcNow();
+                        until = startedAt + options.Wait;
+                        if (await StartAsync(service, running: true, restart: true, options) is { } problem)
+                            return new Outcome(3, false, true, "it could not be started again", problem, notes);
+                        reached = 2;
+                    }
                 }
             }
 

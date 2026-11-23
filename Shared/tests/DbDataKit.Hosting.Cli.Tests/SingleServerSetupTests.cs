@@ -201,6 +201,26 @@ public sealed class SingleServerSetupTests : IDisposable
     }
 
     [Fact]
+    public async Task A_stopped_service_the_console_lists_is_started_with_no_new_token_and_one_it_does_not_list_joins_again()
+    {
+        var (host, console, members, setup) = Machine();
+        Assert.Equal(0, (await RunAsync(setup, members)).Exit);
+        host.States["dbdatarunner"] = SuiteServiceState.Stopped;
+        console.Joined.Remove("fp-dbdataworkspace");
+        console.Requests.Clear();
+        host.Calls.Clear();
+
+        var (exit, output) = await RunAsync(setup, members);
+
+        Assert.True(exit == 0, output);
+        Assert.Equal(["dbdataworkspace"], console.Requests);
+        Assert.Contains("start dbdatarunner", host.Calls);
+        // the Workspace ran and listened, so it was given a request and started again to read it
+        Assert.Equal(["folders dbdataworkspace", "give dbdataworkspace", "stop dbdataworkspace", "start dbdataworkspace"], host.Calls.Where(c => c.EndsWith("dbdataworkspace", StringComparison.Ordinal)));
+        Assert.Contains("dbdataworkspace  registered · started · listening · joined\n", output.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
     public async Task The_skip_switch_is_put_on_each_registered_command_line_and_a_run_without_it_takes_it_off()
     {
         var (host, _, members, setup) = Machine();
