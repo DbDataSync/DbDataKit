@@ -208,6 +208,17 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_workspace_servers_guard_fails_a_request_that_carries_the_login()
+    {
+        // the guard the tests above rely on: the login in the address of a call to the Workspace server is caught there
+        var (status, _) = await SetUpAsync(admin, Password, new { runner = RunnerId, channel = "dev", connection = "crm", password = "another" });
+
+        Assert.NotEqual(HttpStatusCode.OK, status);
+        Assert.Equal([$"GET /api/v1/projects/{Password}"], carried.ToArray());
+        Assert.Empty(held);
+    }
+
+    [Fact]
     public async Task A_runner_that_is_a_workspace_server_is_refused()
     {
         var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = WorkspaceId, channel = "dev", connection = "crm", password = Password });
