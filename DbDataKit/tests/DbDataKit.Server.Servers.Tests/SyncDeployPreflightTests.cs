@@ -37,6 +37,8 @@ public sealed class SyncDeployPreflightTests : IAsyncLifetime
         workspace = WorkspaceServer.Build(new WorkspaceSettings(directory, new Uri("https://127.0.0.1:0")) { SyncExecutable = tool }, WorkspaceServer.Certificate(directory), _ => { });
         await workspace.StartAsync();
 
+        // a CI runner is slow to start the engine's process: the deploy waits for the preflight longer than a person's two minutes, so the test reads its outcome, not a 202
+        h.Console.Services.GetRequiredService<ConsoleDeploys>().PreflightWait = TimeSpan.FromMinutes(5);
         var instances = h.Console.Services.GetRequiredService<ConsoleInstances>();
         var code = WorkspaceState.Pairing(directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author | ServerRole.Approver));
         workspaceId = (await instances.PairAsync(new Uri(workspace.Urls.First()), code.Code, "Workspace", default)).InstanceId;
