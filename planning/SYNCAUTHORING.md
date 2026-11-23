@@ -218,19 +218,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P26: a time column on Oracle (awaiting the owner)
-
-Oracle has no time-of-day type. Sync writes a time as `timestamp(6)`, with the note that its date part means nothing; the shared `oracle` table writes
-`interval day(0) to second(6)`, which reads back as an interval rather than a time. Scenario: Ana replicates `shop.dbo.opening_hours` (`opens time(0)`)
-into Oracle. Today the target has `opens TIMESTAMP(0)`. On the shared table it would get `INTERVAL DAY(0) TO SECOND(0)`, and her existing target
-would show a type change from `TIMESTAMP` to `INTERVAL` in its next provisioning plan, which Oracle cannot apply to a column with rows. Option A, the
-shared `oracle` table writes a time as `timestamp(s)` with Sync's note; Transfer and the Store then write `timestamp` where they now write an interval.
-Option B, Sync takes the interval for new targets; the shared table also reads `interval day(0) to second(s)` back as a time, and Sync's existing
-targets keep `TIMESTAMP` (their plans would propose the change; Ana declines it). Recommendation: A, since Sync's targets already hold timestamps
-and a timestamp is how Oracle tools show a time of day.
-
-Answer from the owner, 2026-11-23: as recommended (A)
-
 ### SYNCAUTHORING-P27: ANSI type names, for Flight SQL columns and a generic Flight SQL target (awaiting the owner)
 
 The Flight SQL driver names each Arrow column's type in ANSI words (`tinyint`, `varbinary`, `time`, `varchar`), and Sync reads those names, and writes
