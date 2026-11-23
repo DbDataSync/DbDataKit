@@ -105,10 +105,26 @@ public sealed class ConsoleRelay(ConsoleInstances instances, ConsoleKeyStore key
     /// A call on behalf of a named person with no request of theirs in hand (an agent's tool call runs in the background): the same token a relayed call carries, made from the person's id, name and role as they stand now, so the
     /// server decides what that person may do and the agent never has more. Nothing of the console's own authority is added.
     /// </summary>
-    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, object? body, CancellationToken ct, IReadOnlyDictionary<string, string>? headers = null)
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsAsync(RegisteredInstance instance, string userId, string? userName, UserRole role, HttpMethod method, string path, object? body, CancellationToken ct, IReadOnlyDictionary<string, string>? headers = null) =>
+        await SendAsync(instance, await TokenForAsync(instance, userId, userName, role, ct), method, path, body, headers, ct);
+
+    /// <summary>
+    /// A call the console makes as itself, with no person behind it: the token says so (its kind is <c>console</c>, its subject the console's id) and
+    /// claims <paramref name="roles"/> within what the server lets this console grant, so the server's audit names the console and the server decides
+    /// what it may do. Only for the console's own upkeep of a server (trusting its publisher key), never for something a person asked for.
+    /// </summary>
+    public async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> CallAsConsoleAsync(RegisteredInstance instance, ServerRole roles, HttpMethod method, string path, object? body, CancellationToken ct)
+    {
+        var identity = await IdentityForAsync(instance, ct);
+        var ceiling = instance.Ceiling == ServerRole.None ? ServerRole.Viewer : instance.Ceiling;
+        var token = identity.Issuer().Issue(new ConsoleTokenRequest(instance.InstanceId, identity.Id, ConsoleInstances.ClientName, ServerRoles.Lower(roles, ceiling), IsConsole: true));
+        return await SendAsync(instance, token, method, path, body, null, ct);
+    }
+
+    private async Task<(int Status, System.Text.Json.Nodes.JsonNode? Body)> SendAsync(RegisteredInstance instance, string token, HttpMethod method, string path, object? body, IReadOnlyDictionary<string, string>? headers, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(method, new Uri(instance.Url, path));
-        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, await TokenForAsync(instance, userId, userName, role, ct));
+        request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, token);
         foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.TryAddWithoutValidation(name, value);
         DbDataKit.Telemetry.HostTelemetry.Inject(request.Headers);   // the trace goes on at the server (W3C traceparent; plan 22a GP29); nothing when telemetry is off
         if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);

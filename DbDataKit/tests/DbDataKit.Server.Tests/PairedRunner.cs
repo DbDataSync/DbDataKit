@@ -36,7 +36,7 @@ internal sealed class PairedRunner : IAsyncDisposable
     public static async Task<PairedRunner> StartAsync(string id = "runner-1")
     {
         var directory = Directory.CreateTempSubdirectory("ddk-paired-runner").FullName;
-        var state = StateOpener.Open(new StateSettings(), Path.Combine(directory, "state.db"), RunnerNames.EngineModules, new StateScope(Group: RunnerNames.DefaultGroup, Service: RunnerNames.ServiceId));
+        var state = StateOpener.Open(new StateSettings(), Path.Combine(directory, "state.db"), [.. RunnerNames.EngineModules, TrustModule.Module], new StateScope(Group: RunnerNames.DefaultGroup, Service: RunnerNames.ServiceId));
         var host = new RunnerHost(new RunnerHostSettings(Path.Combine(directory, "runner"))
         {
             Channels = ["dev", "prod"],
