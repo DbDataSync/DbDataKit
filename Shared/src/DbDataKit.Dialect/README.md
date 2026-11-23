@@ -26,6 +26,9 @@ Every product that reads or writes a column type (Sync, Build, Transfer, the Gat
 - A time or timestamp with no stated precision is written with microseconds (6 digits) on PostgreSQL, MySQL, DuckDB and Oracle, and with 7 digits on
   SQL Server. On MySQL that is `time(6)`, `datetime(6)` and `timestamp(6)`, so two changes in the same second keep different times. Reading MySQL's
   `datetime` with no precision gives `timestamp(0)`, MySQL's own default.
+- A decimal with no stated precision (PostgreSQL's `numeric`) is written as PostgreSQL's `numeric`, which holds it exactly. Every other engine writes
+  `decimal(38,9)` (`number(38,9)` on Oracle, `numeric(38,9)` for ANSI) with a note, so 12.75 stays 12.75; digits beyond 38, or beyond 9 after the
+  point, are rounded.
 
 ## Decisions
 - Compiled overrides are small: SQL Server (`#temp` names), Fabric, MySQL (trailing-space names), Oracle (no `"` in names). Everything else is data.

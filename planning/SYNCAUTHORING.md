@@ -287,19 +287,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P24: a decimal with no precision (awaiting the owner)
-
-PostgreSQL's `numeric` with no precision reads as a decimal with no precision or scale. Sync then fills in 18 and 0, so every target gets
-`numeric(18,0)` or `decimal(18,0)`, with only the note "unconstrained numeric has no fixed precision or scale", and a value 1.5 arrives as 2. The
-shared tables answer three ways: SQL Server `decimal(18,0)` and MySQL `decimal(10,0)` with no note (the same rounding), PostgreSQL, Oracle and DuckDB
-unmappable. The shared Arrow map answers a fourth: `decimal(38,9)`, lossy, with a note. Scenario: Ana replicates `billing.public.invoice`, whose
-`amount numeric` holds 12.75, into PostgreSQL and into SQL Server. Today both targets hold 13. Option A, the shared tables render a decimal with no
-precision as PostgreSQL's `numeric` (exact) and elsewhere as `decimal(38,9)` / `number(38,9)` (lossy, with a note naming the assumed precision, as
-the Arrow map does). Transfer and the Store then create those types where they now round or refuse. Option B, every shared table refuses a decimal
-with no precision, and Sync asks for a type override on the column, as it does for an unmappable type. Option C, as today. Recommendation: A.
-
-Answer from the owner, 2026-11-23: Yes, A
-
 ### SYNCAUTHORING-P25: fixed-length binary (awaiting the owner)
 
 Sync keeps SQL Server's and MySQL's `binary(n)`, and SQL Server's `rowversion`, as fixed-length: a SQL Server `binary(16)` key becomes `binary(16)` on a
