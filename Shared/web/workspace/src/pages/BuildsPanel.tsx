@@ -3,8 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, ErrorBanner, Link, useModule } from '@dbdatakit/shell'
 import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishOptions } from '../api'
-import { deployApi, deployBody, deployLine, deployTargets, hostedServer, type DeployAnswer } from '../deploys'
+import { deployApi, deployBody, deployLine, deployTargets, hostedServer, type ActivateAnswer, type DeployAnswer } from '../deploys'
 import { adoptionRequest, buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
+import { PreflightCard, type DeployPreflight } from './PreflightCard'
 import { PreviewDataForm } from './PreviewDataForm'
 import { PublishForm } from './PublishForm'
 
@@ -72,6 +73,13 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
     mutationFn: (p) => deployApi.deploy(deployBody({ workspaceServer: server!, project, workspace: id, build: buildId }, p.target, p.note, p.options)),
     onSettled: () => client.invalidateQueries({ queryKey: deploysKey }),
   })
+  // a version served in production waits for its preflight: the deploy's answer (taken, or refused with 409) says what it found, and Activate goes on from there
+  const activate = useMutation<ActivateAnswer, Error, { deploy: string; confirm: boolean }>({
+    mutationFn: (a) => deployApi.activate(a.deploy, a.confirm),
+    onSettled: () => client.invalidateQueries({ queryKey: ['console', 'deploys', server, project, id] }),
+  })
+  const preflight = preflightOfPublish(publish.isSuccess ? publish.data : null, publish.isError ? publish.error : null)
+  const shownPreflight = activate.data ? { deploy: activate.data.deploy.id, preflight: activate.data.preflight } : preflight
   // what the Workspace server sent from this build itself: the previews with data, and what it published before publishing went through the console
   const sentByServer = detail.data?.publishes ?? []
   const previewData = useMutation<PreviewDataAnswer, Error, { target: string; instance: string }>({
@@ -158,6 +166,13 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
                 <ol className="hint">{publish.data.steps.map((s, i) => <li key={i} data-testid="wsp-publish-step">{s}</li>)}</ol>
               </div>
             )}
+            {shownPreflight && (
+              <>
+                <PreflightCard preflight={shownPreflight.preflight} busy={activate.isPending} onActivate={canWrite ? (confirm) => activate.mutate({ deploy: shownPreflight.deploy, confirm }) : undefined} />
+                {activate.data && <div className="hint" data-testid="wsp-preflight-activated">{activate.data.message}</div>}
+                <ErrorBanner error={activate.error} />
+              </>
+            )}
           </>
         )}
         <ErrorBanner error={deploys.error} />
@@ -184,6 +199,13 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
       </div>
     </div>
   )
+}
+
+/** The preflight a deploy waited for, from its answer or from its refusal (409 with the deploy kept), with the deploy's id; null for a deploy that waited for none. */
+export function preflightOfPublish(answer: DeployAnswer | null, error: unknown): { deploy: string; preflight: DeployPreflight } | null {
+  if (answer?.deployed.preflight) return { deploy: answer.deploy.id, preflight: answer.deployed.preflight }
+  const body = error instanceof ApiError ? error.body as { deployed?: { preflight?: DeployPreflight }; deploy?: { id?: string } } | null : null
+  return body?.deployed?.preflight && body.deploy?.id ? { deploy: body.deploy.id, preflight: body.deployed.preflight } : null
 }
 
 /** The builds of a draft: build it, follow the build, read what it said, preview it (read only) and publish it to a Gateway or a Runner (by what its kind makes). A merged workspace (`closed`) keeps its builds: they can still be previewed and published. */
