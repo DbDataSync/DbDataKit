@@ -313,6 +313,8 @@ precision as PostgreSQL's `numeric` (exact) and elsewhere as `decimal(38,9)` / `
 the Arrow map does). Transfer and the Store then create those types where they now round or refuse. Option B, every shared table refuses a decimal
 with no precision, and Sync asks for a type override on the column, as it does for an unmappable type. Option C, as today. Recommendation: A.
 
+Answer from the owner, 2026-11-23: Yes, A
+
 ### SYNCAUTHORING-P25: fixed-length binary (awaiting the owner)
 
 Sync keeps SQL Server's and MySQL's `binary(n)`, and SQL Server's `rowversion`, as fixed-length: a SQL Server `binary(16)` key becomes `binary(16)` on a
