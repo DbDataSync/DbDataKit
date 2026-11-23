@@ -53,6 +53,19 @@ rules are in [docs/install.md](../docs/install.md).
   `setup invite` through `POST /api/join-tokens` (the server, the role ceiling, a group, the minutes and the console's address, which starts as the
   browser's), shows the command once with Copy, and lists the waiting tokens (`GET /api/join-tokens`, never a value) with Cancel (`DELETE
   /api/join-tokens/<id>`, audited as `server.invite.cancel`). The story `join-by-command.spec.ts` joins a real Runner by the command it makes.
+- `dbdatakit setup single-server` registers, starts and joins every suite service installed beside `dbdatakit` (`SingleServerSetup` in
+  `DbDataKit.Hosting.Cli`, the console's half `ConsoleSingleServer`): it finds the programs in the folders next to the console's (named for the service, as
+  the zips and the Scoop package lay them out, or for the program, as `install.sh` does; INSTALLER-P53), registers each by calling the registration every
+  server's own `service install` and `service unit` now use (`SuiteServiceRegistration`), gives its top folder its owner and access list and its program
+  folder an access list only administrators can change (INSTALLER-P55), writes a join request with a single-use token (INSTALLER-P54, INSTALLER-P57),
+  starts it, waits for it to listen and to be listed by the console (INSTALLER-P56), prints `registered · started · listening · joined` per service and
+  the startup-failure file of one that fails, and ends with what is ready, what is not, the console's address and the setup link; a second run leaves
+  what is ready alone (INSTALLER-P58). On Windows it uses the service control manager (`WindowsSuiteServiceHost`), on Linux systemd
+  (`SystemdSuiteServiceHost`: the system user, the unit, enabled; INSTALLER-P55). `--skip-folder-permissions-check` goes on each registered command
+  line; `--stop` stops every suite service of the machine. Tested with fakes (`DbDataKit.Hosting.Cli.Tests`), with the real programs in the Servers suite
+  (`SingleServerSetupTests`), and in the suite dry run on Windows from the extracted zips (`suite-single-server-windows`,
+  `dist/tests/suite-single-server-e2e.ps1`) and on systemd (`suite-install-linux`, `dist/tests/suite-single-server-e2e.sh`); the two dry-run legs have
+  not run yet. The Scoop package does not call it yet (INSTALLER-17).
 - A second Runner instance joins its group by a code made on it (`POST /api/instances/{id}/join`); a Gateway group makes its own key.
 - The folder step of the four servers checks the data folder (`FolderPermissions` in the startup library; INSTALLER-P32 for what it accepts) and fails
   naming the folder, its owner, what is wrong, the flag and the setting. `--skip-folder-permissions-check` on `server run` and
@@ -60,7 +73,7 @@ rules are in [docs/install.md](../docs/install.md).
   Application event log for a Windows service); `service install --skip-folder-permissions-check` puts the flag on the registered command line
   (INSTALLER-P33); `service check` has a line `startup.folder-permissions` naming the service and the switch; each server lists the skipped check in
   `loosened` of its `/version` answer, and the console's Bindings page names each server that skips it under "Posture choices" (INSTALLER-P34,
-  INSTALLER-P35). `dbdatakit setup single-server` is INSTALLER-14's.
+  INSTALLER-P35). `dbdatakit setup single-server` passes the flag on to the services it registers.
 - `service check` checks a service's registration, account and folder permissions in every program and prints its startup-failure file; the verb's
   earlier name is gone from every command, type, test, doc and plan, and `scripts/check_docs_commands.py` (`FORBIDDEN_WORDS`) fails when a tracked file
   uses it again.
@@ -77,17 +90,16 @@ rules are in [docs/install.md](../docs/install.md).
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery | none | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
-| INSTALLER-14 | `dbdatakit setup single-server` and `--stop` (`docs/install.md`, "Setting up one machine"): discovery, registration by library call, the top folder's owner and access list, the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut, so a user cannot plant a file beside a program a service runs), tokens, start, wait, per-service progress, failure files, the summary (what is ready and what is not, the console's address, the first administrator's setup link from `FIRST-RUN.txt`), safe to run again; `--skip-folder-permissions-check` passed on to the registered services and recorded in their settings (the flag on `server run`, `service install` and `setup single-server`) | none | L | Windows CI (zips extracted, no Scoop) and the Linux job (systemd): every service registered, joined and listed; the program folder's access list read back (no write for Users, inheritance off); the summary prints the console's address and the setup link; a second run says nothing to do; a service made to fail (its configured port held) prints its failure file and the summary names it; a run after the fix finishes it; a run with `--skip-folder-permissions-check` leaves the setting in each registered service's settings |
 | INSTALLER-15 | Groups through the token: the console makes every group key (a Gateway group's too) and hands it at the join; the join answer carries a link when TRUSTZONES-1 made one; a Gateway joining an existing group gets the group's pinned ports in the join answer and they become its exact configuration (a taken one fails the ports step naming it; another is never picked); the Gateway's pinned `listen`, `public.listen` and `management.listen` in `config/server.yaml` are the settings handed over | none | M | Servers suite: two Gateway instances joined to group X serve each other's sessions with no key copied; the second instance listens on exactly the first's pinned ports; with one of them held on the second's machine, the second fails with a startup-failure file naming the port and listens on nothing; a Runner instance joined to group Y resolves the group's logins; a token for Y used by a Gateway, or for another group, is refused |
 | INSTALLER-16 | Trust through the console: the console registers its own publisher key in the trust store of every Runner and Gateway group it manages, so the deploys it signs (WORKSPACEISOLATION-3) verify there. Command lines do not publish: `dbdatarunner package publish`, the Runner publishes of `dbdatabuild` and `dbdatasync`, `dbdatagateway apps publish --to`, every `--code` of those commands and `dbdatarunner package pair` answer a sentence that names the console's deploy | none | M | a group the console manages trusts the console's key and a version the console signs verifies there; each removed command answers its sentence (one test per command) |
-| INSTALLER-17 | The Scoop scripts shrink (`docs/install.md`, "Scoop"): no copy; `post_install` prints the next commands; `pre_uninstall` stops the services and on an uninstall prints the `sc.exe delete` commands; verify which `pre_uninstall` runs during `scoop update` (the installed version's) and whether Scoop's running-process check comes before it, with and without `ignore_running_processes`; if both allow it, `pre_uninstall` stops the services on an update too; the outcome in `docs/ci-lessons.md` (its row on "Running process detected, skip updating" rewritten); `dist/README.md` and `docs/suite-single-server-install.md` rewritten | INSTALLER-14 | M | `suite-scoop-e2e.ps1`: install, `dbdatakit setup single-server`, every service ready and registered against `current`; the update check installs a version N whose manifest carries `pre_uninstall`, then updates to N+1 (a new manifest alone cannot show it), and records which `pre_uninstall` ran and whether the running-process check came first, with and without `ignore_running_processes`; the update from N to N+1 by the verified procedure (one command if both allow it, otherwise `setup single-server --stop`, `scoop update`, `setup single-server`) ends with the new version running; uninstall leaves no service running |
-| INSTALLER-18 | Docker Compose through the same path: the console's settings list its members (`setup.members`); at its first start it writes one `join-request.yaml` per member into the shared volume `join`; each member's container consumes its own at its start; the quickstart loses `instance pending` and `instance confirm` | INSTALLER-14 | S | `dist/compose/check.sh` on the quickstart: the console and the Gateway are joined with no `instance confirm`; CI runs it |
-| INSTALLER-19 | Clean break messages, one per row of the table in `docs/install.md` ("Clean break"): a file in a service's top folder owned by another account (the folder step), a `server.yaml` listing a console paired the old way (a warning at start and in `service check`; the pairing not used), old `instances.yaml` entries (removed by `setup single-server`, marked on the Servers page with the generated command), a `dbdatagateway` registration (stopped, removed, `DbDataGateway` registered on the same folder), services registered from `bin\<version>` (registered against the program folder, the copy removed), `bundle.json` and `--announce-listen` (the console refuses to start), `DBDATAKIT_ANNOUNCE_URL` (a warning at every start), the old default ports (the release notes, `docs/suite-single-server-install.md` and the Servers page), `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` (exit 2, `RemovedCommands`) | INSTALLER-14, INSTALLER-15 | S | one test per row of the table: each finding gives its message (naming what the table's last column says), exit code or warning, from the one the table names as saying it; the old-port row is checked by `check_docs_commands.py` and a test that the Servers page shows the reported address |
-| INSTALLER-20 | Delete the old pairing and install code: `PairingCodes`, `pairing-codes.json`, the code verbs (`server pair`, `dbdatarunner package pair`, `instance add --code`), `PairingClient`'s code exchange, the announcement, the bundle (`bundle/1` leaves `docs/formats.json` and `docs/ui-editors.md`), the group join route, `publisher pair --code`. Voids: the Gateway pairing of the Store command line (`dbdatastore gateway add`, with PUBLISHING-2) | INSTALLER-14 to INSTALLER-19 | M | the suites pass with those types gone; the removed verbs answer their sentence; `check_formats.py` and `check_ui_editors.py` pass without `bundle` |
-| INSTALLER-21 | A service writes its own `state:` settings: at first start from the settings `setup single-server` or the MSI pass (`STATE_ENGINE`, `STATE_CONNECTION` with a secret reference), never a password; one login per service and group | INSTALLER-14 | M | Windows leg: an MSI install with the two properties starts the service on SQL Server with the login it names; Linux: `install.sh` the same on PostgreSQL; a password in the property is refused |
+| INSTALLER-17 | The Scoop scripts shrink (`docs/install.md`, "Scoop"): no copy; `post_install` prints the next commands; `pre_uninstall` stops the services and on an uninstall prints the `sc.exe delete` commands; verify which `pre_uninstall` runs during `scoop update` (the installed version's) and whether Scoop's running-process check comes before it, with and without `ignore_running_processes`; if both allow it, `pre_uninstall` stops the services on an update too; the outcome in `docs/ci-lessons.md` (its row on "Running process detected, skip updating" rewritten); `dist/README.md` and `docs/suite-single-server-install.md` rewritten | none | M | `suite-scoop-e2e.ps1`: install, `dbdatakit setup single-server`, every service ready and registered against `current`; the update check installs a version N whose manifest carries `pre_uninstall`, then updates to N+1 (a new manifest alone cannot show it), and records which `pre_uninstall` ran and whether the running-process check came first, with and without `ignore_running_processes`; the update from N to N+1 by the verified procedure (one command if both allow it, otherwise `setup single-server --stop`, `scoop update`, `setup single-server`) ends with the new version running; uninstall leaves no service running |
+| INSTALLER-18 | Docker Compose through the same path: the console's settings list its members (`setup.members`); at its first start it writes one `join-request.yaml` per member into the shared volume `join`; each member's container consumes its own at its start; the quickstart loses `instance pending` and `instance confirm` | none | S | `dist/compose/check.sh` on the quickstart: the console and the Gateway are joined with no `instance confirm`; CI runs it |
+| INSTALLER-19 | Clean break messages, one per row of the table in `docs/install.md` ("Clean break"): a file in a service's top folder owned by another account (the folder step), a `server.yaml` listing a console paired the old way (a warning at start and in `service check`; the pairing not used), old `instances.yaml` entries (removed by `setup single-server`, marked on the Servers page with the generated command), a `dbdatagateway` registration (stopped, removed, `DbDataGateway` registered on the same folder), services registered from `bin\<version>` (registered against the program folder, the copy removed), `bundle.json` and `--announce-listen` (the console refuses to start), `DBDATAKIT_ANNOUNCE_URL` (a warning at every start), the old default ports (the release notes, `docs/suite-single-server-install.md` and the Servers page), `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` (exit 2, `RemovedCommands`) | INSTALLER-15 | S | one test per row of the table: each finding gives its message (naming what the table's last column says), exit code or warning, from the one the table names as saying it; the old-port row is checked by `check_docs_commands.py` and a test that the Servers page shows the reported address |
+| INSTALLER-20 | Delete the old pairing and install code: `PairingCodes`, `pairing-codes.json`, the code verbs (`server pair`, `dbdatarunner package pair`, `instance add --code`), `PairingClient`'s code exchange, the announcement, the bundle (`bundle/1` leaves `docs/formats.json` and `docs/ui-editors.md`), the group join route, `publisher pair --code`. Voids: the Gateway pairing of the Store command line (`dbdatastore gateway add`, with PUBLISHING-2) | INSTALLER-15 to INSTALLER-19 | M | the suites pass with those types gone; the removed verbs answer their sentence; `check_formats.py` and `check_ui_editors.py` pass without `bundle` |
+| INSTALLER-21 | A service writes its own `state:` settings: at first start from the settings `setup single-server` or the MSI pass (`STATE_ENGINE`, `STATE_CONNECTION` with a secret reference), never a password; one login per service and group | none | M | Windows leg: an MSI install with the two properties starts the service on SQL Server with the login it names; Linux: `install.sh` the same on PostgreSQL; a password in the property is refused |
 | INSTALLER-22 | The Runner's release and Windows service legs: a release cut with `dbdatarunner-release.yml`, the MSI installed on Windows, a task run under `NT SERVICE\DbDataRunner`; a package's manifest generated by a build step (`ManifestGenerator.ForAssembly`) | none | M | the `windows` job of `dbdatarunner-ci.yml` installs the service, runs a task, reads its run and removes the service; a snapshot release publishes the Runner's zips and MSI |
 | INSTALLER-23 | Framework-dependent Build and Gateway: `scripts/publish.sh`, `build/publish.ps1`, `package.ps1`, `requiresDotnet` in `dist.json`; the 32-bit ODBC worker stays self-contained | none | M | `dist/tests` and the suite dry run pass with every zip framework-dependent but the worker; `dbdatabuild version` and a Gateway query run on a machine with only the .NET 10 runtime; the zip sizes are in the commit |
-| INSTALLER-25 | First-run remainders: `DbDataKit/docs/scale-out.md` rewritten for joins by token (state move, another Gateway instance, a server on another machine); the Gateway and the Runner still install, start and join alone from their own MSI | INSTALLER-14 | S | `ConsoleScaleOutTests` follow the document's commands; the per-product MSI jobs (`dist-msi-ci.yml`) pass with a join by token |
+| INSTALLER-25 | First-run remainders: `DbDataKit/docs/scale-out.md` rewritten for joins by token (state move, another Gateway instance, a server on another machine); the Gateway and the Runner still install, start and join alone from their own MSI | none | S | `ConsoleScaleOutTests` follow the document's commands; the per-product MSI jobs (`dist-msi-ci.yml`) pass with a join by token |
 | INSTALLER-26 | Container images for the Runner and the Workspace, so the Compose quickstart runs all four services (queued: wanted, not yet) | INSTALLER-18 | M | `dist/compose/check.sh` runs four containers joined, and a Build refresh task runs on the Runner's container |
 | INSTALLER-27 | Console-started pairing for networks where a server cannot reach the console (low priority): `setup invite` and the Add a server screen offer it; the console still generates the command for the remote, code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command prints; it then connects to the server and pins it, with the token's scope and single use | none | M | Servers suite: a Runner whose calls to the console are blocked joins by this path and is listed ready, once with its address given up front and once with the address the command printed entered afterwards; a reused or expired code is refused; a Playwright story of entering the address |
 | INSTALLER-28 | Serving groups upgrade rolling, draining first (waits for the first stable release) | TASKENGINE-9 | L | the servers suite upgrades a two-instance group with a query running; no query fails; the second instance waits for the first |
@@ -308,7 +320,7 @@ Recommendation: B, a small change of the shared `health` noun; until then the re
 Scenario: `scoop install -g dbdatakit-full` on a machine where 7840 is held; the Runner takes 7841 at its first start. Built as the default: the
 install still pairs each member on its default address (`https://127.0.0.1:7840` for the Runner), so that pairing fails naming the address, and the
 notes say to pair by the server's own address. Option B: the install reads each member's `listen:` line after its first start and pairs on it.
-Recommendation: the default until `setup single-server` joins the members (INSTALLER-14): a joined server reports its own address, so the install stops guessing.
+Recommendation: the default until the Scoop package runs `setup single-server` (INSTALLER-17), which joins the members: a joined server reports its own address, so the install stops guessing.
 
 ### INSTALLER-P31: the Gateway's listeners in the port check (default, awaiting the owner)
 
@@ -340,7 +352,7 @@ group-writable folder on Linux. Recommendation: B, as built.
 with (`server run --repo ... --skip-folder-permissions-check`), so no file in the service's folder is written by the administrator's account
 ("A service owns its data"); `service check` reads it there and from the settings file. Option B: `service install` writes
 `startup.skip_folder_permissions_check: true` into the service's settings file, which an administrator's account would then own. Recommendation: A, and
-`setup single-server` (INSTALLER-14) the same way.
+`setup single-server` the same way (built so).
 
 ### INSTALLER-P34: how the console learns that a server skips the check (default, awaiting the owner)
 
@@ -496,6 +508,77 @@ data folder that is not there is not made for it), so the defaults are
 the current ones wherever the Gateway starts. Option B: write it only when the data folder is the machine's (`C:\ProgramData\DbDataKit\gateway`,
 `/var/lib/dbdatakit/gateway`), so a run on any other folder keeps schema version 1's defaults until a person writes the file. Recommendation: the
 default; one rule for every start is easier to explain.
+
+### INSTALLER-P53: where `setup single-server` looks for the programs (default, awaiting the owner)
+
+Scenario: an administrator extracts the four Windows zips into `C:\Program Files\DbDataKit\console`, `gateway`, `runner` and `workspace` and runs
+`C:\Program Files\DbDataKit\console\dbdatakit.exe setup single-server`; on Linux `install.sh --system` put the programs in `/opt/dbdatakit`,
+`/opt/dbdatagateway` and so on. Built as the default (`SuiteDiscovery`): for each service it looks, beside the console's folder, in a folder named for
+the service's data folder (`..\gateway\dbdatagateway.exe`, the zips' and the Scoop package's layout), then in a folder named for the program
+(`/opt/dbdatagateway/dbdatagateway`), then in the console's own folder; the first found is registered, and a service found nowhere is printed as "not
+installed beside dbdatakit (looked for ...)" and left out, which does not make the run fail. The data folders are the machine's
+(`C:\ProgramData\DbDataKit\<service>`, `/var/lib/dbdatakit/<service>`, or the folder `DBDATAKIT_DATA` names). Run as `dotnet dbdatakit.dll` it
+refuses, as `service install` does. Options: B, a `--programs <folder>` option naming the folder to look in; C, a missing program fails the run.
+Recommendation: the default; B when a layout appears that these three do not cover.
+
+### INSTALLER-P54: when a server gets its join request (default, awaiting the owner)
+
+`docs/install.md` says setup "mints a join token and writes the join request; starts the service". Scenario: a Runner was installed with
+`install.sh --system` and started once (it has its `listen:` line), and is stopped; or a Runner already joined was stopped for maintenance. Built as
+the default: a server that never started (no address in its settings) or that still has a join request from an earlier run gets a new request before
+it is started, as the doc says; any other server is started as it is, and only when it listens and the console does not list the certificate it
+presents is it given a request and started again. So a stopped server that is joined spends no token, and a server that started before setup gets
+one restart more. A request left by a run that failed is replaced, since its token may have ended; the earlier token stays waiting on the Add a server
+screen until it ends. Options: B, every server that is not listed gets a request before it starts (a stopped, joined server then joins again with a
+new token and replaces its entry); C, also cancel the token a replaced request held. Recommendation: the default, and the doc's step 2 says "writes
+the join request of a server that is not listed" once answered.
+
+### INSTALLER-P55: the program folder and the registration on Linux (default, awaiting the owner)
+
+Scenario: `sudo /opt/dbdatakit/dbdatakit setup single-server` on a machine where the zips were extracted by a user, or where `install.sh --system` wrote
+the units without enabling them (INSTALLER-P51). Built as the default:
+- Windows: the folder that holds each program gets the access list Administrators and SYSTEM full control, Users and the service's account read and
+  run, the parent's grants cut. Only that folder is set, not the folder above it (the Scoop version folder, `C:\Program Files\DbDataKit`).
+- Linux: the program's folder and everything in it is made root's (`chown -R root:root`) with no write for the group or others (`chmod -R go-w`).
+- Linux registration: the group `dbdatakit` and the service's system user are made when missing (as `install.sh --system` makes them), the unit the
+  program's own `service unit` prints is written to `/etc/systemd/system`, `systemctl daemon-reload` runs and the unit is enabled, so the service
+  starts at boot as the Windows service does. A unit `install.sh` wrote and did not enable is therefore registered again ("registered ... again")
+  and enabled. The data folder `/var/lib/dbdatakit/<service>` is made for the service's user with mode 0700 before its first start, as systemd's
+  `StateDirectory=` would, so the join request can be written there and given to that user.
+Options: B, on Windows also set the folder above the programs; C, on Linux leave the unit as `install.sh` wrote it (not enabled). Recommendation: the
+default.
+
+### INSTALLER-P56: how setup knows a service listens, is joined or failed (default, awaiting the owner)
+
+Scenario: setup starts the Runner and waits. Built as the default: the address is read from the service's own settings (the `listen:` line; the
+Gateway's `management.listen`); the service listens when `/health/live` answers there; it is joined when the console's `instances.yaml` lists the
+certificate it presented (its SHA-256) and its join request is gone. It failed when its startup-failure file was written after setup started it and
+holds a reason (not the line of a start going on), when systemd says `failed`, or when it stays stopped for 20 seconds; it is not ready when it has not
+listened and joined within 3 minutes. The console is ready when it listens and has made its certificate; when it is not, the other services are
+printed as "not set up: the console is not ready" and nothing is done for them. The exit code is 0 when every service is ready, 1 when one is not, 2
+for a usage error, 3 when not elevated. Options: B, a `--wait <seconds>` option; C, carry on with the other services when the console is not ready
+(registered and started, not joined). Recommendation: the default.
+
+### INSTALLER-P57: the token setup makes for each server (default, awaiting the owner)
+
+Scenario: setup joins the Gateway, the Runner and the Workspace of the console's machine. Built as the default: each gets a token with the admin
+ceiling, no group, and the default lifetime (15 minutes), made by the account that runs setup and audited as `server.invite` with the name
+"<account> (setup single-server)", actor kind `command`; the request names the console's `listen:` address (`https://localhost:7800` by default),
+which a server on the same machine reaches. Setup opens the console's state directly, as `setup invite` does, so on Windows the administrator's
+account may create a file in the console's folder (the SQLite journal); on Linux the files `state.db*` that setup ran into are given back to the
+folder's owner. Options: B, mint through the console's local channel once INSTALLER-7 gives the console one, so no file in its folder is touched by the
+administrator; C, a smaller ceiling for the servers of the console's own machine. Recommendation: the default now, B with INSTALLER-7.
+
+### INSTALLER-P58: what a second run leaves alone, and what it prints (default, awaiting the owner)
+
+Scenario: an administrator runs `dbdatakit setup single-server` twice. Built as the default: a service registered exactly as it should be (the same
+command line, account and settings on Windows; on Linux the same unit text, its user and the unit enabled), running, listening and listed is left
+alone: its folders' access lists are not set again and nothing is restarted. Its line ends with "(already)", and when every service is like that the
+summary starts "Nothing to do: every service is registered, running and joined." A service whose registration differs (another program, another
+command line, `--skip-folder-permissions-check` added or removed) is registered again and restarted, with a note naming the old command line. The
+summary always prints the console's address (its `listen:` line) and either the setup link from `FIRST-RUN.txt` or that the console has a user already
+(`dbdatakit user invite`). `--stop` cannot be given with `--skip-folder-permissions-check`. Options: B, set the folders' access lists again on every
+run; C, print the summary's link only on the run that started the console. Recommendation: the default.
 
 ## Shared areas touched
 
