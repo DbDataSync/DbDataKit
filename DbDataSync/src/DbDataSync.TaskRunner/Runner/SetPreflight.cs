@@ -239,9 +239,8 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
         try
         {
             if (side.Dialect is { } dialect && database is not null) await dialect.UseDatabaseAsync(side.Connection, database, ct).ConfigureAwait(false);
-            await using var command = side.Connection.CreateCommand();
+            await using var command = side.Connection.CreateTimedCommand();
             command.CommandText = sql;
-            command.CommandTimeout = 120;
             await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false)) { }   // no row comes back: the condition is false for every row
         }
@@ -497,9 +496,8 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
     /// <summary>A yes-or-no answer of the engine; a NULL (an object the login cannot see) is a no.</summary>
     private static async Task<bool?> ScalarAsync(DbConnection connection, string sql, CancellationToken ct, params (string Name, string Value)[] parameters)
     {
-        await using var command = connection.CreateCommand();
+        await using var command = connection.CreateTimedCommand();
         command.CommandText = sql;
-        command.CommandTimeout = 60;
         foreach (var (name, value) in parameters)
         {
             var parameter = command.CreateParameter();
