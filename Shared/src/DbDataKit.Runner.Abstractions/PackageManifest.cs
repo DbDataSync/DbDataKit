@@ -92,6 +92,22 @@ public sealed record TaskInput(string Name, ProgressType Type = ProgressType.Tex
 /// </summary>
 public sealed record ConnectionSlot(string Name, string Kind, string? Env = null, SlotAccess Access = SlotAccess.Write);
 
+/// <summary>The names of connection slots.</summary>
+public static class ConnectionSlots
+{
+    /// <summary>
+    /// The slot a connection of a project becomes: its name in the identifier alphabet (lower-case letters, digits and <c>_</c>, starting with a letter, at most 64), what is not allowed becoming <c>_</c> and a name that does not
+    /// start with a letter getting <c>c_</c> in front. A Sync package names its slots this way; a Build project's connection names already are identifiers, so they stay as they are. A reader of a project's connection through its
+    /// package (the read of a database's shape) finds the slot the same way.
+    /// </summary>
+    public static string NameOf(string connection)
+    {
+        var name = System.Text.RegularExpressions.Regex.Replace(connection.ToLowerInvariant(), "[^a-z0-9_]", "_");
+        if (name.Length == 0 || !char.IsAsciiLetter(name[0])) name = "c_" + name;
+        return name.Length > 64 ? name[..64] : name;
+    }
+}
+
 /// <summary>
 /// The forms in which the runner may inject a bound login into a task process (plan 28c section 6, ED11). A registry, not free text: a package picks a name, and the runner writes the variables of that form, so a package cannot make the
 /// runner write an arbitrary variable.

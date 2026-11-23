@@ -110,6 +110,14 @@ AGENTACCESS-3, which become one condition kind of this model; elevated actions (
 - Sample data as a result treatment: the data itself comes from SAMPLEDATA.
 - Whether columns get a classification (personal, financial, free text) that rules can name instead of naming columns one by one.
 - How a person sees what their agent will be allowed in each channel before running it (the console's "what each tool will ask" page, extended).
+- Who sees which servers: whether a person invited to the console as a viewer finds the servers in the navigation and opens the screens their role
+  on each server allows, or the servers stay an administrators' area and a viewer reaches what they hold only through the console's own pages
+  (Views, Runs, Lineage). Today the console answers its list of servers (`GET /api/instances`) to an administrator only (a viewer gets 403), so a
+  viewer's navigation lists no server; the Gateway's entries a viewer may use are shown only to a viewer who reaches its screens, which no console
+  viewer does. `navigation-gateway.spec.ts` gives the viewer's page the administrator's list to prove the hiding. Which console roles see which
+  servers, and whether a server's own roles for a person decide what they see there.
+- What Home shows: today it lists nothing and says no server is paired even when servers are. What a person lands on (their waiting approvals,
+  failed runs, recent projects), and whether there is one Home for everyone or one per role.
 
 ## Shared areas touched
 
