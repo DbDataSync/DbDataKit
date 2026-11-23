@@ -8,7 +8,11 @@ import { ConsoleShell, useConsoleNav } from '../ConsoleShell'
 const GatewayModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.GatewayModule })))
 const IdentityHomeModule = lazy(() => import('@dbdatakit/gateway').then((m) => ({ default: m.IdentityHomeModule })))
 const RunnerModule = lazy(() => import('@dbdatakit/runner').then((m) => ({ default: m.RunnerModule })))
-const WorkspaceModule = lazy(() => import('@dbdatakit/workspace').then((m) => ({ default: m.WorkspaceModule })))
+// The Workspace's screens with the Designers of the kinds that have one (a sync project's is `@dbdatakit/sync-ui`), registered before the module draws.
+const WorkspaceModule = lazy(() => Promise.all([import('@dbdatakit/workspace'), import('@dbdatakit/sync-ui')]).then(([workspace, sync]) => {
+  workspace.registerDesigner(sync.syncDesigner)
+  return { default: workspace.WorkspaceModule }
+}))
 
 /** The servers plan 33 SC23 deleted, with where their work went: a console that still lists one says so instead of "no screens yet". */
 export const removedProducts: Record<string, string> = {

@@ -49,10 +49,6 @@ release moves the entries into its notes and empties this file.
   `systemctl disable --now dbdatasync`) before you install this release.
   The Runner's own screen sets a connection's run login on a runner package's connections card (*Set the login*), in place of
   `dbdatasync secret send --to runner`; a replication set's Apply (provisioning) runs as its `provision` task on the Runner.
-- **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
-  and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
-  `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
-  connection (the Catalog tab), then commit the new file.
 - **Changed: the console, the Runner and the Workspace listen on new default ports, from the suite's range 7800 to 7899.** With no `--listen`, a
   first start takes the default of its service, or the next free port of the service's sub-block, and writes it as the `listen:` line of its settings
   file (`settings.yaml` in the console's folder, `server.yaml` in the Runner's and the Workspace's); later starts use that port. The old and the new
@@ -70,6 +66,10 @@ release moves the entries into its notes and empties this file.
   again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
   server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
   The Gateway's listeners keep 8815 to 8822 for now.
+- **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
+  and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
+  `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
+  connection (the Catalog tab), then commit the new file.
 
 ## Tasks that change table structure start only from the console
 
@@ -111,6 +111,10 @@ release moves the entries into its notes and empties this file.
 - **New: `service check`.** In `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace`, `service check` checks the service's registration, its account and the permissions of its folders, then prints the startup-failure file of its last start (or that there is none). Its last line is `Check: OK (<n> warning(s)).` or `Check: <n> failure(s).`; it exits with code 1 when a check fails, so a script can run it after `service install`.
 
 - **Changed: a server refuses to start on a data folder another account could change, unless told to skip the check.** At start, the console, the Gateway, the Runner and the Workspace check their data folder: on Linux and macOS it must be owned by the service's account and not writable by every account; on Windows its access list must not let Everyone, Users, Authenticated Users, Anonymous, Guests or Interactive write to it. A folder that fails stops the start at the folder step, and `startup-failure-<program>.txt` names the folder, its owner, what is wrong and the switch. For a test's folder or a checkout, start with `--skip-folder-permissions-check` (also on `service install`, which puts it on the registered command line) or set `startup: { skip_folder_permissions_check: true }` in the server's settings file; the server then warns at every start, `service check` names it, and the console's Bindings page lists it under "Posture choices". A folder `service install` made already passes. Scripts that start a server from a terminal on a shared folder (the CI runner's temporary folder on Windows, for example) give the flag.
+
+## A sync project's Designer edits a replication
+
+- **New: a replication's page in the Designer of a Workspace sync project.** It has the tabs Overview (the source and target connections and databases, the schedule) and Table Mappings (the source's tables with **Create mappings**, and a mapping's two sides and **Column Mapping**), with **Enabled**, **Save settings** and **Delete** in its chrome. The databases, tables and columns are those of the draft's `catalog-cache.yaml`. Each change is an unsaved edit of the draft's file, the same one Files shows, and keeps the file's comments and the keys the page does not show. What to do: nothing; everything the page does not offer is still edited in Files.
 
 ## Since the last release before the 2026-11-13 beta
 

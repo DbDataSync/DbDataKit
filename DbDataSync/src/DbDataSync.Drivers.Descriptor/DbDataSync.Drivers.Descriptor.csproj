@@ -10,8 +10,10 @@
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
+  <!-- Reading a driver.yaml moved to the shared library DbDataKit.Sync.Drivers.Descriptor with its namespace; this assembly forwards to it
+       (TypeForwards.cs) and keeps what loads a library (DriverDescriptorReader.BuildDriver, DriverLoader) or compiles a driver.csx (DriverScriptHost). -->
   <ItemGroup>
-    <EmbeddedResource Include="Resources\*.yaml" />
+    <DbDataKitReference Include="Sync.Drivers.Descriptor" />
   </ItemGroup>
 
   <ItemGroup>

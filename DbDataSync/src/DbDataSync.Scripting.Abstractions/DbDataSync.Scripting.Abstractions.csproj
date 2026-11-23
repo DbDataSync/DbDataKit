@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
-  </ItemGroup>
-
+  <!-- The types moved to the shared library DbDataKit.Sync.Scripting.Abstractions with their namespaces; this assembly forwards to it (TypeForwards.cs). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <DbDataKitReference Include="Sync.Scripting.Abstractions" />
+  </ItemGroup>
 
 </Project>

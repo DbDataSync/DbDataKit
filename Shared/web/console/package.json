@@ -16,6 +16,7 @@
     "@dbdatakit/runner": "*",
     "@dbdatakit/store-ui": "*",
     "@dbdatakit/shell": "*",
+    "@dbdatakit/sync-ui": "*",
     "@dbdatakit/workspace": "*",
     "@dbdatakit/views-editor": "*",
     "@dbdatakit/visuals": "*",

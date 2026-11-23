@@ -24,8 +24,6 @@
       "DbDataSync/src/DbDataSync.TaskRunner/DbDataSync.TaskRunner.csproj",
       "DbDataSync/src/DbDataSync.Verification/DbDataSync.Verification.csproj",
       "DbDataSync/tests/DbDataSync.Cli.Tests/DbDataSync.Cli.Tests.csproj",
-      "DbDataSync/tests/DbDataSync.Core.Tests/DbDataSync.Core.Tests.csproj",
-      "DbDataSync/tests/DbDataSync.Drivers.Abstractions.Tests/DbDataSync.Drivers.Abstractions.Tests.csproj",
       "DbDataSync/tests/DbDataSync.Drivers.ArrowFlightSql.Tests/DbDataSync.Drivers.ArrowFlightSql.Tests.csproj",
       "DbDataSync/tests/DbDataSync.Drivers.Descriptor.Tests/DbDataSync.Drivers.Descriptor.Tests.csproj",
       "DbDataSync/tests/DbDataSync.Drivers.DuckDb.Tests/DbDataSync.Drivers.DuckDb.Tests.csproj",
