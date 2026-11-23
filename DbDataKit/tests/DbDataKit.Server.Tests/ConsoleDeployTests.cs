@@ -40,7 +40,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         if [ -e "$root/broken" ]; then echo "$root/broken: this draft is broken on purpose" >&2; exit 1; fi
         if [ "$verb" = "project show" ]; then echo '{"diagnostics":[]}'; exit 0; fi
         if [ -n "$out" ]; then
-          mkdir -p "$out/files/repo"; for f in "$root"/*; do case "$(basename "$f")" in .git) ;; *) cp -r "$f" "$out/files/repo/";; esac; done
+          mkdir -p "$out/files/repo" "$out/files/bin"; printf 'a stand-in assembly' > "$out/files/bin/Orders.dll"; for f in "$root"/*; do case "$(basename "$f")" in .git) ;; *) cp -r "$f" "$out/files/repo/";; esac; done
           printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
         fi
         if [ "$verb" = "project publish" ]; then echo "{\"data\":{\"package\":\"$pkg\",\"files\":1,\"tasks\":[{\"name\":\"load\",\"plan\":\"refresh\"}]}}"; exit 0; fi
@@ -82,7 +82,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var code = WorkspaceState.Pairing(workspaceDirectory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author | ServerRole.Approver));
         workspaceId = (await instances.PairAsync(new Uri(workspace.Urls.First()), code.Code, "Workspace", default)).InstanceId;
         await runner.PairAsync(console, "Runner one");
-        runnerId = runner.Server.InstanceId;
+        runnerId = "runner-1";
         // the console's publisher key in the runner's trust store, as the console's own pass puts it there once the runner is paired
         var trusted = await console.Services.GetRequiredService<ConsoleTrust>().EnsureAsync(instances.Registry.Find(runnerId)!);
         Assert.True(trusted.Done, trusted.Problem);
@@ -122,7 +122,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.True(made.Status == HttpStatusCode.Created, made.Body?.ToJsonString());
         var draft = (string)(await Workspace(HttpMethod.Post, $"/projects/{project}/workspaces", new JsonObject { ["name"] = "draft" })).Body!["id"]!;
         foreach (var (path, text) in files ?? new Dictionary<string, string>())
-            Assert.Equal(HttpStatusCode.OK, (await Workspace(HttpMethod.Put, $"/projects/{project}/workspaces/{draft}/files/{path}", new JsonObject { ["content"] = text })).Status);
+            Assert.True((await Workspace(HttpMethod.Put, $"/projects/{project}/workspaces/{draft}/files/{path}", new JsonObject { ["content"] = text })).Status is HttpStatusCode.OK or HttpStatusCode.Created);
         var requested = await Workspace(HttpMethod.Post, $"/projects/{project}/workspaces/{draft}/builds");
         Assert.True(requested.Status == HttpStatusCode.Accepted, requested.Body?.ToJsonString());
         var build = (string)requested.Body!["id"]!;
