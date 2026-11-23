@@ -75,6 +75,22 @@ POST /api/deploys
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
 
+### Publishing from the Builds tab
+
+On the console's screens of a Workspace server, the Builds tab of a draft makes this deploy. Ana opens build `4f1c...` of `orders`, and the publish
+panel lists the Runners and Gateways the console manages:
+
+- The project's kind goes to the server's product: the server is offered. A Sync project goes to a Runner, so `jobs` is offered and a Gateway is not.
+- The server does not answer the console: it is offered with "not answering", and **Publish** stays off until it answers.
+- The console manages no server the kind goes to: the panel says so, and an administrator adds one under **Servers**.
+
+For a Runner, Ana names the channel (`dev`), the slots to bind (`source=erp`) and whether the version is served at once; for a Gateway of models,
+the data source. **Publish** sends `POST /api/deploys` as Ana. The panel shows the version the target answered and lists the console's records of
+the build's deploys (`GET /api/deploys`), taken or refused.
+
+A build's panel has its own address: `/servers/<Workspace server>/<project>/<workspace>/files?tab=builds&build=<build>` opens the Builds tab with
+that build and its publish panel.
+
 ## The build record
 
 A version deployed from a build carries the record of that build (`build-record/1`), as one line of JSON:

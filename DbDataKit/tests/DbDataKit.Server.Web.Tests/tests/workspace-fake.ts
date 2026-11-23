@@ -6,8 +6,14 @@ import YAML from 'yaml'
  * `store-fake.ts`), so the story needs the signed-in console only and takes no port. The real routes are `DbDataWorkspace.Tests` and `DbDataKit.Authoring.Server`'s tests; the words of the check below are the ones the kinds'
  * validators say (`DataModelLoader`'s code, the Workspace's own refusal of a password, `dbdatabuild`'s DDB code), and the shapes are the ones the screens read. Files live in memory, a build always succeeds, and a publish
  * records what it was given, so the story can see that what the screens sent is what the server would have got.
+ *
+ * A build is published by the console, not by the Workspace server: the console's `/api/instances` also lists a Runner `plant` and a Gateway `edge`, and its `/api/deploys` is answered here too (a deploy and the list of
+ * deploys, in the shapes `DeploysController` answers; the real route is `ConsoleDeployTests`). A call to the Workspace server's own publish route is kept apart (`workspacePublishes`), so a story can say that none was made.
  */
 export const SERVER = 'ws-1'
+/** The Runner and the Gateway the console manages, by the id the console gives them (their names are the same). */
+export const RUNNER = 'plant'
+export const GATEWAY = 'edge'
 
 type Kind = 'store' | 'sync' | 'build' | 'integration'
 interface Project { id: string; kind: Kind; title: string | null; created: string }
@@ -16,8 +22,10 @@ interface Build { id: string; kind: Kind; publishes: { at: string; by: string; t
 interface Finding { severity: 'error' | 'warning' | 'info'; code: string; message: string; file: string | null; line: number | null }
 
 export interface FakeWorkspace {
-  /** What each publish was sent: the project, the build and the body. */
+  /** What each deploy asked the console for: the project and the body of `POST /api/deploys` (`target`, `channel`, `bind`, `adopt`, ...). */
   published: { project: string; body: Record<string, unknown> }[]
+  /** The calls to the Workspace server's own publish route (`.../builds/{b}/publish`): the screens make none. */
+  workspacePublishes: { project: string; body: Record<string, unknown> }[]
   files: (project: string, name: string) => Map<string, string> | undefined
   /** Set to a data source name and a Store publish is refused, as a Gateway does for a data source made by hand, until the body says `adopt` (plan 33 SC21f). */
   adoptRefusal: string | null
@@ -87,13 +95,48 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
   const projects: Project[] = []
   const workspaces: Workspace[] = []
   const published: FakeWorkspace['published'] = []
+  const workspacePublishes: FakeWorkspace['workspacePublishes'] = []
+  const deploys: Record<string, unknown>[] = []
   const fake = { adoptRefusal: null as string | null }
   let counter = 0
   const stamp = () => `2026-11-11T10:${String(counter++).padStart(2, '0')}:00Z`
+  const server = (id: string, name: string, product: string, url: string) => ({ id, name, url, product, version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null })
 
   await page.route('**/api/instances', (route) => route.request().method() === 'GET'
-    ? json(route, [{ id: SERVER, name: 'Workspace server', url: 'https://workspace.invalid', product: 'dbdataworkspace', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null }])
+    ? json(route, [server(SERVER, 'Workspace server', 'dbdataworkspace', 'https://workspace.invalid'), server(RUNNER, RUNNER, 'dbdatarunner', 'https://runner.invalid'), server(GATEWAY, GATEWAY, 'dbdatagateway', 'https://gateway.invalid')])
     : route.fallback())
+
+  // the console's deploy of a build: what the target answers by its product, a refusal for a data source made by hand until `adopt` names it, and the record of each deploy, taken or refused
+  await page.route((url) => url.pathname === '/api/deploys', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() === 'GET') {
+      const narrow = ['workspace_server', 'project', 'workspace', 'build'] as const
+      return json(route, { deploys: deploys.filter((d) => narrow.every((k) => !url.searchParams.get(k) || d[k] === url.searchParams.get(k))) })
+    }
+    const sent = JSON.parse(request.postData() ?? '{}') as Record<string, unknown>
+    const project = projects.find((p) => p.id === sent.project)
+    if (!project) return json(route, { error: `There is no project '${String(sent.project)}'.`, steps: [] }, 404)
+    published.push({ project: project.id, body: sent })
+    const target = String(sent.target)
+    const gateway = target === GATEWAY
+    const record = (outcome: string, answer: Record<string, unknown> | null, error: string | null) => {
+      const kept = { id: `deploy-${counter}`, workspace_server: sent.workspaceServer, project: project.id, workspace: sent.workspace, build: sent.build, item: gateway ? 'model' : 'package', kind: project.kind,
+        target, target_name: target, product: gateway ? 'gateway' : 'runner', route: gateway ? 'model' : 'package', name: project.id, channel: gateway ? null : sent.channel ?? null,
+        version: answer ? 1 : null, mode: gateway || !answer ? null : sent.serve ? 'serve' : 'stage', signature: answer ? 'verified' : null, deployed_by: 'tester', deployed_at: stamp(), outcome, error }
+      deploys.unshift(kept)
+      return kept
+    }
+    const steps = [`Read build ${String(sent.build)} of ${project.id}/${String(sent.workspace)} from Workspace server.`, 'Read the files of the build and checked each against its SHA-256.']
+    if (project.kind === 'store' && fake.adoptRefusal && !(Array.isArray(sent.adopt) && sent.adopt.includes(fake.adoptRefusal))) {
+      const error = `The Gateway refused the model ${project.id} on the data source '${fake.adoptRefusal}' (400): it was made by hand. Publish again with "adopt".`
+      return json(route, { error, steps, adopt: { data_source: fake.adoptRefusal, made_by: 'hand' }, deploy: record('refused', null, error) }, 409)
+    }
+    const answer = gateway
+      ? { target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.dataSource ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] }
+      : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified' }
+    return json(route, { steps, deployed: answer, deploy: record('ok', answer, null) })
+  })
 
   await page.route(`**/relay/${SERVER}/api/v1/**`, async (route) => {
     const request = route.request()
@@ -161,10 +204,11 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
         publishes: b.publishes,
       })
     }
+    // the Workspace server's own publish, with its publisher key: the Builds tab no longer calls it (the Store project's Deploy tab still stages through it)
     if (rest[0] === 'builds' && rest[2] === 'publish' && method === 'POST') {
       const b = w.builds.find((x) => x.id === rest[1])!
       const sent = JSON.parse(body) as Record<string, unknown>
-      published.push({ project: project.id, body: sent })
+      workspacePublishes.push({ project: project.id, body: sent })
       if (project.kind === 'store' && fake.adoptRefusal && !(Array.isArray(sent.adopt) && sent.adopt.includes(fake.adoptRefusal)))
         return json(route, { error: `The Gateway refused the model ${project.id} on the data source '${fake.adoptRefusal}' (400): it was made by hand. Publish again with "adopt".`, steps: ['Asked the Gateway for the version it serves.'], adopt: { data_source: fake.adoptRefusal, made_by: 'hand' } }, 409)
       const answer = project.kind === 'store' ? { target: sent.target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.data_source ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] } : { target: sent.target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'served' : 'staged', changed: true }
@@ -174,7 +218,7 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     return json(route, { error: 'There is no such call.' }, 404)
   })
 
-  return { published, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
+  return { published, workspacePublishes, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
 }
 
 function buildSummary(w: Workspace, b: Build) {
