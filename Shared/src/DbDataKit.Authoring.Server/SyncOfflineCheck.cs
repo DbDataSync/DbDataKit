@@ -115,6 +115,18 @@ public static class SyncOfflineCheck
         return run.Found;
     }
 
+    /// <summary>
+    /// How a connection's driver reads a native type and which dialect writes its DDL, as the engine resolves the driver from the connection file:
+    /// a built-in engine, Flight SQL (an ANSI type name first, then the dialect of the engine behind it), or a <c>driver.yaml</c> of the draft. The
+    /// reason instead when the draft does not say (a compiled driver, a connection file that does not read).
+    /// </summary>
+    internal static (Sql.SqlDialect? Dialect, Func<string, TypeMapping<CanonicalType>>? ReadType, string? Unknown) TypesOf(string root, string connection)
+    {
+        var info = new Run(root, new CatalogCacheFile("", new Dictionary<string, CacheConnection>())).Connection(connection);
+        if (info is null) return (null, null, $"config/connections/{connection}.yaml does not name an engine");
+        return (info.Dialect, info.ToCanonical, info.Unchecked ?? (info.ToCanonical is null ? "its types are not known offline" : null));
+    }
+
     private sealed record Side(string Connection, string Database, string Schema, string Table, string? Query, string? Filter, int Line, int FilterLine, int TableLine)
     {
         public TableRef Ref => new() { ConnectionName = Connection, Database = Database, Schema = Schema, Table = Table };
@@ -188,7 +200,7 @@ public static class SyncOfflineCheck
             return descriptors;
         }
 
-        private ConnectionInfo? Connection(string name)
+        internal ConnectionInfo? Connection(string name)
         {
             if (connections.TryGetValue(name, out var known)) return known;
             ConnectionInfo? info = null;
