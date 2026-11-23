@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { gatewayDirectory, gatewayUrl } from '../playwright.config'
 import { signInNewAdmin, signInNewPerson } from './people'
 
-// A Gateway's entries in the console's navigation (DbDataKit/README.md, "Finding a screen: the navigation"): Overview, then the groups Serving, Access
+// A Gateway's entries in the console's navigation: Overview, then the groups Serving, Access
 // and Server, nested under the Gateway's name; a viewer sees none of the pages that answer "This screen is for administrators". It uses the test Gateway
 // of `playwright.config.ts` (the one `first-run.spec.ts` pairs as "Gateway one"), and pairs it with a new code when no story before it did. It signs in
 // new people, so it sorts after `first-run` and `identity-home`.
