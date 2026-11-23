@@ -262,6 +262,11 @@ A SQL Server `tinyint` becomes `tinyint` on SQL Server, `tinyint unsigned` on My
 precision becomes `numeric` on PostgreSQL and `decimal(38,9)` elsewhere, with a note in the provisioning plan. A Flight SQL column is read by the
 names its client gives Arrow types (the shared `flightsql` dialect), then by the dialect of the engine behind the server when the connection names one.
 
+**Interval and array columns are not replicated.** A PostgreSQL or DuckDB `interval`, an Oracle interval and an array or list column have a type in
+the shared tables, but Sync's readers and writers do not carry their values. Provisioning and the Workspace's offline check report such a column with
+"Sync does not replicate interval columns (interval); leave the column out, or give it a transform that reads it as text". Leave it out of the
+mapping, or add a transform that reads it as text.
+
 ## Worked example: a descriptor driver, with no rebuild
 
 **For a real MySQL or MariaDB replication, use the built-in `MySql` driver above instead** — it has

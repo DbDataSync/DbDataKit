@@ -234,16 +234,6 @@ of a set that uses the old names, and Sync's type is deleted. Recommendation: A,
 
 Answer from the owner, 2026-11-23: P: 28, but no extra check (option B without the check that names each script using the old names)
 
-### SYNCAUTHORING-P29: interval and list columns in Sync (default, awaiting the owner)
-
-The shared tables read PostgreSQL's and DuckDB's `interval`, Oracle's intervals and list types; Sync's readers, staging and writers do not carry
-those values, so Sync reads such a column as unmappable, with the note "Sync does not replicate interval columns (interval); leave the column out,
-or give it a transform that reads it as text". Scenario: Ana maps `ops.public.job` with a `duration interval` column into PostgreSQL. Provisioning
-and the offline check both say the column cannot be replicated. Option A, as built. Option B, replicate an interval between engines that have one
-(PostgreSQL, DuckDB, Oracle), once the readers and writers carry it. Recommendation: A until a set needs B.
-
-Answer from the owner, 2026-11-23: as recommended (A)
-
 ### SYNCAUTHORING-P30: the JDBC driver's types (default, awaiting the owner)
 
 The JDBC driver (pgJDBC) reads PostgreSQL's catalog names, and its dialect now reads and writes them through the shared `postgres` table, where it
