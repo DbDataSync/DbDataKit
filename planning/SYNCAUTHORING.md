@@ -300,6 +300,8 @@ such a type itself (history columns, Flight SQL, descriptors), which also turns 
 Option C, the shared tables stay and Sync takes `datetime(0)` on MySQL. Recommendation: A, since a missing precision should not lose the fractions a
 value may carry; the ANSI `time` default (0) follows the answer to SYNCAUTHORING-P27.
 
+Answer from the owner, 2026-11-23: A
+
 ### SYNCAUTHORING-P24: a decimal with no precision (awaiting the owner)
 
 PostgreSQL's `numeric` with no precision reads as a decimal with no precision or scale. Sync then fills in 18 and 0, so every target gets
