@@ -3,6 +3,7 @@ import { ErrorBanner, Link, useNavigate } from '@dbdatakit/shell'
 import { designerPath, filesPath, useDraft } from '@dbdatakit/workspace'
 import { taskPath } from '../model'
 import { useSyncDraft, type FileProblem } from '../useSyncDraft'
+import { PublishCard } from '../replication/PublishCard'
 import { OverviewPanel } from './OverviewPanel'
 import { TableMappingsPanel } from './TableMappingsPanel'
 
@@ -18,8 +19,8 @@ export const tabOf = (rest: string): 'overview' | 'mappings' => (rest === 'mappi
 /**
  * A replication's page in the Designer: the breadcrumbs, the tabs Overview and Table Mappings, and the chrome. **Enabled** changes `enabled` of
  * the draft's `task.yaml` (it takes effect when the set is published); **Save settings** saves the task file; **Delete** removes the replication's
- * folder from the draft, after asking twice. Every edit on the page is an unsaved edit of the draft, the same one Files shows. Run controls and the
- * rail of a running replication are the Runner's, not the Designer's.
+ * folder from the draft, after asking twice. Every edit on the page is an unsaved edit of the draft, the same one Files shows. The rail holds
+ * **Build and publish…** (`PublishCard`); run controls and the status of a running replication are the Runner's, not the Designer's.
  */
 export function ReplicationPage({ project, id, replication, rest }: { project: string; id: string; replication: string; rest: string }) {
   const draft = useDraft()
@@ -110,6 +111,9 @@ export function ReplicationPage({ project, id, replication, rest }: { project: s
           {task && tab === 'mappings' && (
             <TableMappingsPanel project={project} id={id} replication={replication} model={model} rest={rest === 'mappings' ? '' : rest.slice('mappings/'.length)} />
           )}
+        </div>
+        <div className="detail-rail" data-testid="sd-rail">
+          <PublishCard project={project} id={id} />
         </div>
       </div>
     </div>
