@@ -482,6 +482,37 @@ jobs:
           name: suite-install-logs-${{ matrix.owner }}
           path: ${{ runner.temp }}/suite-scoop/logs/*.txt
 
+  suite-single-server-windows:
+    # `dbdatakit setup single-server` on a real Windows machine from this dry run's zips, extracted with no Scoop and no MSI: every service registered as
+    # NT SERVICE\<name>, started and joined, the program folders closed to writes by Users, a second run with nothing to do, a failed start (a held port)
+    # printed and named and finished by the next run, the switch on each registered command line, and --stop (dist/tests/suite-single-server-e2e.ps1).
+    # Written without a Windows machine: its first run is its proof.
+    if: ${{ inputs.dry_run && !cancelled() && needs.verify.result == 'success' }}
+    needs: [guard, verify]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: The .NET 10 runtime for every account (the services do not read the runner's per-user install)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Runtime aspnetcore -Channel 10.0 -InstallDir "$env:ProgramFiles\dotnet"
+          # dotnet-install.ps1 is a script, not a program: it throws on failure and leaves $LASTEXITCODE unset, so the check is for the result
+          if (-not (Test-Path "$env:ProgramFiles\dotnet\shared\Microsoft.AspNetCore.App")) { throw "the ASP.NET Core runtime was not installed" }
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release
+      - name: Set up the machine with dbdatakit setup single-server
+        shell: pwsh
+        run: ./dist/tests/suite-single-server-e2e.ps1 -Packages "$PWD\release" -Version "${{ needs.guard.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: suite-single-server-logs
+          path: ${{ runner.temp }}/suite-single-server/logs/*.txt
+
   suite-install-linux:
     # The four services on a real Linux machine with systemd, from this dry run's packages: each product's install.sh --system makes the service's system
     # user in the group dbdatakit and its unit, a second run changes nothing, each service starts as its own user and owns everything in its folders, and a
@@ -504,3 +535,5 @@ jobs:
           path: release
       - name: Install, start and check the four services with install.sh --system
         run: dist/tests/suite-systemd-e2e.sh "$PWD/release" "${{ needs.guard.outputs.version }}"
+      - name: Set up the machine with dbdatakit setup single-server (registered, joined, a failed start named, --stop)
+        run: dist/tests/suite-single-server-e2e.sh

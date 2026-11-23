@@ -52,62 +52,11 @@ public static class RunnerService
     public static Noun Noun(RunnerServiceEnvironment env) =>
         HostingNouns.Service(new ServiceCommand(Context(env), env.Scm, env.Acl, env.Elevation, null, true));
 
-    public static ServiceCommandContext Context(RunnerServiceEnvironment env)
-    {
-        var installDirectory = Path.GetDirectoryName(env.BinaryPath) ?? env.BinaryPath;
-        var admin = new AclRule(LayoutPrincipal.Administrators, AccessRights.Full);
-        var system = new AclRule(LayoutPrincipal.System, AccessRights.Full);
-        AclRule Svc(AccessRights r) => new(LayoutPrincipal.ServiceAccount, r);
+    /// <summary>The Runner's registration, as the suite's registrations are made (<see cref="SuiteServiceRegistration"/>).</summary>
+    public static ServiceCommandContext Context(RunnerServiceEnvironment env) =>
+        SuiteServiceRegistration.Context(SuiteServices.Runner, env.BinaryPath, env.DefaultDataDirectory, env.PrincipalResolver, RunnerServer.Version);
 
-        var layout = DirectoryLayout.Create(RegistrationName,
-        [
-            new LayoutEntry(LayoutRole.InstallRoot, installDirectory, new AclSpec(false, [admin, system, Svc(AccessRights.ReadExecute)]),
-                "Binaries and the task host; the service can read and run them but not change them."),
-            // the install makes only this folder, owned by the Administrators group; the service creates everything inside it at its first start
-            // Design: docs/install.md#a-service-owns-its-data
-            new LayoutEntry(LayoutRole.Data, env.DefaultDataDirectory, new AclSpec(true, [admin, system, Svc(AccessRights.Modify)], LayoutPrincipal.Administrators),
-                "The server's state, certificate, package cache and scratch space; Users have no access."),
-        ]);
-
-        return new ServiceCommandContext
-        {
-            ServiceName = RegistrationName,
-            DisplayName = DisplayName,
-            Description = Description,
-            BinaryPath = env.BinaryPath,
-            Version = RunnerServer.Version,
-            // the service runs the server, with its directory named so it does not depend on the account's profile
-            Arguments = ["server", "run", "--repo", env.DefaultDataDirectory],
-            Layout = layout,
-            PrincipalResolver = env.PrincipalResolver,
-            SystemdUnit = () => UnitOptions("dbdatarunner", env.BinaryPath.StartsWith('/') ? env.BinaryPath : "/opt/dbdatarunner/dbdatarunner"),
-            StartMode = ServiceStartMode.Automatic,
-            Failure = new FailurePolicy([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)], TimeSpan.FromDays(1)),
-            DataDirectoryArgument = path => ["--repo", path],
-            StartupService = SuiteServices.Runner,
-        };
-    }
-
-    public static SystemdUnitOptions UnitOptions(string name, string executable) => new()
-    {
-        Name = name,
-        Description = SuiteServices.Runner.Description,
-        ExecStart = $"{executable} server run --repo /var/lib/dbdatakit/{Folder}",
-        WorkingDirectory = executable[..executable.LastIndexOf('/')],
-        // the system user install.sh --system makes, in the group dbdatakit; systemd makes /var/lib/dbdatakit/runner and /var/log/dbdatakit/dbdatarunner for it at
-        // each start, owned by that user and closed to every other one, so the service creates everything inside them as itself
-        // Design: docs/install.md#a-service-owns-its-data
-        DynamicUser = false,
-        User = SuiteServices.Runner.LinuxUser,
-        Group = SuiteServices.LinuxGroup,
-        StateDirectories = [$"dbdatakit/{Folder}"],
-        StateDirectoryMode = "0700",
-        LogsDirectories = [$"dbdatakit/{SuiteServices.Runner.LogFolder}"],
-        LogsDirectoryMode = "0700",
-    };
-
-    /// <summary>The runner's folder under <c>/var/lib/dbdatakit</c>, the Linux service's data folder (<see cref="SuiteEnvironment.MachineFolder"/>).</summary>
-    private const string Folder = RunnerSettings.ServiceName;
+    public static SystemdUnitOptions UnitOptions(string name, string executable) => SuiteServiceRegistration.UnitOptions(SuiteServices.Runner, executable, name);
 
     // ---- cert
 
