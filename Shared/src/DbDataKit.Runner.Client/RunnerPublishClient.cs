@@ -99,8 +99,8 @@ public sealed record ClientRun(Guid Id, string Task, int Attempt, string Outcome
 /// <summary>One line of a run's log as the runner holds it.</summary>
 public sealed record ClientLogLine(long Id, DateTimeOffset At, string Level, string? Item, string Message);
 
-/// <summary>A completed step of a task's run: its key, when it started and completed, and its result as JSON text (null for a step that has none).</summary>
-public sealed record ClientStep(string Key, DateTimeOffset Started, DateTimeOffset? Completed, string? Result);
+/// <summary>A completed step of a task's run: its key, when it started and completed, its result as JSON text (null for a step that has none) and, for a streamed result, the payload <c>StepPayloadAsync</c> reads.</summary>
+public sealed record ClientStep(string Key, DateTimeOffset Started, DateTimeOffset? Completed, string? Result, Guid? Payload = null);
 
 /// <summary>One scheduling decision of an observed task: <paramref name="Source"/> is <c>runner</c> (would have queued) or <c>old</c> (the product queued).</summary>
 public sealed record ClientDecision(string Source, DateTimeOffset At, int Missed, bool Paused);
@@ -516,7 +516,8 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         var query = $"limit={limit}" + (before is { } b ? $"&before={Uri.EscapeDataString(b.UtcDateTime.ToString("O"))}" : "") + (key is null ? "" : $"&key={Uri.EscapeDataString(key)}");
         using var response = await link.SendAsync(HttpMethod.Get, TaskPath(package, channel, task) + "/steps/" + Uri.EscapeDataString(step) + "?" + query, null, ct);
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to read the steps {step} of {package}/{channel}/{task}", ct);
-        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["steps"]!.AsArray().Select(s => new ClientStep((string)s!["key"]!, Time(s["started"])!.Value, Time(s["completed"]), s["result"]?.ToJsonString()))];
+        return [.. JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!["steps"]!.AsArray().Select(s => new ClientStep((string)s!["key"]!, Time(s["started"])!.Value, Time(s["completed"]), s["result"]?.ToJsonString(),
+            Guid.TryParse((string?)s["payload"], out var payload) ? payload : null))];
     }
 
     /// <summary>

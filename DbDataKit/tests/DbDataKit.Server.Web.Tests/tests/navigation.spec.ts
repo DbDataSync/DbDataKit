@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signInNewAdmin, signInNewPerson } from './people'
 
-// The console's navigation (DbDataKit/README.md, "Finding a screen: the navigation"): Home, six named groups of labelled entries, Docs; every entry opens
+// The console's navigation: Home, six named groups of labelled entries, Docs; every entry opens
 // its page with that entry lit; a button collapses it to the icon rail, the browser keeps the choice, and a window under 1000 pixels starts collapsed; a
 // viewer sees no administrators' entry and no group left empty. It signs in new people (`user invite`), so it sorts after `first-run` and `identity-home`;
 // it needs no server but the console, so it takes no port.

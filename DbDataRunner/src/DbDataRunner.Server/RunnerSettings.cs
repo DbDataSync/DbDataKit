@@ -111,6 +111,9 @@ public sealed record RunnerSettings(string Directory, Uri Listen)
     /// <summary>The task host to start for an assembly package; null: the one published beside this program (<see cref="RunnerTaskHost"/>).</summary>
     public string? TaskHostPath { get; init; }
 
+    /// <summary>The folder of the built-in packages' files (<c>builtin/</c>); null: the one published beside this program.</summary>
+    public string? BuiltinDirectory { get; init; }
+
     /// <summary>A name for the instance's group; instances that share a database and a group name share their queue, instances and pairings.</summary>
     public string Group { get; init; } = RunnerState.DefaultGroup;
 
