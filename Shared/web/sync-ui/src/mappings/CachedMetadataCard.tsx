@@ -1,10 +1,15 @@
+import { useState } from 'react'
+import { useDraft } from '@dbdatakit/workspace'
+import { RefreshPanel } from '../components/RefreshPanel'
 import { useReadLine } from '../metadata'
 import type { ColumnMetadata, ResolvedRef, TableMappingConfig } from '../types'
 
 /**
  * The mapping's own picture of its two tables (`sourceColumns` and `targetColumns` of the mapping file), next to what the draft's catalog cache now
  * says of the same tables: the columns are named where the two differ, so a person sees which columns moved rather than a count to go and check.
- * The mapping's picture changes only when its columns are written (a table picked, Create mappings), never by a look.
+ * The mapping's picture changes only when its columns are written (a table picked, Create mappings), never by a look. **Refresh** on a side reads
+ * that one table again from a Runner channel and shows what changed before the cache is replaced; accepted, the comparison here is against the new
+ * cache, and the mapping's own columns stay as they were.
  */
 export function CachedMetadataCard({ mapping, source, target, sourceNow, targetNow }: {
   mapping: TableMappingConfig
@@ -23,8 +28,8 @@ export function CachedMetadataCard({ mapping, source, target, sourceNow, targetN
         <span className="card-note">the columns this mapping records of its tables, against the draft's catalog cache</span>
       </div>
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <SideRow label="Source" cached={mapping.sourceColumns} now={sourceNow} read={sourceRead} />
-        <SideRow label="Target" cached={mapping.targetColumns} now={targetNow} read={targetRead} />
+        <SideRow label="Source" cached={mapping.sourceColumns} now={sourceNow} read={sourceRead} side={source} />
+        <SideRow label="Target" cached={mapping.targetColumns} now={targetNow} read={targetRead} side={target} />
       </div>
     </div>
   )
@@ -45,17 +50,29 @@ export function columnDifference(cached: ColumnMetadata[], now: ColumnMetadata[]
   return parts.length === 0 ? 'the same as the catalog cache' : `the catalog cache has ${parts.join(', ')}`
 }
 
-function SideRow({ label, cached, now, read }: { label: string; cached: ColumnMetadata[] | undefined; now: ColumnMetadata[] | undefined; read: string | null }) {
+function SideRow({ label, cached, now, read, side }: { label: string; cached: ColumnMetadata[] | undefined; now: ColumnMetadata[] | undefined; read: string | null; side: ResolvedRef }) {
+  const draft = useDraft()
+  const [refreshing, setRefreshing] = useState(false)
   const count = cached?.length ?? 0
   const id = label.toLowerCase()
+  const table = side.table ? { schema: side.schema, name: side.table } : undefined
   return (
-    <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }} data-testid={`cached-metadata-${id}`}>
-      <span style={{ font: '500 11.5px var(--ui)', color: 'var(--ink-4)', minWidth: 54 }}>{label}</span>
-      <span className="mono">{count} {count === 1 ? 'column' : 'columns'}</span>
-      <span className="faint" data-testid={`cached-metadata-${id}-outcome`}>
-        {now === undefined ? 'the catalog cache does not have this table' : count === 0 ? 'none recorded yet' : columnDifference(cached ?? [], now)}
-      </span>
-      {read && <span className="hint">catalog {read}</span>}
+    <div>
+      <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }} data-testid={`cached-metadata-${id}`}>
+        <span style={{ font: '500 11.5px var(--ui)', color: 'var(--ink-4)', minWidth: 54 }}>{label}</span>
+        <span className="mono">{count} {count === 1 ? 'column' : 'columns'}</span>
+        <span className="faint" data-testid={`cached-metadata-${id}-outcome`}>
+          {now === undefined ? 'the catalog cache does not have this table' : count === 0 ? 'none recorded yet' : columnDifference(cached ?? [], now)}
+        </span>
+        {read && <span className="hint">catalog {read}</span>}
+        {side.connectionName && table && draft.canEdit && (
+          <button type="button" className="btn btn-sm" disabled={refreshing} onClick={() => setRefreshing(true)} data-testid={`cached-metadata-${id}-refresh-button`}
+            title={`Read ${side.schema ? `${side.schema}.` : ''}${side.table} of ${side.connectionName} again from a Runner channel`}>Refresh</button>
+        )}
+      </div>
+      {refreshing && side.connectionName && table && (
+        <RefreshPanel key={`${side.connectionName}/${table.schema}.${table.name}`} connection={side.connectionName} table={table} onClose={() => setRefreshing(false)} testId={`cached-metadata-${id}-refresh`} />
+      )}
     </div>
   )
 }

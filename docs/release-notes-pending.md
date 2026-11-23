@@ -125,6 +125,39 @@ release moves the entries into its notes and empties this file.
 ## A sync project's Designer edits a replication
 
 - **New: a replication's page in the Designer of a Workspace sync project.** It has the tabs Overview (the source and target connections and databases, the schedule) and Table Mappings (the source's tables with **Create mappings**, and a mapping's two sides and **Column Mapping**), with **Enabled**, **Save settings** and **Delete** in its chrome. The databases, tables and columns are those of the draft's `catalog-cache.yaml`. Each change is an unsaved edit of the draft's file, the same one Files shows, and keeps the file's comments and the keys the page does not show. What to do: nothing; everything the page does not offer is still edited in Files.
+- **New: the Workspace answers a sync draft's authoring questions in its own process.** `GET .../sync/script-slots`, `POST .../sync/capabilities`, `POST .../sync/inferred-columns` and `POST .../sync/bulk-create` (author) answer the script slots, what a connection's driver offers with the key each reader and writer needs, a mapping's inferred target types and natural key, and the files Create mappings makes, from Sync's libraries and the draft's `catalog-cache.yaml`, with no database. A question may carry the person's unsaved edits. What to do: nothing.
+- **New: the rest of a table mapping in the Designer.** A mapping's editor has the source filter, **Custom query, not a table**, and the tabs Notes, Column Mapping, Custom Transforms, Bulk Load, Provisioning (the mapping's part of the replication's plan, its number of statements on the tab), Pipeline, Diagnostics and Verify. **Create mappings** asks the Workspace for the files (`sync/bulk-create`) and lists what is inferred for each new mapping; Column Mapping shows each target type nobody set as the inferred one, in grey, and the type is not written into the file. A mapping named in the replication's provisioning plan opens that mapping's Provisioning tab. What to do: nothing; the column pairs of a query source are still written in Files.
+- **New: the draft's check warns when an engine's own reader or writer would refuse a mapping for want of a key.** `MsSqlChangeTracking` and `PgLogicalSlot` need the source's primary key in `catalog-cache.yaml`, `MsSqlMerge` and `MsSqlMergeReconcile` the target's. Before, the check said it could not tell. What to do: add the key, or pick a reader or writer that needs none.
+
+## Column types: one set of answers for every product
+
+- **Fixed: Sync no longer reads SQL Server's `tinyint` (0 to 255) as a signed 8-bit integer, nor MySQL's unsigned integers as signed ones.** A
+  replication into MySQL or DuckDB created a signed `tinyint`, and values from 128 to 255 failed on write; MySQL `int unsigned` and `bigint unsigned`
+  became `int` and `bigint`, and values above their signed maximum failed. Sync now writes `tinyint` on SQL Server, `tinyint unsigned` on MySQL and
+  `utinyint` on DuckDB, and the next wider signed type on PostgreSQL and Oracle. A target made before shows a type change in its next provisioning
+  plan (for example SQL Server `smallint` to `tinyint`); apply it or leave it. DuckDB's `UTINYINT` to `UBIGINT` are written back as the same type
+  where the target has unsigned types, where Sync wrote `smallint` to `decimal(20,0)`.
+- **Fixed: a decimal with no stated precision (PostgreSQL's `numeric`) is no longer rounded to a whole number.** Sync created `numeric(18,0)` or
+  `decimal(18,0)`, so 12.75 arrived as 13; Transfer and the Store created `decimal(18,0)` on SQL Server and `decimal(10,0)` on MySQL. Every product now
+  writes PostgreSQL's `numeric` on PostgreSQL and `decimal(38,9)` (`number(38,9)` on Oracle) elsewhere, with a note. A Sync target made before shows a
+  type change in its next provisioning plan.
+- **Changed: a time or timestamp with no stated precision is `time(6)`, `datetime(6)` or `timestamp(6)` on MySQL in every product**, where Transfer
+  and the Store wrote whole seconds (Sync already wrote microseconds).
+- **Changed: SQL Server's and MySQL's `binary(n)` stay fixed-length in Transfer and the Store too** (Sync already kept them): a `binary(16)` copied to
+  SQL Server or MySQL is created as `binary(16)`, where it was `varbinary(16)`. The catalog shows such a column as `binary(fixed,16)`, and the
+  Gateway reads an Arrow fixed-size binary column as one, with no note.
+- **Changed, for authors of Sync scripts and `driver.csx` files: a column type is the shared `DbDataKit.Dialect.CanonicalType`; Sync's own
+  `CanonicalType` and `CanonicalTypeKind` are gone.** A lifecycle hook, a `driver.csx` provisioner (`ProvisioningColumn.Type`) and a `driver.csx`
+  dialect that used them no longer compile until they are changed; the namespace `DbDataKit.Dialect` is imported for every script, so no `using`
+  is needed. What to change: `CanonicalTypeKind.X` becomes `CanonicalKind.X` (`CanonicalTypeKind.Unmappable` is `CanonicalKind.Unmappable`);
+  `IsUnicode` becomes `Unicode == true`; `IsMax` becomes `Length is null`; `IsFixed` becomes `Fixed == true`; `CanonicalTypeKind.TimestampTz`
+  becomes `CanonicalKind.Timestamp` with `TimeZone == true` (written `timestamp(tz)`); a reading's note (`SourceNote`) is no longer on the type.
+  A `driver.csx` dialect implements `ReadColumnType` and `WriteColumnType` in place of `ToCanonicalType` and `RenderColumnType`. A hook's
+  `IScriptDialect.ToCanonicalType` and `RenderColumnType` keep their names.
+- **Changed: a generic Arrow Flight SQL target gets `TIME(6)` and `TIMESTAMP(6)`** for a time or timestamp with no stated precision, where Sync
+  wrote `TIME` and `TIMESTAMP`; an Oracle target gets `timestamp(s)` for a time in Transfer and the Store too, where they wrote an interval.
+- **Changed: Sync's JDBC driver reads and writes PostgreSQL's types through the same table as the PostgreSQL driver**, so a `bytea` or `time`
+  column it refused before is provisioned, and a `varchar` with no length becomes `text`, where it was `varchar(255)`.
 
 ## Since the last release before the 2026-11-13 beta
 

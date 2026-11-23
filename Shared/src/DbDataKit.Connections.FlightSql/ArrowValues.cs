@@ -164,7 +164,7 @@ internal static class ArrowValues
     };
 
     /// <summary>
-    /// The ANSI name for an Arrow type, in the spelling <c>AnsiDialect.ToCanonicalType</c> reads back.
+    /// The ANSI name for an Arrow type, in the spelling the shared <c>flightsql</c> dialect reads back.
     /// Unsigned types go one size up (nothing in ANSI SQL is unsigned) and anything with no scalar
     /// equivalent is reported as <c>varchar</c>, matching what <see cref="ValueAt"/> actually returns.
     /// </summary>

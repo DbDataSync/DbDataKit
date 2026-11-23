@@ -74,7 +74,10 @@ public sealed class WatermarkReader(SqlDialect dialect, ISegmentValueBinder bind
 
     /// <summary>Required, and it is: without it this reader cannot run at all, which an operator
     /// previously found out on the first pass rather than while choosing the Kind.</summary>
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
+    public IReadOnlyList<ParameterDescriptor> Parameters => Options;
+
+    /// <summary>The settings of every watermark reader, whatever its engine: the built-in drivers' capability table names them.</summary>
+    public static IReadOnlyList<ParameterDescriptor> Options { get; } =
     [
         new()
         {

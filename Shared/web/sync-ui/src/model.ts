@@ -1,7 +1,7 @@
 import { parseYaml, removeAt, setAt, toYaml, type YamlPath } from '@dbdatakit/shell'
 import { SYNC_TASK_CURRENT, withCurrentTaskVersion } from '@dbdatakit/workspace'
 import type {
-  ColumnMapping, ConnectionView, EndpointRef, ReplicationTaskConfig, RelationshipConfig, SourceTableSpec, TableMappingConfig, TableSpec,
+  ColumnMapping, ConnectionView, EndpointRef, ParameterDescriptor, ReplicationTaskConfig, RelationshipConfig, ScriptView, SourceTableSpec, TableMappingConfig, TableSpec,
 } from './types'
 
 /** The newest format of a table mapping this reads and writes (`ConfigSchema.MappingCurrent`). */
@@ -115,6 +115,26 @@ export function readConnection(path: string, text: string): Read<ConnectionView>
   return { value: { name: str(raw.name, fallback), path, engine: str(raw.engine), database: strOrNull(address.database), scripts }, problem: null }
 }
 
+/** The manifests of the set's scripts (`config/scripts/<name>.yaml`), from the draft's paths. */
+export const scriptPathsOf = (paths: readonly string[]): string[] =>
+  paths.filter((p) => /^config\/scripts\/[^/]+\.ya?ml$/i.test(p)).sort()
+
+/** A script's manifest, read only: its name, the slot it fills, its declared parameters and whether it is enabled (absent is enabled). */
+export function readScript(path: string, text: string): Read<ScriptView> {
+  const read = parsed(path, text)
+  if (read.value === null) return read
+  const raw = read.value
+  const fallback = /([^/]+)\.ya?ml$/i.exec(path)?.[1] ?? ''
+  const parameters = maps(raw.parameters).flatMap((p): ParameterDescriptor[] => (typeof p.name === 'string' && p.name !== '' ? [{ ...p, name: p.name } as ParameterDescriptor] : []))
+  return {
+    value: {
+      name: str(raw.name, fallback), path, kind: str(raw.kind), language: str(raw.language, 'CSharp'),
+      description: strOrNull(raw.description), parameters, enabled: raw.enabled !== false,
+    },
+    problem: null,
+  }
+}
+
 const absent = (v: unknown) => v === null || v === undefined
 
 function same(a: unknown, b: unknown): boolean {
@@ -184,7 +204,12 @@ export function newTaskText(name: string, scheduling: { mode: 'Continuous'; freq
   }) + '\n'
 }
 
-/** A new mapping that states only its tables: the endpoints, provisioning, scripts and hooks follow the replication. */
+/**
+ * A new mapping that states only its tables: the endpoints, provisioning, scripts and hooks follow the replication. Each side is written as a mapping
+ * of its own, even when the caller passes one object for both: the writer would otherwise write the target as an alias of the source (`- *a1`),
+ * which a later edit of one side cannot change without the other.
+ */
 export function newMappingText(name: string, source: { schema: string; table: string }, target: { schema: string; table: string }): string {
-  return toYaml({ schemaVersion: SYNC_MAPPING_CURRENT, name, sources: [source], targets: [target], columnMappings: [] }) + '\n'
+  const side = (t: { schema: string; table: string }) => ({ schema: t.schema, table: t.table })
+  return toYaml({ schemaVersion: SYNC_MAPPING_CURRENT, name, sources: [side(source)], targets: [side(target)], columnMappings: [] }) + '\n'
 }

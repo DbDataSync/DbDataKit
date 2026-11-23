@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Globalization;
+using DbDataKit.Dialect;
 
 namespace DbDataSync.Core.Sql;
 
@@ -409,20 +410,18 @@ public abstract class SqlDialect
         CancellationToken cancellationToken) => write();
 
     /// <summary>
-    /// Translates one of this engine's native type specs (e.g. <c>"nvarchar(50)"</c>, the exact string
-    /// <c>ColumnMetadata.NativeType</c> carries) into the canonical intermediate a
-    /// provisioning plan uses to create a matching column on a *different* engine. See phase 25 —
-    /// <c>architecture/implementation/todo/phase-025-database-provisioning.md</c>.
+    /// One of this engine's native type specs (e.g. <c>"nvarchar(50)"</c>, the exact string <c>ColumnMetadata.NativeType</c> carries) as the
+    /// shared dialects' type, with how faithfully it was read. A built-in dialect reads it from the shared table of its engine
+    /// (<c>DbDataKit.Dialect</c>). A kind Sync does not replicate (an interval, a list) is unmappable, with a note.
     /// </summary>
-    public abstract CanonicalType ToCanonicalType(string nativeType);
+    public abstract TypeMapping<CanonicalType> ReadColumnType(string nativeType);
 
     /// <summary>
-    /// The reverse direction: renders this engine's DDL for a canonical type produced by (usually)
-    /// another engine's <see cref="ToCanonicalType"/>. Must not be called with
-    /// <see cref="CanonicalTypeKind.Unmappable"/> — a caller checks <see cref="CanonicalType.Kind"/>
-    /// and reports <c>Unsupported</c> before ever reaching a renderer.
+    /// This engine's DDL for a shared type (usually read by another engine's <see cref="ReadColumnType"/>), with <paramref name="sourceNote"/>
+    /// (what was already lost when the source column was read) joined to what writing it loses. Must not be called with an unmappable type: a
+    /// caller checks the kind and reports <c>Unsupported</c> first.
     /// </summary>
-    public abstract RenderedColumnType RenderColumnType(CanonicalType type);
+    public abstract RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null);
 }
 
 /// <summary>How auto-segmentation may divide a column's value space. Not a type system — only the four

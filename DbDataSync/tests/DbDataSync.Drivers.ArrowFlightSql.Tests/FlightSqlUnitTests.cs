@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data;
 using System.Reflection;
 using Apache.Arrow;
@@ -416,30 +417,41 @@ public sealed class DialectTests
     }
 
     [Theory]
-    [InlineData("bigint", CanonicalTypeKind.Int64)]
-    [InlineData("integer", CanonicalTypeKind.Int32)]
-    [InlineData("smallint", CanonicalTypeKind.Int16)]
-    [InlineData("tinyint", CanonicalTypeKind.Int8)]
-    [InlineData("boolean", CanonicalTypeKind.Boolean)]
-    [InlineData("real", CanonicalTypeKind.Float)]
-    [InlineData("double precision", CanonicalTypeKind.Double)]
-    [InlineData("decimal(18,2)", CanonicalTypeKind.Decimal)]
-    [InlineData("varchar", CanonicalTypeKind.String)]
-    [InlineData("varbinary", CanonicalTypeKind.Binary)]
-    [InlineData("date", CanonicalTypeKind.Date)]
-    [InlineData("time", CanonicalTypeKind.Time)]
-    [InlineData("timestamp", CanonicalTypeKind.Timestamp)]
-    [InlineData("timestamp with time zone", CanonicalTypeKind.TimestampTz)]
-    public void Reads_The_Ansi_Names_A_Flight_Column_Reports_Under_Every_Variant(string native, CanonicalTypeKind kind)
+    [InlineData("bigint", CanonicalKind.Int64)]
+    [InlineData("integer", CanonicalKind.Int32)]
+    [InlineData("smallint", CanonicalKind.Int16)]
+    [InlineData("tinyint", CanonicalKind.Int8)]
+    [InlineData("boolean", CanonicalKind.Boolean)]
+    [InlineData("real", CanonicalKind.Float)]
+    [InlineData("double precision", CanonicalKind.Double)]
+    [InlineData("decimal(18,2)", CanonicalKind.Decimal)]
+    [InlineData("varchar", CanonicalKind.String)]
+    [InlineData("varbinary", CanonicalKind.Binary)]
+    [InlineData("date", CanonicalKind.Date)]
+    [InlineData("time", CanonicalKind.Time)]
+    [InlineData("timestamp", CanonicalKind.Timestamp)]
+    [InlineData("timestamp with time zone", CanonicalKind.Timestamp)]
+    public void Reads_The_Ansi_Names_A_Flight_Column_Reports_Under_Every_Variant(string native, CanonicalKind kind)
     {
         foreach (var variant in ArrowFlightSqlDriver.Variants)
-            Assert.Equal(kind, For(variant.DriverType).ToCanonicalType(native).Kind);
+            Assert.Equal(kind, Read(For(variant.DriverType), native).Kind);
+    }
+
+    /// <summary>The dialect's reading, or the unmappable type when the dialect does not know the name.</summary>
+    private static CanonicalType Read(SqlDialect dialect, string native) =>
+        dialect.ReadColumnType(native) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+
+    [Fact]
+    public void A_Zoned_Timestamp_Keeps_Its_Time_Zone()
+    {
+        foreach (var variant in ArrowFlightSqlDriver.Variants)
+            Assert.True(Read(For(variant.DriverType), "timestamp with time zone").TimeZone);
     }
 
     [Fact]
     public void Decimal_Keeps_Its_Precision_And_Scale()
     {
-        var type = For(DriverIds.ArrowFlightSql).ToCanonicalType("decimal(18,2)");
+        var type = Read(For(DriverIds.ArrowFlightSql), "decimal(18,2)");
         Assert.Equal(18, type.Precision);
         Assert.Equal(2, type.Scale);
     }
@@ -448,8 +460,8 @@ public sealed class DialectTests
     public void Falls_Back_To_The_Named_Engines_Own_Type_Names()
     {
         // `nvarchar` is not an ANSI name; the SQL Server variant still understands it.
-        Assert.Equal(CanonicalTypeKind.String, For(DriverIds.ArrowFlightSqlMsSql).ToCanonicalType("nvarchar(50)").Kind);
-        Assert.Equal(CanonicalTypeKind.Unmappable, For(DriverIds.ArrowFlightSql).ToCanonicalType("nvarchar(50)").Kind);
+        Assert.Equal(CanonicalKind.String, Read(For(DriverIds.ArrowFlightSqlMsSql), "nvarchar(50)").Kind);
+        Assert.Equal(CanonicalKind.Unmappable, Read(For(DriverIds.ArrowFlightSql), "nvarchar(50)").Kind);
     }
 
     [Fact]
@@ -466,8 +478,8 @@ public sealed class DialectTests
 
         foreach (var type in types)
         {
-            var canonical = AnsiDialect.Instance.ToCanonicalType(ArrowValues.NativeTypeName(type));
-            Assert.NotEqual(CanonicalTypeKind.Unmappable, canonical.Kind);
+            var canonical = Read(AnsiDialect.Instance, ArrowValues.NativeTypeName(type));
+            Assert.NotEqual(CanonicalKind.Unmappable, canonical.Kind);
         }
     }
 }

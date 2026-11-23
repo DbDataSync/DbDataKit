@@ -243,7 +243,7 @@ internal sealed class JdbcDataReader : DbDataReader
 
     // Kind is deliberately Unspecified, not Local: DateTimeOffset.LocalDateTime stamps Kind.Local, but
     // every other engine's DateTime for a "timestamp without time zone" column in this repo carries
-    // Unspecified (see GenericValueBinder's own CanonicalTypeKind.Timestamp case) — a real parity bug
+    // Unspecified (see GenericValueBinder's own CanonicalKind.Timestamp case) — a real parity bug
     // phase 165V's own comparison-against-Npgsql test caught: same instant, different Kind, which
     // differs under DateTime.ToString("o") (WatermarkValue.Format's own round-trip format) even though
     // the wall-clock value is identical.

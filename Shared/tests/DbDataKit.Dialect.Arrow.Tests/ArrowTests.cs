@@ -87,7 +87,8 @@ public class ArrowTests
         Assert.Equal(CanonicalType.Time(3), ArrowTypeMap.FromArrow(new Time32Type(TimeUnit.Millisecond)).Result);
         Assert.Equal(CanonicalType.Timestamp(9), ArrowTypeMap.FromArrow(new TimestampType(TimeUnit.Nanosecond, (string?)null)).Result);
         Assert.Equal(CanonicalKind.List, ArrowTypeMap.FromArrow(new ListType(Int32Type.Default)).Result!.Kind);
-        Assert.Equal(Fidelity.Lossy, ArrowTypeMap.FromArrow(new FixedSizeBinaryType(16)).Fidelity);
+        Assert.Equal(Fidelity.Exact, ArrowTypeMap.FromArrow(new FixedSizeBinaryType(16)).Fidelity);
+        Assert.Equal(CanonicalType.Binary(16, @fixed: true), ArrowTypeMap.FromArrow(new FixedSizeBinaryType(16)).Result);
         Assert.Equal(Fidelity.Unmappable, ArrowTypeMap.FromArrow(NullType.Default).Fidelity);
     }
 

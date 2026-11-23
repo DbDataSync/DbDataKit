@@ -224,7 +224,7 @@ public sealed class MetadataQueriesYaml
 /// One <c>typeMap</c> value — either a bare kind name (<c>datetime: Timestamp</c>) or a mapping
 /// spelling out <see cref="Precision"/>/<see cref="Scale"/>/<see cref="Length"/>/<see cref="Max"/>/
 /// <see cref="Unicode"/>, whose values are either a literal (a fixed decimal(10,2)) or one of this
-/// entry's own key's placeholder names — see <see cref="DescriptorDialect.ToCanonicalType"/>.
+/// entry's own key's placeholder names — see <see cref="DescriptorDialect.ReadColumnType"/>.
 /// A custom <c>IYamlTypeConverter</c> (<see cref="TypeMapEntryYamlConverter"/>) reads both forms into
 /// this one class rather than needing two.
 /// </summary>

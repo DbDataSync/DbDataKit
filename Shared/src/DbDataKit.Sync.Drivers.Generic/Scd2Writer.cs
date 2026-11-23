@@ -60,7 +60,13 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
 
     public bool SupportsReconciliation => false;
 
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
+    public IReadOnlyList<ParameterDescriptor> Parameters => Options;
+
+    /// <summary>A row's versions are found by its natural key, stated or derived from the source's primary key.</summary>
+    public KeyNeed NeedsKey => KeyNeed.NaturalKey;
+
+    /// <summary>The settings of every SCD Type 2 writer, whatever its engine: the built-in drivers' capability table names them.</summary>
+    public static IReadOnlyList<ParameterDescriptor> Options { get; } =
     [
         new()
         {

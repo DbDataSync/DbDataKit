@@ -30,7 +30,10 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
     public bool SupportsPositionLog => true;
 
     /// <summary>Only the batch size: everything else this writer does is derived from the target.</summary>
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.MsSqlMerge;
+
+    /// <summary>MERGE matches on the target's primary key, every key column mapped (<see cref="MsSqlTargetShape.RequireMergeKey"/>).</summary>
+    public KeyNeed NeedsKey => KeyNeed.TargetKey;
 
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,

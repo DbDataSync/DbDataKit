@@ -109,8 +109,6 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Secrets.SecretStore))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.AnsiDialect))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.BucketableKind))]
-[assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.CanonicalType))]
-[assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.CanonicalTypeKind))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.CanonicalTypeSpec))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.ConnectionTimeouts))]
 [assembly: TypeForwardedTo(typeof(DbDataSync.Core.Sql.DriverFailures))]

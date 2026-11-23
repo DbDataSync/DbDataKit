@@ -70,18 +70,14 @@ public sealed class DuckDbDialect : SqlDialect
     /// <summary>
     /// DuckDB's type names, as <c>information_schema</c> and a result-set schema report them. It has
     /// one string family with no length bound and no narrow/wide distinction, so
-    /// <see cref="CanonicalType.IsUnicode"/> is always true and every string is
-    /// <see cref="CanonicalType.IsMax"/> unless a length was actually declared. Nested types — LIST,
-    /// STRUCT, MAP, UNION — fall through to <see cref="CanonicalTypeKind.Unmappable"/>: there is no
+    /// <see cref="CanonicalType.Unicode"/> is always true and every string has no
+    /// <see cref="CanonicalType.Length"/> unless a length was actually declared. Nested types — LIST,
+    /// STRUCT, MAP, UNION — are unmappable: there is no
     /// faithful scalar column on any target engine in scope, and guessing one would silently flatten
     /// data.
     /// </summary>
-    public override CanonicalType ToCanonicalType(string nativeType) => SharedTypes.ToSyncWideningUnsigned(Shared.ToCanonical(nativeType));
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => SharedTypes.Render(Shared, SharedTypes.MicrosecondsByDefault(type));
-
-    private static RenderedColumnType Faithful(string sql, CanonicalType type) => new(sql, type.SourceNote);
-
-    private static string Combine(CanonicalType type, string renderNote) =>
-        type.SourceNote is null ? renderNote : $"{type.SourceNote} {renderNote}";
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
+        DialectTypes.Write(Shared, type, sourceNote);
 }

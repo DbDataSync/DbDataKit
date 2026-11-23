@@ -1,39 +1,18 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi, type CheckDiagnostic, type ProvisioningPlan, type ProvisioningSide, type StagedRun, type ToolAnswer } from '../api'
-import { deployApi, useRunnerVersion } from '../deploys'
+import { useProvisioningApply } from '../designerData'
 import { replicationsOf } from '../syncSchemas'
 
-/** The step the Sync task `provision` records its report as. */
-export const AppliedStep = 'provision-applied'
-
-/**
- * Reads a run back until it ended (each `intervalMs`, at most `attempts` times); the last read when it has not ended by then. A run the Runner has queued but not started is not on its record yet: a read answered 404 is tried
- * again until the run is seen, `queuedAttempts` times at most.
- */
-export async function followStagedRun(read: () => Promise<StagedRun>, intervalMs = 1000, attempts = 600, queuedAttempts = 60): Promise<StagedRun> {
-  let run: StagedRun | null = null
-  for (let i = 0; run === null; i++) {
-    try { run = await read() }
-    catch (e) {
-      if (!(e instanceof ApiError && e.status === 404) || i + 1 >= queuedAttempts) throw e
-      await new Promise((r) => setTimeout(r, intervalMs))
-    }
-  }
-  for (let i = 1; i < attempts && !run.finished; i++) {
-    await new Promise((r) => setTimeout(r, intervalMs))
-    run = await read()
-  }
-  return run
-}
+export { AppliedStep, followStagedRun } from '../designerData'
 
 interface ReportStep { title?: string; succeeded?: boolean; error?: string | null }
 /** The statements a run of `provision` reports, each with whether it ran (the run's `provision-applied` step). */
 export const reportedSteps = (run: StagedRun): ReportStep[] =>
   (run.steps ?? []).flatMap((s) => ((s.result as { steps?: ReportStep[] } | null)?.steps ?? []))
 
-function RunResult({ run }: { run: StagedRun }) {
+export function RunResult({ run }: { run: StagedRun }) {
   return (
     <div className="card flush" style={{ marginTop: 8, padding: '6px 10px' }} data-testid="wsp-prov-run-result" data-outcome={run.outcome}>
       <div>Run <span className="mono">{run.id}</span> of version {run.version ?? '?'}: <span className={run.outcome === 'succeeded' ? '' : 'error'}>{run.finished ? run.outcome : `${run.outcome}, not ended yet; follow it on the Runner`}</span></div>
@@ -105,16 +84,8 @@ export function SyncProvisioningPanel({ project, id, paths }: { project: string;
   const [chosen, setChosen] = useState('')
   const replication = chosen !== '' && replications.includes(chosen) ? chosen : (replications[0] ?? '')
   const plan = useMutation({ mutationFn: (name: string) => workspaceApi.provisioningPlan(project, id, name) })
-  // the version the console's newest deploy of a build of this draft put on a Runner
-  const staged = useRunnerVersion(project, id)
-  const apply = useMutation({
-    mutationFn: async ({ mapping, action }: { mapping: string; action: string }) => {
-      const at = staged.data
-      if (!at) throw new Error('No build of this draft is staged on a Runner. Build it and publish it to a Runner (staged, not served); then apply.')
-      const started = await deployApi.run(at.deploy, 'provision', { replication, mapping, action, steps: '', repo_dir: 'repo' })
-      return followStagedRun(() => deployApi.runOf(at.deploy, started.run.run_id, AppliedStep))
-    },
-  })
+  // the version the console's newest deploy of a build of this draft put on a Runner, and the task provision of it
+  const { staged, apply } = useProvisioningApply(project, id)
   return (
     <div data-testid="wsp-prov">
       <div className="hint" style={{ marginBottom: 6 }}>The plan of a replication's tables, made offline from the catalog cache of this draft. Applying it runs DDL on a Runner, as the task provision of the version a build of this draft staged there.</div>
@@ -130,7 +101,7 @@ export function SyncProvisioningPanel({ project, id, paths }: { project: string;
           </div>
         )}
       <ErrorBanner error={plan.error} />
-      {plan.data && <ProvisioningPlanView answer={plan.data} onApply={staged.data && !apply.isPending ? (mapping, action) => apply.mutate({ mapping, action }) : undefined} />}
+      {plan.data && <ProvisioningPlanView answer={plan.data} onApply={staged.data && !apply.isPending ? (mapping, action) => apply.mutate({ replication, mapping, action }) : undefined} />}
       {apply.isPending && <div className="hint" data-testid="wsp-prov-applying">Applying on the Runner...</div>}
       <ErrorBanner error={apply.error} />
       {apply.data && <RunResult run={apply.data} />}

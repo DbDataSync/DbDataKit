@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using DbDataSync.Core.Config;
@@ -22,8 +23,8 @@ internal sealed class BracketDialect : SqlDialect
     public override (string Prefix, string Suffix) RenderTieSafeRowLimit(string parameterName) =>
         ($"TOP ({ParameterReference(parameterName)}) WITH TIES ", "");
 
-    public override CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => throw new NotSupportedException();
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => throw new NotSupportedException();
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => throw new NotSupportedException();
 }
 
 /// <summary>The other common shape: double-quoted identifiers and colon-prefixed placeholders whose
@@ -36,8 +37,8 @@ internal sealed class ColonDialect : SqlDialect
     public override string QuoteIdentifier(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
     public override string ParameterReference(string name) => $":{name}";
     public override string ParameterName(string name) => name;
-    public override CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => throw new NotSupportedException();
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => throw new NotSupportedException();
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => throw new NotSupportedException();
 }
 
 /// <summary>Records what it was asked to bind. Segment binding is provider-specific by design, so the
@@ -82,11 +83,11 @@ internal sealed class GenerousDialect : SqlDialect
     public override string QuoteIdentifier(string identifier) => $"\"{identifier}\"";
     public override string ParameterReference(string name) => $"${name}";
     public override int MaxParametersPerStatement => 65535;
-    public override CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => throw new NotSupportedException();
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => throw new NotSupportedException();
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => throw new NotSupportedException();
 }
 
-/// <summary>A dialect whose <see cref="RenderColumnType"/> is a simple, deterministic mapping — enough
+/// <summary>A dialect whose <see cref="WriteColumnType"/> is a simple, deterministic mapping — enough
 /// to test <see cref="CreateTargetTablePlanner"/>'s handling of Unmappable columns and fidelity
 /// warnings without depending on a real engine's dialect.</summary>
 internal sealed class FakeCanonicalDialect : SqlDialect
@@ -94,13 +95,13 @@ internal sealed class FakeCanonicalDialect : SqlDialect
     public static FakeCanonicalDialect Instance { get; } = new();
     public override string QuoteIdentifier(string identifier) => $"[{identifier.Replace("]", "]]")}]";
     public override string ParameterReference(string name) => $"@{name}";
-    public override CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
+    public override TypeMapping<CanonicalType> ReadColumnType(string nativeType) => throw new NotSupportedException();
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind switch
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) => type.Kind switch
     {
-        CanonicalTypeKind.Unmappable => throw new InvalidOperationException("Never called for Unmappable."),
-        CanonicalTypeKind.String when type.IsMax => new RenderedColumnType("TEXT", "No length bound at the target."),
-        CanonicalTypeKind.Decimal => new RenderedColumnType($"NUM({type.Precision},{type.Scale})", type.SourceNote),
-        _ => new RenderedColumnType(type.Kind.ToString().ToUpperInvariant(), type.SourceNote),
+        CanonicalKind.Unmappable => throw new InvalidOperationException("Never called for Unmappable."),
+        CanonicalKind.String when type.Length is null => new RenderedColumnType("TEXT", "No length bound at the target."),
+        CanonicalKind.Decimal => new RenderedColumnType($"NUM({type.Precision},{type.Scale})", sourceNote),
+        _ => new RenderedColumnType(type.Kind.ToString().ToUpperInvariant(), sourceNote),
     };
 }

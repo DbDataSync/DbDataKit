@@ -63,8 +63,11 @@ public static class LineageIdentity
 
     private static IdentifierRules Rules(string engine)
     {
-        // an engine with no dialect of its own (flightsql, jdbc, odbc) keeps the case it is given
-        return DialectCatalog.Builtin.TryGet(new EngineId(engine), out var dialect) && dialect is not null ? dialect.Identifiers : new IdentifierRules(IdentifierCase.Preserve, 128, new HashSet<string>());
+        // an engine with no dialect of its own (flightsql, jdbc, odbc) keeps the case it is given. The engine registry says which dialect an engine
+        // speaks: flightsql's says ansi, so the flightsql dialect, which only Sync's Flight SQL driver reads types with, never folds a name here
+        var preserve = new IdentifierRules(IdentifierCase.Preserve, 128, new HashSet<string>());
+        if (EngineRegistry.Builtin.Find(engine) is { } descriptor && !string.Equals(descriptor.Dialect, engine, StringComparison.OrdinalIgnoreCase)) return preserve;
+        return DialectCatalog.Builtin.TryGet(new EngineId(engine), out var dialect) && dialect is not null ? dialect.Identifiers : preserve;
     }
 
     private static (string Host, int? Port, string Database) Parts(ConnectionDefinition connection)

@@ -1,3 +1,5 @@
+using CanonicalKind = DbDataKit.Dialect.CanonicalKind;
+using CanonicalType = DbDataKit.Dialect.CanonicalType;
 using System.Data.Common;
 using System.Globalization;
 using DbDataSync.Core.Sql;
@@ -8,7 +10,7 @@ namespace DbDataSync.Drivers.Descriptor;
 /// A <see cref="SqlDialect"/> built entirely from a <c>driver.yaml</c>'s <c>dialect</c> and
 /// <c>typeMap</c> blocks — data instead of code, per
 /// <c>architecture/planning/todo/nuget-loaded-drivers.md</c> §*The descriptor*. Provisioning
-/// (<see cref="RenderColumnType"/>) is out of this phase's scope and throws; everything else a
+/// (<see cref="WriteColumnType"/>) is out of this phase's scope and throws; everything else a
 /// descriptor driver's generic Kinds need (quoting, parameter placeholders, row-limit rendering,
 /// native → canonical type lookup) is here.
 /// </summary>
@@ -139,31 +141,57 @@ public sealed class DescriptorDialect : SqlDialect
     /// (<c>tinyint(1)</c> as boolean) is the signal to write a compiled driver instead, per the plan
     /// doc; this deliberately does not grow that capability.
     /// </summary>
-    public override CanonicalType ToCanonicalType(string nativeType)
+    public override DbDataKit.Dialect.TypeMapping<CanonicalType> ReadColumnType(string nativeType)
     {
         var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
         if (!_typeMap.TryGetValue(baseName, out var mapping))
-            return new CanonicalType(CanonicalTypeKind.Unmappable, null, null, null, false, false);
+            return DbDataKit.Dialect.TypeMapping<CanonicalType>.Unmappable($"native type '{nativeType.Trim()}' is not in the driver's typeMap");
 
         var bound = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < mapping.Placeholders.Count && i < args.Count; i++)
             bound[mapping.Placeholders[i]] = args[i];
 
         var entry = mapping.Entry;
-        return new CanonicalType(
-            Enum.Parse<CanonicalTypeKind>(entry.Kind),
-            Length: entry.Max ? null : ResolvePlaceholder(entry.Length, bound),
-            Precision: ResolvePlaceholder(entry.Precision, bound),
-            Scale: ResolvePlaceholder(entry.Scale, bound),
-            IsUnicode: entry.Unicode,
-            IsMax: entry.Max);
+        var length = entry.Max ? null : ResolvePlaceholder(entry.Length, bound);
+        var precision = ResolvePlaceholder(entry.Precision, bound);
+        var scale = ResolvePlaceholder(entry.Scale, bound);
+        // The kind names of a typeMap entry; TimestampTz is the shared timestamp with a time zone.
+        CanonicalType? type = entry.Kind switch
+        {
+            "Boolean" => CanonicalType.Of(CanonicalKind.Boolean),
+            "Int8" => CanonicalType.Of(CanonicalKind.Int8),
+            "Int16" => CanonicalType.Of(CanonicalKind.Int16),
+            "Int32" => CanonicalType.Of(CanonicalKind.Int32),
+            "Int64" => CanonicalType.Of(CanonicalKind.Int64),
+            "Decimal" => new CanonicalType(CanonicalKind.Decimal, Precision: precision, Scale: scale),
+            "Float" => CanonicalType.Of(CanonicalKind.Float),
+            "Double" => CanonicalType.Of(CanonicalKind.Double),
+            "String" => CanonicalType.String(length, entry.Unicode),
+            "Binary" => CanonicalType.Binary(length),
+            "Date" => CanonicalType.Of(CanonicalKind.Date),
+            "Time" => CanonicalType.Time(scale),
+            "Timestamp" => CanonicalType.Timestamp(scale),
+            "TimestampTz" => CanonicalType.Timestamp(scale, tz: true),
+            "Guid" => CanonicalType.Of(CanonicalKind.Guid),
+            "Json" => CanonicalType.Of(CanonicalKind.Json),
+            "Xml" => CanonicalType.Of(CanonicalKind.Xml),
+            "Unmappable" => null,
+            _ => throw new ArgumentException($"The typeMap entry for '{baseName}' names the kind '{entry.Kind}', which is not one of {string.Join(", ", KindNames)}."),
+        };
+        return type is null
+            ? DbDataKit.Dialect.TypeMapping<CanonicalType>.Unmappable($"the driver's typeMap says '{baseName}' is unmappable")
+            : DbDataKit.Dialect.TypeMapping<CanonicalType>.Exact(type);
     }
+
+    /// <summary>The kind names a <c>typeMap</c> entry may use.</summary>
+    public static IReadOnlyList<string> KindNames { get; } =
+        ["Boolean", "Int8", "Int16", "Int32", "Int64", "Decimal", "Float", "Double", "String", "Binary", "Date", "Time", "Timestamp", "TimestampTz", "Guid", "Json", "Xml", "Unmappable"];
 
     /// <summary>Not supported in this phase — a descriptor driver's initial scope is watermark and
     /// batch reload only, neither of which renders a target column. See the plan doc's §*The
     /// descriptor* — provisioning needs the reverse (canonical → native) direction of exactly the table
     /// that stays deliberately minimal here.</summary>
-    public override RenderedColumnType RenderColumnType(CanonicalType type) =>
+    public override RenderedColumnType WriteColumnType(CanonicalType type, string? sourceNote = null) =>
         throw new NotSupportedException(
             "Provisioning is not supported for a driver defined by a YAML descriptor. " +
             "Write a compiled driver if this engine needs target-table DDL.");
