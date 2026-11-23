@@ -291,7 +291,7 @@ test('table mappings: Create mappings from two ticked tables, then Auto-map, the
   await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '1')
 })
 
-const RUNNER = 'runner-eu-1'
+const CATALOG_RUNNER = 'runner-eu-1'
 const READ_AT = '2026-11-23T09:00:00Z'
 
 /** A `catalog-cache/2` file of one connection as the console's read answers it, recorded as read from `runners-eu` in the channel asked. */
@@ -318,7 +318,7 @@ async function mockCatalogRead(page: Page) {
   await page.route('**/api/instances', (route) => route.request().method() === 'GET'
     ? json(route, [
       { id: SERVER, name: 'Workspace server', url: 'https://workspace.invalid', product: 'dbdataworkspace', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
-      { id: RUNNER, name: 'runners-eu', url: 'https://runner.invalid', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
+      { id: CATALOG_RUNNER, name: 'runners-eu', url: 'https://runner.invalid', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
     ])
     : route.fallback())
   await page.route('**/api/workspace-catalog/**', async (route) => {
@@ -326,7 +326,7 @@ async function mockCatalogRead(page: Page) {
     if (url.pathname.endsWith('/channels')) {
       const connection = url.searchParams.get('connection')!
       return json(route, {
-        runner: RUNNER, runner_name: 'runners-eu', connection, package: 'plant', slot: connection.replace(/[^a-z0-9_]/g, '_'), default: 'dev',
+        runner: CATALOG_RUNNER, runner_name: 'runners-eu', connection, package: 'plant', slot: connection.replace(/[^a-z0-9_]/g, '_'), default: 'dev',
         channels: [{ channel: 'dev', production: false, bound: true, bound_to: `${connection}-dev` }, { channel: 'prod', production: true, bound: true, bound_to: connection }],
       })
     }
@@ -341,7 +341,7 @@ async function mockCatalogRead(page: Page) {
             ...tableLines('App', 'Customers', [ID, "{name: 'name', type: 'nvarchar(100)', nullable: true}"]), ...tableLines('App', 'Invoices', INVOICE_COLUMNS),
             ...tableLines('App', 'Orders', INVOICE_COLUMNS), ...tableLines('App', 'Payments', [ID]),
           ])
-      return json(route, { runner: RUNNER, runner_name: 'runners-eu', connection: body.connection, state: 'done', run_id: `run-${reads.length}`, link: `/servers/${RUNNER}/runs?run=run-${reads.length}`, channel: body.channel, production: false, cache })
+      return json(route, { runner: CATALOG_RUNNER, runner_name: 'runners-eu', connection: body.connection, state: 'done', run_id: `run-${reads.length}`, link: `/servers/${CATALOG_RUNNER}/runs?run=run-${reads.length}`, channel: body.channel, production: false, cache })
     }
     return json(route, { error: 'There is no such call.' }, 404)
   })
@@ -403,9 +403,9 @@ test('the Designer\'s Refresh buttons read through the console: an endpoint\'s c
 
   // Files shows the new cache as an unsaved edit; saved, it holds all three reads
   expect(catalog.reads).toEqual([
-    { runner: RUNNER, channel: 'dev', connection: 'target-db' },
-    { runner: RUNNER, channel: 'dev', connection: 'source-db' },
-    { runner: RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Invoices' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'target-db' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'source-db' },
+    { runner: CATALOG_RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Invoices' },
   ])
   await cacheFile.click()
   await expect(area(page)).toHaveAttribute('data-area', 'files')
