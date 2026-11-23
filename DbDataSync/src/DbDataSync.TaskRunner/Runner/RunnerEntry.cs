@@ -6,7 +6,7 @@ namespace DbDataSync.TaskRunner.Runner;
 
 /// <summary>
 /// What the engine does when a runner starts it (<c>DbDataSync.TaskRunner --runner</c>, the executable launch of the package, plan 28c ED3): connect to the runner with the token and endpoint in the environment, run
-/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain; the set's manual task <c>provision</c> runs <see cref="ProvisionJob"/> (E21).
+/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain; the set's manual task <c>provision</c> runs <see cref="ProvisionJob"/> (E21), and its manual task <c>preflight</c> runs <see cref="SetPreflightJob"/>.
 /// </summary>
 public static class RunnerEntry
 {
@@ -35,10 +35,13 @@ public static class RunnerEntry
             cts.Cancel();
         };
 
-        // the set's provisioning task runs the database setup (plan 28c E21); every other task is a replication's drain
-        var result = task == ReplicationSetPackage.ProvisionTask
-            ? await RemoteJobHost.RunAsync<ProvisionJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false)
-            : await RemoteJobHost.RunAsync<DrainJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync", AnyTaskName = true }).ConfigureAwait(false);
+        // the set's provisioning task runs the database setup (plan 28c E21), its preflight the read-only checks before a version is served; every other task is a replication's drain
+        var result = task switch
+        {
+            ReplicationSetPackage.ProvisionTask => await RemoteJobHost.RunAsync<ProvisionJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
+            ReplicationSetPackage.PreflightTask => await RemoteJobHost.RunAsync<SetPreflightJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
+            _ => await RemoteJobHost.RunAsync<DrainJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync", AnyTaskName = true }).ConfigureAwait(false),
+        };
         Console.Out.WriteLine($"{TrafficPrefix}sent {RunnerSocketTraffic.BytesSent} bytes, received {RunnerSocketTraffic.BytesReceived} bytes.");
         return result.End.State == TaskEndState.Failed ? (int)ExitCode.DataError : (int)ExitCode.Success;
     }

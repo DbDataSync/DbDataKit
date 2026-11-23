@@ -74,8 +74,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var built = Build(out var problems);
 
         Assert.Empty(problems);
-        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask], built.Manifest.Tasks.Select(t => t.Name));
-        var drains = built.Manifest.Tasks.Where(t => t.Name != ReplicationSetPackage.ProvisionTask).ToList();
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask], built.Manifest.Tasks.Select(t => t.Name));
+        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask)).ToList();
         var orders = built.Manifest.Tasks.Single(t => t.Name == "orders");
         Assert.Equal("*/15 * * * *", orders.Schedule.Cron);
         Assert.Equal(TimeSpan.FromSeconds(30), built.Manifest.Tasks.Single(t => t.Name == "events").Schedule.Every);
@@ -102,6 +102,17 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.Equal(drains.SelectMany(t => t.Connections).Select(c => c.Name).Distinct().Order(StringComparer.Ordinal), provision.Connections.Select(c => c.Name));
         Assert.Equal(["replication", "mapping", "action", "steps", "repo_dir"], provision.Inputs.Select(i => i.Name));
         Assert.Equal(ReplicationSetPackage.RepoDir, provision.Inputs.Single(i => i.Name == "repo_dir").Default);
+
+        // the set's preflight: read only, by hand, over the same connections, one run at a time, one attempt, every input with a default (a control service starts it with none),
+        // and the step whose documents the control service reads before it serves a version in prod
+        var preflight = built.Manifest.Tasks.Single(t => t.Name == ReplicationSetPackage.PreflightTask);
+        Assert.Equal(DbDataKit.Runner.Preflight.TaskName, preflight.Name);
+        Assert.Null(preflight.Schedule.Cron);
+        Assert.Null(preflight.Schedule.Every);
+        Assert.Equal((1, 1), (preflight.Limits.Attempts, preflight.Limits.Concurrency));
+        Assert.Equal(provision.Connections.Select(c => c.Name), preflight.Connections.Select(c => c.Name));
+        Assert.Equal([("replication", ""), ("repo_dir", ReplicationSetPackage.RepoDir)], preflight.Inputs.Select(i => (i.Name, i.Default)));
+        Assert.Equal([DbDataKit.Runner.Preflight.StepName], preflight.StepList.Select(s => s.Name));
 
         var load = PackageManifestReader.Load(built.ManifestText, "package.yaml");
         Assert.True(load.Ok, string.Join("\n", load.Diagnostics));
@@ -205,6 +216,17 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.Null(built);
         Assert.Contains(problems, p => p.Contains(Path.Combine("broken", "task.yaml")) && p.Contains("cronExpression"));
         Assert.Contains(problems, p => p.Contains("both make the task `sales-orders`"));
+    }
+
+    [Fact]
+    public void AReplicationNamedForTheSetsPreflightIsRefused()
+    {
+        Replication("preflight", ScheduleMode.Periodic, cron: "0 1 * * *");
+
+        var built = Build(out var problems);
+
+        Assert.Null(built);
+        Assert.Contains(problems, p => p.Contains(Path.Combine("preflight", "task.yaml")) && p.Contains("the name of the set's preflight"));
     }
 
     [Fact]

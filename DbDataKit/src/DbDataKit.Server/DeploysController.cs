@@ -2,6 +2,7 @@ using DbDataKit.State;
 using System.Text.Json.Nodes;
 using DbDataKit.Web.Auth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DbDataKit.Server;
@@ -34,8 +35,11 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
 {
     private RelayPerson Person => new(User.FindFirst(ConsoleHost.Auth.UserIdClaim)?.Value ?? User.Identity?.Name ?? "unknown", User.Identity?.Name, User.IsInRole(nameof(UserRole.Admin)) ? UserRole.Admin : UserRole.Viewer);
 
+    // a deploy reads the build, sends its files and, in prod, waits for the preflight (ConsoleDeploys.PreflightWait, two minutes): longer than the host's default request timeout,
+    // which would cancel it midway and answer 504 with no body; the deploy bounds its own waits
     [HttpPost]
     [Authorize(Policies.Viewer)]
+    [DisableRequestTimeout]
     public async Task<IActionResult> Deploy([FromBody] DeployBody body, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(body.WorkspaceServer) || string.IsNullOrWhiteSpace(body.Project) || string.IsNullOrWhiteSpace(body.Workspace) || string.IsNullOrWhiteSpace(body.Build) || string.IsNullOrWhiteSpace(body.Target))
@@ -87,6 +91,7 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
 
     [HttpPost("{id}/activate")]
     [Authorize(Policies.Viewer)]
+    [DisableRequestTimeout]   // waits for the Runner's instances to have the staged version ready
     public async Task<IActionResult> Activate(string id, [FromBody] DeployActivateBody? body, CancellationToken ct)
     {
         var done = await runs.ActivateAsync(id, body?.Confirm ?? false, Person, ct);

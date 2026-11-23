@@ -341,8 +341,8 @@ binding, never a staged or served version.
 ## Checking before production: `preflight`
 
 A package's read-only manual task `preflight` reads its databases with the logins its channel binds and reports findings. Build's runs `connection status`
-for each connection, and the Store's runs the `deploy` dry run and the `contract` plan. Sync's checks of a replication's source and target
-([A sync project](#a-sync-project)) are not built yet, so a Sync set has no `preflight`.
+for each connection, and the Store's runs the `deploy` dry run and the `contract` plan. A Sync set's preflight reads the source and target of each
+mapping ([A sync project](#a-sync-project)).
 
 When a person serves a version in `prod` from the publish panel, the console stages it held, runs `preflight` there with production's bound logins,
 and shows the findings with the run's link. With no error the console activates the version. An error leaves the version staged until the person
@@ -395,6 +395,43 @@ for dev**.
 | types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
+
+**The live findings.** Every Sync package carries the task `preflight` beside `provision`. It reads each mapping of each enabled replication with
+the connections of the slots the channel binds, so with the run login a pass uses. Its input `replication` names one replication; empty, the default,
+checks them all. A finding's `about` is the connection it was read on.
+
+The preflight writes nothing. It reads the catalogs. It asks the engine whether the login holds a privilege (on SQL Server `HAS_PERMS_BY_NAME`, on
+PostgreSQL `has_table_privilege`, `has_schema_privilege` and the table's owner). It runs the read `SELECT <mapped columns> FROM <table> WHERE
+(<filter>) AND 1 = 0`. It makes the provisioning plans as `provision` makes them, and never applies them.
+
+How much a live finding weighs:
+
+- Errors, because the first pass would fail on them:
+  - a source or target table, or a mapped column, that is not there;
+  - a filter or a read of the source that the database refuses;
+  - a run login that may not read the source, or may not insert, update or delete on the target;
+  - change tracking, CDC, a trigger's shadow table or a logical slot that the reader needs and that is off. The finding carries the statements that
+    turn it on, the source side of the provisioning plan;
+  - a reader or writer that the connection's driver does not have;
+  - a state table on the target that is missing and that the run login may not create.
+- Warnings: a type that does not fit or may not fit the target column, a type the driver does not read, a key column that is nullable, a mapping key
+  that is not the target's primary key, and a reader or writer that matches rows on a key the tables do not give it.
+- Information: what is in order, and what was not checked on this engine.
+
+Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking`. In `prod` change tracking is on for the database and off on the
+table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the staged version records:
+
+```
+error  crm: The reader 'MsSqlChangeTracking' needs the source crm.dbo.orders to be set up first: Enable Change Tracking on [dbo].[orders].
+            The statements that do it (the source side's provisioning, which the set's `provision` task applies):
+            ALTER TABLE [dbo].[orders] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF);
+error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders.
+error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders.
+error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders.
+```
+
+The console keeps the version staged and held. A DBA enables change tracking and grants the login its rights, and Ana runs **Re-check** before she
+activates the version.
 
 **The offline findings.** The Workspace runs the offline checks in its own process when it checks a draft, after Sync's own check of the files. It
 reads every table mapping against `catalog-cache.yaml` and the connection files, and reports each finding on the mapping's file and line. Example: the

@@ -404,6 +404,19 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     }
 
     [Fact]
+    public void A_deploy_and_an_activation_are_not_cut_off_by_the_hosts_request_timeout_since_a_deploy_to_prod_waits_for_its_preflight()
+    {
+        // the host's default request timeout (100 s) is shorter than the preflight wait (two minutes): a deploy cut off by it is cancelled midway and answers 504 with no body
+        Assert.True(console.Services.GetRequiredService<ConsoleDeploys>().PreflightWait > TimeSpan.FromSeconds(100));
+        var endpoints = console.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints.OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>().ToList();
+        foreach (var route in new[] { "api/deploys", "api/deploys/{id}/activate" })
+        {
+            var endpoint = Assert.Single(endpoints, e => e.RoutePattern.RawText == route && e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods.Contains("POST") == true);
+            Assert.NotNull(endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Timeouts.DisableRequestTimeoutAttribute>());
+        }
+    }
+
+    [Fact]
     public async Task A_package_with_no_preflight_is_served_in_prod_as_before_and_the_deploy_says_nothing_was_checked()
     {
         if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
