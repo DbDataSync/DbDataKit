@@ -9,6 +9,8 @@ import YAML from 'yaml'
  *
  * A build is published by the console, not by the Workspace server: the console's `/api/instances` also lists a Runner `plant` and a Gateway `edge`, and its `/api/deploys` is answered here too (a deploy and the list of
  * deploys, in the shapes `DeploysController` answers; the real route is `ConsoleDeployTests`). A call to the Workspace server's own publish route is kept apart (`workspacePublishes`), so a story can say that none was made.
+ * The runs of what a deploy put on the Runner go through the console too (`/api/deploys/{id}/runs`, `/runs/{run}`, `/binding-test`): a run is queued at first (the read answers 404, as a Runner that has not started it yet), then it has
+ * succeeded with the steps its task records; a call to the Workspace server's own run routes is kept apart (`workspaceRuns`).
  */
 export const SERVER = 'ws-1'
 /** The Runner and the Gateway the console manages, by the id the console gives them (their names are the same). */
@@ -29,6 +31,20 @@ export interface FakeWorkspace {
   files: (project: string, name: string) => Map<string, string> | undefined
   /** Set to a data source name and a Store publish is refused, as a Gateway does for a data source made by hand, until the body says `adopt` (plan 33 SC21f). */
   adoptRefusal: string | null
+  /** What each run asked the console for: the deploy, the task, its inputs and whether the served version runs it. */
+  runs: { deploy: string; task: string; inputs: Record<string, string>; served: boolean }[]
+  /** The slots tested through the console, by deploy. */
+  bindingTests: { deploy: string; slot: string }[]
+  /** The calls to the Workspace server's own run routes (`.../builds/{b}/run`, `/runs/{run}`, `/binding-test`, `/contract`): the screens make none. */
+  workspaceRuns: string[]
+}
+
+/** What a task records while it runs, as the real ones do: a replication's pass, or the statements provision ran. */
+function stepsOf(task: string, inputs: Record<string, string>, step: string | null) {
+  const at = '2026-11-11T11:00:00Z'
+  if (step === 'pass-record') return [{ key: 'orders', started: at, completed: at, result: { mapping: 'orders', kind: 'Primary', status: 'Succeeded', rowsRead: 3, rowsWritten: 3 } }]
+  if (step === 'provision-applied' && task === 'provision') return [{ key: inputs.mapping ?? '', started: at, completed: at, result: { steps: [{ title: `Create the table of ${inputs.mapping}`, succeeded: true }] } }]
+  return []
 }
 
 const lineOf = (text: string, needle: string) => { const i = text.split('\n').findIndex((l) => l.includes(needle)); return i < 0 ? null : i + 1 }
@@ -97,6 +113,10 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
   const published: FakeWorkspace['published'] = []
   const workspacePublishes: FakeWorkspace['workspacePublishes'] = []
   const deploys: Record<string, unknown>[] = []
+  const runs: FakeWorkspace['runs'] = []
+  const bindingTests: FakeWorkspace['bindingTests'] = []
+  const workspaceRuns: string[] = []
+  const reads = new Map<string, number>()
   const fake = { adoptRefusal: null as string | null }
   let counter = 0
   const stamp = () => `2026-11-11T10:${String(counter++).padStart(2, '0')}:00Z`
@@ -123,7 +143,8 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     const record = (outcome: string, answer: Record<string, unknown> | null, error: string | null) => {
       const kept = { id: `deploy-${counter}`, workspace_server: sent.workspaceServer, project: project.id, workspace: sent.workspace, build: sent.build, item: gateway ? 'model' : 'package', kind: project.kind,
         target, target_name: target, product: gateway ? 'gateway' : 'runner', route: gateway ? 'model' : 'package', name: project.id, channel: gateway ? null : sent.channel ?? null,
-        version: answer ? 1 : null, mode: gateway || !answer ? null : sent.serve ? 'serve' : 'stage', signature: answer ? 'verified' : null, deployed_by: 'tester', deployed_at: stamp(), outcome, error }
+        version: answer ? 1 : null, mode: gateway || !answer ? null : sent.serve ? 'serve' : 'stage', signature: answer ? 'verified' : null, deployed_by: 'tester', deployed_at: stamp(), outcome, error,
+        tasks: answer && !gateway ? (answer.tasks as string[] | undefined) ?? [] : [] }
       deploys.unshift(kept)
       return kept
     }
@@ -134,8 +155,38 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     }
     const answer = gateway
       ? { target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.dataSource ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] }
-      : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified' }
+      : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified', tasks: project.kind === 'sync' ? ['orders', 'provision'] : [] }
     return json(route, { steps, deployed: answer, deploy: record('ok', answer, null) })
+  })
+
+  // the runs of what a deploy put on the Runner, through the console as the person
+  await page.route((url) => url.pathname.startsWith('/api/deploys/'), async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const [deployId, what, runId] = url.pathname.slice('/api/deploys/'.length).split('/').map(decodeURIComponent)
+    const deploy = deploys.find((d) => d.id === deployId)
+    if (!deploy) return json(route, { error: `The console has no deploy '${deployId}'.` }, 404)
+    if (what === 'runs' && request.method() === 'POST') {
+      const body = JSON.parse(request.postData() ?? '{}') as { task: string; inputs?: Record<string, string>; served?: boolean }
+      runs.push({ deploy: deployId!, task: body.task, inputs: body.inputs ?? {}, served: body.served === true })
+      const id = `6f1c0f1e-0000-4000-8000-${String(runs.length).padStart(12, '0')}`
+      return json(route, { steps: [`Started ${body.task} of ${String(deploy.name)}: run ${id}.`], run: { run_id: id, task: body.task, package: deploy.name, channel: deploy.channel, version: body.served ? 'served' : String(deploy.version), target: deploy.target_name, runner: 'https://runner.invalid', instance: deploy.target, on_behalf_of: 'tester' } }, 202)
+    }
+    if (what === 'runs' && runId && request.method() === 'GET') {
+      const index = Number(runId.slice(-12)) - 1
+      const started = runs[index]
+      if (!started) return json(route, { error: `${String(deploy.target_name)} has no run ${runId}.` }, 404)
+      const n = (reads.get(runId) ?? 0) + 1
+      reads.set(runId, n)
+      if (n === 1) return json(route, { error: `${String(deploy.target_name)} has no run ${runId}.` }, 404)   // queued: not on the Runner's record yet
+      return json(route, { run: { id: runId, task: started.task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(started.task, started.inputs, url.searchParams.get('step')) } })
+    }
+    if (what === 'binding-test' && request.method() === 'POST') {
+      const body = JSON.parse(request.postData() ?? '{}') as { slot: string }
+      bindingTests.push({ deploy: deployId!, slot: body.slot })
+      return json(route, { test: { slot: body.slot, ok: false, step: 'connection', message: `${String(deploy.target_name)} has no connection erp.`, connected: false, package: deploy.name, channel: deploy.channel, target: deploy.target_name, instance: deploy.target } })
+    }
+    return json(route, { error: 'There is no such call.' }, 404)
   })
 
   await page.route(`**/relay/${SERVER}/api/v1/**`, async (route) => {
@@ -185,6 +236,20 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     }
     if (rest[0] === 'check') return json(route, { kind: project.kind, ok: !check(project.kind, w.files).some((f) => f.severity === 'error'), diagnostics: check(project.kind, w.files) })
     if (rest[0] === 'changes') return json(route, { changes: [], uncommitted: true })
+    // the plan of a replication's tables, made offline from the draft's catalog cache: the target table is not there yet
+    if (rest[0] === 'provisioning-plan' && method === 'POST') {
+      const replication = (JSON.parse(body || '{}') as { replication?: string }).replication ?? ''
+      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [{
+        mapping: 'orders', source: { connection: 'source-db', table: 'dbo.Orders' }, target: { connection: 'target-db', table: 'public.orders' }, excluded: null,
+        source_plan: { action: 'enableSourceChangeCapture', state: 'satisfied', steps: [], warnings: [] },
+        target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE "public"."orders" ("id" bigint)', rationale: 'it is not there', scope: 'table' }], warnings: [] },
+      }] } })
+    }
+    // the Workspace server's own run routes: the screens run through the console
+    if (rest[0] === 'builds' && (rest[2] === 'run' || rest[2] === 'runs' || rest[2] === 'binding-test' || rest[2] === 'contract')) {
+      workspaceRuns.push(`${method} ${tail}`)
+      return json(route, { error: 'This build has not been staged on a Runner.' }, 409)
+    }
     if (rest[0] === 'history') return json(route, { commits: [] })
     if (rest[0] === 'events') return json(route, { events: [] })
     if (rest[0] === 'builds' && rest.length === 1 && method === 'GET') return json(route, { builds: w.builds.map((b) => buildSummary(w, b)) })
@@ -204,7 +269,7 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
         publishes: b.publishes,
       })
     }
-    // the Workspace server's own publish, with its publisher key: the Builds tab no longer calls it (the Store project's Deploy tab still stages through it)
+    // the Workspace server's own publish, with its publisher key: no screen calls it any more (the Builds tab and the Store project's Deploy tab deploy through the console)
     if (rest[0] === 'builds' && rest[2] === 'publish' && method === 'POST') {
       const b = w.builds.find((x) => x.id === rest[1])!
       const sent = JSON.parse(body) as Record<string, unknown>
@@ -218,7 +283,7 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     return json(route, { error: 'There is no such call.' }, 404)
   })
 
-  return { published, workspacePublishes, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
+  return { published, workspacePublishes, runs, bindingTests, workspaceRuns, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
 }
 
 function buildSummary(w: Workspace, b: Build) {
