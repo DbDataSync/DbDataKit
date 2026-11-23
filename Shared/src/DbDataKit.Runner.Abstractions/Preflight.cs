@@ -27,9 +27,12 @@ public static class Preflight
     /// <summary>The largest document recorded whole (the step's cap is 64 KiB); a larger one keeps its findings and drops its detail.</summary>
     public const int MaxDocumentBytes = 60 * 1024;
 
-    /// <summary>The task as a manifest declares it: by hand only, no inputs, the package's <paramref name="slots"/>, one run at a time, one attempt, and the step <see cref="StepName"/>.</summary>
-    public static PackageTask Declare(IReadOnlyList<ConnectionSlot> slots, TimeSpan? timeout = null) =>
-        new(TaskName, new TaskEntry(), new Schedule(), [TaskTrigger.ByHand()], [], slots, ProgressDeclaration.Empty,
+    /// <summary>
+    /// The task as a manifest declares it: by hand only, the package's <paramref name="slots"/>, one run at a time, one attempt, and the step <see cref="StepName"/>. Its <paramref name="inputs"/> (none by default) each have a default, since a
+    /// control service starts it with none.
+    /// </summary>
+    public static PackageTask Declare(IReadOnlyList<ConnectionSlot> slots, TimeSpan? timeout = null, IReadOnlyList<TaskInput>? inputs = null) =>
+        new(TaskName, new TaskEntry(), new Schedule(), [TaskTrigger.ByHand()], inputs ?? [], slots, ProgressDeclaration.Empty,
             new TaskLimits(Timeout: timeout ?? TimeSpan.FromMinutes(30), Concurrency: 1, Attempts: 1), [], [], Steps: [new TaskStep(StepName)]);
 
     /// <summary>

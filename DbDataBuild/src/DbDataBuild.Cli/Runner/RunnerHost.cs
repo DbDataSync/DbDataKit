@@ -28,6 +28,7 @@ public static class RunnerHost
                 case BuildViews.Tests: await RemoteJobHost.RunAsync<TestsViewJob>(cancel.Token, options).ConfigureAwait(false); break;
                 case BuildViews.Status: await RemoteJobHost.RunAsync<StatusViewJob>(cancel.Token, options).ConfigureAwait(false); break;
                 case BuildViews.Compare: await RemoteJobHost.RunAsync<CompareViewJob>(cancel.Token, options).ConfigureAwait(false); break;
+                case DbDataKit.Runner.Preflight.TaskName: await RemoteJobHost.RunAsync<PreflightJob>(cancel.Token, options).ConfigureAwait(false); break;
                 case DbDataKit.Quality.QualityCheckTask.Name: await RemoteJobHost.RunAsync<CheckJob>(cancel.Token, options).ConfigureAwait(false); break;
                 default: await RemoteJobHost.RunAsync<RefreshJob>(cancel.Token, options).ConfigureAwait(false); break;
             }
