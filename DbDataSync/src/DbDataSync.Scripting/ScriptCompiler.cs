@@ -30,7 +30,7 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
     private static readonly string[] Imports =
     [
         "System", "System.Linq", "System.Collections.Generic", "System.Threading", "System.Threading.Tasks",
-        "DbDataSync.Core.Config", "DbDataSync.Scripting.Abstractions", "DbDataSync.Drivers.Abstractions",
+        "DbDataSync.Core.Config", "DbDataSync.Scripting.Abstractions", "DbDataSync.Drivers.Abstractions", "DbDataKit.Dialect",
     ];
 
     public ScriptCompilation Compile(ScriptDefinition script)
@@ -60,7 +60,8 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         {
             CacheDirectory = Path.Combine(cache.Root, "csx"),
             LoadRoot = scriptsDirectory,
-            HostReferences = [typeof(ISqlColumnExpression).Assembly.Location, typeof(DbDataSync.Drivers.Abstractions.ColumnMetadata).Assembly.Location, typeof(ColumnMapping).Assembly.Location],
+            HostReferences = [typeof(ISqlColumnExpression).Assembly.Location, typeof(DbDataSync.Drivers.Abstractions.ColumnMetadata).Assembly.Location, typeof(ColumnMapping).Assembly.Location,
+                typeof(DbDataKit.Dialect.CanonicalType).Assembly.Location],
             Imports = Imports,
             AllowedFrameworkAssembly = name => AllowedAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase),
         });

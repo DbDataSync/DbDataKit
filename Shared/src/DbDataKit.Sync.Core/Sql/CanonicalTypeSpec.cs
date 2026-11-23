@@ -3,7 +3,7 @@ namespace DbDataSync.Core.Sql;
 /// <summary>
 /// Splits a native type spec string (e.g. <c>"nvarchar(50)"</c>, <c>"numeric(18,2)"</c>,
 /// <c>"double precision"</c>) into a lowercased base name and its parenthesised arguments — shared
-/// parsing for every dialect's <see cref="SqlDialect.ToCanonicalType"/>, so each engine's switch only
+/// parsing for every dialect's <see cref="SqlDialect.ReadColumnType"/>, so each engine's switch only
 /// has to name its own type spellings rather than re-write this splitting.
 /// </summary>
 public static class CanonicalTypeSpec

@@ -52,6 +52,7 @@ types:
   - { native: "bigint({n})", canonical: "int64", direction: to_canonical }
   - { native: "bigint", canonical: "int64" }
   - { native: "year", canonical: "int16", direction: to_canonical }
+  - { native: "decimal(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as decimal(38,9), so digits beyond it are rounded" }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 10, s: 0 }, p_max: 65, s_max: 30 }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 10, s: 0 } }
   - { native: "decimal(65,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 65 is reduced to 65", p_min: 66, s_max: 30 }
@@ -66,20 +67,22 @@ types:
   - { native: "mediumtext", canonical: "string(~unicode)", direction: to_canonical }
   - { native: "text", canonical: "string(~unicode)", direction: to_canonical }
   - { native: "tinytext", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "binary({n})", canonical: "binary(fixed,{n})", defaults: { n: 1 }, n_max: 255 }
   - { native: "varbinary({n})", canonical: "binary({n})", n_max: 65535 }
-  - { native: "binary({n})", canonical: "binary({n})", direction: to_canonical, defaults: { n: 1 }, fidelity: lossy, note: "fixed-length binary becomes variable-length" }
   - { native: "longblob", canonical: "binary" }
   - { native: "longblob", canonical: "binary({n})", direction: from_canonical, fidelity: widened, note: "length above 65535 becomes longblob", n_min: 65536 }
   - { native: "mediumblob", canonical: "binary", direction: to_canonical }
   - { native: "blob", canonical: "binary", direction: to_canonical }
   - { native: "tinyblob", canonical: "binary", direction: to_canonical }
   - { native: "date", canonical: "date" }
-  - { native: "time({s})", canonical: "time({s})", defaults: { s: 0 }, s_max: 6 }
+  - { native: "time({s})", canonical: "time({s})", direction: to_canonical, defaults: { s: 0 }, s_max: 6 }
+  - { native: "time({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 6 }
   - { native: "time(6)", canonical: "time({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
-  - { native: "datetime({s})", canonical: "timestamp({s})", defaults: { s: 0 }, s_max: 6 }
+  - { native: "datetime({s})", canonical: "timestamp({s})", direction: to_canonical, defaults: { s: 0 }, s_max: 6 }
+  - { native: "datetime({s})", canonical: "timestamp({s})", direction: from_canonical, defaults: { s: 6 }, s_max: 6 }
   - { native: "datetime(6)", canonical: "timestamp({s})", direction: from_canonical, fidelity: lossy, note: "fractional-second precision above 6 is reduced to microseconds", s_min: 7 }
   - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: to_canonical, defaults: { s: 0 }, fidelity: lossy, note: "MySQL TIMESTAMP is stored in UTC and converted to and from the session time zone at read and write; it carries no explicit offset of its own." }
-  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 0 }, s_max: 6, fidelity: lossy, note: "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted through the session time zone, which is not the same guarantee as a source zone-aware value, and it covers 1970-01-01 to 2038-01-19 only." }
+  - { native: "timestamp({s})", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 6 }, s_max: 6, fidelity: lossy, note: "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted through the session time zone, which is not the same guarantee as a source zone-aware value, and it covers 1970-01-01 to 2038-01-19 only." }
   - { native: "timestamp(6)", canonical: "timestamp(tz,{s})", direction: from_canonical, fidelity: lossy, note: "MySQL TIMESTAMP carries no explicit offset; it is stored in UTC and converted through the session time zone, which is not the same guarantee as a source zone-aware value, and it covers 1970-01-01 to 2038-01-19 only. Precision above 6 is reduced to microseconds.", s_min: 7 }
   - { native: "char(36)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "stored as 36-character text" }
   - { native: "uuid", canonical: "guid", direction: to_canonical }

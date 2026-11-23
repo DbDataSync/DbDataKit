@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
 
@@ -10,109 +11,116 @@ public sealed class MsSqlDialectCanonicalTypeTests
 {
     private static readonly MsSqlDialect Dialect = MsSqlDialect.Instance;
 
+    /// <summary>The dialect's reading, or the unmappable type when the dialect does not know the name.</summary>
+    private static CanonicalType Read(string native) => Dialect.ReadColumnType(native) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+
+    /// <summary>The note of a reading that is not exact (what the reading already lost), or null.</summary>
+    private static string? NoteOf(string native) => Dialect.ReadColumnType(native) is { Fidelity: not Fidelity.Exact } read ? read.Note : null;
+
     [Theory]
-    [InlineData("bit", CanonicalTypeKind.Boolean)]
-    [InlineData("tinyint", CanonicalTypeKind.Int8)]
-    [InlineData("int", CanonicalTypeKind.Int32)]
-    [InlineData("bigint", CanonicalTypeKind.Int64)]
-    [InlineData("uniqueidentifier", CanonicalTypeKind.Guid)]
-    [InlineData("xml", CanonicalTypeKind.Xml)]
-    public void SimpleTypes_TranslateToTheirCanonicalKind(string nativeType, CanonicalTypeKind expected) =>
-        Assert.Equal(expected, Dialect.ToCanonicalType(nativeType).Kind);
+    [InlineData("bit", CanonicalKind.Boolean)]
+    [InlineData("tinyint", CanonicalKind.Int8)]
+    [InlineData("int", CanonicalKind.Int32)]
+    [InlineData("bigint", CanonicalKind.Int64)]
+    [InlineData("uniqueidentifier", CanonicalKind.Guid)]
+    [InlineData("xml", CanonicalKind.Xml)]
+    public void SimpleTypes_TranslateToTheirCanonicalKind(string nativeType, CanonicalKind expected) =>
+        Assert.Equal(expected, Read(nativeType).Kind);
 
     [Theory]
     [InlineData("sql_variant")]
     [InlineData("hierarchyid")]
     [InlineData("geography")]
     public void TypesWithNoCanonicalEquivalent_AreUnmappable(string nativeType) =>
-        Assert.Equal(CanonicalTypeKind.Unmappable, Dialect.ToCanonicalType(nativeType).Kind);
+        Assert.Equal(CanonicalKind.Unmappable, Read(nativeType).Kind);
 
     [Fact]
     public void DecimalKeepsItsPrecisionAndScale()
     {
-        var canonical = Dialect.ToCanonicalType("decimal(18,2)");
-        Assert.Equal(CanonicalTypeKind.Decimal, canonical.Kind);
+        var canonical = Read("decimal(18,2)");
+        Assert.Equal(CanonicalKind.Decimal, canonical.Kind);
         Assert.Equal(18, canonical.Precision);
         Assert.Equal(2, canonical.Scale);
-        Assert.Null(canonical.SourceNote);
+        Assert.Null(NoteOf("decimal(18,2)"));
     }
 
     [Fact]
     public void Money_CollapsesToDecimal19_4_AndCarriesASourceNoteAboutLostCurrencySemantics()
     {
-        var canonical = Dialect.ToCanonicalType("money");
-        Assert.Equal(CanonicalTypeKind.Decimal, canonical.Kind);
+        var canonical = Read("money");
+        Assert.Equal(CanonicalKind.Decimal, canonical.Kind);
         Assert.Equal(19, canonical.Precision);
         Assert.Equal(4, canonical.Scale);
-        Assert.NotNull(canonical.SourceNote);
+        Assert.NotNull(NoteOf("money"));
     }
 
     [Fact]
     public void NvarcharKeepsItsLengthAndIsUnicode()
     {
-        var canonical = Dialect.ToCanonicalType("nvarchar(50)");
-        Assert.Equal(CanonicalTypeKind.String, canonical.Kind);
+        var canonical = Read("nvarchar(50)");
+        Assert.Equal(CanonicalKind.String, canonical.Kind);
         Assert.Equal(50, canonical.Length);
-        Assert.True(canonical.IsUnicode);
-        Assert.False(canonical.IsMax);
+        Assert.True(canonical.Unicode);
+        Assert.NotNull(canonical.Length);
     }
 
     [Fact]
     public void NvarcharMax_HasNoLength_AndIsMax()
     {
-        var canonical = Dialect.ToCanonicalType("nvarchar(max)");
-        Assert.Equal(CanonicalTypeKind.String, canonical.Kind);
+        var canonical = Read("nvarchar(max)");
+        Assert.Equal(CanonicalKind.String, canonical.Kind);
         Assert.Null(canonical.Length);
-        Assert.True(canonical.IsMax);
+        Assert.Null(canonical.Length);
     }
 
     [Fact]
     public void Datetime2_KeepsItsScale()
     {
-        var canonical = Dialect.ToCanonicalType("datetime2(7)");
-        Assert.Equal(CanonicalTypeKind.Timestamp, canonical.Kind);
+        var canonical = Read("datetime2(7)");
+        Assert.Equal(CanonicalKind.Timestamp, canonical.Kind);
         Assert.Equal(7, canonical.Scale);
     }
 
     [Fact]
     public void Datetime_IsTimestampWithScale3()
     {
-        var canonical = Dialect.ToCanonicalType("datetime");
-        Assert.Equal(CanonicalTypeKind.Timestamp, canonical.Kind);
+        var canonical = Read("datetime");
+        Assert.Equal(CanonicalKind.Timestamp, canonical.Kind);
         Assert.Equal(3, canonical.Scale);
     }
 
     [Fact]
     public void Datetimeoffset_IsTimestampTz()
     {
-        var canonical = Dialect.ToCanonicalType("datetimeoffset(7)");
-        Assert.Equal(CanonicalTypeKind.TimestampTz, canonical.Kind);
+        var canonical = Read("datetimeoffset(7)");
+        Assert.Equal(CanonicalKind.Timestamp, canonical.Kind);
+        Assert.True(canonical.TimeZone);
     }
 
     [Fact]
     public void VarbinaryMax_IsBinaryMax()
     {
-        var canonical = Dialect.ToCanonicalType("varbinary(max)");
-        Assert.Equal(CanonicalTypeKind.Binary, canonical.Kind);
-        Assert.True(canonical.IsMax);
+        var canonical = Read("varbinary(max)");
+        Assert.Equal(CanonicalKind.Binary, canonical.Kind);
+        Assert.Null(canonical.Length);
     }
 
     [Fact]
     public void PlainBinary_IsFixedLength()
     {
-        var canonical = Dialect.ToCanonicalType("binary(16)");
-        Assert.Equal(CanonicalTypeKind.Binary, canonical.Kind);
+        var canonical = Read("binary(16)");
+        Assert.Equal(CanonicalKind.Binary, canonical.Kind);
         Assert.Equal(16, canonical.Length);
-        Assert.True(canonical.IsFixed);
+        Assert.True(canonical.Fixed);
     }
 
     [Fact]
     public void PlainVarbinary_IsNotFixedLength()
     {
-        var canonical = Dialect.ToCanonicalType("varbinary(16)");
-        Assert.Equal(CanonicalTypeKind.Binary, canonical.Kind);
+        var canonical = Read("varbinary(16)");
+        Assert.Equal(CanonicalKind.Binary, canonical.Kind);
         Assert.Equal(16, canonical.Length);
-        Assert.False(canonical.IsFixed);
+        Assert.Null(canonical.Fixed);
     }
 
     [Theory]
@@ -120,22 +128,22 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [InlineData("rowversion")]
     public void TimestampAndRowversion_MapToFixedLengthBinary8(string nativeType)
     {
-        var canonical = Dialect.ToCanonicalType(nativeType);
-        Assert.Equal(CanonicalTypeKind.Binary, canonical.Kind);
+        var canonical = Read(nativeType);
+        Assert.Equal(CanonicalKind.Binary, canonical.Kind);
         Assert.Equal(8, canonical.Length);
-        Assert.True(canonical.IsFixed);
-        Assert.False(canonical.IsMax);
+        Assert.True(canonical.Fixed);
+        Assert.NotNull(canonical.Length);
     }
 
     // --- Reverse direction: rendering a canonical type this dialect did not originate. ---
 
-    private static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
+    private static CanonicalType Simple(CanonicalKind kind) => CanonicalType.Of(kind);
 
     [Fact]
     public void RenderingTextFromAnotherEngine_ProducesNvarcharMax_Faithfully()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.String, Unicode: true);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("nvarchar(max)", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -143,7 +151,7 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingBoolean_ProducesBit()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Boolean));
+        var rendered = Dialect.WriteColumnType(Simple(CanonicalKind.Boolean));
         Assert.Equal("bit", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -151,7 +159,7 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingGuid_ProducesUniqueidentifier()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Guid));
+        var rendered = Dialect.WriteColumnType(Simple(CanonicalKind.Guid));
         Assert.Equal("uniqueidentifier", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -159,7 +167,7 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingJson_ProducesNvarcharMax_WithAFidelityNote()
     {
-        var rendered = Dialect.RenderColumnType(Simple(CanonicalTypeKind.Json));
+        var rendered = Dialect.WriteColumnType(Simple(CanonicalKind.Json));
         Assert.Equal("nvarchar(max)", rendered.Sql);
         Assert.NotNull(rendered.Fidelity);
     }
@@ -167,8 +175,8 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingVarbinaryMax_IsFaithful()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Binary, null, null, null, false, true);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Binary);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("varbinary(max)", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -176,10 +184,10 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingAFixedLengthBinary_ProducesBinaryNotVarbinary()
     {
-        // What ToCanonicalType now gives a rowversion/timestamp source column (and a genuine binary(n)
+        // What ReadColumnType gives a rowversion/timestamp source column (and a genuine binary(n)
         // one) — the round trip this whole IsFixed flag exists for.
-        var canonical = new CanonicalType(CanonicalTypeKind.Binary, 8, null, null, false, false, IsFixed: true);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Binary, Length: 8, Fixed: true);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("binary(8)", rendered.Sql);
         Assert.Null(rendered.Fidelity);
     }
@@ -187,20 +195,20 @@ public sealed class MsSqlDialectCanonicalTypeTests
     [Fact]
     public void RenderingANonFixedBinary_StillProducesVarbinary()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Binary, 8, null, null, false, false);
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Binary, Length: 8);
+        var rendered = Dialect.WriteColumnType(canonical);
         Assert.Equal("varbinary(8)", rendered.Sql);
     }
 
     [Fact]
     public void RenderingUnmappable_Throws() =>
-        Assert.Throws<InvalidOperationException>(() => Dialect.RenderColumnType(Simple(CanonicalTypeKind.Unmappable)));
+        Assert.Throws<InvalidOperationException>(() => Dialect.WriteColumnType(Simple(CanonicalKind.Unmappable)));
 
     [Fact]
     public void ASourceNoteFromTheOriginatingEngine_SurvivesIntoTheRenderedFidelity()
     {
-        var canonical = new CanonicalType(CanonicalTypeKind.Decimal, null, 19, 4, false, false, "carries currency semantics");
-        var rendered = Dialect.RenderColumnType(canonical);
+        var canonical = new CanonicalType(CanonicalKind.Decimal, Precision: 19, Scale: 4);
+        var rendered = Dialect.WriteColumnType(canonical, "carries currency semantics");
         Assert.Contains("currency semantics", rendered.Fidelity);
     }
 }

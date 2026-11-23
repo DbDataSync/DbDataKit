@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -37,10 +38,11 @@ public static class ProvisioningColumnBuilder
                     $"Column '{mapping.TargetColumn}': the source's identity/generated column is created " +
                     "plain — DbDataSync writes explicit values into the target.");
 
-            var canonical = sourceDialect.ToCanonicalType(sourceColumn.NativeType);
+            var read = sourceDialect.ReadColumnType(sourceColumn.NativeType);
+            var canonical = read is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
             columns.Add(new ProvisioningColumn(
                 mapping.TargetColumn, canonical, sourceColumn.IsNullable, sourceColumn.IsPrimaryKey,
-                mapping.TargetType, mapping.Renames, sourceColumn.KeyOrdinal));
+                mapping.TargetType, mapping.Renames, sourceColumn.KeyOrdinal, read.Fidelity == Fidelity.Exact ? null : read.Note));
         }
 
         return (columns, warnings);

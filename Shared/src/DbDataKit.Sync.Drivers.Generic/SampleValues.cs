@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
 
@@ -36,23 +37,23 @@ public static class SampleValues
 
     private static IEnumerable<object?> Characteristic(CanonicalType type) => type.Kind switch
     {
-        CanonicalTypeKind.Boolean => [true, false],
-        CanonicalTypeKind.Int8 => [(byte)7, (byte)0],
-        CanonicalTypeKind.Int16 => [(short)42, (short)0, (short)-1],
-        CanonicalTypeKind.Int32 => [42, 0, -1],
-        CanonicalTypeKind.Int64 => [42L, 0L, -1L],
-        CanonicalTypeKind.Decimal => [12.34m, 0m, -0.01m],
-        CanonicalTypeKind.Float => [1.5f, 0f],
-        CanonicalTypeKind.Double => [1.5d, 0d],
-        CanonicalTypeKind.String => Strings(type),
-        CanonicalTypeKind.Binary => [new byte[] { 1, 2, 3 }, Array.Empty<byte>()],
-        CanonicalTypeKind.Date => [DateOnly.FromDateTime(Instant)],
-        CanonicalTypeKind.Time => [TimeOnly.FromDateTime(Instant)],
-        CanonicalTypeKind.Timestamp => [Instant],
-        CanonicalTypeKind.TimestampTz => [new DateTimeOffset(Instant)],
-        CanonicalTypeKind.Guid => [new Guid("00000000-0000-4000-8000-000000000042")],
-        CanonicalTypeKind.Json => ["""{"sample":true}"""],
-        CanonicalTypeKind.Xml => ["<sample/>"],
+        CanonicalKind.Boolean => [true, false],
+        CanonicalKind.Int8 => [(byte)7, (byte)0],
+        CanonicalKind.Int16 => [(short)42, (short)0, (short)-1],
+        CanonicalKind.Int32 => [42, 0, -1],
+        CanonicalKind.Int64 => [42L, 0L, -1L],
+        CanonicalKind.Decimal => [12.34m, 0m, -0.01m],
+        CanonicalKind.Float => [1.5f, 0f],
+        CanonicalKind.Double => [1.5d, 0d],
+        CanonicalKind.String => Strings(type),
+        CanonicalKind.Binary => [new byte[] { 1, 2, 3 }, Array.Empty<byte>()],
+        CanonicalKind.Date => [DateOnly.FromDateTime(Instant)],
+        CanonicalKind.Time => [TimeOnly.FromDateTime(Instant)],
+        CanonicalKind.Timestamp when type.TimeZone == true => [new DateTimeOffset(Instant)],
+        CanonicalKind.Timestamp => [Instant],
+        CanonicalKind.Guid => [new Guid("00000000-0000-4000-8000-000000000042")],
+        CanonicalKind.Json => ["""{"sample":true}"""],
+        CanonicalKind.Xml => ["<sample/>"],
         // Nothing is invented for a type no engine could translate. A generated value for one would be
         // a guess about a type the whole canonical system declines to guess about.
         _ => [null],
@@ -67,7 +68,7 @@ public static class SampleValues
         yield return "sample";
         yield return "";
 
-        var length = type.IsMax ? 64 : type.Length ?? 0;
+        var length = type.Length ?? 64;
         if (length > "sample".Length)
             yield return new string('x', Math.Min(length, 64));
     }

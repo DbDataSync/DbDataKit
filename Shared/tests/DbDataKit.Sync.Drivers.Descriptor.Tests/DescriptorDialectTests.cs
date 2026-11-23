@@ -1,3 +1,5 @@
+using CanonicalKind = DbDataKit.Dialect.CanonicalKind;
+using CanonicalType = DbDataKit.Dialect.CanonicalType;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Descriptor;
 using Xunit;
@@ -35,6 +37,10 @@ public sealed class DescriptorDialectTests
           writers: [DeleteInsert]
         """;
 
+    /// <summary>The descriptor's reading, or the unmappable type when its typeMap does not name the type.</summary>
+    private static CanonicalType Read(string native) =>
+        Dialect().ReadColumnType(native) is { IsMapped: true, Result: { } type } ? type : CanonicalType.Unmappable;
+
     private static DescriptorDialect Dialect(string yaml = MySqlGenericYaml)
     {
         var descriptor = DriverDescriptors.Deserialize(yaml);
@@ -55,13 +61,13 @@ public sealed class DescriptorDialectTests
     }
 
     [Theory]
-    [InlineData("int", CanonicalTypeKind.Int32)]
-    [InlineData("bigint", CanonicalTypeKind.Int64)]
-    [InlineData("json", CanonicalTypeKind.Json)]
-    [InlineData("datetime", CanonicalTypeKind.Timestamp)]
-    public void PlainScalarEntries_MapDirectlyToTheirKind(string nativeType, CanonicalTypeKind expected)
+    [InlineData("int", CanonicalKind.Int32)]
+    [InlineData("bigint", CanonicalKind.Int64)]
+    [InlineData("json", CanonicalKind.Json)]
+    [InlineData("datetime", CanonicalKind.Timestamp)]
+    public void PlainScalarEntries_MapDirectlyToTheirKind(string nativeType, CanonicalKind expected)
     {
-        var canonical = Dialect().ToCanonicalType(nativeType);
+        var canonical = Read(nativeType);
 
         Assert.Equal(expected, canonical.Kind);
         Assert.Null(canonical.Precision);
@@ -72,9 +78,9 @@ public sealed class DescriptorDialectTests
     [Fact]
     public void DecimalWithPrecisionAndScale_SubstitutesThePlaceholders()
     {
-        var canonical = Dialect().ToCanonicalType("decimal(10,2)");
+        var canonical = Read("decimal(10,2)");
 
-        Assert.Equal(CanonicalTypeKind.Decimal, canonical.Kind);
+        Assert.Equal(CanonicalKind.Decimal, canonical.Kind);
         Assert.Equal(10, canonical.Precision);
         Assert.Equal(2, canonical.Scale);
     }
@@ -82,32 +88,32 @@ public sealed class DescriptorDialectTests
     [Fact]
     public void VarcharWithLength_SubstitutesThePlaceholder_AndCarriesUnicode()
     {
-        var canonical = Dialect().ToCanonicalType("varchar(255)");
+        var canonical = Read("varchar(255)");
 
-        Assert.Equal(CanonicalTypeKind.String, canonical.Kind);
+        Assert.Equal(CanonicalKind.String, canonical.Kind);
         Assert.Equal(255, canonical.Length);
-        Assert.True(canonical.IsUnicode);
-        Assert.False(canonical.IsMax);
+        Assert.True(canonical.Unicode);
+        Assert.NotNull(canonical.Length);
     }
 
     [Fact]
     public void MaxEntries_CarryNoLength()
     {
-        var text = Dialect().ToCanonicalType("text");
-        var blob = Dialect().ToCanonicalType("blob");
+        var text = Read("text");
+        var blob = Read("blob");
 
-        Assert.True(text.IsMax);
         Assert.Null(text.Length);
-        Assert.Equal(CanonicalTypeKind.Binary, blob.Kind);
-        Assert.True(blob.IsMax);
+        Assert.Null(text.Length);
+        Assert.Equal(CanonicalKind.Binary, blob.Kind);
+        Assert.Null(blob.Length);
     }
 
     [Fact]
     public void AnUnlistedNativeType_IsUnmappable()
     {
-        var canonical = Dialect().ToCanonicalType("geometry");
+        var canonical = Read("geometry");
 
-        Assert.Equal(CanonicalTypeKind.Unmappable, canonical.Kind);
+        Assert.Equal(CanonicalKind.Unmappable, canonical.Kind);
     }
 
     [Fact]
@@ -115,9 +121,9 @@ public sealed class DescriptorDialectTests
     {
         // information_schema.columns often reports "decimal" the same as the internal catalog would;
         // the point of this test is the (p,s) substitution surviving args in either order of size.
-        var canonical = Dialect().ToCanonicalType("decimal(5,0)");
+        var canonical = Read("decimal(5,0)");
 
-        Assert.Equal(CanonicalTypeKind.Decimal, canonical.Kind);
+        Assert.Equal(CanonicalKind.Decimal, canonical.Kind);
         Assert.Equal(5, canonical.Precision);
         Assert.Equal(0, canonical.Scale);
     }
@@ -302,9 +308,9 @@ public sealed class DescriptorDialectTests
     public void RenderColumnType_IsNotSupported()
     {
         var dialect = Dialect();
-        var canonical = dialect.ToCanonicalType("int");
+        var canonical = dialect.ReadColumnType("int").Result!;
 
-        Assert.Throws<NotSupportedException>(() => dialect.RenderColumnType(canonical));
+        Assert.Throws<NotSupportedException>(() => dialect.WriteColumnType(canonical));
     }
 
     [Fact]

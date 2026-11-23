@@ -109,7 +109,7 @@ public sealed class ScriptHostTests : IDisposable
         public string EngineName => "MsSql";
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
-        public DbDataSync.Core.Sql.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataSync.Core.Sql.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
+        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 }

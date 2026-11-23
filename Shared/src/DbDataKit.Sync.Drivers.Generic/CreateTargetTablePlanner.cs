@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Core.Config;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
@@ -18,7 +19,7 @@ public static class CreateTargetTablePlanner
         // said what it should be, and refusing on the grounds that we could not have guessed it would
         // be refusing to honour the answer.
         var unmappable = columns
-            .Where(c => c.TypeOverride is null && c.Type.Kind == CanonicalTypeKind.Unmappable)
+            .Where(c => c.TypeOverride is null && c.Type.Kind == CanonicalKind.Unmappable)
             .ToList();
         if (unmappable.Count > 0)
             return new ProvisioningPlan(
@@ -33,7 +34,7 @@ public static class CreateTargetTablePlanner
         {
             var renderedType = column.TypeOverride is { } chosen
                 ? new RenderedColumnType(chosen, null)
-                : targetDialect.RenderColumnType(column.Type);
+                : targetDialect.WriteColumnType(column.Type, column.TypeNote);
             if (renderedType.Fidelity is not null)
                 warnings.Add($"Column '{column.Name}': {renderedType.Fidelity}");
             rendered.Add(new CreateTableColumn(column.Name, renderedType, column.IsNullable, column.IsPrimaryKey, column.KeyOrdinal));

@@ -16,7 +16,7 @@ namespace DbDataSync.Drivers.ArrowFlightSql;
 /// the inner dialect's own (<c>USE</c> on SQL Server, a validated <c>ChangeDatabase</c> elsewhere) would
 /// send SQL the proxy may not accept. It only records the name on the connection, where metadata calls
 /// read it as the catalog to look in.</item>
-/// <item><see cref="ToCanonicalType"/> reads the ANSI type names a Flight SQL column reports (an Arrow
+/// <item><see cref="ReadColumnType"/> reads the ANSI type names a Flight SQL column reports (an Arrow
 /// schema carries no engine-specific names), then falls back to the engine's own for any name that
 /// is not one of those.</item>
 /// <item>The identifier quote characters, which the base class reads through two protected members the
@@ -97,11 +97,9 @@ public sealed class FlightSqlDialect(SqlDialect inner, char quoteOpen = '"', cha
         inner.WriteWithGeneratedColumnOverrideAsync(
             connection, transaction, qualifiedTable, overrideRequired, write, cancellationToken);
 
-    public override CanonicalType ToCanonicalType(string nativeType)
-    {
-        var ansi = AnsiDialect.Instance.ToCanonicalType(nativeType);
-        return ansi.Kind != CanonicalTypeKind.Unmappable ? ansi : inner.ToCanonicalType(nativeType);
-    }
+    public override DbDataKit.Dialect.TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) =>
+        AnsiDialect.Instance.ReadColumnType(nativeType) is { IsMapped: true } ansi ? ansi : inner.ReadColumnType(nativeType);
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => inner.RenderColumnType(type);
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+        inner.WriteColumnType(type, sourceNote);
 }

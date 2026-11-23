@@ -12,6 +12,8 @@ internal sealed class CanonSpec
 {
     public CanonicalKind Kind;
     public FlagMatch Unicode, TimeZone, Unsigned;
+    /// <summary>A row that does not name <c>fixed</c> writes a fixed binary too, as the engine's one binary type; a row with <c>fixed</c> reads and writes only a fixed one.</summary>
+    public FlagMatch Fixed = FlagMatch.Any;
     /// <summary>Positional slots: placeholder letter (n,p,s) or literal value.</summary>
     public List<(char Placeholder, int Literal)> Slots = [];
 
@@ -41,6 +43,7 @@ internal sealed class CanonSpec
                     case "~unicode": spec.Unicode = FlagMatch.Any; break;
                     case "tz": spec.TimeZone = FlagMatch.Require; break;
                     case "unsigned": spec.Unsigned = FlagMatch.Require; break;
+                    case "fixed": spec.Fixed = FlagMatch.Require; break;
                     case "{n}" or "{p}" or "{s}": spec.Slots.Add((a[1], 0)); break;
                     default:
                         if (!int.TryParse(a, NumberStyles.None, CultureInfo.InvariantCulture, out int v))
@@ -163,7 +166,7 @@ internal sealed class TypeRule
         return kind switch
         {
             CanonicalKind.String => new CanonicalType(kind, Length: s0, Unicode: uni ? true : null),
-            CanonicalKind.Binary => new CanonicalType(kind, Length: s0),
+            CanonicalKind.Binary => new CanonicalType(kind, Length: s0, Fixed: Canon.Fixed == FlagMatch.Require ? true : null),
             CanonicalKind.Decimal => new CanonicalType(kind, Precision: s0, Scale: s1),
             CanonicalKind.Time => new CanonicalType(kind, Scale: s0, TimeZone: Canon.TimeZone == FlagMatch.Require ? true : null),
             CanonicalKind.Timestamp => new CanonicalType(kind, Scale: s0, TimeZone: Canon.TimeZone == FlagMatch.Require ? true : null),
@@ -178,6 +181,7 @@ internal sealed class TypeRule
         if (t.Kind == CanonicalKind.String && !Ok(Canon.Unicode, t.Unicode == true)) return null;
         if (t.Kind is CanonicalKind.Time or CanonicalKind.Timestamp && !Ok(Canon.TimeZone, t.TimeZone == true)) return null;
         if (t.Kind is CanonicalKind.Int8 or CanonicalKind.Int16 or CanonicalKind.Int32 or CanonicalKind.Int64 && !Ok(Canon.Unsigned, t.Unsigned == true)) return null;
+        if (t.Kind == CanonicalKind.Binary && !Ok(Canon.Fixed, t.Fixed == true)) return null;
 
         int?[] values = t.Kind switch
         {

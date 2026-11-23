@@ -41,7 +41,7 @@ internal sealed class OracleValueBinding : ISegmentValueBinder
 
     /// <summary>
     /// Checked against the full native type string, not <see cref="SqlTypeName.BaseOf"/>'s truncated
-    /// name — the same reason <c>OracleDialect.ToCanonicalType</c> checks the raw string for
+    /// name — the same reason <c>OracleDialect.ReadColumnType</c> checks the raw string for
     /// <c>WITH TIME ZONE</c> before falling through to the shared parser: a plain
     /// <c>SqlTypeName.BaseOf("TIMESTAMP(6) WITH TIME ZONE")</c> would come back <c>"timestamp"</c>,
     /// indistinguishable from a zone-naive column, and bind a zoned bound as the wrong .NET type.

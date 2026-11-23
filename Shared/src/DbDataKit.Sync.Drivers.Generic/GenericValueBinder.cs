@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using DbDataKit.Dialect;
 using DbDataSync.Core.Sql;
 using DbDataSync.Drivers.Abstractions;
 
@@ -14,7 +15,7 @@ namespace DbDataSync.Drivers.Generic;
 /// through the provider's own enum (<c>SqlDbType</c>, <c>NpgsqlDbType</c>) because "no common ancestor"
 /// is exactly right — but a provider's generic <see cref="DbProviderFactory.CreateParameter"/> plus the
 /// BCL's <see cref="System.Data.DbType"/> *is* a common ancestor, just a coarser one. Routing a native
-/// type through the dialect's own <see cref="SqlDialect.ToCanonicalType"/> — a table that already
+/// type through the dialect's own <see cref="SqlDialect.ReadColumnType"/> — a table that already
 /// exists for provisioning — and from there to <see cref="DbType"/> gets a typed, index-seekable
 /// parameter for any engine with a working <see cref="DbProviderFactory"/>, at the cost of the
 /// precision a provider-specific enum carries (no distinction between <c>Npgsql</c>'s
@@ -26,10 +27,10 @@ public sealed class GenericValueBinder(SqlDialect dialect, DbProviderFactory pro
 {
     public DbParameter CreateParameter(string name, string rawValue, ColumnMetadata column)
     {
-        var canonical = dialect.ToCanonicalType(column.NativeType);
+        var canonical = dialect.ReadColumnType(column.NativeType).Result ?? DbDataKit.Dialect.CanonicalType.Unmappable;
         try
         {
-            var (dbType, value) = Convert(canonical.Kind, rawValue);
+            var (dbType, value) = Convert(canonical, rawValue);
             var parameter = providerFactory.CreateParameter()
                 ?? throw new InvalidOperationException("The provider factory did not produce a parameter.");
             parameter.ParameterName = name;
@@ -45,22 +46,28 @@ public sealed class GenericValueBinder(SqlDialect dialect, DbProviderFactory pro
         }
     }
 
-    private static (DbType Type, object Value) Convert(CanonicalTypeKind kind, string raw) => kind switch
+    private static (DbType Type, object Value) Convert(DbDataKit.Dialect.CanonicalType type, string raw) => (type.Kind, type.Unsigned == true) switch
     {
-        CanonicalTypeKind.Boolean => (DbType.Boolean, ParseBool(raw)),
-        CanonicalTypeKind.Int8 => (DbType.SByte, sbyte.Parse(raw, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Int16 => (DbType.Int16, short.Parse(raw, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Int32 => (DbType.Int32, int.Parse(raw, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Int64 => (DbType.Int64, long.Parse(raw, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Decimal => (DbType.Decimal, decimal.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Float => (DbType.Single, float.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Double => (DbType.Double, double.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Date => (DbType.Date, DateOnly.FromDateTime(ParseDateTime(raw))),
-        CanonicalTypeKind.Time => (DbType.Time, TimeSpan.Parse(raw, CultureInfo.InvariantCulture)),
-        CanonicalTypeKind.Timestamp => (DbType.DateTime2, DateTime.SpecifyKind(ParseDateTime(raw), DateTimeKind.Unspecified)),
-        CanonicalTypeKind.TimestampTz => (DbType.DateTimeOffset, DateTimeOffset.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)),
-        CanonicalTypeKind.Guid => (DbType.Guid, Guid.Parse(raw)),
-        CanonicalTypeKind.Binary => (DbType.Binary, ParseBinary(raw)),
+        (CanonicalKind.Boolean, _) => (DbType.Boolean, ParseBool(raw)),
+        (CanonicalKind.Int8, false) => (DbType.SByte, sbyte.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int8, true) => (DbType.Byte, byte.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int16, false) => (DbType.Int16, short.Parse(raw, CultureInfo.InvariantCulture)),
+        // Providers rarely take the unsigned DbTypes, so a 16-, 32- or 64-bit unsigned value is bound as the next wider signed type.
+        (CanonicalKind.Int16, true) => (DbType.Int32, (int)ushort.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int32, false) => (DbType.Int32, int.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int32, true) => (DbType.Int64, (long)uint.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int64, false) => (DbType.Int64, long.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Int64, true) => (DbType.Decimal, (decimal)ulong.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Decimal, _) => (DbType.Decimal, decimal.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Float, _) => (DbType.Single, float.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Double, _) => (DbType.Double, double.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Date, _) => (DbType.Date, DateOnly.FromDateTime(ParseDateTime(raw))),
+        (CanonicalKind.Time, _) => (DbType.Time, TimeSpan.Parse(raw, CultureInfo.InvariantCulture)),
+        (CanonicalKind.Timestamp, _) when type.TimeZone == true =>
+            (DbType.DateTimeOffset, DateTimeOffset.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)),
+        (CanonicalKind.Timestamp, _) => (DbType.DateTime2, DateTime.SpecifyKind(ParseDateTime(raw), DateTimeKind.Unspecified)),
+        (CanonicalKind.Guid, _) => (DbType.Guid, Guid.Parse(raw)),
+        (CanonicalKind.Binary, _) => (DbType.Binary, ParseBinary(raw)),
         // String, Json, Xml, Unmappable and anything future: text is always a valid comparison for a
         // segment bound even when it is not the column's real type — the fallback of last resort.
         _ => (DbType.String, raw),

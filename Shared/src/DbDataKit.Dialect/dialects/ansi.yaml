@@ -119,6 +119,7 @@ types:
   - { native: "integer", canonical: "int32" }
   - { native: "int", canonical: "int32", direction: to_canonical }
   - { native: "bigint", canonical: "int64" }
+  - { native: "numeric(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as numeric(38,9), so digits beyond it are rounded" }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", defaults: { p: 18, s: 0 } }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { p: 18, s: 0 } }
   - { native: "real", canonical: "float" }

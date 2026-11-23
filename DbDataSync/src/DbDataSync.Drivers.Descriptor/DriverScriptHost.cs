@@ -17,7 +17,7 @@ public static class DriverScriptHost
     private static readonly string[] DefaultImports =
     [
         "System", "System.Linq", "System.Collections.Generic", "System.Threading", "System.Threading.Tasks", "System.Data", "System.Data.Common",
-        "DbDataSync.Core.Config", "DbDataSync.Drivers.Abstractions",
+        "DbDataSync.Core.Config", "DbDataSync.Drivers.Abstractions", "DbDataKit.Dialect",
     ];
 
     /// <param name="driverDir">The driver's folder.</param>
@@ -42,7 +42,7 @@ public static class DriverScriptHost
         {
             CacheDirectory = cacheRoot is null ? Path.Combine(libDir, ".csx-cache") : Path.Combine(cacheRoot, manifest.Id),
             LoadRoot = driverDir,
-            HostReferences = [typeof(IDriver).Assembly.Location, typeof(ConnectionConfig).Assembly.Location],
+            HostReferences = [typeof(IDriver).Assembly.Location, typeof(ConnectionConfig).Assembly.Location, typeof(DbDataKit.Dialect.CanonicalType).Assembly.Location],
             Imports = DefaultImports,
             BannedNamespaces = [],
         });

@@ -85,7 +85,7 @@ public static class ArrowTypeMap
             case Decimal128Type d: return E(CanonicalType.Decimal(d.Precision, d.Scale));
             case Decimal256Type d: return E(CanonicalType.Decimal(d.Precision, d.Scale));
             case StringType or LargeStringType: return E(CanonicalType.String());
-            case FixedSizeBinaryType f: return new(CanonicalType.Binary(f.ByteWidth), Fidelity.Lossy, "fixed-size binary becomes variable-length");
+            case FixedSizeBinaryType f: return E(CanonicalType.Binary(f.ByteWidth, @fixed: true));
             case BinaryType or LargeBinaryType: return E(CanonicalType.Binary());
             case Date32Type or Date64Type: return E(CanonicalType.Of(CanonicalKind.Date));
             case Time32Type t32: return E(CanonicalType.Time(Digits(t32.Unit)));
