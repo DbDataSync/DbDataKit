@@ -10,8 +10,15 @@ namespace DbDataKit.Hosting.Cli;
 /// writes by anyone but administrators and SYSTEM.
 /// Design: docs/install.md#setting-up-one-machine-or-inviting-another
 /// </summary>
-public sealed class WindowsSuiteServiceHost(IServiceControlManager scm, IAclService acl, IElevationChecker elevation) : ISuiteServiceHost
+/// <param name="scm">The service control manager.</param>
+/// <param name="acl">Applies the folders' access lists.</param>
+/// <param name="elevation">Whether the command runs elevated.</param>
+/// <param name="allowLogsWriter">Gives a service's account its grant on an existing shared logs folder (<see cref="SharedLogsFolder.AllowWriter"/> by
+/// default); tests replace it.</param>
+public sealed class WindowsSuiteServiceHost(IServiceControlManager scm, IAclService acl, IElevationChecker elevation, Action<string, string>? allowLogsWriter = null) : ISuiteServiceHost
 {
+    private readonly Action<string, string> _allowLogsWriter = allowLogsWriter ?? SharedLogsFolder.AllowWriter;
+
     private readonly ServiceProvisioner _provisioner = new(scm);
 
     public bool IsElevated => elevation.IsElevated;
@@ -35,6 +42,8 @@ public sealed class WindowsSuiteServiceHost(IServiceControlManager scm, IAclServ
             acl.Apply(entry, principals);
         acl.Apply(new LayoutEntry(LayoutRole.InstallRoot, registration.Member.ProgramFolder, SuiteServiceRegistration.ProgramFolderAcl,
             "The program; administrators and SYSTEM change it, everyone else reads and runs it."), principals);
+        // a shared logs folder an earlier start made before this service was registered still lets this service make its own folder there
+        _allowLogsWriter(SuiteServices.LogsRootFor(registration.Service, registration.Member.DataFolder), principals.ResolveSid(LayoutPrincipal.ServiceAccount));
     }
 
     // the request inherits the folder's access list, which grants the service Modify: it reads the request and deletes it once joined

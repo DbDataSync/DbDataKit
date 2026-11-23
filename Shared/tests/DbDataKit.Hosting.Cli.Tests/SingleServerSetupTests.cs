@@ -358,7 +358,8 @@ public sealed class SingleServerSetupTests : IDisposable
     {
         var scm = new InMemoryServiceControlManager();
         var acl = new RecordingAcl();
-        var host = new WindowsSuiteServiceHost(scm, acl, new Elevated());
+        var logsWriters = new List<(string Folder, string Writer)>();
+        var host = new WindowsSuiteServiceHost(scm, acl, new Elevated(), (folder, writer) => logsWriters.Add((folder, writer)));
         var member = new SetupMember(SuiteServices.Runner, @"C:\Program Files\DbDataKit\runner\dbdatarunner.exe", @"C:\ProgramData\DbDataKit\runner");
         var registration = SuiteRegistration.For(member, skipFolderPermissionsCheck: true, _ => new WellKnownPrincipalResolver("S-1-5-80-7"));
 
@@ -385,6 +386,8 @@ public sealed class SingleServerSetupTests : IDisposable
         Assert.Equal(AccessRights.Full, Assert.Single(programs.Entries, e => e.Sid == "S-1-5-18").Rights);
         Assert.Equal(AccessRights.ReadExecute, Assert.Single(programs.Entries, e => e.Sid == "S-1-5-32-545").Rights);
         Assert.All(programs.Entries.Where(e => e.Sid is not ("S-1-5-32-544" or "S-1-5-18")), e => Assert.Equal(AccessRights.ReadExecute, e.Rights));
+        // the shared logs folder lets the service make its own folder there
+        Assert.Equal([(SuiteServices.LogsRootFor(SuiteServices.Runner, member.DataFolder), "S-1-5-80-7")], logsWriters);
     }
 
     [Fact]

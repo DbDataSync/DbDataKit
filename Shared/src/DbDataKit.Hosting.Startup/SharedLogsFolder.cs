@@ -25,9 +25,37 @@ public static class SharedLogsFolder
 
     /// <summary>
     /// The accounts that may create their files there: the four services' and, when it is none of those, this process's (a server started from a
-    /// terminal). An account that does not resolve (a service that is not registered on this machine) is left out.
+    /// terminal). A service's account is named by its SID, computed from the service's name, so it is granted whether or not that service is
+    /// registered yet: the console that starts first and makes the folder gives the Runner registered after it its grant too.
     /// </summary>
-    public static IReadOnlyList<string> DefaultWriters() => [.. SuiteServices.All.Select(s => s.WindowsAccount), "CurrentUser"];
+    public static IReadOnlyList<string> DefaultWriters() => [.. SuiteServices.All.Select(s => WindowsServiceAccounts.VirtualAccountSid(s.WindowsName)), "CurrentUser"];
+
+    /// <summary>
+    /// Gives <paramref name="writer"/> (an account or a SID) the grant <see cref="Ensure"/> gives each writer on an existing folder, when it does not have
+    /// it: for a folder an earlier release made before that service was registered. Nothing on Linux, or when the folder is not there.
+    /// </summary>
+    public static void AllowWriter(string path, string writer)
+    {
+        if (!OperatingSystem.IsWindows() || !Directory.Exists(path)) return;
+        AllowWriterWindows(path, writer);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AllowWriterWindows(string path, string writer)
+    {
+        var sid = AclHelper.ResolveIdentity(writer);
+        var directory = new DirectoryInfo(path);
+        var security = directory.GetAccessControl();
+        var has = security.GetAccessRules(true, true, typeof(SecurityIdentifier)).OfType<FileSystemAccessRule>()
+            .Any(r => r.IdentityReference.Equals(sid) && r.AccessControlType == AccessControlType.Allow && (r.FileSystemRights & WriterRights) == WriterRights);
+        if (has) return;
+        security.AddAccessRule(new FileSystemAccessRule(sid, WriterRights, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
+        directory.SetAccessControl(security);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static FileSystemRights WriterRights =>
+        FileSystemRights.CreateFiles | FileSystemRights.CreateDirectories | FileSystemRights.ReadAttributes | FileSystemRights.Synchronize;
 
     /// <summary>Makes the folder when it is missing and gives it its protection. An existing folder is left as it is.</summary>
     /// <returns>True when the folder was made.</returns>
@@ -72,9 +100,7 @@ public static class SharedLogsFolder
             SecurityIdentifier sid;
             try { sid = AclHelper.ResolveIdentity(writer); }
             catch (SystemException) { continue; } // IdentityNotMappedException among others: the service is not registered here
-            security.AddAccessRule(new FileSystemAccessRule(sid,
-                FileSystemRights.CreateFiles | FileSystemRights.CreateDirectories | FileSystemRights.ReadAttributes | FileSystemRights.Synchronize,
-                InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(sid, WriterRights, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
         }
         new DirectoryInfo(path).SetAccessControl(security);
     }
