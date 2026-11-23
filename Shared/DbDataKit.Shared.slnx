@@ -131,6 +131,12 @@
     <Project Path="src/DbDataKit.ReportCatalogs.Runner/DbDataKit.ReportCatalogs.Runner.csproj" />
     <Project Path="src/DbDataKit.Views.Hosting/DbDataKit.Views.Hosting.csproj" />
     <Project Path="src/DbDataKit.Web/DbDataKit.Web.csproj" />
+    <Project Path="src/DbDataKit.Sync.Core/DbDataKit.Sync.Core.csproj" />
+    <Project Path="src/DbDataKit.Sync.Drivers.Abstractions/DbDataKit.Sync.Drivers.Abstractions.csproj" />
+    <Project Path="src/DbDataKit.Sync.Scripting.Abstractions/DbDataKit.Sync.Scripting.Abstractions.csproj" />
+    <Project Path="src/DbDataKit.Sync.Drivers.Generic/DbDataKit.Sync.Drivers.Generic.csproj" />
+    <Project Path="src/DbDataKit.Sync.Provisioning/DbDataKit.Sync.Provisioning.csproj" />
+    <Project Path="src/DbDataKit.Sync.Drivers.Descriptor/DbDataKit.Sync.Drivers.Descriptor.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/DbDataKit.Tools.XmlaForwarder/DbDataKit.Tools.XmlaForwarder.csproj" />
@@ -246,5 +252,11 @@
     <Project Path="tests/DbDataKit.ReportCatalogs.Tests/DbDataKit.ReportCatalogs.Tests.csproj" />
     <Project Path="tests/DbDataKit.Views.Hosting.Tests/DbDataKit.Views.Hosting.Tests.csproj" />
     <Project Path="tests/DbDataKit.Web.Tests/DbDataKit.Web.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Core.Tests/DbDataKit.Sync.Core.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Abstractions.Tests/DbDataKit.Sync.Drivers.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Generic.Tests/DbDataKit.Sync.Drivers.Generic.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Drivers.Descriptor.Tests/DbDataKit.Sync.Drivers.Descriptor.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Sync.Scripting.Abstractions.Tests/DbDataKit.Sync.Scripting.Abstractions.Tests.csproj" />
+    <Project Path="tests/DbDataKit.Authoring.Server.Tests/DbDataKit.Authoring.Server.Tests.csproj" />
   </Folder>
 </Solution>

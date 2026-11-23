@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The types keep their namespaces (DbDataSync.Core.*): DbDataSync's project of the same name forwards to this assembly. -->
+  <PropertyGroup>
+    <PackageId>DbDataKit.Sync.Core</PackageId>
+    <Description>Sync's configuration model: a replication, a table mapping, a connection and a script as their files say, the strict readers of those files, the configuration repository, the SQL dialects of the built-in engines and the secret references a connection names. Read by the replication engine and by the Workspace's authoring of a sync project.</Description>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CS1573;CS1572;CS1587</NoWarn>   <!-- doc comments on positional record parameters, and param tags of only some parameters -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />   <!-- secret names and references -->
+    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />   <!-- the provider chain and the environment provider -->
+    <ProjectReference Include="..\DbDataKit.Secrets.Store\DbDataKit.Secrets.Store.csproj" />   <!-- the encrypted store -->
+    <ProjectReference Include="..\DbDataKit.Secrets.Windows\DbDataKit.Secrets.Windows.csproj" />   <!-- DPAPI protection of the store's key -->
+    <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />   <!-- identifier quoting and name splitting for the built-in engines -->
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />   <!-- the strict reader connection files pass through -->
+    <ProjectReference Include="..\DbDataKit.Quality\DbDataKit.Quality.csproj" />   <!-- the check/1 model and the checks: section of a replication -->
+    <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />   <!-- the configuration repository's history (brings LibGit2Sharp) -->
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />   <!-- the connection definition and the policy composers apply -->
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- the suite's lineage graph -->
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />   <!-- the composer pipeline (credentials last, round-trip proof) -->
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DbDataKit.Authoring.Server\DbDataKit.Authoring.Server.csproj" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

@@ -247,6 +247,22 @@ for dev**.
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
 
+**The offline findings.** The Workspace runs the offline checks in its own process when it checks a draft, after Sync's own check of the files. It
+reads every table mapping against `catalog-cache.yaml` and the connection files, and reports each finding on the mapping's file and line. Example: the
+mapping `orders` maps the column `shipped_on`, and the cache's `crm.dbo.orders` has no such column. The Check tab then shows "The source column
+'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml (read from runners-eu, channel dev at 2026-11-18T10:00:00Z)" on that line of
+`config/replications/orders/table-mappings/orders.yaml`. Refresh the connection, or correct the mapping.
+
+What is left unchecked offline, and what the check says:
+
+- The draft has no `catalog-cache.yaml`: the check says so once and does not check the mappings against the databases' shape.
+- The cache has errors: they are reported with the file, and the mappings are not checked against it.
+- A connection has no entry in the cache: the check names the connection once and leaves the mappings on it unchecked.
+- A source filter the lexer of the source's dialect cannot read (a string that is not closed, a `;`, a subquery, parentheses that do not match): the
+  filter is reported as not checked offline. A filter that can be read has each name that stands for a column compared with the cached table.
+- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types and keys are compared once the cache
+  holds it.
+
 **The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
 
 **Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
