@@ -4,20 +4,25 @@ import { designerPath, filesPath, useDraft } from '@dbdatakit/workspace'
 import { taskPath } from '../model'
 import { useSyncDraft, type FileProblem } from '../useSyncDraft'
 import { PublishCard } from '../replication/PublishCard'
+import { ReplicationChecksPanel } from '../replication/ReplicationChecksPanel'
 import { OverviewPanel } from './OverviewPanel'
 import { TableMappingsPanel } from './TableMappingsPanel'
 
-/** The replication's tabs and where each is: Overview at the replication's own address, Table Mappings under `mappings`. */
+/** The replication's tabs and where each is: Overview at the replication's own address (its sub-tabs under `overview/`), Table Mappings under `mappings`, Quality Checks under `checks`. */
 const TABS = [
-  { path: '', label: 'Overview', testId: 'tab-overview' },
-  { path: 'mappings', label: 'Table Mappings', testId: 'tab-mappings' },
+  { tab: 'overview', path: '', label: 'Overview', testId: 'tab-overview' },
+  { tab: 'mappings', path: 'mappings', label: 'Table Mappings', testId: 'tab-mappings' },
+  { tab: 'checks', path: 'checks', label: 'Quality Checks', testId: 'tab-checks' },
 ] as const
 
+export type ReplicationTab = (typeof TABS)[number]['tab']
+
 /** Which tab an address after `replications/<name>/` opens. */
-export const tabOf = (rest: string): 'overview' | 'mappings' => (rest === 'mappings' || rest.startsWith('mappings/') ? 'mappings' : 'overview')
+export const tabOf = (rest: string): ReplicationTab =>
+  rest === 'mappings' || rest.startsWith('mappings/') ? 'mappings' : rest === 'checks' || rest.startsWith('checks/') ? 'checks' : 'overview'
 
 /**
- * A replication's page in the Designer: the breadcrumbs, the tabs Overview and Table Mappings, and the chrome. **Enabled** changes `enabled` of
+ * A replication's page in the Designer: the breadcrumbs, the tabs Overview, Table Mappings and Quality Checks, and the chrome. **Enabled** changes `enabled` of
  * the draft's `task.yaml` (it takes effect when the set is published); **Save settings** saves the task file; **Delete** removes the replication's
  * folder from the draft, after asking twice. Every edit on the page is an unsaved edit of the draft, the same one Files shows. The rail holds
  * **Build and publish…** (`PublishCard`); run controls and the status of a running replication are the Runner's, not the Designer's.
@@ -58,8 +63,10 @@ export function ReplicationPage({ project, id, replication, rest }: { project: s
 
       <div className="tabbar" style={{ marginTop: 8 }}>
         {TABS.map((t) => (
-          <Link key={t.testId} to={designerPath(project, id, t.path ? `${base}/${t.path}` : base)} className={`tab ${tab === (t.path || 'overview') ? 'active' : ''}`}
-            aria-current={tab === (t.path || 'overview') ? 'page' : undefined} data-testid={t.testId}>{t.label}</Link>
+          <Link key={t.testId} to={designerPath(project, id, t.path ? `${base}/${t.path}` : base)} className={`tab ${tab === t.tab ? 'active' : ''}`}
+            aria-current={tab === t.tab ? 'page' : undefined} data-testid={t.testId}>
+            {t.label}{t.tab === 'checks' && (task?.checks?.length ?? 0) > 0 ? <span className="subtab-badge" data-testid="tab-checks-count">{task!.checks!.length}</span> : null}
+          </Link>
         ))}
         <div className="actions">
           <span className="row" style={{ gap: 7, marginRight: 4 }}>
@@ -106,14 +113,18 @@ export function ReplicationPage({ project, id, replication, rest }: { project: s
         <div className="detail-main">
           {model.task.loading && <div className="empty">Loading…</div>}
           {task && tab === 'overview' && (
-            <OverviewPanel draft={task} setDraft={model.setTask} connections={model.connections} mappingCount={model.mappingNames.length} />
+            <OverviewPanel project={project} id={id} replication={replication} rest={rest} draft={task} setDraft={model.setTask}
+              connections={model.connections} mappingCount={model.mappingNames.length} editable={editable} />
           )}
           {task && tab === 'mappings' && (
             <TableMappingsPanel project={project} id={id} replication={replication} model={model} rest={rest === 'mappings' ? '' : rest.slice('mappings/'.length)} />
           )}
+          {task && tab === 'checks' && (
+            <ReplicationChecksPanel checks={task.checks ?? []} onChange={(checks) => model.setTask({ ...task, checks })} editable={editable} />
+          )}
         </div>
         <div className="detail-rail" data-testid="sd-rail">
-          <PublishCard project={project} id={id} />
+          <PublishCard project={project} id={id} replication={replication} />
         </div>
       </div>
     </div>

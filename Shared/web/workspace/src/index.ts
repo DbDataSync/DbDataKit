@@ -17,3 +17,8 @@ export type { ColumnChoices } from './mappingColumns'
 export { CatalogRefresh, ChannelPicker, RefreshDifference } from './pages/CatalogRefresh'
 export { catalogReadApi, differenceLine, isUnchanged, productionWarning, refreshDifference, refreshOutcome, withRefresh, workspaceServerOf } from './catalogRefresh'
 export type { CatalogDifference, CatalogReadAnswer, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'
+// what a kind's Designer reads through the frame: the draft's check, where it stands against its newest deploy to a Runner, a replication's provisioning plan and its apply
+export { commitsAfter, errorsUnder, provisioningPlanKey, useDraftCheck, useDraftPublication, useProvisioningApply, useProvisioningPlan } from './designerData'
+export type { DraftPublication, ProvisioningApply } from './designerData'
+export { RunResult as ProvisioningRunResult } from './pages/SyncProvisioningPanel'
+export type { RunnerVersion } from './deploys'
