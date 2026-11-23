@@ -1,25 +1,26 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { ErrorBanner } from '@dbdatakit/shell'
-import { workspaceApi, type BuildDetail, type CheckDiagnostic, type ProvisioningPlan, type ProvisioningSide, type StagedRun, type ToolAnswer } from '../api'
+import { useMutation } from '@tanstack/react-query'
+import { ApiError, ErrorBanner } from '@dbdatakit/shell'
+import { workspaceApi, type CheckDiagnostic, type ProvisioningPlan, type ProvisioningSide, type StagedRun, type ToolAnswer } from '../api'
+import { deployApi, useRunnerVersion } from '../deploys'
 import { replicationsOf } from '../syncSchemas'
-
-/** The version a build of this draft staged (or published) on a Runner: the newest build, newest first, with a publish that worked and named a package. */
-export interface StagedVersion { build: string; target: string; package: string; channel: string; version: string }
-export function stagedVersionOf(details: readonly BuildDetail[]): StagedVersion | null {
-  for (const d of details) {
-    const record = [...d.publishes].reverse().find((p) => p.ok && !p.preview && p.answer?.package && p.answer.channel && p.answer.version != null)
-    if (record?.answer) return { build: d.build.id, target: record.target, package: record.answer.package!, channel: record.answer.channel!, version: String(record.answer.version) }
-  }
-  return null
-}
 
 /** The step the Sync task `provision` records its report as. */
 export const AppliedStep = 'provision-applied'
 
-/** Reads a run back until it ended (each `intervalMs`, at most `attempts` times); the last read when it has not ended by then. */
-export async function followStagedRun(read: () => Promise<StagedRun>, intervalMs = 1000, attempts = 600): Promise<StagedRun> {
-  let run = await read()
+/**
+ * Reads a run back until it ended (each `intervalMs`, at most `attempts` times); the last read when it has not ended by then. A run the Runner has queued but not started is not on its record yet: a read answered 404 is tried
+ * again until the run is seen, `queuedAttempts` times at most.
+ */
+export async function followStagedRun(read: () => Promise<StagedRun>, intervalMs = 1000, attempts = 600, queuedAttempts = 60): Promise<StagedRun> {
+  let run: StagedRun | null = null
+  for (let i = 0; run === null; i++) {
+    try { run = await read() }
+    catch (e) {
+      if (!(e instanceof ApiError && e.status === 404) || i + 1 >= queuedAttempts) throw e
+      await new Promise((r) => setTimeout(r, intervalMs))
+    }
+  }
   for (let i = 1; i < attempts && !run.finished; i++) {
     await new Promise((r) => setTimeout(r, intervalMs))
     run = await read()
@@ -96,37 +97,28 @@ export function ProvisioningPlanView({ answer, onApply }: { answer: ToolAnswer<P
 /**
  * The Provisioning tab of a Sync project's workspace (plan 33 SC22j): what a replication needs of its two databases, planned offline from the draft's catalog cache (the target's tables and columns) and the mappings' own column caches. The statements are the product's planners'
  * (the create or alter of the target table). The cache holds no index, foreign key or default, and the source's change-capture state is the live server's, so those say so. **Apply** (plan 28c E21, step e) runs the set's manual task `provision`
- * of the version a build of this draft staged on a Runner, for the signed-in person: the DDL runs there under the logins bound on the Runner's channel, and this server holds none.
+ * of the version the console's newest deploy of a build of this draft put on a Runner, for the signed-in person, through the console (Design: docs/publishing.md#runs-of-a-deployed-build): the DDL runs there under the logins bound on the
+ * Runner's channel, and the Workspace server holds none and calls no Runner.
  */
 export function SyncProvisioningPanel({ project, id, paths }: { project: string; id: string; paths: readonly string[] }) {
   const replications = replicationsOf(paths)
   const [chosen, setChosen] = useState('')
   const replication = chosen !== '' && replications.includes(chosen) ? chosen : (replications[0] ?? '')
   const plan = useMutation({ mutationFn: (name: string) => workspaceApi.provisioningPlan(project, id, name) })
-  // the version a build of this draft staged on a Runner: the newest succeeded builds, read until one has a package publish
-  const staged = useQuery({
-    queryKey: ['workspace', project, id, 'staged-version'],
-    queryFn: async () => {
-      const succeeded = (await workspaceApi.builds(project, id)).filter((b) => b.status === 'succeeded').slice(0, 5)
-      for (const b of succeeded) {
-        const found = stagedVersionOf([await workspaceApi.build(project, id, b.id)])
-        if (found) return found
-      }
-      return null
-    },
-  })
+  // the version the console's newest deploy of a build of this draft put on a Runner
+  const staged = useRunnerVersion(project, id)
   const apply = useMutation({
     mutationFn: async ({ mapping, action }: { mapping: string; action: string }) => {
       const at = staged.data
       if (!at) throw new Error('No build of this draft is staged on a Runner. Build it and publish it to a Runner (staged, not served); then apply.')
-      const started = await workspaceApi.runStaged(project, id, at.build, 'provision', { replication, mapping, action, steps: '', repo_dir: 'repo' })
-      return followStagedRun(() => workspaceApi.stagedRun(project, id, at.build, started.run.run_id, AppliedStep))
+      const started = await deployApi.run(at.deploy, 'provision', { replication, mapping, action, steps: '', repo_dir: 'repo' })
+      return followStagedRun(() => deployApi.runOf(at.deploy, started.run.run_id, AppliedStep))
     },
   })
   return (
     <div data-testid="wsp-prov">
       <div className="hint" style={{ marginBottom: 6 }}>The plan of a replication's tables, made offline from the catalog cache of this draft. Applying it runs DDL on a Runner, as the task provision of the version a build of this draft staged there.</div>
-      <div className="hint" data-testid="wsp-prov-staged">{staged.data ? `Staged: ${staged.data.package} version ${staged.data.version} on ${staged.data.channel} of ${staged.data.target}.` : staged.isLoading ? '' : 'No build of this draft is staged on a Runner yet, so nothing can be applied.'}</div>
+      <div className="hint" data-testid="wsp-prov-staged">{staged.data ? `${staged.data.mode === 'serve' ? 'Published' : 'Staged'}: ${staged.data.package} version ${staged.data.version} on ${staged.data.channel} of ${staged.data.targetName}.` : staged.isLoading ? '' : 'No build of this draft is staged on a Runner yet, so nothing can be applied.'}</div>
       {replications.length === 0
         ? <div className="hint" data-testid="wsp-prov-no-replication">No replication yet.</div>
         : (

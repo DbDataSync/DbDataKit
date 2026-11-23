@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, ErrorBanner, Link } from '@dbdatakit/shell'
-import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishAnswer, type PublishOptions } from '../api'
+import { ApiError, ErrorBanner, Link, useModule } from '@dbdatakit/shell'
+import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishOptions } from '../api'
+import { deployApi, deployBody, deployLine, deployTargets, hostedServer, type DeployAnswer } from '../deploys'
 import { adoptionRequest, buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
 import { PreviewDataForm } from './PreviewDataForm'
 import { PublishForm } from './PublishForm'
@@ -32,7 +34,7 @@ function Readiness() {
   )
 }
 
-/** The refusal of a publish, in the server's words, and the steps it got through. */
+/** The refusal of a publish, in the target's or the console's words, and the steps it got through. */
 function PublishFailure({ error }: { error: unknown }) {
   const steps = error instanceof ApiError && typeof error.body === 'object' && error.body && Array.isArray((error.body as { steps?: unknown }).steps) ? (error.body as { steps: string[] }).steps : []
   return (
@@ -43,9 +45,15 @@ function PublishFailure({ error }: { error: unknown }) {
   )
 }
 
-/** One build: what it said (notes, diagnostics with file and line), its preview and its publish. */
+/**
+ * One build: what it said (notes, diagnostics with file and line), its preview and its publish. Publishing asks the console that hosts these screens to deploy the build
+ * (`POST /api/deploys`) as the signed-in person, to a Runner or a Gateway the console manages; the Workspace server only serves what the build holds. What was deployed
+ * from the build is the console's record (`GET /api/deploys`).
+ */
 function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: string; id: string; buildId: string; canWrite: boolean; kind: string }) {
   const client = useQueryClient()
+  const module = useModule()
+  const server = module.host?.serverId ?? hostedServer(module.apiBase)
   const [previewing, setPreviewing] = useState(false)
   const app = kind === 'app'
   const detail = useQuery<BuildDetail>({
@@ -53,11 +61,19 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
     queryFn: () => workspaceApi.build(project, id, buildId),
     refetchInterval: (q) => (q.state.data && buildBusy(q.state.data.build.status) ? 1200 : false),
   })
-  const targets = useQuery({ queryKey: ['workspace', 'targets', project], queryFn: () => workspaceApi.publishTargets(project), retry: false })
-  const publish = useMutation<PublishAnswer, Error, { target: string; note: string; options: PublishOptions }>({
-    mutationFn: (p) => workspaceApi.publish(project, id, buildId, p.target, p.note, p.options),
-    onSettled: () => client.invalidateQueries({ queryKey: ['workspace', 'build', project, id, buildId] }),
+  // the preview with data still goes from the Workspace server with its publisher key, to the targets it is paired with
+  const targets = useQuery({ queryKey: ['workspace', 'targets', project], queryFn: () => workspaceApi.publishTargets(project), retry: false, enabled: app })
+  const servers = useQuery({ queryKey: ['console', 'servers'], queryFn: deployApi.servers, enabled: server !== null, staleTime: 10_000 })
+  const kinds = useQuery({ queryKey: ['workspace', 'kinds'], queryFn: workspaceApi.projectKinds, staleTime: 60_000 })
+  const deployTo = deployTargets(servers.data ?? [], kinds.data?.find((k) => k.name === kind))
+  const deploysKey = ['console', 'deploys', server, project, id, buildId]
+  const deploys = useQuery({ queryKey: deploysKey, queryFn: () => deployApi.deploys({ workspaceServer: server!, project, workspace: id, build: buildId }), enabled: server !== null })
+  const publish = useMutation<DeployAnswer, Error, { target: string; note: string; options: PublishOptions }>({
+    mutationFn: (p) => deployApi.deploy(deployBody({ workspaceServer: server!, project, workspace: id, build: buildId }, p.target, p.note, p.options)),
+    onSettled: () => client.invalidateQueries({ queryKey: deploysKey }),
   })
+  // what the Workspace server sent from this build itself: the previews with data, and what it published before publishing went through the console
+  const sentByServer = detail.data?.publishes ?? []
   const previewData = useMutation<PreviewDataAnswer, Error, { target: string; instance: string }>({
     mutationFn: (p) => workspaceApi.previewWithData(project, id, buildId, p.target, p.instance),
     onSettled: () => client.invalidateQueries({ queryKey: ['workspace', 'build', project, id, buildId] }),
@@ -125,22 +141,40 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
                 )}
               </>
             )}
-            <PublishForm canWrite={canWrite} status={build.status} targets={targets.data ?? []} models={kind === 'store'} busy={publish.isPending} onPublish={(target, note, options) => publish.mutate({ target, note, options })}
-              adoption={publish.isError && publish.error instanceof ApiError ? adoptionRequest(publish.error.body) : null} onCancelAdoption={publish.reset} />
-            {publish.isPending && <div className="hint" data-testid="wsp-publish-progress">Publishing: the server reads the key and sends it; the Gateway or Runner checks it and stores the version...</div>}
+            {server === null
+              ? <div className="hint" data-testid="wsp-publish-no-console">A build is published by the console that manages this server, from these screens in the console.</div>
+              : (
+                <>
+                  <PublishForm canWrite={canWrite} status={build.status} targets={deployTo} models={kind === 'store'} busy={publish.isPending} onPublish={(target, note, options) => publish.mutate({ target, note, options })}
+                    adoption={publish.isError && publish.error instanceof ApiError ? adoptionRequest(publish.error.body) : null} onCancelAdoption={publish.reset} />
+                  <ErrorBanner error={servers.error ?? kinds.error} />
+                </>
+              )}
+            {publish.isPending && <div className="hint" data-testid="wsp-publish-progress">Publishing: the console reads the build from this server and sends it, as you, to the Runner or Gateway, which checks it and stores the version...</div>}
             {publish.isError && <PublishFailure error={publish.error} />}
             {publish.isSuccess && (
-              <div data-testid="wsp-published" data-version={publish.data.published.version ?? ''}>
-                <div className="empty" data-testid="wsp-published-line">{publishedLine(publish.data.published)}</div>
+              <div data-testid="wsp-published" data-version={publish.data.deployed.version ?? publish.data.deploy.version ?? ''}>
+                <div className="empty" data-testid="wsp-published-line">{publishedLine(publish.data.deployed)}</div>
                 <ol className="hint">{publish.data.steps.map((s, i) => <li key={i} data-testid="wsp-publish-step">{s}</li>)}</ol>
               </div>
             )}
           </>
         )}
-        {(detail.data?.publishes.length ?? 0) > 0 && (
-          <div data-testid="wsp-publishes">
+        <ErrorBanner error={deploys.error} />
+        {(deploys.data?.length ?? 0) > 0 && (
+          <div data-testid="wsp-deploys">
             <div className="hint" style={{ marginTop: 8 }}>Published from this build</div>
-            {detail.data!.publishes.map((p, i) => (
+            {deploys.data!.map((d) => (
+              <div key={d.id} data-testid="wsp-deploy-record" data-outcome={d.outcome} data-target={d.target_name} data-version={d.version ?? ''}>
+                {d.deployed_by} to {d.target_name} {when(d.deployed_at)}: {deployLine(d)}
+              </div>
+            ))}
+          </div>
+        )}
+        {sentByServer.length > 0 && (
+          <div data-testid="wsp-publishes">
+            <div className="hint" style={{ marginTop: 8 }}>Sent from this build by the Workspace server</div>
+            {sentByServer.map((p, i) => (
               <div key={i} data-testid="wsp-publish-record" data-ok={String(p.ok)}>
                 {p.by} {p.preview ? `previewed ${p.preview} on` : 'to'} {p.target} {when(p.at)}: {p.ok ? (p.answer ? publishedLine(p.answer) : '') : p.error}
               </div>
@@ -155,7 +189,10 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
 /** The builds of a draft: build it, follow the build, read what it said, preview it (read only) and publish it to a Gateway or a Runner (by what its kind makes). A merged workspace (`closed`) keeps its builds: they can still be previewed and published. */
 export function BuildsPanel({ project, id, canWrite, closed = false }: { project: string; id: string; canWrite: boolean; closed?: boolean }) {
   const client = useQueryClient()
-  const [selected, setSelected] = useState<string | null>(null)
+  // the build shown is in the address (`?build=<id>`, see `buildsPath`), so a link can open one build's publish panel
+  const [search, setSearch] = useSearchParams()
+  const selected = search.get('build')
+  const setSelected = (build: string) => setSearch((now) => { const next = new URLSearchParams(now); next.set('build', build); return next }, { replace: true })
   const projects = useQuery({ queryKey: ['workspace', 'projects'], queryFn: workspaceApi.projects, staleTime: 30_000 })
   const kind = projects.data?.find((p) => p.id === project)?.kind ?? 'app'
   const app = kind === 'app'
@@ -178,7 +215,7 @@ export function BuildsPanel({ project, id, canWrite, closed = false }: { project
       <div className="row" style={{ gap: 10, margin: '8px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-primary" disabled={!button.enabled} title={button.why ?? undefined} data-testid="wsp-build" onClick={() => ask.mutate()}>{makeLabel(kind)}</button>
         {button.why && (closed || !app || !readiness.data?.problems.length) && <span className="hint" data-testid="wsp-build-why">{button.why}</span>}
-        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not. <Link to="/keys" data-testid="wsp-keys-link">Publisher keys</Link></span>
+        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not.{app && <> <Link to="/keys" data-testid="wsp-keys-link">Publisher keys</Link> (a preview with data is sent with one)</>}</span>
       </div>
       <ErrorBanner error={ask.error ?? builds.error} />
       {builds.data?.length === 0 && <div className="empty" data-testid="wsp-builds-none">{app ? 'This workspace has not been built.' : 'Nothing has been made from this workspace yet.'}</div>}
@@ -191,7 +228,7 @@ export function BuildsPanel({ project, id, canWrite, closed = false }: { project
           <span className="hint">{b.message ?? ''}</span>
         </button>
       ))}
-      {shown && <BuildDetailView key={shown} project={project} id={id} buildId={shown} canWrite={canWrite} kind={kind} />}
+      {shown && projects.data && <BuildDetailView key={shown} project={project} id={id} buildId={shown} canWrite={canWrite} kind={kind} />}
     </div>
   )
 }
