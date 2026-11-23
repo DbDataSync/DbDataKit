@@ -326,6 +326,8 @@ text `binary(fixed,16)`): SQL Server and MySQL read and write `binary(n)` exactl
 engine writes its one binary type as now. Transfer then creates `binary(16)` where it now creates `varbinary(16)`, the catalog screens show the flag,
 and the Gateway's Arrow map can read `FixedSizeBinary` exactly. Option B, no flag: Sync's new targets get `varbinary(n)` and a lossy note. Recommendation: A.
 
+Answer from the owner, 2026-11-23: A add fixed length flag.
+
 ### SYNCAUTHORING-P26: a time column on Oracle (awaiting the owner)
 
 Oracle has no time-of-day type. Sync writes a time as `timestamp(6)`, with the note that its date part means nothing; the shared `oracle` table writes
