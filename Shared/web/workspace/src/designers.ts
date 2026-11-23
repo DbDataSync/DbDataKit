@@ -44,3 +44,7 @@ export const designerPath = (project: string, id: string, rest = '') =>
 /** The address of a file in a draft's Files area (no path: the area with no file open), with a tab of the area when given. */
 export const filesPath = (project: string, id: string, path: string | null = null, tab?: string) =>
   `${draftPath(project, id)}/files${path ? `/${path.split('/').map(enc).join('/')}` : ''}${tab ? `?tab=${enc(tab)}` : ''}`
+
+/** The address of a draft's Builds tab, where a build is made and published; with a build, that build is open with its publish panel. */
+export const buildsPath = (project: string, id: string, build?: string) =>
+  `${filesPath(project, id, null, 'builds')}${build ? `&build=${enc(build)}` : ''}`

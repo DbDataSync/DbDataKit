@@ -27,17 +27,17 @@ async function makeProject(page: Page, id: string, kind: string, workspace: stri
 const openFile = (page: Page, path: string) => page.locator(`[data-testid="wsp-file"][data-path="${path}"]`).click()
 const live = (page: Page) => page.getByTestId('wsp-live')
 
-/** Builds the draft and publishes it to a target; the answer line is the server's. */
+/** Builds the draft and publishes it to a server of the console, through the console's deploy; the answer line is the target's, the record the console's. */
 async function publish(page: Page, target: string, channel?: string) {
   await page.getByTestId('wsp-tab-builds').click()
   await page.getByTestId('wsp-build').click()
   const done = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
   await expect(done).toBeVisible({ timeout: 15_000 })
-  await done.getByTestId('wsp-publish-target').fill(target)
+  await done.getByTestId('wsp-publish-target').selectOption(target)
   if (channel) await done.getByTestId('wsp-publish-channel').fill(channel)
   await done.getByTestId('wsp-publish').click()
   await expect(done.getByTestId('wsp-published')).toBeVisible()
-  await expect(done.locator('[data-testid="wsp-publish-record"][data-ok="true"]')).toContainText(`tester to ${target}`)
+  await expect(done.locator('[data-testid="wsp-deploy-record"][data-outcome="ok"]')).toContainText(`tester to ${target}`)
 }
 
 async function storeFlow(page: Page, fake: FakeWorkspace) {

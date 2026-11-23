@@ -39,7 +39,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
 | WORKSPACEISOLATION-3 | The control service's deploy of a build is built: the Workspace serves a build's items and record (`.../builds/{b}/contents`, `.../files/{sha256}`), the console deploys an item as the person (`POST /api/deploys`, `ConsoleDeploys`), signs each version with its publisher key over the build record, and keeps the deploy record (`GET /api/deploys`; `docs/publishing.md`, "Deploying a build from the control service"). Left: an app build sent to an instance's preview (`preview-data`) through the console, which the Workspace still sends with its key; the deploy to a Gateway tested end to end through the console (an app build, which needs Bun and the vendored store; a Build project's semantic models; a Store project's models), so far tested against a stand-in Gateway in `DbDataKit.Deploy.Tests`; an app version is sent over the Gateway's app calls, with no signature and no build record on the Gateway, until PUBLISHING-1 puts apps on the shared publish API; for trusted code, the approver's signature once PUBLISHING-3 is built | none | M | a test through the console deploys an app build, a Build project's semantic models and a Store project's models to a Gateway; the Gateway records the person, and for the models the signature and the build record; the deploy record lists each |
-| WORKSPACEISOLATION-4 | The publish panel on the Workspace screens calls the control service's deploy (the Designer's **Build and publish…** opens this panel; SYNCAUTHORING-17 waits for this task); the preview form of an app build calls it too | WORKSPACEISOLATION-3 | M | Playwright: publish from the panel; the target shows the version |
+| WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). Left: the preview form of an app build calls it too, once WORKSPACEISOLATION-3 deploys a preview through the console; the Store project's Deploy tab (`StoreDeployPanel`) stages its model package through the console, with WORKSPACEISOLATION-5, which moves the runs it starts (WORKSPACEISOLATION-P13) | WORKSPACEISOLATION-3, WORKSPACEISOLATION-5 | S | Playwright: Preview with data sends the build through the console and the preview opens; the Deploy tab's dry run stages through the console and its report comes back |
 | WORKSPACEISOLATION-5 | Runs, run results, binding tests and lineage reads go through the control service; a Store model's contract check (`contract`) goes the same way and asks the Gateways the control service manages | WORKSPACEISOLATION-3 | M | the Runs tab's tests pass with the Workspace service unable to reach the Runner |
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`), built for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
 | WORKSPACEISOLATION-7 | Development logins (AUTHORING-19): the screen sends the login through the relay to the Runner; the Workspace service only learns which binding exists | none | M | a test sets up a login for `dev`; the value is in no Workspace log, state or audit, and the Runner holds it |
@@ -298,6 +298,35 @@ Scenario: a team deploys twenty builds a day for two years. The console's `deplo
 - Option B: a retention age (180 days, say), as the runs have.
 
 Recommendation: A for now: a row is small, and the Builds and Runs tabs read the history.
+
+### WORKSPACEISOLATION-P12: the Runs and Provisioning tabs until the runs go through the console (awaiting the owner)
+
+Scenario: Ana publishes build 3 of the Sync project `orders` from the Builds tab: the console stages it on `jobs` in `dev` with `source=erp`
+bound. She opens the Runs tab to run a replication now, or the Provisioning tab to apply its setup. Both tabs find the version a build published in
+the Workspace server's own record (`publishes.jsonl`), and the Workspace server's run routes look it up there (`StagedOf`). The console's deploy
+writes only the console's record, so the tabs say "No build of this draft is published to a Runner yet", and a run asked anyway is refused with
+"This build has not been staged on a Runner". The version is on the Runner, and the Runner's own screens in the console run its tasks.
+
+- Option A: WORKSPACEISOLATION-4 merges into `main` together with WORKSPACEISOLATION-5, which moves the runs, run results and binding tests to the
+  console and makes the Runs and Provisioning tabs read the console's deploy record; until both are ready, `main` keeps the Workspace server's publish.
+- Option B: WORKSPACEISOLATION-4 merges now; until WORKSPACEISOLATION-5, a person runs a published version's tasks from the Runner's screens.
+- Option C: WORKSPACEISOLATION-4 merges now and the Builds tab keeps a second button that publishes through the Workspace server, for the Runs and
+  Provisioning tabs, until WORKSPACEISOLATION-5.
+
+Recommendation: A: building and running a Sync set from the Workspace keeps working at every merge, and nothing is added to the old path.
+
+### WORKSPACEISOLATION-P13: the Store project's Deploy tab stages through the Workspace server until its runs move (default, awaiting the owner)
+
+Scenario: Ana presses **Dry run** on the Deploy tab of the Store project `sales`. The tab builds the draft, stages the model's package `model-sales`
+on a Runner with the slot `storage` bound, then runs the task `deploy` of the version that build staged, through the Workspace server's run route,
+which finds the version in the Workspace server's own record of the build.
+
+- Option A (built): the tab keeps staging through the Workspace server's publish route until WORKSPACEISOLATION-5 moves its runs to the console; that
+  task then moves the stage and the runs together.
+- Option B: the tab stages through the console now; its dry run is then refused ("This build has not been staged on a Runner") until
+  WORKSPACEISOLATION-5.
+
+Recommendation: A: the Deploy tab keeps working, and its stage and its runs move in one step.
 
 ## Shared areas touched
 
