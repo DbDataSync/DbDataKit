@@ -245,6 +245,8 @@ Option B, Sync takes the interval for new targets; the shared table also reads `
 targets keep `TIMESTAMP` (their plans would propose the change; Ana declines it). Recommendation: A, since Sync's targets already hold timestamps
 and a timestamp is how Oracle tools show a time of day.
 
+Answer from the owner, 2026-11-23: as recommended (A)
+
 ### SYNCAUTHORING-P27: ANSI type names, for Flight SQL columns and a generic Flight SQL target (awaiting the owner)
 
 The Flight SQL driver names each Arrow column's type in ANSI words (`tinyint`, `varbinary`, `time`, `varchar`), and Sync reads those names, and writes
@@ -260,6 +262,8 @@ Sync's writes for a generic target, used by Sync's Flight SQL driver and the off
 shared `ansi` table as it is. Recommendation: B. The same answer decides how ANSI writes a time with no stated precision (`time(0)` in the
 shared `ansi` table today, Sync's `TIME`), since every other engine writes one with microseconds.
 
+Answer from the owner, 2026-11-23: as recommended (B)
+
 ### SYNCAUTHORING-P28: the column type authors' scripts see (default, awaiting the owner)
 
 Sync's dialects now read and write every column type through the shared tables (`ReadColumnType` and `WriteColumnType`, the shared
@@ -274,6 +278,8 @@ an assembly, so removing the type means changing what scripts compile against. S
 tables', and nothing in Sync decides a type on its own. Option B, the script contracts take the shared type, with a check that names each script
 of a set that uses the old names, and Sync's type is deleted. Recommendation: A, for the same reason as SYNCAUTHORING-P15.
 
+Answer from the owner, 2026-11-23: P: 28, but no extra check (option B without the check that names each script using the old names)
+
 ### SYNCAUTHORING-P29: interval and list columns in Sync (default, awaiting the owner)
 
 The shared tables read PostgreSQL's and DuckDB's `interval`, Oracle's intervals and list types; Sync's readers, staging and writers do not carry
@@ -282,12 +288,16 @@ or give it a transform that reads it as text". Scenario: Ana maps `ops.public.jo
 and the offline check both say the column cannot be replicated. Option A, as built. Option B, replicate an interval between engines that have one
 (PostgreSQL, DuckDB, Oracle), once the readers and writers carry it. Recommendation: A until a set needs B.
 
+Answer from the owner, 2026-11-23: as recommended (A)
+
 ### SYNCAUTHORING-P30: the JDBC driver's types (default, awaiting the owner)
 
 The JDBC driver (pgJDBC) reads PostgreSQL's catalog names, and its dialect now reads and writes them through the shared `postgres` table, where it
 had its own short table that refused `bytea`, `time`, `uuid`, `jsonb` and `xml` and wrote a `varchar` with no length as `varchar(255)`. Scenario: a
 JDBC source with `payload bytea` and `name varchar` is provisioned into PostgreSQL as `bytea` and `text`; before, the mapping was refused. Option A,
 as built. Option B, keep the old table. Recommendation: A.
+
+Answer from the owner, 2026-11-23: as recommended (A)
 
 ## Open designs
 
