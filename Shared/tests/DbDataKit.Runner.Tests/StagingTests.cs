@@ -175,6 +175,32 @@ public sealed class StagingTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_version_staged_with_a_hold_is_prepared_but_not_activated_by_itself_and_the_administrators_activation_keeps_the_reason(string engine)
+    {
+        using var rig = new Rig(engine);
+        var (first, one) = rig.Instance();
+        Seed(rig.Store());
+        rig.Publish(Package(Version1), PublishMode.Serve);
+        var v2 = rig.Publisher.Publish(new PublishRequest(PackageActivator.Kind, Name, PackageManifestWriter.Write(Package(Version2Keeps)), "ada", Prod, PublishMode.Stage, Hold: "its preflight")).Version.Version;
+
+        // prepared and ready on the one instance, and still not activated: the automatic pass says what it waits for, without holding the package's runs
+        var pass = await one.PassAsync();
+        Assert.Empty(pass.Activated);
+        Assert.Equal(InstanceStates.Ready, StatusOf(rig, first).State);
+        Assert.Equal(1, rig.Publisher.Head(PackageActivator.Kind, Name, Prod)!.Active);
+        var waiting = await rig.Activator.ActivateAsync(Name, Prod, new ActivationRequest(ActivationMode.Automatic, "runner:x", [first.ToString("D")]));
+        Assert.Equal(ActivationState.Held, waiting.State);
+        Assert.Contains("its preflight", waiting.Message);
+        Assert.False(new ActivationHolds(rig.Database).IsHeld(PackageActivator.Kind, Name, Prod));
+
+        // an administrator activates it; the reason given is in the event of the activation
+        var done = await rig.Activator.ActivateAsync(Name, Prod, new ActivationRequest(ActivationMode.Administrator, "root", [first.ToString("D")], Reason: "preflight run 7 found 1 error; confirmed by root"));
+        Assert.Equal((ActivationState.Activated, v2), (done.State, done.Version));
+        Assert.Contains(rig.Publisher.EventsOf(PackageActivator.Kind, Name), e => e.Action == "activate" && e.Note == "reason: preflight run 7 found 1 error; confirmed by root");
+        Assert.Null(rig.Publisher.HoldOf(PackageActivator.Kind, Name, Prod));
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_version_that_loses_nothing_activates_by_itself_when_every_live_instance_is_ready_and_not_before(string engine)
     {
         using var rig = new Rig(engine);
