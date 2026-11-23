@@ -79,6 +79,7 @@ types:
   - { native: "hugeint", canonical: "decimal(38,0)", direction: to_canonical, fidelity: lossy, note: "128-bit integer does not fit 38 decimal digits in every case" }
   - { native: "decimal", canonical: "decimal(18,3)", direction: to_canonical }
   - { native: "numeric", canonical: "decimal(18,3)", direction: to_canonical }
+  - { native: "decimal(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as decimal(38,9), so digits beyond it are rounded" }
   - { native: "decimal({p},{s})", canonical: "decimal({p},{s})", defaults: { s: 0 }, p_max: 38 }
   - { native: "numeric({p},{s})", canonical: "decimal({p},{s})", direction: to_canonical, defaults: { s: 0 } }
   - { native: "decimal(38,{s})", canonical: "decimal({p},{s})", direction: from_canonical, fidelity: lossy, note: "precision above 38 is reduced to 38", p_min: 39, s_max: 38 }

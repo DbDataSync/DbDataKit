@@ -18,14 +18,14 @@ public static class PostgresDriverKinds
     /// Binary <c>COPY</c> staging — phase 38. Prefixed, per the naming rule: this is one engine's
     /// mechanism rather than a strategy every driver could offer.
     /// </summary>
-    public const string CopyStaging = "PgCopyStaging";
+    public const string CopyStaging = BuiltInDriverKinds.PgCopyStaging;
 
     /// <summary>
     /// Logical decoding through a replication slot — phase 34. Prefixed for the same reason
     /// <see cref="CopyStaging"/> is: it is one engine's mechanism, not a strategy every driver could
     /// offer.
     /// </summary>
-    public const string LogicalSlot = "PgLogicalSlot";
+    public const string LogicalSlot = BuiltInDriverKinds.PgLogicalSlot;
 
     /// <summary>Re-exported from <see cref="GenericDriverKinds"/>: batched multi-row <c>INSERT</c>
     /// staging is engine-neutral, and it stays registered as the fallback for an instance that will

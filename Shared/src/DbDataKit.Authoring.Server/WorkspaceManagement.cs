@@ -357,6 +357,48 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
+        // the sync Designer's questions, answered in this process by Sync's libraries over the draft's files and catalog cache (SyncDesigner): no database, no child
+        // process; a question may carry the person's unsaved edits, so the answer reads the draft as they see it. Create mappings answers files and writes none.
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/sync/script-slots", (string project, string id, HttpContext context) =>
+            SyncToolsOf(project, id, context, ServerRole.Viewer, out _, out _) is { } refused ? refused : Results.Json(SyncDesigner.ScriptSlotsAnswer()));
+
+        async Task<IResult> SyncDesignerAsync(string project, string id, HttpContext context, ServerRole needed, Func<string, JsonObject, Task<JsonNode>> answer)
+        {
+            if (SyncToolsOf(project, id, context, needed, out _, out var root) is { } refused) return refused;
+            var body = await Body(context);
+            if (body is null) return Results.Json(new { error = "The body is a JSON object." }, statusCode: StatusCodes.Status400BadRequest);
+            try
+            {
+                var unsaved = new Dictionary<string, string?>(StringComparer.Ordinal);
+                if (body["unsaved"] is JsonObject edits) foreach (var (path, text) in edits) unsaved[path] = text?.GetValue<string>();
+                else if (body["unsaved"] is not null) throw new SyncDesignerRefusal("\"unsaved\" is an object of paths and texts.", 400);
+                using var view = SyncDesigner.DraftView.Open(root, unsaved);
+                return Results.Json(await answer(view.Root, body));
+            }
+            catch (SyncDesignerRefusal ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = "A value of the body is not of the right type: " + ex.Message }, statusCode: StatusCodes.Status400BadRequest); }
+        }
+
+        static string? Text(JsonObject body, string key) => body[key]?.GetValue<string>();
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sync/capabilities", (string project, string id, HttpContext context) =>
+            SyncDesignerAsync(project, id, context, ServerRole.Viewer, (root, body) => Task.FromResult(SyncDesigner.CapabilitiesAnswer(root, Text(body, "connection")))));
+
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sync/inferred-columns", (string project, string id, HttpContext context) =>
+            SyncDesignerAsync(project, id, context, ServerRole.Viewer, (root, body) => SyncDesigner.InferredAnswerAsync(root, Text(body, "replication"), Text(body, "mapping"), context.RequestAborted)));
+
+        // making mappings is the author's, though the answer is only texts: a viewer cannot save them
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/sync/bulk-create", (string project, string id, HttpContext context) =>
+            SyncDesignerAsync(project, id, context, ServerRole.Author, (root, body) =>
+            {
+                var tables = (body["tables"] as JsonArray ?? throw new SyncDesignerRefusal("\"tables\" is a list of {\"schema\", \"table\"}.", 400))
+                    .Select(t => t is JsonObject o && Text(o, "table") is { Length: > 0 } table
+                        ? new SyncDesigner.TableToMap(Text(o, "schema") ?? "", table)
+                        : throw new SyncDesignerRefusal("\"tables\" is a list of {\"schema\", \"table\"}.", 400))
+                    .ToList();
+                return SyncDesigner.BulkCreateAnswerAsync(root, Text(body, "replication"), tables, context.RequestAborted);
+            }));
+
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (string project, string id, HttpContext context) =>
         {
             if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;

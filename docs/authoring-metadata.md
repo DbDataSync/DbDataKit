@@ -7,7 +7,7 @@ connection at all. It applies to every kind of project; what a sync project chec
 
 **Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a Runner channel (**Refresh from a Runner** on the tab
 **Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a paired Gateway's read-only schema call; the offline readers of the
-cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
+cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the offline checks of a Sync draft against the cache ([The offline findings](#a-sync-project)); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
@@ -323,6 +323,23 @@ mapping `orders` maps the column `shipped_on`, and the cache's `crm.dbo.orders` 
 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml (read from runners-eu, channel dev at 2026-11-18T10:00:00Z)" on that line of
 `config/replications/orders/table-mappings/orders.yaml`. Refresh the connection, or correct the mapping.
 
+How much a finding weighs:
+
+- A table or a column that the mapping names and the cache does not hold is an error. This covers a mapped column, a column a source filter names
+  and the table of a relationship. The check fails, and a build stops until the cache is refreshed or the name is corrected, so a build never carries
+  a mapping the cache contradicts.
+- A source type that does not fit the target column, a type the driver's type map does not know, and a key that does not agree with the target are
+  warnings. The Check tab counts them and a build goes on; the set's `preflight` checks them again on the databases.
+- What could not be checked offline (no cache, a connection with no entry in it, a filter the lexer cannot read) is a note.
+
+A type is judged by the same code the Sync engine reads it with: the connection's dialect over the shared type tables (`DbDataKit.Dialect`), or a YAML
+driver's type map from its `driver.yaml`. So the check and a run never disagree about what a column's type is.
+
+Example: Ana's cache of `crm` was read in `dev` a month ago. A DBA has since added `shipped_on` to `dbo.orders`, and Ana maps it. Her check fails with
+"The source column 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml". She presses **Refresh** on `orders`, accepts "1 column
+added", and the check passes. Her mapping also writes `amount` (`decimal(18,2)`) into an `integer` column of the target; the check warns that it "may
+not fit", and she can still build and stage.
+
 What is left unchecked offline, and what the check says:
 
 - The draft has no `catalog-cache.yaml`: the check says so once and does not check the mappings against the databases' shape.
@@ -330,8 +347,32 @@ What is left unchecked offline, and what the check says:
 - A connection has no entry in the cache: the check names the connection once and leaves the mappings on it unchecked.
 - A source filter the lexer of the source's dialect cannot read (a string that is not closed, a `;`, a subquery, parentheses that do not match): the
   filter is reported as not checked offline. A filter that can be read has each name that stands for a column compared with the cached table.
-- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types and keys are compared once the cache
-  holds it.
+- A target table that is not in the cache: the provisioning plan shows the statement that creates it. Its types are compared once the cache holds it.
+- A connection whose driver the draft does not hold as `drivers/<id>/driver.yaml` (a compiled driver, or one installed where the set runs): the check
+  names the connection once, and its source types and filters are not checked offline. A driver with a `driver.yaml` in the draft has its source types
+  read through that file's type map.
+- A reader or writer that the connection's built-in driver does not have (a Kind of a driver the project carries, or of one installed where the set
+  runs): whether it needs a key is not checked offline. The check says so once per replication.
+
+**A key where the reader or writer needs one.** The check works out which readers and writers each mapping runs, as the engine does: its change
+processing, its bulk load, and its reconcile sweep when that is on. It asks each one that matches rows on a key whether the cache gives it one:
+
+- `ChangeApply` and `KeyReconcileDelete` need the target's primary key.
+- `TriggerAudit` and `KeyReconcile` need the source's primary key.
+- `Scd2` needs a natural key, stated as its `naturalKey` option or derived from the source's key.
+- `MsSqlChangeTracking` and `PgLogicalSlot` need the source's primary key: change tracking reports a change by it, and a logical slot reports a
+  delete by the table's replica identity, which is the primary key unless a DBA set another.
+- `MsSqlMerge` and `MsSqlMergeReconcile` need the target's primary key, with every key column mapped.
+
+Which key a reader or writer needs comes from the built-in drivers' table (`BuiltInDriverCapabilities` in `DbDataKit.Sync.Drivers.Generic`), the
+same table the Workspace answers a connection's capabilities from. Example: Ana picks `MsSqlChangeTracking` for `crm.dbo.audit_log`, which the cache shows without a
+primary key. The check warns on the mapping's source table: "The reader 'MsSqlChangeTracking' would refuse this mapping: the source table
+crm.dbo.audit_log has no primary key in catalog-cache.yaml".
+
+Example: the replication `orders` reads with `Watermark` and names no writer, so it writes with `ChangeApply`. The cached `dw.public.orders` has no
+primary key. The check warns on the mapping: "The writer 'ChangeApply' would refuse this mapping: Table mapping 'orders': target table 'public.orders'
+has no primary key". Add the key to the target and refresh the cache, or read the whole table each pass with `BatchReload` and write with
+`DeleteInsert`, which needs no key.
 
 **The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
 

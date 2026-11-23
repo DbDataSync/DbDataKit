@@ -65,6 +65,9 @@ function check(kind: Kind, files: Map<string, string>): Finding[] {
         if (m && !m[1].startsWith('secret:')) found.push({ severity: 'error', code: 'DBD-WS-SYNC-SECRET', message: `${file} has a \`password_secret\` that is not a secret reference.`, file, line: i + 1 })
       })
     }
+    if (kind === 'sync' && /^config\/replications\/[^/]+\/task\.yaml$/.test(file) && text.includes('NOT_A_READER')) {
+      found.push({ severity: 'error', code: 'DBD-WS-SYNC-READER', message: "The reader 'NOT_A_READER' is not one the source connection's driver offers.", file, line: lineOf(text, 'NOT_A_READER') })
+    }
     if (kind === 'integration' && file.startsWith('src/') && file.endsWith('.csx') && text.includes('BROKEN')) {
       found.push({ severity: 'error', code: 'DBD-INT-CS1002', message: '; expected', file, line: lineOf(text, 'BROKEN') })
     }
@@ -107,7 +110,133 @@ const KINDS = [
 
 function json(route: Route, body: unknown, status = 200) { return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }) }
 
-export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
+/** The slots a script binding can name, as `ScriptSlots` lists them. */
+const SLOTS = [
+  { slot: 'sqlColumnExpression', levels: ['connection', 'replication', 'mapping'], label: 'SQL column expression', description: 'Generates a SQL expression the source evaluates for one column.' },
+  { slot: 'valueColumnExpression', levels: ['connection', 'replication', 'mapping'], label: 'Value column expression', description: "Transforms one column's value as rows flow to staging." },
+  { slot: 'rowTransform', levels: ['connection', 'replication', 'mapping'], label: 'Row transform', description: 'Transforms a whole row, and may drop it.' },
+  { slot: 'lifecycleHook', levels: ['connection', 'replication', 'mapping'], label: 'Lifecycle hook', description: 'Generates the SQL a hook point runs.' },
+  { slot: 'metadataProvider', levels: ['connection'], label: 'Metadata provider', description: "Answers a connection's databases, tables and columns." },
+]
+
+/** A built-in driver's capabilities in the shape `BuiltInDriverCapabilities` answers, trimmed to the Kinds a story picks. */
+function capabilitiesOf(engine: string) {
+  const reader = (kind: string, needsKey = 'None', detectsDeletes = false) =>
+    ({ kind, supportsSegmentation: kind === 'BatchReload', detectsDeletes, parameters: [], supportedIntents: kind === 'BatchReload' ? [] : ['Changes', 'ChangesFromEarliest', 'ChangesFromLatest'], detectsKeyChanges: kind !== 'Watermark', needsKey })
+  const writer = (kind: string, needsKey = 'None', supportsReconciliation = false) => ({ kind, supportsReconciliation, parameters: [], needsKey })
+  const base = { supportsConnectionTest: true, supportedProvisioningActions: ['enableSourceChangeCapture', 'createTargetTable', 'alterTargetTable'], supportsLibraryValidation: true, supportsTieSafeRowLimit: true }
+  if (engine === 'sqlserver') return { driverType: 'MsSql', ...base, defaultTestQuery: 'SELECT @@VERSION;',
+    readers: [reader('MsSqlChangeTracking', 'SourceKey', true), reader('Watermark'), reader('BatchReload')],
+    stagingProviders: [{ kind: 'MsSqlStagingTable', parameters: [] }, { kind: 'StagingTable', parameters: [] }],
+    writers: [writer('MsSqlMerge', 'TargetKey'), writer('ChangeApply', 'TargetKey'), writer('DeleteInsert', 'None', true)] }
+  if (engine === 'postgres') return { driverType: 'Postgres', ...base, defaultTestQuery: 'SELECT version();',
+    readers: [reader('Watermark'), reader('BatchReload'), reader('PgLogicalSlot', 'SourceKey', true)],
+    stagingProviders: [{ kind: 'PgCopyStaging', parameters: [] }, { kind: 'StagingTable', parameters: [] }],
+    writers: [writer('ChangeApply', 'TargetKey'), writer('DeleteInsert', 'None', true), writer('Scd2', 'NaturalKey')] }
+  return null
+}
+
+/** The draft's files with the unsaved edits a question sends over them, as `SyncDesigner.DraftView` reads them. */
+function viewOf(w: { files: Map<string, string> }, unsaved: Record<string, string | null> | undefined) {
+  const files = new Map(w.files)
+  for (const [path, text] of Object.entries(unsaved ?? {})) { if (text === null) files.delete(path); else files.set(path, text) }
+  return files
+}
+
+/** The cached columns of a table of a connection in the draft's `catalog-cache.yaml`, or undefined. */
+function cachedColumns(files: Map<string, string>, connection: string, schema: string, table: string): { name: string; type: string; nullable?: boolean; key?: boolean }[] | undefined {
+  const text = files.get('catalog-cache.yaml')
+  if (!text) return undefined
+  const cache = YAML.parse(text) as { connections?: Record<string, { tables?: { schema: string; name: string; columns: { name: string; type: string; nullable?: boolean; key?: boolean }[] }[] }> }
+  return cache.connections?.[connection]?.tables?.find((t) => t.schema.toLowerCase() === schema.toLowerCase() && t.name.toLowerCase() === table.toLowerCase())?.columns
+}
+
+/**
+ * The sync Designer's questions (`/sync/script-slots`, `/sync/capabilities`, `/sync/inferred-columns`, `/sync/bulk-create`): the shapes of the real answers, worked
+ * out simply. A target type is the source's type as it is (the real one translates it), and Create mappings writes no file into the draft.
+ */
+function syncDesigner(route: Route, w: { files: Map<string, string> }, question: string, method: string, body: string) {
+  if (question === 'script-slots' && method === 'GET') return json(route, { slots: SLOTS })
+  if (method !== 'POST') return json(route, { error: 'There is no such call.' }, 404)
+  const asked = JSON.parse(body || '{}') as { connection?: string; replication?: string; mapping?: string; tables?: { schema?: string; table: string }[]; unsaved?: Record<string, string | null> }
+  const files = viewOf(w, asked.unsaved)
+  const endpoints = () => {
+    const task = YAML.parse(files.get(`config/replications/${asked.replication}/task.yaml`) ?? 'null') as { endpoints?: { source?: { connectionName?: string }; target?: { connectionName?: string } } } | null
+    return { task, source: task?.endpoints?.source?.connectionName ?? '', target: task?.endpoints?.target?.connectionName ?? '' }
+  }
+  if (question === 'capabilities') {
+    const text = files.get(`config/connections/${asked.connection}.yaml`)
+    if (!text) return json(route, { error: `The draft has no connection '${asked.connection}' (config/connections/${asked.connection}.yaml).` }, 404)
+    const engine = (YAML.parse(text) as { engine?: string }).engine ?? ''
+    const answer = capabilitiesOf(engine)
+    return answer ? json(route, answer) : json(route, { error: `The driver '${engine}' is not one of Sync's built-in drivers, so what it can do is not known offline.` }, 404)
+  }
+  if (question === 'inferred-columns') {
+    const { source } = endpoints()
+    const mapping = YAML.parse(files.get(`config/replications/${asked.replication}/table-mappings/${asked.mapping}.yaml`) ?? 'null') as { sources?: { connectionName?: string; schema: string; table: string }[] } | null
+    if (!mapping?.sources?.[0]) return json(route, { error: `Table mapping '${asked.mapping}' was not found on replication '${asked.replication}'.` }, 404)
+    const side = mapping.sources[0]
+    const columns = cachedColumns(files, side.connectionName ?? source, side.schema, side.table)
+    if (!columns) return json(route, { replication: asked.replication, mapping: asked.mapping, problem: `The source table ${side.schema}.${side.table} is not in catalog-cache.yaml.`, columns: [], naturalKey: null })
+    const key = columns.filter((c) => c.key).map((c) => c.name)
+    return json(route, { replication: asked.replication, mapping: asked.mapping, problem: null,
+      columns: columns.map((c) => ({ sourceColumn: c.name, sourceType: c.type, targetType: c.type, fidelity: null, problem: null })),
+      naturalKey: key.length > 0 ? { columns: key, problem: null } : { columns: [], problem: `'${side.schema}.${side.table}' has no primary key, so there is nothing to derive a natural key from. Enter one below.` } })
+  }
+  if (question === 'bulk-create') {
+    const { task, source, target } = endpoints()
+    if (!task) return json(route, { error: `The draft has no replication '${asked.replication}'.` }, 404)
+    const out = { files: [] as { path: string; text: string }[], created: [] as string[], skipped: [] as string[], notes: [] as { mapping: string; side: string; reason: string }[], inferred: {} as Record<string, unknown> }
+    const folder = `config/replications/${asked.replication}/table-mappings/`
+    const taken = new Set([...files.keys()].filter((p) => p.startsWith(folder)).map((p) => p.slice(folder.length, -'.yaml'.length).toLowerCase()))
+    for (const t of asked.tables ?? []) {
+      const schema = t.schema ?? ''
+      const name = schema ? `${schema}.${t.table}` : t.table
+      if (taken.has(name.toLowerCase())) { out.skipped.push(name); continue }
+      taken.add(name.toLowerCase())
+      const columns = cachedColumns(files, source, schema, t.table) ?? []
+      const onTarget = cachedColumns(files, target, schema, t.table)
+      if (columns.length === 0) out.notes.push({ mapping: name, side: 'source', reason: 'the source table is not in the catalog cache, so nothing was captured and no columns were mapped' })
+      if (!onTarget) out.notes.push({ mapping: name, side: 'target', reason: 'the target table is not in the catalog cache: it is created with these columns when the target is provisioned' })
+      const shape = (cs: { name: string; type: string; nullable?: boolean; key?: boolean }[]) =>
+        cs.map((c) => ({ name: c.name, nativeType: c.type, isNullable: c.nullable !== false, isPrimaryKey: c.key === true, isIdentity: false }))
+      const paired = onTarget ? onTarget.filter((c) => columns.some((s) => s.name === c.name)) : columns
+      const mapping = { schemaVersion: 1, name, sources: [{ schema, table: t.table }], targets: [{ schema, table: t.table }],
+        columnMappings: paired.map((c) => ({ sourceColumn: c.name, targetColumn: c.name })),
+        sourceColumns: shape(columns), ...(onTarget ? { targetColumns: shape(onTarget) } : {}) }
+      out.files.push({ path: `${folder}${name}.yaml`, text: YAML.stringify(mapping) })
+      out.created.push(name)
+      if (columns.length > 0) {
+        const key = columns.filter((c) => c.key).map((c) => c.name)
+        out.inferred[name] = { columns: columns.map((c) => ({ sourceColumn: c.name, sourceType: c.type, targetType: c.type, fidelity: null, problem: null })),
+          naturalKey: key.length > 0 ? { columns: key, problem: null } : { columns: [], problem: `'${name}' has no primary key, so there is nothing to derive a natural key from. Enter one below.` } }
+      }
+    }
+    return json(route, out)
+  }
+  return json(route, { error: 'There is no such call.' }, 404)
+}
+
+/** The plan of each saved mapping of a replication but the template's `orders`: its target table is created when the catalog cache does not have it. */
+function savedPlans(files: Map<string, string>, replication: string) {
+  const folder = `config/replications/${replication}/table-mappings/`
+  const task = YAML.parse(files.get(`config/replications/${replication}/task.yaml`) ?? 'null') as { endpoints?: { target?: { connectionName?: string } } } | null
+  return [...files.entries()].filter(([p]) => p.startsWith(folder) && p !== `${folder}orders.yaml`).sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => {
+    const m = YAML.parse(text) as { name: string; targets?: { connectionName?: string; schema?: string; table: string }[] }
+    const t = m.targets?.[0] ?? { table: m.name }
+    const connection = t.connectionName ?? task?.endpoints?.target?.connectionName ?? ''
+    const table = `${t.schema ?? 'public'}.${t.table}`
+    const there = cachedColumns(files, connection, t.schema ?? '', t.table) !== undefined
+    return { mapping: m.name, source: null, target: { connection, table }, excluded: null, source_plan: null,
+      target_plan: there ? { action: 'createTargetTable', state: 'satisfied', steps: [], warnings: [] }
+        : { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${table} (...)`, rationale: 'it is not in the catalog cache', scope: 'table' }], warnings: [] } }
+  })
+}
+
+/** What a story adds to the fake: `syncFiles` are put in every new sync draft beside the template's (a `catalog-cache.yaml`, for the Designer's pickers). */
+export interface FakeOptions { syncFiles?: Record<string, string> }
+
+export async function mockWorkspace(page: Page, options: FakeOptions = {}): Promise<FakeWorkspace> {
   const projects: Project[] = []
   const workspaces: Workspace[] = []
   const published: FakeWorkspace['published'] = []
@@ -220,6 +349,7 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     if (parts.length === 3 && method === 'POST') {
       const name = (JSON.parse(body) as { name: string }).name
       const w: Workspace = { id: `ws-${counter}-${name}`, project: project.id, name, branch: `workspace/${name}`, base: 'abc1234', created: stamp(), files: template(project.id, project.kind), builds: [] }
+      if (project.kind === 'sync') for (const [path, text] of Object.entries(options.syncFiles ?? {})) w.files.set(path, text)
       workspaces.push(w)
       const { files: _f, builds: _b, ...summary } = w
       return json(route, { ...summary, owner: 'tester', mine: true }, 201)
@@ -236,15 +366,18 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     }
     if (rest[0] === 'check') return json(route, { kind: project.kind, ok: !check(project.kind, w.files).some((f) => f.severity === 'error'), diagnostics: check(project.kind, w.files) })
     if (rest[0] === 'changes') return json(route, { changes: [], uncommitted: true })
-    // the plan of a replication's tables, made offline from the draft's catalog cache: the target table is not there yet
+    // the plan of a replication's tables, made offline from the draft's saved files and catalog cache: the template's orders, whose target table is
+    // not there yet, then each other saved mapping of the replication, whose target table is created when the cache does not have it
     if (rest[0] === 'provisioning-plan' && method === 'POST') {
       const replication = (JSON.parse(body || '{}') as { replication?: string }).replication ?? ''
-      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [{
+      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [...savedPlans(w.files, replication), {
         mapping: 'orders', source: { connection: 'source-db', table: 'dbo.Orders' }, target: { connection: 'target-db', table: 'public.orders' }, excluded: null,
         source_plan: { action: 'enableSourceChangeCapture', state: 'satisfied', steps: [], warnings: [] },
         target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE "public"."orders" ("id" bigint)', rationale: 'it is not there', scope: 'table' }], warnings: [] },
       }] } })
     }
+    // the sync Designer's questions, in the shapes the Workspace answers them (`SyncDesigner`; the real routes are `WorkspaceSyncDesignerTests`)
+    if (rest[0] === 'sync' && project.kind === 'sync') return syncDesigner(route, w, rest[1] ?? '', method, body)
     // the Workspace server's own run routes: the screens run through the console
     if (rest[0] === 'builds' && (rest[2] === 'run' || rest[2] === 'runs' || rest[2] === 'binding-test' || rest[2] === 'contract')) {
       workspaceRuns.push(`${method} ${tail}`)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from '@dbdatakit/shell'
-import { designerPath, filesPath, replicationsOf, useDraft, type DesignerProps, type DesignerRegistration } from '@dbdatakit/workspace'
+import { designerPath, errorsUnder, filesPath, replicationsOf, useDraft, useDraftCheck, type DesignerProps, type DesignerRegistration } from '@dbdatakit/workspace'
 import { NewReplicationForm } from './replication/NewReplicationForm'
 import { ReplicationPage } from './pages/ReplicationPage'
 
@@ -10,9 +10,13 @@ export function replicationOfRest(rest: string): { name: string; rest: string } 
   return m ? { name: decodeURIComponent(m[1]), rest: m[2] ?? '' } : null
 }
 
-/** The sync Designer's entries in the navigation: the draft's replications, each opening its page, and **New replication** last, as a dialog. */
+/**
+ * The sync Designer's entries in the navigation: the draft's replications, each opening its page with the count of the draft's check's errors in
+ * its files (the check of what is saved), and **New replication** last, as a dialog.
+ */
 function SyncNavigation({ project, id, rest }: DesignerProps) {
   const draft = useDraft()
+  const check = useDraftCheck(project, id)
   const navigate = useNavigate()
   const [making, setMaking] = useState(false)
   const open = replicationOfRest(rest)?.name ?? null
@@ -22,7 +26,10 @@ function SyncNavigation({ project, id, rest }: DesignerProps) {
       {replications.length === 0 && <div className="hint" data-testid="sd-nav-none">No replication yet.</div>}
       {replications.map((r) => (
         <Link key={r} to={designerPath(project, id, `replications/${r}`)} className={`grid-row mono ${open === r ? 'active' : ''}`} style={{ display: 'block' }}
-          aria-current={open === r ? 'page' : undefined} data-testid="sd-nav-replication" data-name={r}>{r}{draft.dirtyPaths.some((p) => p.startsWith(`config/replications/${r}/`)) ? ' •' : ''}</Link>
+          aria-current={open === r ? 'page' : undefined} data-testid="sd-nav-replication" data-name={r}>
+          {r}{draft.dirtyPaths.some((p) => p.startsWith(`config/replications/${r}/`)) ? ' •' : ''}
+          <ErrorCount count={errorsUnder(check.data?.diagnostics, `config/replications/${r}/`)} />
+        </Link>
       ))}
       {draft.canEdit && (
         <button type="button" className="btn-link" style={{ marginTop: 6 }} onClick={() => setMaking(true)} data-testid="sd-new-replication">New replication</button>
@@ -39,6 +46,12 @@ function SyncNavigation({ project, id, rest }: DesignerProps) {
       )}
     </div>
   )
+}
+
+/** The check's errors in a replication's files, as a badge; nothing when there are none. */
+function ErrorCount({ count }: { count: number }) {
+  if (count === 0) return null
+  return <span className="badge" style={{ marginLeft: 6, borderColor: 'var(--danger-edge)', color: 'var(--danger-ink)' }} title={`The draft's check finds ${count} error${count === 1 ? '' : 's'} in this replication's files.`} data-testid="sd-nav-errors" data-count={count}>{count}</span>
 }
 
 /** The sync Designer's pages: a replication's page, and on the Designer's own address the first replication. */

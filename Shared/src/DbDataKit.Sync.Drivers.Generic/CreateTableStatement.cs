@@ -4,7 +4,7 @@ using DbDataSync.Core.Sql;
 namespace DbDataSync.Drivers.Generic;
 
 /// <summary>One column a generated <c>CREATE TABLE</c> should carry, already translated into its
-/// *target* dialect's rendering — see <see cref="SqlDialect.RenderColumnType"/>. Identity/generated
+/// *target* dialect's rendering — see <see cref="SqlDialect.WriteColumnType"/>. Identity/generated
 /// columns are never represented here at all: <see cref="ProvisioningColumn.IsPrimaryKey"/> aside,
 /// dropping <c>IsIdentity</c> on the way in (with a warning) is the caller's job, not this renderer's —
 /// see phase 25 §4.</summary>

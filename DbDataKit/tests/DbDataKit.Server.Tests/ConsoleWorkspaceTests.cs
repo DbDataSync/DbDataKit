@@ -293,7 +293,13 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.Null(ServerProducts.RoleNeeded("dbdatarunner", "GET", "api/v1/projects"));      // another product's table is its own
         Assert.True(ServerProducts.Relayable("dbdatabuild", "DELETE", "api/v1/projects/x"));   // a product with no table is not limited
         // every route of the table is a call a screen makes: the list is the whole of what passes
-        Assert.Equal(52, ServerProducts.WorkspaceRoutes.Count);
+        Assert.Equal(56, ServerProducts.WorkspaceRoutes.Count);
+        // the sync Designer's questions: reading them is the viewer's, Create mappings the author's
+        Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/sync/script-slots"));
+        Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/sync/capabilities"));
+        Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/sync/inferred-columns"));
+        Assert.Equal(ServerRole.Author, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/sync/bulk-create"));
+        Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/sync/connections"));   // no metadata route: the browser reads catalog-cache.yaml
         // what a build holds to send and each file by hash: read by the console's deploy, as the person, with the viewer role
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/contents"));
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/files/" + new string('a', 64)));

@@ -63,7 +63,7 @@ public sealed record HookRunFacts(
 /// <para>
 /// Two dialects, not one, because the motivating case translates a type *across* engines: a source
 /// column's native type has to be parsed by the engine that produced it
-/// (<see cref="SourceDialect"/>.<c>ToCanonicalType</c>) before the target engine can render DDL for it
+/// (<see cref="SourceDialect"/>.<c>ToCanonicalType</c>, the shared type) before the target engine can render DDL for it
 /// (<see cref="TargetDialect"/>.<c>RenderColumnType</c>). The phase 27 doc sketches this as one
 /// <c>Dialect</c> field; splitting it is the only way the schema-evolution case it motivates actually
 /// works for a mapping whose source and target are different engines.

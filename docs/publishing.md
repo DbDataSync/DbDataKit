@@ -91,6 +91,9 @@ the build's deploys (`GET /api/deploys`), taken or refused.
 A build's panel has its own address: `/servers/<Workspace server>/<project>/<workspace>/files?tab=builds&build=<build>` opens the Builds tab with
 that build and its publish panel.
 
+A Sync project's Designer links here: **Build and publish…** in the rail of a replication's page opens the Builds tab of the same draft, and the browser's
+Back returns to the replication (`DbDataWorkspace/README.md`, "A project's two areas").
+
 ### Runs of a deployed build
 
 A version the console deployed to a Runner is run through the console too. The console's deploy record names the Runner, the package, the channel

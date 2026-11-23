@@ -191,7 +191,7 @@ exposes one; the `mysql.generic` starter template is the closest fully worked ex
 | `typeMap` | no (default empty) | native type name (optionally parameterized, e.g. `"decimal(p,s)"`, `"varchar(n)"`) → a canonical kind, either a bare name (`datetime: Timestamp`) or an object (`{ kind: String, length: n, unicode: true }`). Anything not listed maps to `Unmappable`, which provisioning reports as unsupported rather than guessing. |
 | `capabilities.readers`/`.staging`/`.writers` | yes | which of `DbDataSync.Drivers.Generic`'s existing engine-neutral strategies (`Watermark`, `BatchReload`, `StagingTable`, `DeleteInsert`, `ChangeApply`, ...) this driver offers — a descriptor can only opt into strategies that already exist, never introduce a new one |
 
-**A descriptor driver never auto-provisions a target table.** `RenderColumnType` — the DDL-generation
+**A descriptor driver never auto-provisions a target table.** `WriteColumnType` — the DDL-generation
 path — deliberately throws rather than guess at a `CREATE TABLE` for an engine it only knows through a
 type-name table. Use it as a source (or as a target whose tables you create yourself) freely; write a
 compiled driver if you need real provisioning for a new engine.
@@ -253,6 +253,41 @@ implementation yourself — and is out of scope for this page beyond the command
 
 A newly installed driver is picked up by the next process that loads the driver set: the next `dbdatasync` command, and the next run of the engine on a
 Runner once the repository is published again (its package carries the `drivers/` and `libraries/` folders it needs).
+
+## Column types
+
+Every driver reads a source column's type, and writes a target column's type, through the shared type tables of the suite
+(`Shared/src/DbDataKit.Dialect`, its README lists the rules), so Sync, Build, Transfer and the Gateway give the same answer for the same column.
+A SQL Server `tinyint` becomes `tinyint` on SQL Server, `tinyint unsigned` on MySQL and `smallint` on PostgreSQL; a PostgreSQL `numeric` with no
+precision becomes `numeric` on PostgreSQL and `decimal(38,9)` elsewhere, with a note in the provisioning plan. A Flight SQL column is read by the
+names its client gives Arrow types (the shared `flightsql` dialect), then by the dialect of the engine behind the server when the connection names one.
+
+**Interval and array columns are not replicated.** A PostgreSQL or DuckDB `interval`, an Oracle interval and an array or list column have a type in
+the shared tables, but Sync's readers and writers do not carry their values. Provisioning and the Workspace's offline check report such a column with
+"Sync does not replicate interval columns (interval); leave the column out, or give it a transform that reads it as text". Leave it out of the
+mapping, or add a transform that reads it as text.
+
+**The JDBC driver reads PostgreSQL's names.** pgJDBC reports PostgreSQL's catalog names (`int4`, `bytea`, `timestamptz`), and the JDBC driver
+reads and writes them through the same table as the PostgreSQL driver: a `bytea` column is provisioned as `bytea`, a `varchar` with no length as
+`text`.
+
+**What a script or a `driver.csx` sees.** A lifecycle hook, a `driver.csx` provisioner and a `driver.csx` dialect see a column type as the shared
+`DbDataKit.Dialect.CanonicalType`; the namespace `DbDataKit.Dialect` is imported for every script and `driver.csx`. Its kind is `CanonicalKind`; a string or binary with no length bound has a
+null `Length`; a zoned timestamp is `Timestamp` with `TimeZone` true; an unsigned integer has `Unsigned` true; a fixed-length binary has `Fixed`
+true. A hook that names, for each source column, the type it would have on the target:
+
+```csharp
+foreach (var column in context.SourceColumns)
+{
+    var type = context.SourceDialect.ToCanonicalType(column.NativeType);
+    if (type.Kind == CanonicalKind.Unmappable) continue;   // a type the source dialect does not know, an interval or an array
+    var rendered = context.TargetDialect.RenderColumnType(type);
+    context.Log($"ALTER TABLE ... ADD {column.Name} {rendered.Sql}{(rendered.Fidelity is { } note ? " -- " + note : "")}");
+}
+```
+
+A `driver.csx` dialect implements `ReadColumnType` (a native type to a `TypeMapping<CanonicalType>`, which says how faithfully it was read) and
+`WriteColumnType` (a `CanonicalType` to the DDL of its column, with the note of what it loses).
 
 ## Worked example: a descriptor driver, with no rebuild
 

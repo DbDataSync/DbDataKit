@@ -52,25 +52,28 @@ internal static class EngineComposition
             string.Equals(Environment.GetEnvironmentVariable("Diagnostics__DriverDetails"), "true", StringComparison.OrdinalIgnoreCase));
 
         var driverRegistry = new DriverRegistry();
-        // The scripted reader is composed here rather than inside a driver, because it needs the script host
-        // and a driver must not depend on Roslyn.
-        var msSqlDriver = new MsSqlDriver();
-        var postgresDriver = new PostgresDriver();
-        var mySqlDriver = new MySqlDriver();
-        var oracleDriver = new OracleDriver();
-        var duckDbDriver = new DuckDbDriver();
-        driverRegistry.RegisterWithScripting(msSqlDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(postgresDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(mySqlDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(oracleDriver, scriptHost);
-        driverRegistry.RegisterWithScripting(duckDbDriver, scriptHost);
-        // One driver per SQL dialect (phase 197F); like DuckDb they name a dialect but supply no catalog, so
-        // they get no ScriptedQuery reader out of the same call.
-        foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
-            driverRegistry.RegisterWithScripting(flightSqlDriver, scriptHost);
+        RegisterBuiltInDrivers(driverRegistry, scriptHost);
         DriverLoader.LoadDescriptorDrivers(repoRoot, libraryRegistry, driverRegistry);
         DriverLoader.LoadCompiledDrivers(repoRoot, driverRegistry, cacheRoot: Path.Combine(scriptCache.Root, "drivers"));
 
         return new EngineServices(configRepository, driverRegistry, libraryRegistry, scriptHost);
+    }
+
+    /// <summary>
+    /// The built-in drivers, as every run registers them. What they register is what <see cref="BuiltInDriverCapabilities"/> says a screen may
+    /// offer, and a test holds the two equal. The scripted reader is composed here rather than inside a driver, because it needs the script host
+    /// and a driver must not depend on Roslyn.
+    /// </summary>
+    internal static void RegisterBuiltInDrivers(DriverRegistry driverRegistry, ScriptHost scriptHost)
+    {
+        driverRegistry.RegisterWithScripting(new MsSqlDriver(), scriptHost);
+        driverRegistry.RegisterWithScripting(new PostgresDriver(), scriptHost);
+        driverRegistry.RegisterWithScripting(new MySqlDriver(), scriptHost);
+        driverRegistry.RegisterWithScripting(new OracleDriver(), scriptHost);
+        driverRegistry.RegisterWithScripting(new DuckDbDriver(), scriptHost);
+        // One driver per SQL dialect; like DuckDb they name a dialect but supply no catalog, so they get no ScriptedQuery reader out of the
+        // same call.
+        foreach (var flightSqlDriver in ArrowFlightSqlDriver.CreateAll())
+            driverRegistry.RegisterWithScripting(flightSqlDriver, scriptHost);
     }
 }

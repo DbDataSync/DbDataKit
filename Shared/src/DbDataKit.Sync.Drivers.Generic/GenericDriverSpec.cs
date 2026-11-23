@@ -44,7 +44,7 @@ public sealed record GenericConnectionStringKeys(
 /// <see cref="GenericDriverKinds.Scd2"/>.</param>
 /// <param name="ValueBinder">Types a segment bound to the column it is compared against — see
 /// <see cref="ISegmentValueBinder"/>. Null falls back to <see cref="GenericValueBinder"/>, which binds
-/// through <see cref="SqlDialect.ToCanonicalType"/> and a generic <see cref="System.Data.DbType"/>
+/// through <see cref="SqlDialect.ReadColumnType"/> and a generic <see cref="System.Data.DbType"/>
 /// rather than a provider-specific type enum — a real loss of precision for an engine with legitimate
 /// provider-typed bindings, but the only thing possible without engine-specific code, and the reason a
 /// value-aware type (Oracle's <c>NUMBER</c>) is a compiled driver's job, not a descriptor's.</param>

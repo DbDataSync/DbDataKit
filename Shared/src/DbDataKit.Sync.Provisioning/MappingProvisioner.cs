@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataSync.Core.Config;
@@ -543,7 +544,7 @@ public class MappingProvisioner(
         var targetDialect = ResolveDialect(
             driverRegistry.Get(configRepository.LoadConnection(target.ConnectionName).DriverType));
 
-        return [.. sourceColumns.Select(column => Infer(sourceDialect, targetDialect, column))];
+        return MappingInference.TargetTypes(sourceDialect.ReadColumnType, targetDialect, sourceColumns);
     }
 
     /// <summary>
@@ -579,47 +580,7 @@ public class MappingProvisioner(
             await sourceConnection.DisposeAsync();
         }
 
-        sourceColumns = sourceColumns.WithKey(mapping.PrimaryKey);
-        var derived = NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings);
-        if (derived.Count > 0)
-            return new InferredNaturalKey(derived, null);
-
-        var keyColumns = sourceColumns.InKeyOrder().Select(c => c.Name).ToList();
-        var unmapped = keyColumns
-            .Where(k => !mapping.ColumnMappings.Any(m => string.Equals(m.SourceColumn, k, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        return new InferredNaturalKey([], keyColumns.Count == 0
-            ? $"'{source.Schema}.{source.Table}' has no primary key, so there is nothing to derive a " +
-              "natural key from. Enter one below."
-            : $"'{source.Schema}.{source.Table}'s primary key includes {string.Join(", ", unmapped.Select(u => $"'{u}'"))}, " +
-              "which this mapping does not carry across. Map those columns, or enter a natural key below.");
-    }
-
-    /// <summary>
-    /// One column's inference, or a null <c>TargetType</c> with the reason.
-    /// <para>
-    /// A type with no cross-engine equivalent is reported as such rather than thrown, because one
-    /// unmappable column should not stop the editor showing the other forty — and the operator's
-    /// answer to it is to type a target type of their own, which is exactly what the editor offers.
-    /// </para>
-    /// </summary>
-    private static InferredColumnType Infer(SqlDialect sourceDialect, SqlDialect targetDialect, ColumnMetadata column)
-    {
-        try
-        {
-            var canonical = sourceDialect.ToCanonicalType(column.NativeType);
-            if (canonical.Kind == CanonicalTypeKind.Unmappable)
-                return new InferredColumnType(column.Name, column.NativeType, null, null,
-                    $"'{column.NativeType}' has no cross-engine equivalent — set a target type by hand.");
-
-            var rendered = targetDialect.RenderColumnType(canonical);
-            return new InferredColumnType(column.Name, column.NativeType, rendered.Sql, rendered.Fidelity, null);
-        }
-        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or FormatException)
-        {
-            return new InferredColumnType(column.Name, column.NativeType, null, null, DriverFailures.Describe(ex));
-        }
+        return MappingInference.NaturalKey(sourceColumns, mapping, $"{source.Schema}.{source.Table}");
     }
 
     private (ReplicationTaskConfig Task, TableMappingConfig Mapping, SourceTableRef Source, TableRef Target) LoadMapping(

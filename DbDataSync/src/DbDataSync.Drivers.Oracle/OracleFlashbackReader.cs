@@ -12,7 +12,7 @@ namespace DbDataSync.Drivers.Oracle;
 /// <see cref="OracleFlashbackReader"/> is shared with any other engine.</summary>
 public static class OracleDriverKinds
 {
-    public const string Flashback = "OracleFlashback";
+    public const string Flashback = BuiltInDriverKinds.OracleFlashback;
 }
 
 /// <summary>

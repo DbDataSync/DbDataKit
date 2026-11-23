@@ -70,7 +70,8 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
   const deploys = useQuery({ queryKey: deploysKey, queryFn: () => deployApi.deploys({ workspaceServer: server!, project, workspace: id, build: buildId }), enabled: server !== null })
   const publish = useMutation<DeployAnswer, Error, { target: string; note: string; options: PublishOptions }>({
     mutationFn: (p) => deployApi.deploy(deployBody({ workspaceServer: server!, project, workspace: id, build: buildId }, p.target, p.note, p.options)),
-    onSettled: () => client.invalidateQueries({ queryKey: deploysKey }),
+    // every read of this draft's deploys is asked again, not only this build's: the replication pages say which version a Runner has from them
+    onSettled: () => client.invalidateQueries({ queryKey: ['console', 'deploys', server, project, id] }),
   })
   // what the Workspace server sent from this build itself: the previews with data, and what it published before publishing went through the console
   const sentByServer = detail.data?.publishes ?? []

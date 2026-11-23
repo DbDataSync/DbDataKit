@@ -33,6 +33,9 @@ public sealed class KeyReconcileScd2CloseWriter(SqlDialect dialect, ITableCatalo
     // The reconciling half of this pair, same sense KeyReconcileDeleteWriter is.
     public bool SupportsReconciliation => true;
 
+    /// <summary>A version is closed by its natural key, as the SCD Type 2 writer finds it.</summary>
+    public KeyNeed NeedsKey => KeyNeed.NaturalKey;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,

@@ -204,6 +204,12 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/script-test", ServerRole.Author),
         // plan 33 SC22j: the provisioning plan of a Sync draft from its catalog cache (offline, read only)
         ("POST", "api/v1/projects/{p}/workspaces/{id}/provisioning-plan", ServerRole.Viewer),
+        // the sync Designer's questions of a draft, answered by the Workspace from Sync's libraries and the draft's catalog cache: the script slots, a connection's
+        // capabilities and a mapping's inferred types and key (read), and Create mappings, whose files the author keeps as unsaved edits
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/sync/script-slots", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/sync/capabilities", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/sync/inferred-columns", ServerRole.Viewer),
+        ("POST", "api/v1/projects/{p}/workspaces/{id}/sync/bulk-create", ServerRole.Author),
         ("GET", "api/v1/app-build", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Author),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds", ServerRole.Viewer),

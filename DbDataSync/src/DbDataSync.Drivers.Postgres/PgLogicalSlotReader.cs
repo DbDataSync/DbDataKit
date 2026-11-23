@@ -52,7 +52,7 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
     /// discards changes the others have not read.
     /// </para>
     /// </summary>
-    public const string SlotNameOption = "slotName";
+    public const string SlotNameOption = BuiltInDriverOptions.SlotName;
 
     /// <summary>
     /// Whether a successful pass moves the slot forward, letting the source recycle the WAL behind it.
@@ -70,7 +70,7 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
     /// operator can see coming; the alternative is a correctness problem they cannot.
     /// </para>
     /// </summary>
-    public const string AdvanceSlotOption = "advanceSlot";
+    public const string AdvanceSlotOption = BuiltInDriverOptions.AdvanceSlot;
 
     public string Kind => PostgresDriverKinds.LogicalSlot;
 
@@ -98,31 +98,11 @@ public sealed class PgLogicalSlotReader(SqlDialect dialect) : IChangeReader, IPo
         ReadIntent.Changes, ReadIntent.ChangesFromEarliest, ReadIntent.ChangesFromLatest,
     };
 
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
-    [
-        new()
-        {
-            Name = SlotNameOption,
-            Label = "Replication slot",
-            Description =
-                "The logical replication slot this mapping reads. Left empty, one named after the " +
-                "source table. The slot has to exist — it is created by Apply on the Provisioning tab — " +
-                "and a slot that no replication reads pins the source's WAL until it is dropped.",
-            Required = false,
-        },
-        new()
-        {
-            Name = AdvanceSlotOption,
-            Label = "Advance the slot after a successful pass",
-            Description =
-                "Lets the source recycle the WAL this slot is holding, once the pass that read it has " +
-                "written and recorded its position. Without it the slot's WAL grows for as long as " +
-                "the replication runs. Only turn this on when the slot belongs to this mapping alone: " +
-                "advancing a shared slot discards changes the other mappings have not read.",
-            Type = ParameterType.Bool,
-            Default = "false",
-        },
-    ];
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.PgLogicalSlot;
+
+    /// <summary>A delete or an update reaches the slot with the source's replica identity, which by default is its primary key: a table with no
+    /// primary key and the default identity writes no delete record at all, and provisioning refuses it (<see cref="PgLogicalSlotStatement.ReplicaIdentity"/>).</summary>
+    public KeyNeed NeedsKey => KeyNeed.SourceKey;
 
     public async Task<CapturedPosition> CapturePositionAsync(
         DbConnection sourceConnection, SourceTableRef source, IReadOnlyDictionary<string, string> options,

@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using DbDataSync.Drivers.Abstractions;
 using DbDataSync.Core.Sql;
 
@@ -57,12 +58,9 @@ public static class HistorizedProvisioning
     public static bool IsHistorizing(string? writerKind) =>
         writerKind is GenericDriverKinds.Snapshot or GenericDriverKinds.Scd2;
 
-    private static CanonicalType Timestamp { get; } =
-        new(CanonicalTypeKind.Timestamp, null, null, null, IsUnicode: false, IsMax: false);
+    private static CanonicalType Timestamp { get; } = CanonicalType.Timestamp();
 
-    private static CanonicalType Text { get; } =
-        new(CanonicalTypeKind.String, 200, null, null, IsUnicode: false, IsMax: false);
+    private static CanonicalType Text { get; } = CanonicalType.String(200, unicode: false);
 
-    private static CanonicalType Boolean { get; } =
-        new(CanonicalTypeKind.Boolean, null, null, null, IsUnicode: false, IsMax: false);
+    private static CanonicalType Boolean { get; } = CanonicalType.Of(CanonicalKind.Boolean);
 }

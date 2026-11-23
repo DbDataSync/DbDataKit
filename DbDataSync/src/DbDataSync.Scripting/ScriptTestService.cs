@@ -1,3 +1,4 @@
+using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Globalization;
 using DbDataSync.Core.Config;
@@ -701,7 +702,7 @@ public sealed class ScriptTestService(
         {
             var column = columns.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
             var type = column is null
-                ? new CanonicalType(CanonicalTypeKind.String, 50, null, null, true, false)
+                ? CanonicalType.String(50)
                 : CanonicalTypeOf(column);
 
             foreach (var value in SampleValues.For(type, column?.IsNullable ?? true).Take(Math.Max(1, limit)))
@@ -729,7 +730,7 @@ public sealed class ScriptTestService(
         {
             var column = columns.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
             var type = column is null
-                ? new CanonicalType(CanonicalTypeKind.String, 50, null, null, true, false)
+                ? CanonicalType.String(50)
                 : CanonicalTypeOf(column);
             return SampleValues.For(type, isNullable: false).FirstOrDefault();
         })];
@@ -909,31 +910,26 @@ public sealed class ScriptTestService(
     private static CanonicalType MsSqlLikeCanonical(string nativeType)
     {
         var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
+        var max = args.Count > 0 && args[0] == "max";
         return baseName switch
         {
-            "bit" or "boolean" or "bool" => new(CanonicalTypeKind.Boolean, null, null, null, false, false),
-            "tinyint" => new(CanonicalTypeKind.Int8, null, null, null, false, false),
-            "smallint" or "int2" => new(CanonicalTypeKind.Int16, null, null, null, false, false),
-            "int" or "integer" or "int4" => new(CanonicalTypeKind.Int32, null, null, null, false, false),
-            "bigint" or "int8" => new(CanonicalTypeKind.Int64, null, null, null, false, false),
-            "decimal" or "numeric" or "money" => new(
-                CanonicalTypeKind.Decimal, null, CanonicalTypeSpec.IntAt(args, 0, 18), CanonicalTypeSpec.IntAt(args, 1, 2), false, false),
-            "real" or "float4" => new(CanonicalTypeKind.Float, null, null, null, false, false),
-            "float" or "double" or "double precision" or "float8" => new(CanonicalTypeKind.Double, null, null, null, false, false),
-            "date" => new(CanonicalTypeKind.Date, null, null, null, false, false),
-            "time" => new(CanonicalTypeKind.Time, null, null, null, false, false),
-            "datetime" or "datetime2" or "smalldatetime" or "timestamp" => new(CanonicalTypeKind.Timestamp, null, null, null, false, false),
-            "datetimeoffset" or "timestamptz" => new(CanonicalTypeKind.TimestampTz, null, null, null, false, false),
-            "uniqueidentifier" or "uuid" => new(CanonicalTypeKind.Guid, null, null, null, false, false),
-            "json" or "jsonb" => new(CanonicalTypeKind.Json, null, null, null, false, false),
-            "xml" => new(CanonicalTypeKind.Xml, null, null, null, false, false),
-            "binary" or "varbinary" or "bytea" or "image" => new(
-                CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, null), null, null, false,
-                args.Count > 0 && args[0] == "max"),
-            _ => new(
-                CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, 50), null, null,
-                baseName.StartsWith('n') || baseName is "text",
-                args.Count > 0 && args[0] == "max"),
+            "bit" or "boolean" or "bool" => CanonicalType.Of(CanonicalKind.Boolean),
+            "tinyint" => new CanonicalType(CanonicalKind.Int8, Unsigned: true),
+            "smallint" or "int2" => CanonicalType.Of(CanonicalKind.Int16),
+            "int" or "integer" or "int4" => CanonicalType.Of(CanonicalKind.Int32),
+            "bigint" or "int8" => CanonicalType.Of(CanonicalKind.Int64),
+            "decimal" or "numeric" or "money" => CanonicalType.Decimal(CanonicalTypeSpec.IntAt(args, 0, 18) ?? 18, CanonicalTypeSpec.IntAt(args, 1, 2) ?? 2),
+            "real" or "float4" => CanonicalType.Of(CanonicalKind.Float),
+            "float" or "double" or "double precision" or "float8" => CanonicalType.Of(CanonicalKind.Double),
+            "date" => CanonicalType.Of(CanonicalKind.Date),
+            "time" => CanonicalType.Time(),
+            "datetime" or "datetime2" or "smalldatetime" or "timestamp" => CanonicalType.Timestamp(),
+            "datetimeoffset" or "timestamptz" => CanonicalType.Timestamp(tz: true),
+            "uniqueidentifier" or "uuid" => CanonicalType.Of(CanonicalKind.Guid),
+            "json" or "jsonb" => CanonicalType.Of(CanonicalKind.Json),
+            "xml" => CanonicalType.Of(CanonicalKind.Xml),
+            "binary" or "varbinary" or "bytea" or "image" => CanonicalType.Binary(max ? null : CanonicalTypeSpec.IntAt(args, 0, null)),
+            _ => CanonicalType.String(max ? null : CanonicalTypeSpec.IntAt(args, 0, 50), baseName.StartsWith('n') || baseName is "text"),
         };
     }
 

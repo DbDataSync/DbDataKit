@@ -27,6 +27,9 @@ public sealed class MsSqlMergeReconcileWriter : IChangeWriter, IStatementPreview
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>MERGE matches on the target's primary key, every key column mapped (<see cref="MsSqlTargetShape.RequireMergeKey"/>).</summary>
+    public KeyNeed NeedsKey => KeyNeed.TargetKey;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,
