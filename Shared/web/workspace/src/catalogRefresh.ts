@@ -33,12 +33,25 @@ export interface CatalogReadAnswer {
   error?: string
 }
 
+/** What a read from a Gateway is asked: the Gateway, the project's connection, the Gateway's data source for it (the connection's name when none is given), and `adopt` once the person confirmed a data source made by hand. */
+export interface GatewayReadRequest { gateway: string; connection: string; data_source?: string; adopt?: boolean }
+
+/** What a read from a Gateway answers: the connection as a `catalog-cache/2` file of that one connection, recorded as read from the Gateway. */
+export interface GatewayReadAnswer { state: 'done'; gateway: string; gateway_name: string; connection: string; data_source: string; cache: string; tables: number; columns: number }
+
 const enc = encodeURIComponent
 const base = (workspace: string, project: string) => `/api/workspace-catalog/${enc(workspace)}/${enc(project)}`
 
+/** The servers of one product the console lists (`/api/instances`): each one's id in the console and its name. */
+const serversOf = (product: string) => () =>
+  request<{ id: string; name: string; product: string | null }[]>('/api/instances').then((all) => all.filter((s) => s.product === product).map((s) => ({ id: s.id, name: s.name })))
+
 /** The console's routes of a read. They are the console's own, whatever server the module talks to (`HOST_OWN` in the shell). */
 export const catalogReadApi = {
-  runners: () => request<{ id: string; name: string; product: string | null }[]>('/api/instances').then((all) => all.filter((s) => s.product === 'dbdatarunner').map((s) => ({ id: s.id, name: s.name }))),
+  runners: serversOf('dbdatarunner'),
+  gateways: serversOf('dbdatagateway'),
+  gatewayRead: (workspace: string, project: string, body: GatewayReadRequest) =>
+    request<GatewayReadAnswer>(`${base(workspace, project)}/gateway-read`, { method: 'POST', body: JSON.stringify(body) }),
   channels: (workspace: string, project: string, runner: string, connection: string) =>
     request<ChannelList>(`${base(workspace, project)}/channels?runner=${enc(runner)}&connection=${enc(connection)}`),
   read: (workspace: string, project: string, body: CatalogReadRequest) =>
