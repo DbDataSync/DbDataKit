@@ -119,7 +119,8 @@ public static class RemoteJobHost
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
         var settings = new RunSettings(options.Hooks, options.MaxParallelism, Guid.CreateVersion7, dryRun);
-        var run = JobRunner.ExecuteAsync(jobType, backend, settings, options.SlotOpener ?? ConnectionGrant.Opener(client, headers, options.SlotFactory, dryRun), input, cancel.Token);
+        var run = JobRunner.ExecuteAsync(jobType, backend, settings, options.SlotOpener ?? ConnectionGrant.Opener(client, headers, options.SlotFactory, dryRun), input, cancel.Token,
+            options.SlotOpener is null ? ConnectionGrant.RoleOpener(client, headers, options.SlotFactory, dryRun) : null);
         try
         {
             var graceOver = cancelledByRunner.Task.ContinueWith(async _ => await Task.Delay(grace, CancellationToken.None).ConfigureAwait(false), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();

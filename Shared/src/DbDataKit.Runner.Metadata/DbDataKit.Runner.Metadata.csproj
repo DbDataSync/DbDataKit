@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Runner.Metadata</RootNamespace>
+    <PackageId>DbDataKit.Runner.Metadata</PackageId>
+    <Description>The Runner's built-in package dbdatakit-metadata: the tasks discover (databases, schemas, tables, columns and keys) and describe (a query's columns, without running it), read through another package's slot with the login the channel binds, answering shape only. The runner ships it beside its program and runs it through the task host.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\DbDataKit.Runner.Kit\DbDataKit.Runner.Kit.csproj" />
+    <ProjectReference Include="..\DbDataKit.Metadata\DbDataKit.Metadata.csproj" />
+    <ProjectReference Include="..\DbDataKit.Catalog.Cache\DbDataKit.Catalog.Cache.csproj" />   <!-- the answer of discover is a connection of catalog-cache/2 -->
+    <ProjectReference Include="..\DbDataKit.Connections\DbDataKit.Connections.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.SqlServer\DbDataKit.Connections.SqlServer.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Postgres\DbDataKit.Connections.Postgres.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.MySql\DbDataKit.Connections.MySql.csproj" />   <!-- MySQL and MariaDB -->
+    <ProjectReference Include="..\DbDataKit.Connections.Oracle\DbDataKit.Connections.Oracle.csproj" />
+  </ItemGroup>
+</Project>
