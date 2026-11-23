@@ -163,6 +163,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-10 | The rest of the offline checks in the sync draft's check (`SyncOfflineCheck` in `DbDataKit.Authoring.Server`): the key check of the readers and writers that are an engine's own (SQL Server's change tracking, CDC and `MsSqlMerge`, PostgreSQL's `PgLogicalSlot` reader), once SYNCAUTHORING-P19 says where their capabilities come from. Until then each is the note "whether it needs a key is not checked offline". The generic readers and writers, and the types and filters of YAML drivers and of Flight SQL, are built (`docs/authoring-metadata.md`, "A sync project") | none | S | xunit on a sync draft fixture with a cache: an `MsSqlChangeTracking` reader on a source table with no key in the cache is a finding on the mapping's file and line; a `PgLogicalSlot` reader on a keyed table is none |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package (AUTHORING-23) through Sync's metadata service, started through the console's catalog read as the built-in package's are (AUTHORING-21); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | AUTHORING-23, AUTHORING-21, WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
 | SYNCAUTHORING-12 | Follows SYNCAUTHORING-18 (Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card exist). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (WORKSPACEISOLATION-5) | SYNCAUTHORING-18, SYNCAUTHORING-4, SYNCAUTHORING-5, AUTHORING-6, WORKSPACEISOLATION-5 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
+| SYNCAUTHORING-19 | Sync uses the shared types: Sync's own type list (`CanonicalType` and `CanonicalTypeKind` in `DbDataKit.Sync.Core`) is replaced by the shared `DbDataKit.Dialect.CanonicalType`, **adapter first**, and every rule that exists only in Sync's conversion (`SharedTypes`) moves into the shared dialects so every product answers the same: an unsigned integer widened to the next signed type where the target has no unsigned type (today only DuckDB's reading does it), and a time or timestamp with no stated precision meaning microseconds; first the list of every case Sync needs that the shared types lack, each added to the shared types with a test, including whether SQL Server's `tinyint` (0 to 255) is read as a signed 8-bit integer; then Sync's dialects, drivers and `driver.yaml` type maps read and write the shared type, and `SharedTypes` is removed | none | M | the shared dialect tests cover each case on the list; DbDataSync's unit suite (`Category!=Integration`) and the moved `DbDataKit.Sync.*` tests pass with no test changed except where a case on the list changes an answer (each named in the commit); no `DbDataSync`/`DbDataKit.Sync` type named `CanonicalType` remains |
 
 ## Needs from other subjects
 
@@ -188,24 +189,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
 ## Proposed decisions
-
-### SYNCAUTHORING-P13: which code decides a type offline (default, awaiting the owner)
-
-The offline type checks read the shared dialect tables (`DbDataKit.Dialect`), the same tables Sync's built-in drivers read their types through, and
-compare a source type with the target column's cached type by the shared `FidelityRules` (`DbDataKit.Transfer`): a type it cannot carry is "not a type
-the target column can hold", a lossy one (`decimal(18,2)` into `integer`) "may not fit". Sync's own inference (`MappingColumnReader`,
-`ProvisioningColumnBuilder`) and the type maps of a YAML driver live in `DbDataSync/` and are not a shared library yet, so a connection whose driver is
-Sync's own is reported as not checked offline. Scenario: a mapping reads an `acme-odbc` connection (a YAML driver) whose `geometry` column its type map
-does not know; today the check says the connection's types are not checked offline, and only `preflight` finds it. Option A, keep the shared tables
-for the built-in drivers and add the YAML drivers' type maps now that the descriptors are a shared library (`DbDataKit.Sync.Drivers.Descriptor`; the remaining SYNCAUTHORING-10 row).
-Option B, also switch the comparison to Sync's `MappingColumnReader` once it is shared, so the check and provisioning answer from one code path.
-Recommendation: B, done in the remaining SYNCAUTHORING-10 row.
-
-Built since (awaiting the owner's confirmation): the switch to Sync's code. Each side's columns are read through `MappingColumnReader` over the cache,
-each native type through the driver's Sync dialect (`MsSqlDialect` and the other built-in dialects over the shared tables, a draft's
-`drivers/<id>/driver.yaml` through `DescriptorDialect`, ANSI first for Flight SQL), and the two sides are compared by `FidelityRules` after
-`CanonicalTypes.ToShared` (new in `DbDataKit.Sync.Core`). If the owner chooses to keep the shared tables, the dialect lookup in `SyncOfflineCheck`
-goes back to `DialectCatalog` for the built-in engines and the YAML drivers keep their `DescriptorDialect`.
 
 ### SYNCAUTHORING-P14: words inside a function call in a source filter (default, awaiting the owner)
 

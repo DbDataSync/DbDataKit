@@ -219,6 +219,9 @@ How much a finding weighs:
   warnings. The Check tab counts them and a build goes on; the set's `preflight` checks them again on the databases.
 - What could not be checked offline (no cache, a connection with no entry in it, a filter the lexer cannot read) is a note.
 
+A type is judged by the same code the Sync engine reads it with: the connection's dialect over the shared type tables (`DbDataKit.Dialect`), or a YAML
+driver's type map from its `driver.yaml`. So the check and a run never disagree about what a column's type is.
+
 Example: Ana's cache of `crm` was read in `dev` a month ago. A DBA has since added `shipped_on` to `dbo.orders`, and Ana maps it. Her check fails with
 "The source column 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml". She presses **Refresh** on `orders`, accepts "1 column
 added", and the check passes. Her mapping also writes `amount` (`decimal(18,2)`) into an `integer` column of the target; the check warns that it "may
