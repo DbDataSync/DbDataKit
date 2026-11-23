@@ -22,9 +22,12 @@ public sealed record DefinitionsAnswer(int Status, JsonObject Body)
 /// <summary>What the group holds of a definition: the highest version number, the version the channel serves and its manifest (null when it serves none).</summary>
 public sealed record ServedDefinition(int Latest, int? Active, string? Manifest);
 
-/// <summary>What a publish asks (<c>PUT /api/v1/definitions/{kind}/{name}</c>): the manifest, the files, the channel and mode, the version the caller saw (<see cref="ExpectedVersion"/>, null to create), what it depends on, and <see cref="Extra"/> fields a kind reads from the body (the Gateway's <c>adopt</c>).</summary>
+/// <summary>
+/// What a publish asks (<c>PUT /api/v1/definitions/{kind}/{name}</c>): the manifest, the files, the channel and mode, the version the caller saw (<see cref="ExpectedVersion"/>, null to create), what it depends on, <see cref="Extra"/> fields a kind
+/// reads from the body (the Gateway's <c>adopt</c>) and <see cref="Build"/>, the record of the build the version is deployed from, which the signature covers and the group keeps with the version.
+/// </summary>
 public sealed record DefinitionPublishRequest(string Kind, string Name, string Manifest, IReadOnlyList<DefinitionFile>? Files = null, string Channel = DefinitionStore.Production, string? Mode = null, int? ExpectedVersion = null,
-    IReadOnlyList<string>? DependsOn = null, int? Format = null, string? Note = null, JsonObject? Extra = null);
+    IReadOnlyList<string>? DependsOn = null, int? Format = null, string? Note = null, JsonObject? Extra = null, string? Build = null);
 
 /// <summary>
 /// The client of the shared publish API (plan 30 PB02, <see cref="DefinitionsApi"/>) over the HTTP form every group speaks: <c>HEAD</c> and <c>PUT artifacts/{sha256}</c>, <c>PUT definitions/{kind}/{name}</c>, <c>PUT bindings/...</c> and the reads.
@@ -63,7 +66,7 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
         string? signature = null;
         if (key is not null && await TrustAsync(request.Kind, ct).ConfigureAwait(false) is { } trust)
         {
-            if (trust.Trusted) signature = DefinitionSigning.Sign(key, request.Kind, request.Name, request.Manifest, refs);
+            if (trust.Trusted) signature = DefinitionSigning.Sign(key, request.Kind, request.Name, request.Manifest, refs, request.Build);
             else if (trust.Required)
                 return new DefinitionsAnswer(403, new JsonObject
                 {
@@ -79,6 +82,7 @@ public sealed class DefinitionsClient(IDefinitionsLink link, ConsoleSigningKey? 
         if (request.Format is { } format) body["format"] = format;
         if (request.Note is not null) body["note"] = request.Note;
         if (signature is not null) body["signature"] = signature;
+        if (request.Build is not null) body["build"] = request.Build;
         if (request.DependsOn is { Count: > 0 } depends) body["depends_on"] = new JsonArray([.. depends.Select(d => (JsonNode?)JsonValue.Create(d))]);
         if (refs.Count > 0) body["artifacts"] = new JsonArray([.. refs.Select(r => (JsonNode)new JsonObject { ["path"] = r.Path, ["sha256"] = r.Sha256, ["size"] = r.Size, ["media_type"] = r.MediaType })]);
         foreach (var (field, value) in request.Extra ?? []) body[field] = value?.DeepClone();

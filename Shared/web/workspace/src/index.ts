@@ -2,7 +2,7 @@
 export { WorkspaceModule } from './WorkspaceModule'
 export { useSyncEngines, syncEnginesFrom, registryDescriptors, roleWords, SYNC_SOURCE, SYNC_TARGET } from './syncEngines'
 export type { EngineRole, RoleStatus, SyncEngine, SyncEngineList, SyncRole } from './syncEngines'
-export { registerDesigner, designerOf, designerPath, filesPath } from './designers'
+export { registerDesigner, designerOf, designerPath, filesPath, buildsPath } from './designers'
 export type { DesignerProps, DesignerRegistration } from './designers'
 export { DraftProvider, useDraft, useDraftFile, useDraftFiles, findingsKey } from './draft'
 export type { Draft, DraftFile } from './draft'
@@ -12,3 +12,7 @@ export type { CacheColumn, CacheConnection, CacheDatabase, CacheFinding, CacheRe
 export { SYNC_TASK_CURRENT, connectionPath, connectionsOf, replicationPath, replicationsOf, syncNameProblem, withCurrentTaskVersion } from './syncSchemas'
 export { writeColumns } from './mappingColumns'
 export type { ColumnChoices } from './mappingColumns'
+// the read of a connection's shape from a Runner channel, through the console, for every kind's Designer and the Files area's Catalog tab
+export { CatalogRefresh, ChannelPicker, RefreshDifference } from './pages/CatalogRefresh'
+export { catalogReadApi, differenceLine, isUnchanged, productionWarning, refreshDifference, refreshOutcome, withRefresh, workspaceServerOf } from './catalogRefresh'
+export type { CatalogDifference, CatalogReadAnswer, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'

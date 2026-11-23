@@ -80,7 +80,7 @@ jobs:
 
   # The real programs in one run (plan 13a, T12): Gateways, a runner and a Workspace started from their built output, a console in the test between them (the Build and Sync servers' tests went with them,
   # plan 33 SC23); a SQL Server and a PostgreSQL from testenv/ are up for that job.
-  # The Sync stories (plan 28c E12e, plan 33 SC23d2) run replications on a runner with no Sync server: the repository written as files, published with `dbdatasync package publish`, the engine as the runtime
+  # The Sync stories (plan 28c E12e, plan 33 SC23d2) run replications on a runner with no Sync server: the repository written as files, written as a package with `dbdatasync package publish --out` and sent with the runner client, the engine as the runtime
   # package, SQL Server to PostgreSQL and SQL Server to SQL Server; they take about five minutes.
   servers:
     needs: changes

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DbDataKit.Authoring;
 using DbDataKit.Authoring.Server;
 using DbDataKit.State;
+using DbDataKit.Web.Trust;
 
 namespace DbDataWorkspace.Tests;
 
@@ -74,6 +75,26 @@ public sealed class WorkspaceKindsTests
         Assert.Equal("error", (string)first["severity"]!);
         Assert.Equal("app.yaml", (string)first["file"]!);
         Assert.StartsWith("DBD-", (string)first["code"]!);
+    }
+
+    [Fact]
+    public async Task One_project_says_the_package_it_becomes_on_a_runner_to_a_person_who_may_read_it()
+    {
+        await using var server = await WorkspaceHarness.StartAsync();
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", """{"id":"orders"}""")).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", """{"id":"crm-to-dw","kind":"sync"}""")).Response.StatusCode);
+
+        var sync = await server.AsAda(HttpMethod.Get, "/api/v1/projects/crm-to-dw");
+        Assert.Equal(HttpStatusCode.OK, sync.Response.StatusCode);
+        Assert.Equal(("sync", "crm-to-dw"), ((string)sync.Body!["kind"]!, (string?)sync.Body["package"]));
+        var app = await server.AsAda(HttpMethod.Get, "/api/v1/projects/orders");
+        Assert.Null((string?)app.Body!["package"]);   // an app is published to a Gateway, not as a package of tasks
+        Assert.Equal(HttpStatusCode.NotFound, (await server.AsAda(HttpMethod.Get, "/api/v1/projects/ghost")).Response.StatusCode);
+
+        // a person who holds a role on another project only is refused this one
+        var scoped = await server.Send("bob", ServerRole.None, HttpMethod.Get, "/api/v1/projects/crm-to-dw", projects: new Dictionary<string, ServerRole> { ["orders"] = ServerRole.Viewer });
+        Assert.Equal(HttpStatusCode.Forbidden, scoped.Response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await server.Send("bob", ServerRole.None, HttpMethod.Get, "/api/v1/projects/orders", projects: new Dictionary<string, ServerRole> { ["orders"] = ServerRole.Viewer })).Response.StatusCode);
     }
 
     [Fact]

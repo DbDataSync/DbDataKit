@@ -5,7 +5,9 @@ import { workspaceApi, type AdoptionRequest, type CatalogRefreshAnswer, type Cat
 import { adoptionRequest, catalogAdoptionSentence, refreshButton, refreshedLine, refreshLabel } from '../model'
 import { shapePreview } from '../catalogPreview'
 import { BuildImportPanel } from './BuildImportPanel'
-import { CATALOG_CACHE_FILE, readCatalogCache, readLine, tableLabel, type CacheRead, type CacheTable } from '../catalogCache'
+import { CatalogRefresh } from './CatalogRefresh'
+import { CATALOG_CACHE_FILE, readCatalogCache, readLine, tableLabel, type CacheRead, type CacheTable, type CatalogCache } from '../catalogCache'
+import { useDraftFile, useDraftOrNull } from '../draft'
 
 /** The catalog cache without its query, so a test can draw it: what is cached per connection, or what is wrong with the file (the strict reader's words, with the key path). */
 /** A table's shape: its columns with their types and a few rows made from the types. Labelled as generated, because the cache holds no row (D20). */
@@ -103,9 +105,66 @@ export function RefreshForm({ canWrite, targets, busy, onRefresh, adoption = nul
   )
 }
 
-/** The cache of a draft, read through the file route and checked by the twin reader; with the refresh from a Gateway above it. */
+/** The names of a draft's connections, from its files: `config/connections/<name>.yaml` (Sync) or `connections/<name>.yaml` (Build). */
+export const draftConnections = (paths: readonly string[]): string[] =>
+  [...new Set(paths.map((p) => /^(?:config\/)?connections\/([^/]+)\.ya?ml$/i.exec(p)?.[1]).filter((n): n is string => !!n))].sort()
+
+/** What to read again: one connection whole, or one of its cached tables (`schema.name`). */
+export function RefreshTarget({ connections, cache, connection, onConnection, table, onTable }: {
+  connections: readonly string[]; cache: CatalogCache | null; connection: string; onConnection: (name: string) => void; table: string; onTable: (table: string) => void
+}) {
+  const tables = cache?.connections[connection]?.tables ?? []
+  return (
+    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+      <label className="hint" htmlFor="wsp-runner-refresh-connection">Connection</label>
+      <select id="wsp-runner-refresh-connection" className="input mono" value={connection} onChange={(e) => onConnection(e.target.value)} data-testid="wsp-runner-refresh-connection">
+        {connections.length === 0 && <option value="">the draft has no connection</option>}
+        {connections.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      <label className="hint" htmlFor="wsp-runner-refresh-table">Read</label>
+      <select id="wsp-runner-refresh-table" className="input mono" value={table} onChange={(e) => onTable(e.target.value)} data-testid="wsp-runner-refresh-table">
+        <option value="">the whole connection</option>
+        {tables.filter((t) => t.schema !== '').map((t) => <option key={tableLabel(t)} value={`${t.schema}.${t.name}`}>{t.schema}.{t.name}</option>)}
+      </select>
+    </div>
+  )
+}
+
+/**
+ * **Refresh from a Runner** on the Catalog tab: the shape of a connection, or of one of its tables, read in a channel of a Runner through the console
+ * (`CatalogRefresh`), against the cache the draft shows with its unsaved edit; accepted, the new cache is an unsaved edit of the draft, as any typed change is.
+ */
+function RunnerRefresh({ cache, canWrite, project }: { cache: CatalogCache | null; canWrite: boolean; project: string }) {
+  const draft = useDraftOrNull()!
+  const file = useDraftFile(CATALOG_CACHE_FILE)
+  const connections = draftConnections(draft.paths)
+  const [connection, setConnection] = useState('')
+  const [table, setTable] = useState('')
+  const chosen = connection || connections[0] || ''
+  const dot = table.indexOf('.')
+  const target = table !== '' && dot > 0 ? { schema: table.slice(0, dot), name: table.slice(dot + 1) } : undefined
+  return (
+    <div className="card" style={{ margin: '6px 0 10px' }} data-testid="wsp-runner-refresh">
+      <div className="card-body">
+        <div className="hint" style={{ marginBottom: 6 }}>Read the shape again from a Runner channel that binds the connection, with the login bound there. Only names and types are read, never a row.</div>
+        <RefreshTarget connections={connections} cache={cache} connection={chosen} onConnection={(c) => { setConnection(c); setTable('') }} table={table} onTable={setTable} />
+        {chosen !== '' && <CatalogRefresh key={`${chosen}/${table}`} project={project} connection={chosen} table={target} current={file.text} canEdit={canWrite && draft.canEdit} onAccept={(text) => draft.edit(CATALOG_CACHE_FILE, text)} />}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The cache of a draft, read through the file route and checked by the twin reader, or the unsaved edit of it when there is one; with the refresh from
+ * a Runner and the refresh from a Gateway above it.
+ */
 export function CatalogPanel({ project, id, onOpen, canWrite = true, kind }: { project: string; id: string; onOpen: (path: string) => void; canWrite?: boolean; kind?: string }) {
-  const { read, present, error } = useCatalogRead(project, id)
+  const saved = useCatalogRead(project, id)
+  const draft = useDraftOrNull()
+  const unsaved = draft?.dirtyPaths.includes(CATALOG_CACHE_FILE) ? draft.textOf(CATALOG_CACHE_FILE) : undefined
+  const read = unsaved !== undefined ? readCatalogCache(unsaved) : saved.read
+  const present = saved.present || unsaved !== undefined
+  const error = saved.error
   const [preview, setPreview] = useState<string | null>(null)
   const client = useQueryClient()
   const targets = useQuery({ queryKey: ['workspace', 'targets', 'all'], queryFn: () => workspaceApi.publishTargets(), retry: false })
@@ -118,6 +177,8 @@ export function CatalogPanel({ project, id, onOpen, canWrite = true, kind }: { p
   })
   return (
     <>
+      {draft && <RunnerRefresh cache={read?.cache ?? null} canWrite={canWrite} project={project} />}
+      {unsaved !== undefined && <div className="hint" data-testid="wsp-catalog-unsaved">The cache below is an unsaved edit of the draft: save it to keep it.</div>}
       <RefreshForm canWrite={canWrite} targets={targets.data ?? []} busy={refresh.isPending} onRefresh={(request) => refresh.mutate(request)}
         adoption={refresh.isError && refresh.error instanceof ApiError ? adoptionRequest(refresh.error.body) : null} onCancelAdoption={refresh.reset} />
       {refresh.isPending && <div className="hint" data-testid="wsp-catalog-refresh-progress">Asking the Gateway for the tables and columns of the data source...</div>}

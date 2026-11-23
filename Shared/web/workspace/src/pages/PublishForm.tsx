@@ -1,27 +1,32 @@
 import { useState } from 'react'
-import type { AdoptionRequest, PublishOptions, PublishTarget } from '../api'
+import type { AdoptionRequest, PublishOptions } from '../api'
+import type { DeployTarget } from '../deploys'
 import { adoptionSentence, parseBindings, productWord, publishButton } from '../model'
 
 /**
- * The publish form of a build, by the product of the target it names (plan 33 SC20d, SC21b, SC22c): any target takes a note; a Runner takes the channel the package is staged on (and, if asked, serves it at once, and the slots to bind there,
- * `slot=connection`); a Gateway that takes models takes the data source they are on (blank: the model's own storage connection). A target the project's kind is not published to is not offered (the server says which with `accepts`).
- * When the Gateway refuses a model for a data source made by hand, `adoption` (read from its refusal) shows a confirmation that names the data source and who made it (plan 33 SC21f); **Confirm and publish** publishes again with `adopt`, which the Gateway records.
- * It sends nothing itself: `onPublish` gets the target, the note and the options, so the screen and its tests say the same.
+ * The publish form of a build, by the product of the target chosen: the targets are the Runners and Gateways the console manages, and only those of a product the
+ * project's kind goes to are offered. Any target takes a note; a Runner takes the channel the package is staged on (and, if asked, serves it at once, and the slots to
+ * bind there, `slot=connection`); a Gateway that takes models takes the data source they are on (blank: the model's own storage connection).
+ * When the Gateway refuses a model for a data source made by hand, `adoption` (read from its refusal) shows a confirmation that names the data source and who made it;
+ * **Confirm and publish** publishes again with `adopt`, which the Gateway records.
+ * It sends nothing itself: `onPublish` gets the target's id, the note and the options, so the screen and its tests say the same.
  */
 export function PublishForm({ canWrite, status, targets, models = false, busy, onPublish, initialTarget = '', adoption = null, onCancelAdoption }: {
-  canWrite: boolean; status: string; targets: readonly PublishTarget[]; models?: boolean; busy: boolean
+  canWrite: boolean; status: string; targets: readonly DeployTarget[]; models?: boolean; busy: boolean
   onPublish: (target: string, note: string, options: PublishOptions) => void; initialTarget?: string
   adoption?: AdoptionRequest | null; onCancelAdoption?: () => void
 }) {
   const [adopted, setAdopted] = useState<string[]>([])
-  const [target, setTarget] = useState(initialTarget)
+  const [chosen, setTarget] = useState(initialTarget)
   const [note, setNote] = useState('')
   const [channel, setChannel] = useState('')
   const [serve, setServe] = useState(false)
   const [bindText, setBindText] = useState('')
   const [dataSource, setDataSource] = useState('')
-  const offered = targets.filter((t) => t.accepts !== false)
-  const known = targets.find((t) => t.name === target.trim())
+  const offered = targets.filter((t) => t.accepts)
+  // the only server the kind goes to is chosen without asking; a target given by the address is kept even when the kind does not go there, so the form says why
+  const target = chosen !== '' ? chosen : offered.length === 1 ? offered[0]!.id : ''
+  const known = targets.find((t) => t.id === target)
   const bindings = parseBindings(bindText)
   const state = publishButton({ canWrite, status, target, targets, busy, channel })
   const why = bindings.problem ?? state.why
@@ -34,7 +39,7 @@ export function PublishForm({ canWrite, status, targets, models = false, busy, o
       if (Object.keys(bindings.bind).length > 0) options.bind = bindings.bind
     } else if (models && dataSource.trim() !== '') options.data_source = dataSource.trim()
     if (known?.product === 'gateway' && adopt.length > 0) options.adopt = adopt
-    onPublish(target.trim(), note.trim(), options)
+    onPublish(target, note.trim(), options)
   }
   const confirm = () => {
     if (!adoption) return
@@ -44,8 +49,11 @@ export function PublishForm({ canWrite, status, targets, models = false, busy, o
   }
   return (
     <form className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }} data-testid="wsp-publish-form" data-product={known?.product ?? ''} onSubmit={(e) => { e.preventDefault(); if (enabled) send() }}>
-      <input className="input mono" list="wsp-targets" aria-label="Publish to" placeholder="publisher key" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-publish-target" />
-      <datalist id="wsp-targets">{offered.map((t) => <option key={t.name} value={t.name}>{productWord(t.product)} {t.gateway ?? 'not paired'}</option>)}</datalist>
+      <select className="input" aria-label="Publish to" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="wsp-publish-target">
+        <option value="">{offered.length === 0 ? 'No Runner or Gateway to publish to' : 'Choose a Runner or a Gateway'}</option>
+        {offered.map((t) => <option key={t.id} value={t.id}>{t.name} ({productWord(t.product)}{t.reachable ? '' : ', not answering'})</option>)}
+        {known && !known.accepts && <option value={known.id}>{known.name} ({productWord(known.product)})</option>}
+      </select>
       {known?.product === 'runner' && (
         <>
           <input className="input mono" style={{ width: 130 }} aria-label="Channel" placeholder="channel" value={channel} onChange={(e) => setChannel(e.target.value)} data-testid="wsp-publish-channel" />

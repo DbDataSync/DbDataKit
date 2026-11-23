@@ -108,6 +108,10 @@ public static class ConsoleHost
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton(RelayTimeouts.Default);
         builder.Services.AddSingleton<ConsoleRelay>();
+        builder.Services.AddSingleton(sp => new ConsolePublisherKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
+        builder.Services.AddSingleton<ConsoleTrust>();   // the console's publisher key in the trust store of every Runner and Gateway group it manages
+        builder.Services.AddSingleton<ConsoleTrustService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsoleTrustService>());
         builder.Services.AddSingleton<ConsoleGroupKeys>();   // plan 28c E20d: the keys of the groups this console manages, handed to each instance it joins
         builder.Services.TryAddSingleton<IBuildRelay>(sp => sp.GetRequiredService<ConsoleRelay>());   // an agent's Build commands run on a server as the person (plan 27a AG14)
         builder.Services.AddSingleton<ConsoleLineage>();
@@ -118,8 +122,11 @@ public static class ConsoleHost
         builder.Services.AddSingleton(sp => new ConsoleConnections(settings, sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton(sp => new ConsoleBindings(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<AuditLog>(), sp.GetRequiredService<StateDatabase>()));
         builder.Services.AddSingleton<ConsoleRunnerBindings>();
+        builder.Services.AddSingleton<ConsoleCatalogRead>();   // the shape of a Workspace project's connection, read from a Runner channel as the signed-in person
         builder.Services.AddSingleton<ConsoleBindingCompare>();   // plan 27a IX25: compare, adopt and publish of bindings and connections against a Runner or a Gateway, and the combined posture list
         builder.Services.AddSingleton<ConsolePromotions>();   // plan 30 PB06: a package promoted from one runner group to another as the signed-in person
+        builder.Services.AddSingleton<ConsoleDeploys>();   // the deploy of a build from a Workspace server to a Runner or a Gateway, as the person, signed with the console's publisher key
+        builder.Services.AddSingleton<ConsoleDeployRuns>();   // the runs, run results, binding tests and contract of what a deploy put on a Runner, as the person
         builder.Services.AddSingleton<ConsoleReleases>();   // plan 21 CH02: releases, one approval, run as the person who starts them
         builder.Services.AddSingleton<ConsoleModels>(sp => new ConsoleModels(settings, sp.GetRequiredService<ConsoleConnections>(), sp.GetRequiredService<ConsoleBindings>(), sp.GetRequiredService<ModelHttp>()));
         builder.Services.TryAddSingleton<IAgentModels>(sp => sp.GetRequiredService<ConsoleModels>());
@@ -235,7 +242,12 @@ public static class ConsoleHost
         // a joining server has no sign-in, only the signature its token makes: the route is outside the sign-in, and the join checks the signature itself
         var ownFingerprint = PairingProof.CertificateFingerprint(certificate);
         app.MapJoin((http, ct) => http.RequestServices.GetRequiredService<ConsoleJoins>().ServiceAsync(() => ownFingerprint, ct),
-            (server, ct) => app.Services.GetRequiredService<ConsoleJoins>().RecordAsync(server, ct)).AllowAnonymous();
+            async (server, ct) =>
+            {
+                await app.Services.GetRequiredService<ConsoleJoins>().RecordAsync(server, ct);
+                // the server keeps the console as a client once it has the answer; the pass retries until it does
+                app.Services.GetRequiredService<ConsoleTrustService>().Request(server.InstanceId);
+            }).AllowAnonymous();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 

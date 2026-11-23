@@ -91,10 +91,11 @@ public sealed class DefinitionFormatTests : IDisposable
     [Fact]
     public void The_migration_is_appended_and_an_instance_of_the_version_before_still_works_with_it()
     {
-        Assert.Equal(5, DefinitionsModule.Module.Version);   // the fifth migration is plan 30 PB03's signature columns and trust table: nullable, so version 4 still works with it
+        Assert.Equal(6, DefinitionsModule.Module.Version);   // the sixth migration is the build record of a version: a nullable column, so version 5 still works with it
         Assert.Equal(1, DefinitionsModule.Module.CompatibleWithPrevious);
         Assert.Contains("DEFAULT 1", DefinitionsModule.Module.Migrations[3], StringComparison.Ordinal);
         Assert.DoesNotContain("NOT NULL DEFAULT", DefinitionsModule.Module.Migrations[4].Replace("PRIMARY KEY", ""), StringComparison.Ordinal);
+        Assert.Contains("build_record {{text}} NULL", DefinitionsModule.Module.Migrations[5], StringComparison.Ordinal);
     }
 
     // ---- publish

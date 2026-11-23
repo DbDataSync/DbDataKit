@@ -1,156 +1,88 @@
 using System.Runtime.InteropServices;
-using DbDataKit.Runner.Client;
+using DbDataKit.Cli;
 using DbDataSync.Libraries;
 using DbDataSync.TaskRunner.Runner;
 
 namespace DbDataSync.Cli;
 
 /// <summary>
-/// <c>dbdatasync package publish --to runner</c> (plan 28c E08): the repository's enabled replications as a definition package on a runner. <see cref="ReplicationSetPackage"/> makes the package (and refuses, naming the file, what would
-/// fail at its first run: a bad schedule, a mapping with no column cache); <see cref="DriverLibrariesPart"/> restores the libraries and compiled drivers for the platform the runner is on; the shared <see cref="RunnerPublishClient"/> sends
-/// only the files the runner does not have and stages the version, which the runners of the group prepare and activate once every one of them has it ready. <c>--out</c> writes the package and sends nothing. The package holds
-/// no secret: a connection's login is a slot, filled with <c>--bind slot=connection</c> in the channel. <c>--check</c> builds the manifest and says what would be published (the replications, their tasks and slots) or what refuses it,
-/// restoring no library and contacting nothing; <c>--json</c> prints the outcome as one JSON object on stdout (the Sync API's publish action runs this verb with it and relays the words of a refusal unchanged).
+/// <c>dbdatasync package publish --to runner</c> (plan 28c E08): the repository's enabled replications as a definition package for a runner. <see cref="ReplicationSetPackage"/> makes the package (and refuses, naming the file, what would
+/// fail at its first run: a bad schedule, a mapping with no column cache); <see cref="DriverLibrariesPart"/> restores the libraries and compiled drivers for the platform the runner is on. <c>--out</c> writes the package
+/// (<c>package.yaml</c> and <c>files/</c>) and sends nothing. The package holds no secret: a connection's login is a slot, bound in a channel on the Runner. <c>--check</c> builds the manifest and says what the package would hold (the
+/// replications, their tasks and slots) or what refuses it, restoring no library and contacting nothing; <c>--json</c> prints the outcome as one JSON object on stdout (the Workspace's sync project runs this verb with it and relays
+/// the words of a refusal unchanged). Sending the package to a runner is the console's deploy: <c>--server</c> (and <c>--code</c>) answer the sentence that says so and exit 2.
 /// </summary>
 public static class PackageCommand
 {
+    /// <summary>The words a person typed for the removed form: the package sent to a runner from the command line.</summary>
+    public const string SendToRunner = "dbdatasync package publish --to runner --server";
+
     public static async Task<int> RunAsync(string[] args)
     {
         if (args.Length == 0 || args[0] != "publish") { Console.Error.WriteLine("Usage: package publish --to runner ..."); return 2; }
         var rest = args[1..];
+        if (CliOptions.Read(rest, "--server") is not null || CliOptions.Read(rest, "--code") is not null)
+        {
+            Console.Error.WriteLine(RemovedCommands.PublishingGone(SendToRunner));
+            return 2;
+        }
         var repoRoot = DbDataSyncRoot.Resolve(rest);
-        if (CliOptions.Read(rest, "--to") != "runner") { Console.Error.WriteLine("--to is `runner`, the only place a package is published to."); return 2; }
-        var server = CliOptions.Read(rest, "--server");
-        var channel = CliOptions.Read(rest, "--channel");
+        if (CliOptions.Read(rest, "--to") != "runner") { Console.Error.WriteLine("--to is `runner`, the only place a package is made for."); return 2; }
         var output = CliOptions.Read(rest, "--out");
         var json = CliOptions.Has(rest, "--json");
         var check = CliOptions.Has(rest, "--check");
-        if (check && (output is not null || server is not null)) { Console.Error.WriteLine("--check builds the package and sends nothing: give it without --out and --server."); return 2; }
-        if (output is null && !check && (server is null || channel is null)) { Console.Error.WriteLine("Name the runner and the channel: --server <name or https address> --channel <name> (or --out <directory> to write the package and send nothing)."); return 2; }
-        if (output is not null && server is not null) { Console.Error.WriteLine("--out writes the package and sends nothing: give it or --server, not both."); return 2; }
-        Action<string> log = json ? _ => { } : Console.WriteLine;
-
-        var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
-        for (var i = 0; i < rest.Length - 1; i++)
-        {
-            if (rest[i] != "--bind") continue;
-            var text = rest[i + 1];
-            var eq = text.IndexOf('=');
-            if (eq <= 0 || eq == text.Length - 1) { Console.Error.WriteLine($"--bind is `slot=connection`, not `{text}`."); return 2; }
-            bindings[text[..eq]] = text[(eq + 1)..];
-        }
+        if (check && output is not null) { Console.Error.WriteLine("--check builds the package and writes nothing: give it without --out."); return 2; }
+        if (output is null && !check) { Console.Error.WriteLine("Give --out <directory> to write the package, or --check to say what it would hold; the package reaches a runner through the console's deploy."); return 2; }
 
         var platform = CliOptions.Read(rest, "--platform") ?? (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win-x64" : "linux-x64");
         var package = CliOptions.Read(rest, "--package") ?? ReplicationSetPackage.NameOf(Path.GetFileName(Path.GetFullPath(repoRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
         var version = typeof(PackageCommand).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0";
         var problems = new List<string>();
-        // what the working tree holds now: taken before the package is built, so an edit made while it is sent counts as unpublished (plan 28c E12g)
-        var digest = check || output is not null ? null : DbDataSync.Libraries.DefinitionDigest.Of(repoRoot);
         var built = ReplicationSetPackage.Build(repoRoot, package, CliOptions.Read(rest, "--runtime-range") ?? ReplicationSetPackage.RuntimeRange(version), problems);
         if (built is null)
         {
             foreach (var problem in problems) Console.Error.WriteLine(problem);
-            if (!json) Console.WriteLine("Nothing was sent.");
+            if (!json) Console.WriteLine("Nothing was written.");
             return 1;
         }
 
         if (check)
         {
-            if (json) Console.WriteLine(Result(package, channel, "check", built, null, null));
-            else Console.WriteLine($"The package {package} would hold {built.Replications.Count} task(s) and {built.Files.Count} file(s): {string.Join(", ", built.Replications.Select(r => r.Task))}; nothing was restored or sent.");
+            if (json) Console.WriteLine(Result(package, "check", built));
+            else Console.WriteLine($"The package {package} would hold {built.Replications.Count} task(s) and {built.Files.Count} file(s): {string.Join(", ", built.Replications.Select(r => r.Task))}; nothing was restored or written.");
             return 0;
         }
 
         var part = Directory.CreateTempSubdirectory("dbdatasync-part-").FullName;
-        var directory = Directory.CreateTempSubdirectory("dbdatasync-publish-").FullName;
         try
         {
             try { built = await ReplicationSetPackage.AddLibrariesAsync(built, repoRoot, Path.Combine(part, "part"), platform, CliOptions.Read(rest, "--source")); }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
             {
                 Console.Error.WriteLine(ex.Message);
-                if (!json) Console.WriteLine("Nothing was sent.");
+                if (!json) Console.WriteLine("Nothing was written.");
                 return 1;
             }
 
-            if (output is not null)
-            {
-                ReplicationSetPackage.Write(built, Path.GetFullPath(output));
-                if (json) Console.WriteLine(Result(package, channel, "out", built, null, null));
-                else Console.WriteLine($"Wrote the package {package} ({built.Replications.Count} task(s), {built.Files.Count} file(s), for {platform}) to {Path.GetFullPath(output)}; nothing was sent.");
-                return 0;
-            }
-
-            Func<string, string?> environment = Environment.GetEnvironmentVariable;
-            var client = new RunnerPublishClient(new RunnerClientStore(CliOptions.Read(rest, "--client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
-            var code = CliOptions.Read(rest, "--code");
-            try
-            {
-                if (bindings.Count > 0)
-                {
-                    await client.BindAsync(server!, code, package, channel!, bindings, null, log);
-                    log($"Bound {string.Join(", ", bindings.Keys.Order(StringComparer.Ordinal))} in {channel}.");
-                }
-
-                // plan 28c E22 (S2): the Runner is Sync's only scheduler, so a published replication is the runner's from its first activation. A task the runner still records with another owner
-                // (an earlier publish that left it with the Sync server) is given to the runner: this publish is the one that moves it.
-                foreach (var replication in built.Replications)
-                {
-                    var known = await client.ScheduleOfAsync(server!, code, package, channel!, replication.Task, null);
-                    if (known.OwnerSetBy is null || known.Owner == DbDataKit.State.TaskOwners.Runner) continue;
-                    try
-                    {
-                        await client.SetOwnerAsync(server!, code, package, channel!, replication.Task, DbDataKit.State.TaskOwners.Runner, "published by `package publish`: the Runner is Sync's only scheduler (plan 28c E22)", null);
-                        log($"{replication.Task} was left to the Sync server by an earlier publish; the runner schedules it now.");
-                    }
-                    catch (RunnerClientException ex)
-                    {
-                        Console.Error.WriteLine($"{ex.Message}\nThe runner records {replication.Task} as scheduled by the Sync server (owner {known.Owner}), which is gone (plan 28c E22); moving it to the runner takes the operator role of this pairing. Pair with a code that allows it.");
-                        if (!json) Console.WriteLine("Nothing was sent.");
-                        return 1;
-                    }
-                }
-
-                ReplicationSetPackage.Write(built, directory);
-                int? expected = int.TryParse(CliOptions.Read(rest, "--expected-version"), out var e) ? e : null;
-                var serve = CliOptions.Has(rest, "--serve");
-                var result = await client.PublishAsync(server!, code, Path.Combine(directory, "package.yaml"), Path.Combine(directory, "files"), channel!, stage: !serve, expected, log);
-                try { DbDataSync.Libraries.PublishedDefinition.Record(repoRoot, new DbDataSync.Libraries.PublishedMarker(package, channel!, server!, result.Version, result.Mode, DateTimeOffset.UtcNow, digest!)); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine($"Published, but the record of what was published could not be written ({ex.Message}); the screens will show unpublished changes until the next publish."); }
-                if (json) Console.WriteLine(Result(package, channel, result.Mode, built, result, bindings.Keys));
-                else Console.WriteLine($"{(result.Mode == "stage" ? "Staged" : "Published")} {package} on {result.Channel}: version {result.Version}{(result.Changed ? "" : " (the same content as before, nothing changed)")}, {result.Uploaded} file(s) uploaded, {result.Skipped} already there."
-                    + (result.Mode == "stage" ? " Runners prepare it and activate it once every runner of the group has it ready." : "")
-                    + " The runner runs each replication (a continuous one as a drain that stays up and plans on the runner; a periodic one as a drain per cron time).");
-                return 0;
-            }
-            catch (RunnerClientException ex)
-            {
-                Console.Error.WriteLine(ex.Message);
-                if (!json) Console.WriteLine("Nothing more was done.");
-                return 1;
-            }
+            ReplicationSetPackage.Write(built, Path.GetFullPath(output!));
+            if (json) Console.WriteLine(Result(package, "out", built));
+            else Console.WriteLine($"Wrote the package {package} ({built.Replications.Count} task(s), {built.Files.Count} file(s), for {platform}) to {Path.GetFullPath(output!)}; nothing was sent.");
+            return 0;
         }
         finally
         {
-            foreach (var d in new[] { part, directory })
-                try { Directory.Delete(d, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ }
+            try { Directory.Delete(part, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ }
         }
     }
 
-    /// <summary>The outcome as one JSON line: what was published (or only built, with <c>check</c> and <c>out</c>), the version the runner gave it and, for each replication, the task, schedule and slots it became.</summary>
-    private static string Result(string package, string? channel, string mode, BuiltReplicationSet built, ClientPublished? published, IEnumerable<string>? bound) =>
+    /// <summary>The outcome as one JSON line: what the package holds (<c>check</c>) or was written (<c>out</c>) and, for each replication, the task, schedule and slots it became.</summary>
+    private static string Result(string package, string mode, BuiltReplicationSet built) =>
         System.Text.Json.JsonSerializer.Serialize(new
         {
             package,
-            channel = published?.Channel ?? channel,
             mode,
-            version = published?.Version,
-            changed = published?.Changed,
-            uploaded = published?.Uploaded,
-            skipped = published?.Skipped,
             files = built.Files.Count,
-            bound = bound?.Order(StringComparer.Ordinal).ToArray(),
             replications = built.Replications.Select(r => new { replication = r.Replication, task = r.Task, mode = r.Mode, cron = r.Cron, frequencySeconds = r.FrequencySeconds, slots = r.Slots, mappings = r.Mappings, slotConnections = r.SlotConnections }),
         }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
 }

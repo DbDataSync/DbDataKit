@@ -31,5 +31,6 @@
     <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
     <ProjectReference Include="..\DbDataKit.Runner.Client\DbDataKit.Runner.Client.csproj" />
+    <ProjectReference Include="..\DbDataKit.Deploy\DbDataKit.Deploy.csproj" />   <!-- the deploy to a Runner or Gateway and the calls around it, which this server reaches through an adapter that signs with its publisher keys -->
   </ItemGroup>
 </Project>

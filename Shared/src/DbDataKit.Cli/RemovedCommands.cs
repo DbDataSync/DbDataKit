@@ -6,6 +6,15 @@ namespace DbDataKit.Cli;
 /// </summary>
 public sealed class RemovedCommands
 {
+    /// <summary>
+    /// What a command that published to a Runner or a Gateway answers: command lines do not publish, the console deploys. A command that still writes a
+    /// package or app folder offline keeps that form; only the form that sent it answers this.
+    /// </summary>
+    public const string ConsoleDeploys = "command lines do not publish to a Runner or a Gateway; the console deploys. Publish the project from the Workspace in the console, or a package folder with \"Publish a package from files\" on the Runner's Packages screen in the console.";
+
+    /// <summary>The answer of a removed way to publish, <paramref name="command"/> as the person typed its words: <c>'dbdatarunner package publish' is gone: ...</c>.</summary>
+    public static string PublishingGone(string command) => $"'{command}' is gone: {ConsoleDeploys}";
+
     private readonly string _program;
     private readonly Dictionary<string, string> _moved;
 

@@ -20,13 +20,141 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 - **Artifacts** are content-addressed payloads (`PublishArtifacts`, over `PayloadStore`): a file whose hash is stored is not written again. The runner side has the HTTP form: `HEAD` and `PUT /api/v1/artifacts/{sha256}` (refused when the hash differs), `PUT /api/v1/definitions/integration/{name}` with the manifest, the file list, `depends_on`, channel, `serve` or `stage` and `expected_version`, and `POST .../activate|switch|rollback|retire|prune`. Those routes (`DbDataKit.Runner.Api/RunnerPublishApi.cs`) hand every call to the shared library `DefinitionsApi` (`RunnerPublishing.Api`), and what is the runner's own sits in the hook of its kind (below); the runner keeps its own audit verbs (`runner.package.*`) and answer shapes (`already_stored`, `tasks`, `unbound`, a `202` while an activation waits for runs; client `DbDataKit.Runner.Client/RunnerPublishClient.cs`, which also promotes a version from one channel to the next).
 - **Followers.** `DefinitionFollower` hands each subscriber (`IDefinitionSubscriber`) what its kind serves and then polls the events; a subscriber builds the new version before replacing the old one, and if it cannot, the old one keeps serving and the failure is reported. The runner's `StagingFollower` prepares a staged version (materialises files into the disk cache by hash, checks hashes) and reports to the instance status.
 - **Activation and running work** (`ActivationHolds`): a run in flight finishes on the version it started with; activation of a runner kind holds the definition until its runs in flight end, then migrates the task's progress (plan 29 section 4.3).
-- **Signatures.** A publisher signs the message of a version (the manifest and the path and SHA-256 of each file) with an Ed25519 key (`DefinitionSigning`, `ed25519:<key id>:<signature>`). The shared API verifies it against the group's trust store (`DefinitionTrustStore`: the keys each kind trusts; add, revoke; rotation is a new key and a revocation) and stores the signature and signer with the version. Signatures are required for every kind unless an administrator sets the kind optional (`PUT /api/v1/settings/signatures/{kind}`) or marks the group `test` (`PUT /api/v1/settings/group`); an invalid signature is refused wherever they are optional. The runner uses the same trust store (`RunnerPublishing.Trust`, `GET /api/v1/trust/integration`, `PUT .../keys`, `POST .../{keyId}/revoke`) and keeps its own switch: `require_signatures` (off by default) says whether an unsigned version is refused; a signed one is always verified. **Instances verify at preparation** (`VersionSignatureGate`): a version that carries a signature is verified again over the manifest and files as stored, against the trust store (an untrusted key or a signature that does not hold refuses the version; a key revoked since does not unseat what it signed), and an unsigned version is refused only where the host says it needs one: the Gateway for a kind an administrator set to `required` (`SignaturePolicy.RequiredByAdministrator`, not the default for a kind nobody set, because the per-kind routes still publish unsigned versions), the runner when `require_signatures` is on. A refused version is not served; the one served before keeps serving and the host reports why (`DefinitionFollower` `gate`, `GatewayVersionGate`; `StagingOptions.Gate`, `RunnerVersionGate`: the version fails its staging on that instance). The screens: the Gateway's Publishers page (`/trust`, `TrustPage.tsx`) and the runner's Publishing card (`PublishingSettings.tsx`) draw the shared `TrustStore` (`@dbdatakit/shell`): keys per kind, add (a public key is pasted), revoke after asking, the requirement per kind and the group's `test` mode.
+- **Signatures.** A publisher signs the message of a version (the manifest and the path and SHA-256 of each file) with an Ed25519 key (`DefinitionSigning`, `ed25519:<key id>:<signature>`). The shared API verifies it against the group's trust store (`DefinitionTrustStore`: the keys each kind trusts; add, revoke; rotation is a new key and a revocation) and stores the signature and signer with the version. Signatures are required for every kind unless an administrator sets the kind optional (`PUT /api/v1/settings/signatures/{kind}`) or marks the group `test` (`PUT /api/v1/settings/group`); an invalid signature is refused wherever they are optional. The runner uses the same trust store (`RunnerPublishing.Trust`, `GET /api/v1/trust/integration`, `PUT .../keys`, `POST .../{keyId}/revoke`) and keeps its own switch: `require_signatures` (off by default) says whether an unsigned version is refused; a signed one is always verified. **Instances verify at preparation** (`VersionSignatureGate`): a version that carries a signature is verified again over the manifest and files as stored, against the trust store (an untrusted key or a signature that does not hold refuses the version; a key revoked since does not unseat what it signed), and an unsigned version is refused only where the host says it needs one: the Gateway for a kind an administrator set to `required` (`SignaturePolicy.RequiredByAdministrator`, not the default for a kind nobody set, because the per-kind routes still publish unsigned versions), the runner when `require_signatures` is on. A refused version is not served; the one served before keeps serving and the host reports why (`DefinitionFollower` `gate`, `GatewayVersionGate`; `StagingOptions.Gate`, `RunnerVersionGate`: the version fails its staging on that instance). The screens: the Gateway's Publishers page (`/trust`, `TrustPage.tsx`) and the runner's Publishing card (`PublishingSettings.tsx`) draw the shared `TrustStore` (`@dbdatakit/shell`): keys per kind, add (a public key is pasted), revoke after asking, the requirement per kind and the group's `test` mode. `GET /api/v1/trust` answers every kind the group takes, each as `GET /api/v1/trust/{kind}` answers it (a viewer or an administrator; a publisher is refused); the console reads it to add its own publisher key to each kind of every group it manages ([install.md](install.md#the-consoles-publisher-key)).
 
 **Promotion between groups** (plan 30 PB06). `DefinitionPromoter` (`DbDataKit.State`) moves a version from one group to another over their shared APIs, each reached through an `IDefinitionsLink` (a request relative to `/api/v1/`): it reads `GET definitions/{kind}/{name}/versions/{n}` (the manifest, format, `depends_on`, files by hash and the signature) from the source, asks the target `HEAD artifacts/{sha}` for each file, reads only the missing ones (`GET artifacts/{sha}`) and sends them (`PUT`), then publishes the same manifest in the channel asked (`mode` the kind's default unless `serve` or `stage` is asked) with the signature, which the target verifies against its own trust store. The target's checks decide: a slot its channel does not bind and a dependency that is not active there refuse the move naming it (nothing is stored; the files stay and are not sent again). `PromoteRequest.Bindings` writes the target channel's own bindings first (slot to the name of what it is bound to there). The groups number their versions on their own; the same content again changes nothing and sends nothing. The source is read as a viewer or an administrator (a publisher may not read a runner), the target is written as a publisher or an administrator. `RunnerPublishClient.PromoteToGroupAsync` and `dbdatarunner package promote` are the client and the command for two paired runners (`PromoteAsync` moves a version between channels of one group); tests: `PromotionTests` (two in-process groups) and `PublishPromotionTests` (two runner servers). **The console's action:** `POST /api/promotions` of the console (`ConsolePromotions`) runs the promoter as the signed-in person over two links: a registered runner through `ConsoleRelay.SendAsAsync` (the relay's table and roles apply, the answer stays a stream); the Packages screen of a runner shown by a console has the **Promote** action. Tests: `ConsolePromotionTests`, `EmbeddedRunnerTests`. **Releases of Gateway definitions** (plan 21 CH02): a release item of product `gateway` promotes a Gateway's `semantic-model`, `data-source`, `entity-model`, `dashboard`, `report`, `report-catalog`, `app` or `app-nav` the same way, between two registered Gateways, as the person who starts the release; the relay passes a Gateway's publish routes with the role each needs (`ServerProducts.GatewayRoutes`, the Gateway's own roles: a viewer reads, an administrator or a publisher writes) and the approval permission of the item is the administrator role on the target Gateway.
 
 **Kind hooks.** What one kind adds to the shared API is an `IDefinitionKindHook` (`DbDataKit.State.Api/DefinitionKindHook.cs`; every member has a default that adds nothing, so a kind without one is published as before): the channel a host serves (`CheckChannel`), checks before a version is stored (`BeforePublish`: names, the trigger loop) and what follows (`AfterPublish`: the task projection, extra answer fields), the life-cycle calls a host does itself (`ActAsync`: the runner's progress migration, the runs in flight, the holds of an activation, the sandbox run), the checks around a binding (`BeforeBind`/`AfterBind`: the posture of a binding that shares production's connection, which answers its own body; `BeforeUnbind`/`AfterUnbind`), its own list and description, whether a publisher may read, the status a refused registry rule answers and whether signatures are required (the runner's `IntegrationKindHook`). The Gateway has hooks too (`GatewayDefinitionsManagement.HooksOf`; `SemanticModelKindHook`, `DataSourceKindHook` and `EntityModelKindHook`, each a thin adapter over the checks of the per-kind route in `GatewaySemanticModels`, `GatewayDataSources` and `GatewayEntityModels`): a check that waits (`BeforePublishAsync`, the data source's test query and the table and column reads of a model), the request body (`PublishHookContext.Body`, where `adopt` is), the owner a definition names in its content when the group's settings hold none (`OwnerOf`: the stamp `managed_by` of the per-kind routes), a read refused by the owner rules (`BeforeRead`), the binding of a model's slots (`BeforeBind`), the data source's adopt call (`ActAsync`, `POST definitions/data-source/{name}/adopt`: an administrator hands a data source made by hand to a paired client, the route's `POST /api/v1/data-sources/{name}/adopt` as it is), what the channel binds a slot to (`PublishHookContext.BoundTo`), the serving at once on the instance that took the publish and the audit entries of the per-kind route (`semantic-model publish`, `data-source write`, `data-source adopt`). The caller's `Context` is the management caller. The manifest of a publishing client carries its own stamp (it is signed, so the Gateway checks the line and does not add it); a model is published under its lower-case name; the format is read from the content when the body gives none (`DefinitionKind.FormatOf`). While the per-kind routes publish unsigned versions, these kinds ask for a signature only where an administrator set the kind to `required` (the instances' rule), not by the group's default. A hook says no by throwing `DefinitionsRefusalException`; the API audits it as a refused call. A host passes the hooks and its own audit callback to `DefinitionsApi`; the caller's `Context` carries what the host knows of it (the runner's actor).
 
-**The client.** `DefinitionsClient` (`DbDataKit.State.Api`) is the caller's side over an `IDefinitionsLink`: `HEAD` and `PUT artifacts/{sha256}` for the files the group lacks, `PUT definitions/{kind}/{name}` (the manifest, channel, mode, `expected_version`, `depends_on`, format, extra body fields), `PUT bindings/...`, the reads (`NamesAsync`: a caller that only publishes lists the names it owns and no others, an administrator or viewer all of them), the adopt call (`AdoptAsync`), and the signature: it asks `GET trust/{kind}` and signs when the group trusts its key, goes unsigned when the group does not require signatures, and refuses before sending, naming the key and the administrator's call, when the group requires them and does not trust it. Build's `ProxyPublisher` publishes its data sources and models with it, and so does the Workspace server (`WorkspaceGatewayPublish`, `DbDataKit.Authoring.Server`, plan 33 SW01) for a Store project's entity models and a Build project's data source documents and semantic models: it names the data sources a model needs as slots when the publishing client did not make them, binds them itself where the Gateway lets a publishing client (its own data sources), and says what an administrator binds otherwise. The apps command (`apps publish --to`, and the Workspace's app publish) is not on the shared route yet: an app version is one JSON text with every file in base64 until PB04 stores it as a manifest and files by hash, and moving it before then would be a partial route to migrate.
+**The client.** `DefinitionsClient` (`DbDataKit.State.Api`) is the caller's side over an `IDefinitionsLink`: `HEAD` and `PUT artifacts/{sha256}` for the files the group lacks, `PUT definitions/{kind}/{name}` (the manifest, channel, mode, `expected_version`, `depends_on`, format, extra body fields), `PUT bindings/...`, the reads (`NamesAsync`: a caller that only publishes lists the names it owns and no others, an administrator or viewer all of them), the adopt call (`AdoptAsync`), and the signature: it asks `GET trust/{kind}` and signs when the group trusts its key, goes unsigned when the group does not require signatures, and refuses before sending, naming the key and the administrator's call, when the group requires them and does not trust it. Build's `ProxyPublisher` publishes its data sources and models with it, and so does the Workspace server (`WorkspaceGatewayPublish`, `DbDataKit.Authoring.Server`, plan 33 SW01) for a Store project's entity models and a Build project's data source documents and semantic models: it names the data sources a model needs as slots when the publishing client did not make them, binds them itself where the Gateway lets a publishing client (its own data sources), and says what an administrator binds otherwise. The Workspace's app publish (and the apps API's `PUT /api/v1/apps/{name}`, which the removed `apps publish --to` called) is not on the shared route yet: an app version is one JSON text with every file in base64 until PB04 stores it as a manifest and files by hash, and moving it before then would be a partial route to migrate.
+
+## Deploying a build from the control service
+
+The control service deploys a build of a Workspace project to a Runner or a Gateway as the person who asks. The Workspace service builds the project
+and serves what the build holds; it never calls the Runner or the Gateway.
+
+1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
+   kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
+   Store build; a `note`).
+2. The console checks that the person holds the approver role on the Workspace server, and that the target is a registered Runner or Gateway.
+3. The console reads `GET /api/v1/projects/{project}/workspaces/{workspace}/builds/{build}/contents` from the Workspace server, as the person. The
+   answer has the build record and the items the build holds to send. A build that did not succeed is refused: "This build is failed, so there is
+   nothing to publish. Only a build that succeeded is published."
+4. The console picks the item that the kind's route to the target's product takes (`GET /api/v1/project-kinds`). A kind that does not go to that
+   product is refused with the kind, the target and the products the kind goes to.
+5. The console reads each file of the item by its SHA-256 (`GET .../builds/{build}/files/{sha256}`), lays the files out under their paths, and refuses a
+   file whose bytes do not have the hash or the size the build listed.
+6. The console sends the item to the target over the target's publish API, through the relay as the person. The target decides what the person may
+   do there and records them as the publisher. Each version is signed with the console's publisher key over its manifest, its files and the build
+   record, when the target trusts that key (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the
+   deploy before anything is sent, and the message names the key.
+7. The console keeps the deploy (the `deploys` state module) and audits it as `build.deploy`. `GET /api/deploys?workspace_server=&project=&workspace=&build=`
+   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words.
+
+What a build holds to send, by the routes of its kind:
+
+| Item | Product | Files in the build's folder |
+| --- | --- | --- |
+| `package` | Runner | `artifact/package.yaml` and `artifact/files/` (a Sync set, a Build project's refresh plans, an integration) |
+| `semantic-model` | Gateway | `artifact/gateway/` (a Build project's semantic models and views) |
+| `model` | Gateway | `artifact/models/` (a Store project's models) |
+| `model-package/<model>` | Runner | `artifact/runner/<model>/` (one deploy package per Store model; the person names the model when the build has several) |
+| `app` | Gateway | `app/` (a built app) |
+
+Each item lists its files with their SHA-256 and size, and `manifest_sha256`: the SHA-256 of the item's list of files (each path under the item's
+folder, a tab, the file's SHA-256 and a line feed, in path order). Two builds of the same content have the same `manifest_sha256`.
+
+Example: Ana stages build `4f1c...` of the Sync project `orders` on the Runner `jobs` in `dev`, with the slot `source` bound to `erp`:
+
+```
+POST /api/deploys
+{"workspaceServer": "Workspace", "project": "orders", "workspace": "draft-1", "build": "4f1c...", "target": "jobs",
+ "channel": "dev", "bind": {"source": "erp"}}
+```
+
+The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
+An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
+
+### Publishing from the Builds tab
+
+On the console's screens of a Workspace server, the Builds tab of a draft makes this deploy. Ana opens build `4f1c...` of `orders`, and the publish
+panel lists the Runners and Gateways the console manages:
+
+- The project's kind goes to the server's product: the server is offered. A Sync project goes to a Runner, so `jobs` is offered and a Gateway is not.
+- The server does not answer the console: it is offered with "not answering", and **Publish** stays off until it answers.
+- The console manages no server the kind goes to: the panel says so, and an administrator adds one under **Servers**.
+
+For a Runner, Ana names the channel (`dev`), the slots to bind (`source=erp`) and whether the version is served at once; for a Gateway of models,
+the data source. **Publish** sends `POST /api/deploys` as Ana. The panel shows the version the target answered and lists the console's records of
+the build's deploys (`GET /api/deploys`), taken or refused.
+
+A build's panel has its own address: `/servers/<Workspace server>/<project>/<workspace>/files?tab=builds&build=<build>` opens the Builds tab with
+that build and its publish panel.
+
+### Runs of a deployed build
+
+A version the console deployed to a Runner is run through the console too. The console's deploy record names the Runner, the package, the channel
+and the version, so the Workspace server is never asked where a build went and never calls the Runner. These tabs of a draft run it:
+
+- The **Provisioning** tab of a Sync project: **Apply on the Runner** runs the set's task `provision` of the deployed version.
+- The **Runs** tab of a Sync or Build project: **Run now** runs a task of the version the channel serves, and **Test** tries the login bound to a
+  connection's slot.
+- The **Deploy** tab of a Store project: **Dry run** builds the draft, has the console stage the model's package (`POST /api/deploys` with the
+  `model` and the slot `storage` bound), then runs its task `deploy`; **Deploy** and the contract step run on that same deploy.
+
+Each tab takes the newest deploy of a build of the draft that the Runner took (`GET /api/deploys?workspace_server=&project=&workspace=`). A refused
+deploy and a deploy to a Gateway are skipped. When no deploy put a version on a Runner, the tab says to publish the build first.
+
+The calls name the deploy by its id. The console calls the Runner as the signed-in person, so the Runner checks that person's roles there too:
+
+| Call | Role on the Workspace server | Role on the Runner | What it does |
+| --- | --- | --- | --- |
+| `POST /api/deploys/{id}/runs` | approver | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
+| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
+| `POST /api/deploys/{id}/binding-test` | approver | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
+| `POST /api/deploys/{id}/contract` | approver | operator | Runs a Store model's approved contract plan (below). |
+
+A Store model's contract step removes what the model no longer has. It runs in two steps:
+
+1. **Plan the contract** runs the task `contract` with no approval. The run records the plan, its hash and the columns it drops (the step
+   `contract-report`).
+2. **Contract** sends `{"planRun": "<that run>", "approve": "<its hash>", "allowConsumer": [...]}`. The console checks that the run read a plan with
+   that hash. It then reads the lineage of every Gateway it manages, as the person. A published dashboard, report, app or model member that reads a
+   dropped column refuses the step and is named, until it is published without the column or the person allows it as `<name>@<channel>`. A server
+   that does not answer and is a Gateway, or whose product the console does not know yet, refuses the step too; `gateway:<name>` allows it. Then
+   the console runs `contract` with the hash, and the Runner runs exactly that plan or nothing.
+
+Example: Ana deployed build `4f1c...` of the Sync project `orders` to `jobs` in `dev` (deploy `01a2...`). On the Provisioning tab she applies the
+setup of the mapping `orders`:
+
+```
+POST /api/deploys/01a2.../runs
+{"task": "provision", "inputs": {"replication": "orders", "mapping": "orders", "action": "createTargetTable"}}
+```
+
+The answer (202) has the run's id. The tab then reads `GET /api/deploys/01a2.../runs/<run>?step=provision-applied` until the run ends, and shows
+each statement the run reports.
+
+The console audits each call under the person, with the deploy and the Runner: `build.run`, `build.binding_test`, `build.contract` and
+`build.contract.allow_consumer`, refused calls included.
+
+## The build record
+
+A version deployed from a build carries the record of that build (`build-record/1`), as one line of JSON:
+
+```json
+{"schema":"build-record/1","server":"<Workspace server id>","project":"orders","kind":"sync","workspace":"draft-1","build":"4f1c...",
+ "commit":"9a2e...","uncommitted_changes":false,"item":"package","manifest_sha256":"c0ff...",
+ "checks":{"passed":true,"findings":[{"severity":"warning","code":"...","message":"...","file":"config/task.yaml","line":4}]}}
+```
+
+- `checks` is what the kind's validators found when the build ran; `passed` is true only for a build that succeeded.
+- The signature covers the record. A signed version with a record is signed over the message `dbdatakit-definition/2`: the kind, the name, the
+  manifest's SHA-256, the line `build`, a tab and the record's SHA-256, then each file's path and SHA-256. A version without a record is signed over
+  `dbdatakit-definition/1`, as before.
+- The Runner or Gateway keeps the record's text with the version, as it was sent (`definition_version.build_record`). `GET definitions/{kind}/{name}`
+  lists it with each version, and `GET definitions/{kind}/{name}/versions/{n}` returns it. An instance verifies the signature again over the stored
+  record when it prepares the version, and a promotion to another group carries the record with the signature.
 
 ## The registry of kinds
 

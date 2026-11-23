@@ -153,15 +153,19 @@ export const diagnosticLine = (d: { file?: string | null; line?: number | null; 
 /** The product a target is, in words: `Runner`, `Gateway` (a target from before products is a Gateway). */
 export const productWord = (product: string | null | undefined) => (product === 'runner' ? 'Runner' : product === 'gateway' || !product ? 'Gateway' : product)
 
-/** What the Publish button is: the approver role (the console's administrator holds it), a succeeded build and a target the server can publish to; a Runner also needs the channel the package goes to (plan 33 SC22c). */
-export function publishButton(input: { canWrite: boolean; status: string; target: string; targets: readonly { name: string; can_publish: boolean; product?: string | null; accepts?: boolean | null }[]; busy: boolean; channel?: string }): { enabled: boolean; why: string | null } {
+/**
+ * What the Publish button is: the approver role (the console's administrator holds it), a succeeded build, and a Runner or a Gateway the console manages that answers
+ * and that the project's kind goes to; a Runner also needs the channel the package goes to. `target` is the console's id of the server.
+ */
+export function publishButton(input: { canWrite: boolean; status: string; target: string; targets: readonly { id: string; name: string; product: string; reachable: boolean; accepts: boolean }[]; busy: boolean; channel?: string }): { enabled: boolean; why: string | null } {
   if (!input.canWrite) return { enabled: false, why: 'Publishing needs the approver or administrator role.' }
   if (input.status !== 'succeeded') return { enabled: false, why: 'Only a build that succeeded is published.' }
-  if (input.target.trim() === '') return { enabled: false, why: input.targets.length === 0 ? 'No publisher key is set up: an administrator adds one under Publisher keys.' : null }
-  const known = input.targets.find((t) => t.name === input.target.trim())
-  if (known && !known.can_publish) return { enabled: false, why: `The key ${known.name} is not paired with a ${productWord(known.product)} that lets it publish.` }
-  if (known?.accepts === false) return { enabled: false, why: `This kind of project is not published to a ${productWord(known.product)}; choose a key paired with the product it goes to.` }
-  if (known?.product === 'runner' && (input.channel ?? '').trim() === '') return { enabled: false, why: 'Name the channel of the Runner the package goes to.' }
+  if (input.target === '') return { enabled: false, why: input.targets.some((t) => t.accepts) ? null : 'The console manages no Runner or Gateway that this kind of project goes to: an administrator adds one under Servers.' }
+  const known = input.targets.find((t) => t.id === input.target)
+  if (!known) return { enabled: false, why: 'Choose a Runner or a Gateway the console manages.' }
+  if (!known.accepts) return { enabled: false, why: `This kind of project is not published to a ${productWord(known.product)}; choose a server of the product it goes to.` }
+  if (!known.reachable) return { enabled: false, why: `${known.name} is not answering the console.` }
+  if (known.product === 'runner' && (input.channel ?? '').trim() === '') return { enabled: false, why: 'Name the channel of the Runner the package goes to.' }
   return { enabled: !input.busy, why: null }
 }
 
@@ -190,7 +194,7 @@ export function adoptionRequest(body: unknown): AdoptionRequest | null {
 /** What the confirmation says: the data source, who made it, and what adopting means (the Gateway records who adopted it and when). */
 export function adoptionSentence(a: AdoptionRequest): string {
   const who = a.made_by === 'hand' ? 'by hand or by an administrator of the Gateway' : `by ${a.made_by}`
-  return `The data source ${a.data_source} on the Gateway was made ${who}, not by this Workspace. Publishing puts your model on it. The Gateway records that you adopted it (who, when and which data source) in its audit and in the data source's metadata.`
+  return `The data source ${a.data_source} on the Gateway was made ${who}, not by a deploy from the console. Publishing puts your model on it. The Gateway records that you adopted it (who, when and which data source) in its audit and in the data source's metadata.`
 }
 
 /** What the refresh button says: the data source it reads, or the connection that stands for it. */

@@ -52,8 +52,8 @@ public static class SyncCli
         ]),
         new Noun("package", "The repository as a definition package for a runner",
         [
-            Forward("publish", "Publish the replications of the repository as a package on a runner (plan 28c E08); nothing is compiled and no secret goes", EffectClass.RepoFilesOnly,
-                "--to runner (--server <name or https address> --channel <name> [--code <pairing code>] [--bind <slot>=<connection> ...] [--serve] [--expected-version <n>] | --out <directory> | --check) [--json] [--package <name>] [--platform linux-x64|win-x64] [--source <feed>] [--runtime-range <range>] [--client-dir <path>] [--repo <path>]",
+            Forward("publish", "Make the replications of the repository a package for a runner (plan 28c E08): --out writes it, --check says what it would hold; nothing is compiled and no secret goes. The console deploys it to a runner", EffectClass.RepoFilesOnly,
+                "--to runner (--out <directory> | --check) [--json] [--package <name>] [--platform linux-x64|win-x64] [--source <feed>] [--runtime-range <range>] [--repo <path>]",
                 a => PackageCommand.RunAsync(["publish", .. a])),
         ]),
         LineageCommand.Noun(),

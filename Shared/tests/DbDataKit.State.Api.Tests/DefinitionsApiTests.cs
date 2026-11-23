@@ -190,6 +190,54 @@ public sealed class DefinitionsApiTests : IDisposable
     }
 
     [Fact]
+    public void A_version_signed_over_its_build_record_keeps_the_record_and_a_changed_record_is_refused()
+    {
+        var api = Open(signatures: true);
+        var key = ConsoleSigningKey.Generate();
+        AddKey(api, key);
+        const string record = """{"schema":"build-record/1","build":"b1","commit":"abc"}""";
+        var signature = DefinitionSigning.Sign(key, "page", "home", "v1", [], record);
+
+        // the record is part of what was signed: another record, or none, does not hold
+        Assert.Equal(403, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature, build = record.Replace("b1", "b2") }), PublisherA).Status);
+        Assert.Equal(403, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature }), PublisherA).Status);
+        var ok = api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v1", signature, build = record }), PublisherA);
+        Assert.Equal((200, "verified"), (ok.Status, (string)ok.Body["signature"]!));
+
+        // the group keeps the record as it was sent, with the signer, and a version read returns it to a promotion
+        var version = api.Handle("GET", "definitions/page/home/versions/1", null, Admin).Body;
+        Assert.Equal((record, key.Fingerprint), ((string?)version["build"], (string?)version["signer"]));
+        var listed = ((JsonArray)api.Handle("GET", "definitions/page/home", null, Admin).Body["versions"]!)[0]!;
+        Assert.Equal(record, (string?)listed["build"]);
+        // a version signed without a record is signed as before, and has none
+        Assert.Equal(200, api.Handle("PUT", "definitions/page/home", Put(new { manifest = "v2", signature = DefinitionSigning.Sign(key, "page", "home", "v2", []) }), PublisherA).Status);
+        Assert.Null(api.Handle("GET", "definitions/page/home/versions/2", null, Admin).Body["build"]);
+    }
+
+    [Fact]
+    public void The_trust_of_every_kind_the_host_takes_is_one_read_for_a_viewer_and_never_for_a_publisher()
+    {
+        var api = Open(signatures: true);
+        var key = ConsoleSigningKey.Generate();
+        AddKey(api, key, "model");
+        Assert.True(DefinitionsApi.Handles("trust"));
+
+        var all = api.Handle("GET", "trust", null, Viewer);
+        Assert.Equal(200, all.Status);
+        var kinds = ((JsonArray)all.Body["kinds"]!).Select(k => k!.AsObject()).ToList();
+        // the kinds of this host's target type, in name order; the runner's kind of the registry is not one of them
+        Assert.Equal(["model", "page"], kinds.Select(k => (string)k["kind"]!));
+        Assert.Equal([key.Fingerprint], ((JsonArray)kinds[0]["keys"]!).Select(k => (string)k!["key_id"]!));
+        Assert.Empty((JsonArray)kinds[1]["keys"]!);
+        Assert.True((bool)kinds[1]["required"]!);
+        // each kind as its own read answers it
+        Assert.Equal(api.Handle("GET", "trust/model", null, Viewer).Body.ToJsonString(), kinds[0].ToJsonString());
+
+        Assert.Equal(403, api.Handle("GET", "trust", null, new DefinitionsCaller("p", false, true, false, "client-p")).Status);
+        Assert.Equal(200, api.Handle("GET", "trust", null, Admin).Status);
+    }
+
+    [Fact]
     public void An_administrator_turns_signatures_off_for_a_kind_or_marks_the_group_test_and_only_an_administrator_manages_keys()
     {
         var api = Open(signatures: true);

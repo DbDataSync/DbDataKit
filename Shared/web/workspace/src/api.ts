@@ -58,12 +58,11 @@ export interface PublishedAnswer {
   package?: string; channel?: string; mode?: string; changed?: boolean; uploaded?: number; skipped?: number; tasks?: string[]; runner?: string
   models?: { model: string; data_source?: string; data_sources?: Record<string, string>; version?: number | null; created?: boolean | null; unchanged?: boolean | null; adopted?: string | string[] | null }[]
 }
-export interface PublishAnswer { steps: string[]; published: PublishedAnswer }
-/** A manual task of the version a build staged on a Runner, started for the signed-in person (`POST .../builds/{b}/run`, plan 28c E21 step e). */
-/** The Runner's test of a slot's binding, relayed for a build that published (plan 33 SC22h): how far the bound login got and where it was tried; never a value. */
+/** The Runner's test of a slot's binding, asked through the console for what a deploy published (`POST /api/deploys/{id}/binding-test`): how far the bound login got and where it was tried; never a value. */
 export interface BindingTestAnswer { slot: string; ok: boolean; step: string; message: string; connected: boolean; package: string; channel: string; target: string; instance?: string }
+/** A task started on a Runner for the signed-in person (`POST /api/deploys/{id}/runs`). */
 export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; instance?: string; on_behalf_of: string }
-/** A run read back from the Runner (`GET .../builds/{b}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
+/** A run read back from the Runner through the console (`GET /api/deploys/{id}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
 export interface StagedRun { id: string; task: string; outcome: string; started: string; finished: string | null; version: string | null; failure: { kind: string | null; message: string } | null; steps?: { key: string; started: string; completed: string | null; result: unknown }[] }
 /** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
 export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
@@ -158,20 +157,6 @@ export const workspaceApi = {
   publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
   /** Asks a paired Gateway for the tables and columns of a data source and writes them into the draft's `catalog-cache.yaml` (SC20j). */
   refreshCatalog: (project: string, id: string, body: CatalogRefreshRequest) => request<CatalogRefreshAnswer>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/catalog/refresh`, json(body)),
-  publish: (project: string, id: string, build: string, target: string, note: string, options: PublishOptions = {}) => request<PublishAnswer>(`${builds(project, id)}/${enc(build)}/publish`, json({ target, ...(note ? { note } : {}), ...options })),
-  /** Runs a manual-only task (Sync's `provision`) of the version this build last staged or published on a Runner, for the signed-in person; the Runner's bound logins do the work. */
-  runStaged: (project: string, id: string, build: string, task: string, inputs: Record<string, string>, pkg?: string) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, ...(pkg ? { package: pkg } : {}) })),
-  /** Runs a task (a drain, a refresh: one with a schedule too) of the version the channel this build published to serves now, for the signed-in person: the Runner's Run now, asked from the project's page (plan 33 SC20o, SC22l). */
-  runServed: (project: string, id: string, build: string, task: string, inputs: Record<string, string>) => request<{ steps: string[]; run: StagedRunStarted }>(`${builds(project, id)}/${enc(build)}/run`, json({ task, inputs, served: true })),
-  /** Tries a connection of what this build published on the Runner, with the login its channel binds to the slot (the Runner's binding test; the pairing needs the Runner's admin role). */
-  bindingTest: (project: string, id: string, build: string, slot: string, role: 'default' | 'read' | 'write' = 'default') => request<{ test: BindingTestAnswer }>(`${builds(project, id)}/${enc(build)}/binding-test`, json({ slot, role })).then((r) => r.test),
-  /** A run read back; `pkg` names the staged package it is of when the build staged more than one (a Store project's build stages one per model, plan 33 SC24). */
-  stagedRun: (project: string, id: string, build: string, run: string, step?: string, pkg?: string) => {
-    const query = [step ? `step=${enc(step)}` : '', pkg ? `package=${enc(pkg)}` : ''].filter(Boolean).join('&')
-    return request<{ run: StagedRun }>(`${builds(project, id)}/${enc(build)}/runs/${enc(run)}${query ? `?${query}` : ''}`).then((r) => r.run)
-  },
-  /** Runs the approved contract plan of a Store model (plan 33 SC24): `plan_run` is the run of `contract` that read the plan, `approve` its hash; the server asks its paired Gateways who reads the columns it drops first and refuses (409) naming them, unless each is allowed (`<name>@<channel>`, `gateway:<name>`). */
-  contract: (project: string, id: string, build: string, body: { package: string; plan_run: string; approve: string; allow_consumer: string[] }) => request<{ steps: string[]; run: StagedRunStarted; checked: number; gateways: number }>(`${builds(project, id)}/${enc(build)}/contract`, json(body)),
   previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),

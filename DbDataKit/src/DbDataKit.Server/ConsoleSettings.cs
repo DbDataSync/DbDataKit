@@ -73,7 +73,7 @@ public static class ConsoleState
     /// </summary>
     public static StateScope Scope { get; } = new(Group: "console");
 
-    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module, DbDataKit.Web.Trust.TrustModule.Module];
+    public static IReadOnlyList<StateModule> Modules { get; } = [IdentityModule.Module, NotificationsModule.Module, DbDataKit.Identity.FederationModule.Module, RunsModule.Module, AuditModule.Module, AgentsModule.Module, SetupModule.Module, DeliveryModule.Module, BindingPostureModule.Module, QualityModule.Module, BacklogModule.Module, ReleasesModule.Module, DbDataKit.Web.Trust.TrustModule.Module, DeploysModule.Module];
 
     private static string AppliedBy => $"{ConsoleSettings.Product} {typeof(ConsoleState).Assembly.GetName().Version}";
 
