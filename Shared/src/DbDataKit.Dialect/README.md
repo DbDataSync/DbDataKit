@@ -4,7 +4,7 @@ Plan 05 implementation: data-driven dialects, the shared SQL lexer, the statemen
 Depends on `DbDataKit.Dialect.Abstractions` and YamlDotNet (parser events only).
 
 ## Public contract
-- `DialectCatalog.Builtin.Get("postgres")` returns an `ISqlDialect`. Built-ins (embedded `dialects/*.yaml`): `ansi`, `sqlserver`, `postgres`, `mysql`, `oracle`, `duckdb`, `fabric`.
+- `DialectCatalog.Builtin.Get("postgres")` returns an `ISqlDialect`. Built-ins (embedded `dialects/*.yaml`): `ansi`, `sqlserver`, `postgres`, `mysql`, `oracle`, `duckdb`, `fabric`, `flightsql` (the type names a Flight SQL client gives Arrow columns, and the types written for a target behind a Flight SQL server whose engine is not named; the `flightsql` engine itself keeps the `ansi` dialect).
   `catalog.With(yamlText, source)` adds a project-level dialect (may `extends` any built-in and inherits its compiled class). `OdbcDialect.FromFacts(OdbcFacts)` builds a generic `odbc:<name>` dialect from SQLGetInfo-like facts.
 - `SqlLexer.Tokenize(sql, SqlSyntax)`: lexical only, never throws, tokens tile the input exactly (`SqlLexer.Join(tokens) == sql`). Strings (`''`, `E''`, `N''`, `$tag$`, Oracle `q'[ ]'`, MySQL backslash), quoted identifiers (`""`, `[]`, backtick), comments (`--`, `/* */` with a nesting flag, `#`, flagged `/*! */`), parameters (`?`, `@n`, `:n`, `$1`, `$n`), `;`.
   `SqlParameterRewriter.Rewrite` converts markers between styles without touching strings or comments.
@@ -36,7 +36,7 @@ Every product that reads or writes a column type (Sync, Build, Transfer, the Gat
 
 ## Decisions
 - Compiled overrides are small: SQL Server (`#temp` names), Fabric, MySQL (trailing-space names), Oracle (no `"` in names). Everything else is data.
-- Oracle: `NUMBER` unconstrained maps Lossy to unconstrained decimal; ints render `number(p)`; `DATE` reads as `timestamp(0)`; no TIME type (interval); boolean as `number(1)` (pre-23ai).
+- Oracle: `NUMBER` unconstrained maps Lossy to unconstrained decimal; ints render `number(p)`; `DATE` reads as `timestamp(0)`; no TIME type, so a time is written as `timestamp(s)` with a note that its date part means nothing (Oracle tools show a time of day that way, and it reads back as a timestamp); boolean as `number(1)` (pre-23ai).
 - SQL Server `tinyint` is unsigned; signed int8 widens to smallint. Unsigned 64-bit widens to `decimal(20,0)`.
 - The classifier is defence in depth: it refuses harmless SQL that uses a deny word unquoted (a column named `load`); quote such names. Real enforcement is a read-only login (Plan 06).
 - Postgres `?` is not a parameter marker (jsonb operator); callers pass `QuestionParameter` explicitly when rewriting.

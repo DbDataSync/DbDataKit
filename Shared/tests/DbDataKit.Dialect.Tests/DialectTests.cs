@@ -9,7 +9,7 @@ public class DialectTests
 
     [Fact]
     public void Catalog_contains_all_builtins()
-        => Assert.Equal(["ansi", "duckdb", "fabric", "mysql", "oracle", "postgres", "sqlserver"], DialectCatalog.Builtin.Ids);
+        => Assert.Equal(["ansi", "duckdb", "fabric", "flightsql", "mysql", "oracle", "postgres", "sqlserver"], DialectCatalog.Builtin.Ids);
 
     [Theory]
     [InlineData("sqlserver", "a]b", "[a]]b]")]

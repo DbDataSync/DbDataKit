@@ -242,6 +242,60 @@ public class TypeTests
         Assert.Equal("varbinary(16)", D("sqlserver").ColumnType(CanonicalType.Parse("binary(16)")).Result);
     }
 
+    // Oracle has no time-of-day type: a time is written as a timestamp, whose date part means nothing, and reads back as a timestamp.
+    [Theory]
+    [InlineData("time", "timestamp(6)")]
+    [InlineData("time(0)", "timestamp(0)")]
+    [InlineData("time(9)", "timestamp(9)")]
+    public void Oracle_writes_a_time_as_a_timestamp(string canonical, string native)
+    {
+        var m = D("oracle").ColumnType(CanonicalType.Parse(canonical));
+        Assert.Equal(native, m.Result);
+        Assert.Equal(Fidelity.Lossy, m.Fidelity);
+        Assert.Contains("TIME-only", m.Note);
+    }
+
+    // The type names a Flight SQL client gives an Arrow column, read by the flightsql dialect; the shared ansi dialect does not read them all.
+    [Theory]
+    [InlineData("tinyint", "int8")]
+    [InlineData("varbinary", "binary")]
+    [InlineData("time", "time")]
+    [InlineData("varchar", "string(unicode)")]
+    [InlineData("decimal(20,0)", "decimal(20,0)")]
+    [InlineData("double precision", "double")]
+    [InlineData("timestamp with time zone", "timestamp(tz,6)")]
+    [InlineData("bool", "boolean")]
+    [InlineData("text", "string(unicode)")]
+    public void Flightsql_reads_the_names_of_Arrow_types(string native, string canonical) =>
+        Assert.Equal(CanonicalType.Parse(canonical), D("flightsql").ToCanonical(native).Result);
+
+    [Theory]
+    [InlineData("int8", "SMALLINT", Fidelity.Widened)]
+    [InlineData("int64(unsigned)", "DECIMAL(20,0)", Fidelity.Widened)]
+    [InlineData("decimal(18,2)", "DECIMAL(18,2)", Fidelity.Exact)]
+    [InlineData("decimal", "DECIMAL(38,9)", Fidelity.Lossy)]
+    [InlineData("string(unicode,50)", "VARCHAR(50)", Fidelity.Exact)]
+    [InlineData("string", "VARCHAR(4000)", Fidelity.Lossy)]
+    [InlineData("binary", "VARBINARY(4000)", Fidelity.Lossy)]
+    [InlineData("binary(16)", "VARBINARY(4000)", Fidelity.Widened)]
+    [InlineData("time", "TIME(6)", Fidelity.Exact)]
+    [InlineData("timestamp(tz)", "TIMESTAMP(6) WITH TIME ZONE", Fidelity.Exact)]
+    [InlineData("guid", "CHAR(36)", Fidelity.Widened)]
+    [InlineData("json", "VARCHAR(4000)", Fidelity.Lossy)]
+    public void Flightsql_writes_the_types_of_a_target_whose_engine_is_not_named(string canonical, string native, Fidelity fidelity)
+    {
+        var m = D("flightsql").ColumnType(CanonicalType.Parse(canonical));
+        Assert.Equal(native, m.Result);
+        Assert.Equal(fidelity, m.Fidelity);
+    }
+
+    [Fact]
+    public void The_ansi_dialect_is_unchanged_by_flightsql()
+    {
+        Assert.False(D("ansi").ToCanonical("tinyint").IsMapped);
+        Assert.Equal("clob", D("ansi").ColumnType(CanonicalType.String()).Result);
+    }
+
     [Fact]
     public void Ansi_and_unmappable_edge_cases()
     {

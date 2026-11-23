@@ -170,13 +170,8 @@ public sealed class OracleDialect : SqlDialect
 
     public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
 
-    /// <summary>Sync keeps a canonical <c>TIME</c> as a <c>TIMESTAMP</c> column, where the shared table says an interval of the day.
-    /// Existing Oracle targets were created that way, and the interval reads back as a different canonical type.</summary>
-    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) => type.Kind == CanonicalKind.Time
-        ? new RenderedColumnType(
-            $"timestamp({Math.Min(type.Scale ?? 6, 9)})",
-            DialectTypes.Join(sourceNote, "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless."))
-        : DialectTypes.Write(Shared, type, sourceNote);
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+        DialectTypes.Write(Shared, type, sourceNote);
 
     public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
     /// <summary>The comma-separated expressions of a tuple body, split at the commas that are not inside parentheses or a quoted string.</summary>

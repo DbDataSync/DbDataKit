@@ -1,0 +1,41 @@
+schema: dialect/1
+id: flightsql
+extends: ansi
+display: Arrow Flight SQL (an engine not named)
+# The type names a Flight SQL client gives a column from its Arrow type (tinyint, varbinary, time, varchar, ...), whatever engine the server fronts,
+# and the types Sync writes for a target behind a Flight SQL server whose engine is not named. These rows are tried before the inherited ANSI rows.
+types_prepend:
+  - { native: "tinyint", canonical: "int8", direction: to_canonical }
+  - { native: "bool", canonical: "boolean", direction: to_canonical }
+  - { native: "float", canonical: "float", direction: to_canonical }
+  - { native: "double", canonical: "double", direction: to_canonical }
+  - { native: "text", canonical: "string(~unicode)", direction: to_canonical }
+  - { native: "char({n})", canonical: "string(~unicode,{n})", direction: to_canonical, fidelity: lossy, note: "fixed-width padding is not preserved" }
+  - { native: "varbinary({n})", canonical: "binary({n})", direction: to_canonical }
+  - { native: "binary({n})", canonical: "binary({n})", direction: to_canonical }
+  - { native: "time({s})", canonical: "time({s})", direction: to_canonical }
+  - { native: "BOOLEAN", canonical: "boolean", direction: from_canonical }
+  - { native: "SMALLINT", canonical: "int8", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no one-byte integer; widened to SMALLINT." }
+  - { native: "SMALLINT", canonical: "int8(unsigned)", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no unsigned integer; widened to SMALLINT." }
+  - { native: "SMALLINT", canonical: "int16", direction: from_canonical }
+  - { native: "INTEGER", canonical: "int16(unsigned)", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no unsigned integer; widened to INTEGER." }
+  - { native: "INTEGER", canonical: "int32", direction: from_canonical }
+  - { native: "BIGINT", canonical: "int32(unsigned)", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no unsigned integer; widened to BIGINT." }
+  - { native: "BIGINT", canonical: "int64", direction: from_canonical }
+  - { native: "DECIMAL(20,0)", canonical: "int64(unsigned)", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no unsigned integer; widened to DECIMAL(20,0)." }
+  - { native: "DECIMAL(38,9)", canonical: "decimal", direction: from_canonical, fidelity: lossy, note: "no precision or scale was stated; written as DECIMAL(38,9), so digits beyond it are rounded" }
+  - { native: "DECIMAL({p},{s})", canonical: "decimal({p},{s})", direction: from_canonical, defaults: { s: 0 } }
+  - { native: "REAL", canonical: "float", direction: from_canonical }
+  - { native: "DOUBLE PRECISION", canonical: "double", direction: from_canonical }
+  - { native: "VARCHAR({n})", canonical: "string(~unicode,{n})", direction: from_canonical }
+  - { native: "VARCHAR(4000)", canonical: "string(~unicode)", direction: from_canonical, fidelity: lossy, note: "ANSI SQL has no unbounded VARCHAR; capped at 4000." }
+  - { native: "VARBINARY(4000)", canonical: "binary({n})", direction: from_canonical, n_max: 4000, fidelity: widened, note: "every binary is written as VARBINARY(4000)." }
+  - { native: "VARBINARY(4000)", canonical: "binary", direction: from_canonical, fidelity: lossy, note: "ANSI SQL has no unbounded VARBINARY; capped at 4000." }
+  - { native: "VARBINARY(4000)", canonical: "binary({n})", direction: from_canonical, n_min: 4001, fidelity: lossy, note: "ANSI SQL has no unbounded VARBINARY; capped at 4000." }
+  - { native: "DATE", canonical: "date", direction: from_canonical }
+  - { native: "TIME({s})", canonical: "time({s})", direction: from_canonical, defaults: { s: 6 } }
+  - { native: "TIMESTAMP({s}) WITH TIME ZONE", canonical: "timestamp(tz,{s})", direction: from_canonical, defaults: { s: 6 } }
+  - { native: "TIMESTAMP({s})", canonical: "timestamp({s})", direction: from_canonical, defaults: { s: 6 } }
+  - { native: "CHAR(36)", canonical: "guid", direction: from_canonical, fidelity: widened, note: "ANSI SQL has no UUID type; stored as text." }
+  - { native: "VARCHAR(4000)", canonical: "json", direction: from_canonical, fidelity: lossy, note: "ANSI SQL has no native document type; stored as text and not validated." }
+  - { native: "VARCHAR(4000)", canonical: "xml", direction: from_canonical, fidelity: lossy, note: "ANSI SQL has no native document type; stored as text and not validated." }
