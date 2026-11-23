@@ -42,7 +42,7 @@ public sealed class ConsoleDevelopmentLogins(ConsoleCatalogRead projects, Consol
             return CatalogReadAnswer.Error(400, $"The user is a name of 1 to {MaxUserChars} characters, with no space around it.");
         if (string.IsNullOrWhiteSpace(body.Runner)) return CatalogReadAnswer.Error(400, "Name the Runner to set up: `runner`.");
 
-        var (package, refused) = await projects.ProjectAsync(workspace, project, ct);
+        var (package, refused) = await projects.PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
         var (target, problem) = await projects.RunnerAsync(body.Runner, ct);
         if (problem is not null) return problem;

@@ -316,7 +316,7 @@ function FilesArea({ project, id, kind, editable, canWrite, openFile, openTab, s
         : tab === 'runs' && (kind === 'build' || kind === 'sync')
           ? <ProjectRunsPanel project={project} id={id} kind={kind} paths={paths} />
         : tab === 'rows' && kind === 'store'
-          ? <StoreRowsPanel project={project} paths={paths} canWrite />
+          ? <StoreRowsPanel paths={paths} canWrite />
         : tab === 'deploy' && kind === 'store'
           ? <StoreDeployPanel project={project} id={id} paths={paths} />
         : tab === 'catalog' && (kind === 'build' || kind === 'sync')

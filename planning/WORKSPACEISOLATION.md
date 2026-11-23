@@ -40,11 +40,9 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
 | WORKSPACEISOLATION-3 | The control service's deploy of a build is built: the Workspace serves a build's items and record (`.../builds/{b}/contents`, `.../files/{sha256}`), the console deploys an item as the person (`POST /api/deploys`, `ConsoleDeploys`), signs each version with its publisher key over the build record, and keeps the deploy record (`GET /api/deploys`; `docs/publishing.md`, "Deploying a build from the control service"). Left: an app build sent to an instance's preview (`preview-data`) through the console, which the Workspace still sends with its key; the deploy to a Gateway tested end to end through the console (an app build, which needs Bun and the vendored store; a Build project's semantic models; a Store project's models), so far tested against a stand-in Gateway in `DbDataKit.Deploy.Tests`; an app version is sent over the Gateway's app calls, with no signature and no build record on the Gateway, until PUBLISHING-1 puts apps on the shared publish API; for trusted code, the approver's signature once PUBLISHING-3 is built | none | M | a test through the console deploys an app build, a Build project's semantic models and a Store project's models to a Gateway; the Gateway records the person, and for the models the signature and the build record; the deploy record lists each |
 | WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). The Store project's Deploy tab stages its model package through the console's deploy too (`docs/publishing.md`, "Runs of a deployed build"). Left: the preview form of an app build calls it too, once WORKSPACEISOLATION-3 deploys a preview through the console | WORKSPACEISOLATION-3 | S | Playwright: Preview with data sends the build through the console and the preview opens |
-| WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console's catalog read (`api/workspace-catalog/...`, `ConsoleCatalogRead`), built for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
-| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-6, WORKSPACEISOLATION-11, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
+| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4, WORKSPACEISOLATION-12, WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
-| WORKSPACEISOLATION-11 | The Rows tab of a Store project (`StoreRowsPanel`) offers the Gateways the control service manages, read from the console as the signed-in person, instead of the Workspace's paired targets (`GET /api/v1/publish-targets`, which WORKSPACEISOLATION-8 removes); a Gateway is offered when it serves the model, and rows are still read and written through the console's relay as today | none | S | vitest: the panel lists the Gateways from the console's answer and calls no Workspace target route; the Rows story (Playwright) edits a row with `publish-targets` answering 404 |
 | WORKSPACEISOLATION-12 | A sync draft's script Test runs on a Runner: the sync runtime package gets a manual task `script-test` that uses no connection; Test on the Scripts tab builds the draft, stages it in a non-production channel through the control service and runs the task there as the person; the tab shows the result with a link to the run | WORKSPACEISOLATION-3 | M | a test: Test of a script runs it on a Runner and shows its rows; the Workspace service starts no script |
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
@@ -93,7 +91,7 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `GET {ws}/builds/{b}/runs/{run}` | viewer | a run and the steps it recorded, read back from the Runner | **Removed** (WORKSPACEISOLATION-8); the screens call the console's `/api/deploys/{id}/...` |
 | `POST {ws}/builds/{b}/binding-test` | approver | the Runner's test of the login bound to a slot | **Removed** (WORKSPACEISOLATION-8); the screens call the console's `/api/deploys/{id}/...` |
 | `POST {ws}/builds/{b}/contract` | approver | a Store model's approved contract: reads the plan's run from the Runner, checks the approved hash, asks each paired Gateway for its lineage and refuses a dropped column that a consumer reads (`ContractGuard`), then runs `contract` on the Runner | **Removed** (WORKSPACEISOLATION-8); its checks are the console's `POST /api/deploys/{id}/contract`, which asks the Gateways the console manages |
-| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed** (WORKSPACEISOLATION-6). The console's relay table does not list this route, so the console refuses the screen's Gateway refresh today |
+| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed** (WORKSPACEISOLATION-8). The screens no longer call it: the Catalog tab's Gateway refresh asks the console (`POST api/workspace-catalog/{workspace}/{project}/gateway-read`, `ConsoleCatalogRead.GatewayAsync`) |
 
 The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST /api/v1/projects`, the workspace calls of `WorkspaceApi`
 (workspaces, files, move, changes, history, file history, commit, push, merge) and `GET {ws}/events`.
@@ -135,7 +133,7 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `WorkspaceGatewayPublish` (the whole class) | entity models, data source documents, semantic models and views over the shared publish API; binds slots where the Gateway lets the client; refusals in the Gateway's words | **Moves**; it signs, and sets `managedBy`, with the publisher key's identity; the control service takes ownership first (WORKSPACEISOLATION-13) |
 | `RunStagedTaskAsync`, `RunServedTaskAsync`, `RunOfAsync`, `TestBindingAsync`, `Refused` | a run of a staged or served version; a run and its steps; a binding test; a Runner's refusal as a status | **Moves**, without its key and target lookup; the console's runs use it (`ConsoleDeployRuns`) |
 | `GatewayLineageAsync` | the lineage graph of each paired Gateway, and the Gateways that did not answer | **Moves** |
-| `ReadSchemaAsync` (`WorkspaceCatalogRefresh.cs`) | a data source's tables and columns from a Gateway (`POST /api/v1/data-sources/{name}/schema`) | **Moves** (WORKSPACEISOLATION-6 uses it), without its key and target lookup; the merge into the cache is `CatalogCache.Refreshed`, already in `DbDataKit.Catalog.Cache` |
+| `ReadSchemaAsync` (`WorkspaceCatalogRefresh.cs`) | a data source's tables and columns from a Gateway (`POST /api/v1/data-sources/{name}/schema`) | **Moves**: `GatewayCalls.ReadSchemaAsync` (`DbDataKit.Deploy`), which the console's `gateway-read` calls over `ConsolePromotions.LinkFor` as the person; the Workspace's adapter keeps its key and target lookup until WORKSPACEISOLATION-8; the merge into the cache is `CatalogCache.Refreshed`, already in `DbDataKit.Catalog.Cache` |
 | `StagedOf` (in `WorkspaceManagement`) | finds the target, package, channel and version a build was staged with, in `publishes.jsonl` | **Removed**: the control service's deploy record replaces it |
 | the contract route's checks (in `WorkspaceManagement`) | the plan's run and hash, `ContractGuard` over the Gateways' lineage, the allowances | **Moves**; the console's contract uses it (`ConsoleDeployRuns`) |
 
@@ -160,9 +158,9 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
   `PublishForm` and `StoreDeployPanel` calls the control service's deploy, and `PreviewDataForm` moves with WORKSPACEISOLATION-4; the runs of
   `ProjectRunsPanel`, `StoreDeployPanel` (deploy, contract) and `SyncProvisioningPanel` (provision) go through the console's `/api/deploys/{id}/...`
   (`docs/publishing.md`, "Runs of a deployed build"); the Gateway refresh of
-  `CatalogPanel` with WORKSPACEISOLATION-6; the Test of `SyncScriptsPanel` with WORKSPACEISOLATION-12.
-- `StoreRowsPanel` picks its Gateway from `publish-targets`, then edits rows through the console's relay. WORKSPACEISOLATION-11 gives it the
-  control service's list of Gateways before WORKSPACEISOLATION-8 removes that route.
+  `CatalogPanel` asks the console (`gateway-read`); the Test of `SyncScriptsPanel` with WORKSPACEISOLATION-12.
+- `StoreRowsPanel` takes its Gateways from the console (`GET /api/instances`) and asks each one's store through the relay which models it serves; it
+  no longer calls `publish-targets`.
 
 ### The child programs
 
@@ -219,8 +217,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   `POST /api/deploys/{id}/contract`.
 - What the Workspace's keys published on a Gateway is owned by the key's client until WORKSPACEISOLATION-13 makes the control service its owner;
   -3's test of a publish over a model published before needs that task.
-- Not for -2 or -3: the console's relay table does not list `catalog/refresh`, so WORKSPACEISOLATION-6 moves a refresh that the screens cannot
-  reach today; and the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
+- Not for -2 or -3: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
 ## Needs from other subjects
@@ -374,6 +371,64 @@ trigger: only a manual-only task is run from a version that is not served", beca
 - Option B: the packages stop writing `manual: true` on these tasks, and the Runner stays as it was.
 
 Recommendation: A: the packages already say what they mean, and the Runner's rule for a `ddl` task reads `manual` the same way.
+
+### WORKSPACEISOLATION-P19: a read from a Gateway is an unsaved edit of the draft (default, awaiting the owner)
+
+Scenario: Ana presses **Refresh catalog from dwh** on the Catalog tab of the draft of `sales-dw`. Before, the Workspace server asked the Gateway and
+wrote `catalog-cache.yaml` into the draft at once, with no difference shown.
+
+- Option A (built): the console answers the connection as a `catalog-cache/2` text; the tab shows what changed, and **Accept** puts it in the draft as
+  an unsaved edit, which Ana saves. The same as a read from a Runner.
+- Option B: the console writes the file into the draft through the Workspace server's file route, as the old route did.
+
+Recommendation: A: one behaviour for both reads, the difference is seen before anything changes, and the console never writes into a draft.
+
+### WORKSPACEISOLATION-P20: who may ask for a read from a Gateway (default, awaiting the owner)
+
+Scenario: Vic holds the viewer role on the project `sales-dw` and the publisher role on the Gateway `edge`. Before, the Workspace server's refresh
+needed the author role and the draft's owner, because it wrote the file.
+
+- Option A (built): the console asks the Workspace server whether Vic may read the project (viewer), and the Gateway decides whether Vic may read the
+  data source (an administrator reads any; a publisher those the console's deploys made). Vic sees the difference; **Accept** is offered only to a
+  person who may edit the draft.
+- Option B: the console also asks for the author role on the Workspace server before it asks the Gateway.
+
+Recommendation: A: the read changes nothing, as with a read from a Runner; the draft's edit rights still guard what is kept.
+
+### WORKSPACEISOLATION-P21: the Gateway form offers the draft's connections only (default, awaiting the owner)
+
+Scenario: the draft of `sales-dw` has `connections/warehouse.yaml`. Ana wants the cache entry for a connection `archive` that has no file yet. Before,
+the form took any name typed.
+
+- Option A (built): the form lists the draft's connections, as the Runner refresh does; Ana adds `connections/archive.yaml` first.
+- Option B: the form also takes a typed connection name.
+
+Recommendation: A: a cache entry for a connection the draft does not have is reported by the draft's check, and both forms then pick the same way.
+
+### WORKSPACEISOLATION-P22: the console keeps no audit line of its own for a read from a Gateway (default, awaiting the owner)
+
+Scenario: Ana reads the data source `dwh` through the console. The Gateway's audit records `data-source schema` (or the adoption) with Ana's name
+beside the console's client. Before, the Workspace server also audited `catalog.refresh`; the console's read from a Runner keeps no line either (the
+Runner records the run).
+
+- Option A (built): the Gateway's audit is the record.
+- Option B: the console also audits `workspace.catalog.read` with the Gateway, the data source and the outcome.
+
+Recommendation: A, the same as a read from a Runner; B if the owner wants every read listed in the console's audit, for both reads.
+### WORKSPACEISOLATION-P23: which Gateways the Rows tab offers when one does not say what it serves (default, awaiting the owner)
+
+Scenario: Ana opens the Rows tab of the Store project `regions`. The console manages three Gateways: `edge` serves `regions`; `plain` has no store
+module, so its `GET /api/v1/store/models` answers 404 (a Gateway where Ana has no role answers 403); `far` is down, and the console marks it
+unreachable.
+
+- Option A (built): `edge` is offered. `plain` counts as serving no model to Ana, with no message, as the console's Approvals page treats a 404 or a
+  403. `far` is not asked; under the pickers the tab says "far did not say which models it serves: The console cannot reach it." A Gateway that
+  answers with any other error is named the same way with its message. The others are still offered.
+- Option B: every Gateway that does not list the model is named under the pickers with the reason, 403 and 404 included.
+- Option C: a Gateway that does not answer is offered anyway, and the editor shows its error when Ana picks it.
+
+Recommendation: A: a Gateway without the store module, or where the person has no role, has nothing to edit, and naming it would be noise on
+every Store project; a Gateway that is down is worth one line, since the model may be served there.
 
 ### WORKSPACEISOLATION-P24: who may store a development login on a Runner (default, awaiting the owner)
 

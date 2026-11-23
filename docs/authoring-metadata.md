@@ -6,12 +6,13 @@ project asks of it. This page says who reads the database for that, with which l
 connection at all. It applies to every kind of project; what a sync project checks is [its own section](#a-sync-project).
 
 **Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a Runner channel (**Refresh from a Runner** on the tab
-**Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a paired Gateway's read-only schema call; the offline readers of the
+**Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a Gateway's data source through the console
+(**Refresh from a Gateway** on the same tab); the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the offline checks of a Sync draft against the cache ([The offline findings](#a-sync-project)); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
-([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+or a Gateway's data source ([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -92,20 +93,21 @@ A connection whose driver the built-in package cannot run is read by the project
 
 ### How a screen asks for a read
 
-A Workspace screen asks the console, and the console asks the Runner. The Workspace server only tells the console which package the project
-becomes and whether the person may read it. It never calls the Runner and never sees the login.
+A Workspace screen asks the console, and the console asks the Runner or the Gateway. The Workspace server only tells the console which package the
+project becomes and whether the person may read it. It never calls the Runner or the Gateway and never sees the login.
 
-The console has three routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
+The console has four routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
 
 | Route | What the console does |
 | --- | --- |
 | `GET .../channels?runner=&connection=` | lists the channels of the project's package on that Runner, whether each binds the connection's slot, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
 | `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
 | `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
+| `POST .../gateway-read` with `{"gateway", "connection", "data_source"?, "adopt"?}` | asks a Gateway for the tables and columns of one of its data sources, as the person ([below](#a-read-from-a-gateway)) |
 
 For each call, the console first asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person. The answer says
 whether the person may read the project and which package the project becomes on a Runner. The Workspace server's refusal is passed on with its own
-words. An app or a Store project is not read this way: its kind makes no single package of tasks.
+words. An app or a Store project is not read from a Runner: its kind makes no single package of tasks.
 
 The slot is the one the package makes of the connection's name: lower-case, with every character other than a letter, a digit or `_` turned into `_`
 (`CRM-db` is read through the slot `crm_db`). A Build project's connection names already are slot names.
@@ -135,6 +137,35 @@ POST /api/workspace-catalog/ws-1/crm-to-dw/read
 
 The screen compares the new entry with the cache it holds and shows the difference before it replaces the entry
 ([Refresh on request](#the-catalog-cache)).
+
+#### A read from a Gateway
+
+A connection that is a data source of a Gateway the console manages can be read through the Gateway's schema call
+(`POST /api/v1/data-sources/{name}/schema`). The Gateway reads with its own login and answers names, types and keys, never a row. The console asks it
+as the signed-in person, after the Workspace server said the person may read the project. An app is refused: it has no connections.
+
+- `gateway` is the Gateway's id or name in the console. A server that is not a Gateway is refused with 409.
+- `connection` is the project's connection the cache entry is for. `data_source` is the Gateway's data source; without it, the connection's name is
+  the data source's name.
+- The Gateway decides what the person may read. An administrator of the Gateway reads any data source. A publisher reads the data sources the
+  console's deploys made.
+- A data source made by hand is read only once the person confirmed it. The first call answers 409 with `adopt` (the data source and who made it);
+  the screen shows the confirmation and asks again with `"adopt": true`. The Gateway records who adopted it and when.
+
+The answer is 200 with `cache`, the text of a `catalog-cache/2` file holding that one connection, recorded as read from the Gateway (its name in the
+console, with no channel). The console checks it with the cache's strict reader first.
+
+Example: Ana reads the data source `dwh` of the Gateway `edge` for the connection `warehouse` of the Build project `sales-dw`.
+
+```
+POST /api/workspace-catalog/ws-1/sales-dw/gateway-read
+{"gateway": "edge", "connection": "warehouse", "data_source": "dwh"}
+
+200 {"state": "done", "gateway": "gw-1", "gateway_name": "edge", "connection": "warehouse", "data_source": "dwh", "tables": 12, "columns": 96,
+     "cache": "schema: catalog-cache/2\ngenerated_at: '2026-11-23T10:00:00Z'\nconnections:\n  'warehouse':\n    engine: 'postgres'\n    read: {server: 'edge', product: 'gateway', at: '2026-11-23T10:00:00Z'}\n..."}
+```
+
+The screen shows the difference and replaces the entry on **Accept**, as for a Runner's read.
 
 ## Before anything is published: Set up for development
 
@@ -265,10 +296,19 @@ The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`)
 **A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
 model's descriptor.
 
-**A Gateway data source is a second way to fill the cache.** A connection that is already a data source of a paired Gateway can be read through the
-Gateway's schema call (`POST /api/v1/data-sources/{name}/schema`, the Gateway's own read login, no row), as is built; it is the natural source of a Build
-model over a served warehouse. Nothing new is built on it, and no data source is made on a Gateway only so that authoring can read it (a Sync target, or an
-operational source the Gateway does not serve).
+**A Gateway data source is a second way to fill the cache.** A connection that is already a data source of a Gateway the console manages can be read
+through the Gateway's schema call, with the Gateway's own read login ([A read from a Gateway](#a-read-from-a-gateway)). It is the natural source of a
+Build model over a served warehouse. No data source is made on a Gateway only so that authoring can read it (a Sync target, or an operational source the
+Gateway does not serve).
+
+On the tab **Catalog**, **Refresh from a Gateway** has a Gateway picker (the Gateways the console manages), the draft's connection, and the data source
+(blank: the connection's name). **Refresh catalog from `<data source>`** asks the console. The tab lists what changed, then **Accept** puts the new cache
+in the draft as an unsaved edit and **Dismiss** leaves the cache as it was. A data source made by hand shows a confirmation first; **Confirm and read**
+reads it, and the Gateway records the adoption.
+
+Example: on the tab **Catalog** of the draft of `sales-dw`, Ana picks the Gateway `edge`, the connection `warehouse` and the data source `dwh`, and
+presses **Refresh catalog from dwh**. The tab says "Read 12 tables and 96 columns of warehouse from the data source dwh on edge" and "2 tables added". She
+presses **Accept**, then saves the draft.
 
 ### Offline and live
 
