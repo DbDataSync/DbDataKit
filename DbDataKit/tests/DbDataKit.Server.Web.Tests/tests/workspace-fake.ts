@@ -144,10 +144,10 @@ function viewOf(w: { files: Map<string, string> }, unsaved: Record<string, strin
 }
 
 /** The cached columns of a table of a connection in the draft's `catalog-cache.yaml`, or undefined. */
-function cachedColumns(files: Map<string, string>, connection: string, schema: string, table: string): { name: string; type: string; key?: boolean }[] | undefined {
+function cachedColumns(files: Map<string, string>, connection: string, schema: string, table: string): { name: string; type: string; nullable?: boolean; key?: boolean }[] | undefined {
   const text = files.get('catalog-cache.yaml')
   if (!text) return undefined
-  const cache = YAML.parse(text) as { connections?: Record<string, { tables?: { schema: string; name: string; columns: { name: string; type: string; key?: boolean }[] }[] }> }
+  const cache = YAML.parse(text) as { connections?: Record<string, { tables?: { schema: string; name: string; columns: { name: string; type: string; nullable?: boolean; key?: boolean }[] }[] }> }
   return cache.connections?.[connection]?.tables?.find((t) => t.schema.toLowerCase() === schema.toLowerCase() && t.name.toLowerCase() === table.toLowerCase())?.columns
 }
 
@@ -184,7 +184,7 @@ function syncDesigner(route: Route, w: { files: Map<string, string> }, question:
       naturalKey: key.length > 0 ? { columns: key, problem: null } : { columns: [], problem: `'${side.schema}.${side.table}' has no primary key, so there is nothing to derive a natural key from. Enter one below.` } })
   }
   if (question === 'bulk-create') {
-    const { task, source } = endpoints()
+    const { task, source, target } = endpoints()
     if (!task) return json(route, { error: `The draft has no replication '${asked.replication}'.` }, 404)
     const out = { files: [] as { path: string; text: string }[], created: [] as string[], skipped: [] as string[], notes: [] as { mapping: string; side: string; reason: string }[], inferred: {} as Record<string, unknown> }
     const folder = `config/replications/${asked.replication}/table-mappings/`
@@ -195,16 +195,42 @@ function syncDesigner(route: Route, w: { files: Map<string, string> }, question:
       if (taken.has(name.toLowerCase())) { out.skipped.push(name); continue }
       taken.add(name.toLowerCase())
       const columns = cachedColumns(files, source, schema, t.table) ?? []
+      const onTarget = cachedColumns(files, target, schema, t.table)
       if (columns.length === 0) out.notes.push({ mapping: name, side: 'source', reason: 'the source table is not in the catalog cache, so nothing was captured and no columns were mapped' })
+      if (!onTarget) out.notes.push({ mapping: name, side: 'target', reason: 'the target table is not in the catalog cache: it is created with these columns when the target is provisioned' })
+      const shape = (cs: { name: string; type: string; nullable?: boolean; key?: boolean }[]) =>
+        cs.map((c) => ({ name: c.name, nativeType: c.type, isNullable: c.nullable !== false, isPrimaryKey: c.key === true, isIdentity: false }))
+      const paired = onTarget ? onTarget.filter((c) => columns.some((s) => s.name === c.name)) : columns
       const mapping = { schemaVersion: 1, name, sources: [{ schema, table: t.table }], targets: [{ schema, table: t.table }],
-        columnMappings: columns.map((c) => ({ sourceColumn: c.name, targetColumn: c.name })),
-        sourceColumns: columns.map((c) => ({ name: c.name, nativeType: c.type, isPrimaryKey: c.key === true })) }
+        columnMappings: paired.map((c) => ({ sourceColumn: c.name, targetColumn: c.name })),
+        sourceColumns: shape(columns), ...(onTarget ? { targetColumns: shape(onTarget) } : {}) }
       out.files.push({ path: `${folder}${name}.yaml`, text: YAML.stringify(mapping) })
       out.created.push(name)
+      if (columns.length > 0) {
+        const key = columns.filter((c) => c.key).map((c) => c.name)
+        out.inferred[name] = { columns: columns.map((c) => ({ sourceColumn: c.name, sourceType: c.type, targetType: c.type, fidelity: null, problem: null })),
+          naturalKey: key.length > 0 ? { columns: key, problem: null } : { columns: [], problem: `'${name}' has no primary key, so there is nothing to derive a natural key from. Enter one below.` } }
+      }
     }
     return json(route, out)
   }
   return json(route, { error: 'There is no such call.' }, 404)
+}
+
+/** The plan of each saved mapping of a replication but the template's `orders`: its target table is created when the catalog cache does not have it. */
+function savedPlans(files: Map<string, string>, replication: string) {
+  const folder = `config/replications/${replication}/table-mappings/`
+  const task = YAML.parse(files.get(`config/replications/${replication}/task.yaml`) ?? 'null') as { endpoints?: { target?: { connectionName?: string } } } | null
+  return [...files.entries()].filter(([p]) => p.startsWith(folder) && p !== `${folder}orders.yaml`).sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => {
+    const m = YAML.parse(text) as { name: string; targets?: { connectionName?: string; schema?: string; table: string }[] }
+    const t = m.targets?.[0] ?? { table: m.name }
+    const connection = t.connectionName ?? task?.endpoints?.target?.connectionName ?? ''
+    const table = `${t.schema ?? 'public'}.${t.table}`
+    const there = cachedColumns(files, connection, t.schema ?? '', t.table) !== undefined
+    return { mapping: m.name, source: null, target: { connection, table }, excluded: null, source_plan: null,
+      target_plan: there ? { action: 'createTargetTable', state: 'satisfied', steps: [], warnings: [] }
+        : { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${table} (...)`, rationale: 'it is not in the catalog cache', scope: 'table' }], warnings: [] } }
+  })
 }
 
 /** What a story adds to the fake: `syncFiles` are put in every new sync draft beside the template's (a `catalog-cache.yaml`, for the Designer's pickers). */
@@ -340,10 +366,11 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     }
     if (rest[0] === 'check') return json(route, { kind: project.kind, ok: !check(project.kind, w.files).some((f) => f.severity === 'error'), diagnostics: check(project.kind, w.files) })
     if (rest[0] === 'changes') return json(route, { changes: [], uncommitted: true })
-    // the plan of a replication's tables, made offline from the draft's catalog cache: the target table is not there yet
+    // the plan of a replication's tables, made offline from the draft's saved files and catalog cache: the template's orders, whose target table is
+    // not there yet, then each other saved mapping of the replication, whose target table is created when the cache does not have it
     if (rest[0] === 'provisioning-plan' && method === 'POST') {
       const replication = (JSON.parse(body || '{}') as { replication?: string }).replication ?? ''
-      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [{
+      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [...savedPlans(w.files, replication), {
         mapping: 'orders', source: { connection: 'source-db', table: 'dbo.Orders' }, target: { connection: 'target-db', table: 'public.orders' }, excluded: null,
         source_plan: { action: 'enableSourceChangeCapture', state: 'satisfied', steps: [], warnings: [] },
         target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE "public"."orders" ("id" bigint)', rationale: 'it is not there', scope: 'table' }], warnings: [] },

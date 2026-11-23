@@ -48,8 +48,9 @@ export function OverviewPanel({ project, id, replication, rest, draft, setDraft,
   const base = designerPath(project, id, `replications/${replication}`)
   const tabs: SubTab[] = TABS.map(({ path, label, testId }) => ({ path, label, testId }))
   const source = connections.find((c) => c.name === draft.endpoints.source?.connectionName)
+  // a mapping named in the replication's plan opens that mapping's own Provisioning tab, its part of the same plan
   const mappingLink = (mapping: string) => (
-    <Link to={designerPath(project, id, `replications/${replication}/mappings/${mapping}/columns`)} className="mono">{mapping}</Link>
+    <Link to={designerPath(project, id, `replications/${replication}/mappings/${mapping}/provisioning`)} className="mono" data-testid={`provisioning-mapping-link-${mapping}`}>{mapping}</Link>
   )
 
   return (

@@ -291,6 +291,102 @@ test('table mappings: Create mappings from two ticked tables, then Auto-map, the
   await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '1')
 })
 
+/** The cache with `target-db` read and a source table with no key, `dbo.Lines`, whose rows ship on a date. */
+const CACHE_WITH_LINES = CACHE + [
+  "      - database: 'App'", "        schema: 'dbo'", "        name: 'Lines'", '        kind: table', '        columns:',
+  "          - {name: 'line_no', type: 'int', nullable: false}", "          - {name: 'order_id', type: 'int', nullable: false}",
+  "          - {name: 'shipped_on', type: 'date', nullable: true}", '',
+].join('\n') + CACHE_WITH_TARGET.slice(CACHE.length)
+
+/** `orders` reading `App` into `dw` with the SCD Type 2 writer (whose natural key is a question per table), and a strategy that segments by month. */
+const SCD2_TASK = [
+  'schemaVersion: 2', 'name: orders', 'scheduling: {mode: Continuous, frequencySeconds: 60}', 'changeProcessing:', '  reader: {kind: BatchReload, options: {}}',
+  '  cache: {kind: StagingTable, options: {}}', '  writer: {kind: Scd2, options: {}}', 'endpoints:', '  source: {connectionName: source-db, database: App}',
+  '  target: {connectionName: target-db, database: dw}', 'segmentingStrategies:',
+  "  - {name: by-month, kind: DuckDb, sql: \"SELECT month_start, month_end FROM range(DATE '2026-01-01', DATE '2027-01-01', INTERVAL 1 MONTH)\"}", '',
+].join('\n')
+
+test('the rest of a mapping: Create mappings with what is inferred, a verification and a segmenting by month, the Provisioning badge and link, the same changes in Files', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Mapping Rest', `sync-mapping-rest-${Date.now()}@example.com`)
+  const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE_WITH_LINES, 'config/replications/orders/task.yaml': SCD2_TASK } })
+  await makeDraft(page, 'plant', 'sync', 'mapping-rest')
+  const mappingFile = (name: string) => `config/replications/orders/table-mappings/${name}.yaml`
+
+  // Create mappings asks the Workspace: dbo.Lines has no primary key, so no natural key can be derived; dbo.Customers's is its key
+  await page.getByTestId('tab-mappings').click()
+  await page.getByTestId('select-table-dbo.Lines').check()
+  await page.getByTestId('select-table-dbo.Customers').check()
+  await page.getByTestId('create-mappings-button').click()
+  await expect(page.getByTestId('bulk-create-inferred-dbo.Lines')).toContainText('3 target types inferred')
+  await expect(page.getByTestId('bulk-create-inferred-dbo.Lines')).toContainText('has no primary key')
+  await expect(page.getByTestId('bulk-create-inferred-dbo.Customers')).toContainText('natural key id')
+  await shot(page, '08-mappings-inferred')
+
+  // Column Mapping shows each target type as inferred, and the file states none; the Pipeline tab shows the natural key, derived or why not
+  await page.getByTestId('mapping-item-dbo.Lines').click()
+  await expect(page.getByTestId('column-mapping-row')).toHaveCount(3)
+  await expect(page.getByTestId('column-mapping-type-2-text')).toHaveText('date')
+  await page.getByTestId('mapping-tab-pipeline').click()
+  await expect(page).toHaveURL(/\/mappings\/dbo\.Lines\/pipeline$/)
+  await expect(page.getByTestId('mapping-natural-key-problem')).toContainText('has no primary key')
+  await page.getByTestId('mapping-item-dbo.Customers').click()
+  await page.getByTestId('mapping-tab-pipeline').click()
+  await expect(page.getByTestId('mapping-natural-key-derived')).toHaveText('id')
+
+  // on dbo.Lines: a row-count verification, and the reload segmented by month through the replication's strategy
+  await page.getByTestId('mapping-item-dbo.Lines').click()
+  await page.getByTestId('mapping-tab-verify').click()
+  await page.getByTestId('add-check-button').click()
+  await page.getByTestId('check-name-input').fill('rows')
+  await page.getByTestId('save-check-button').click()
+  await expect(page.getByTestId('check-rows')).toHaveAttribute('data-kind', 'RowCount')
+  await page.getByTestId('mapping-tab-segmenting').click()
+  await page.getByTestId('default-segmenting-mode').selectOption('custom')
+  await expect(page.getByTestId('default-segmenting-strategy')).toHaveValue('by-month')
+  await page.getByTestId('default-segmenting-custom-column').fill('shipped_on')
+  await shot(page, '09-mapping-segmenting')
+
+  // saved, the replication's plan has the mapping: its target table is missing, so the Provisioning tab's badge counts the one step
+  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveCount(0)
+  await page.getByTestId('save-mapping-button').click()
+  await expect(page.getByTestId('mapping-dirty')).toHaveCount(0)
+  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
+  await page.getByTestId('mapping-tab-provisioning').click()
+  await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')
+  await expect(page.getByTestId('provisioning-plan-target-sql')).toContainText('CREATE TABLE dbo.Lines')
+  const lines = saved(workspace, 'mapping-rest', mappingFile('dbo.Lines'))
+  expect(lines.verification).toEqual([expect.objectContaining({ name: 'rows', kind: 'RowCount' })])
+  expect(lines.defaultSegmenting).toEqual([{ mode: 'custom', strategyName: 'by-month', column: 'shipped_on' }])
+  expect(lines.columnMappings.some((c: Record<string, unknown>) => 'targetType' in c)).toBe(false)
+  expect(lines.primaryKey).toBeUndefined()
+  expect(JSON.stringify(lines)).not.toContain('naturalKey')
+
+  // the replication's Provisioning tab names the mapping, and the name opens the mapping's own Provisioning tab
+  await page.getByTestId('tab-overview').click()
+  await page.getByTestId('overview-tab-provisioning').click()
+  await page.getByTestId('provisioning-mapping-link-dbo.Lines').first().click()
+  await expect(page).toHaveURL(/\/mappings\/dbo\.Lines\/provisioning$/)
+  await expect(page.getByTestId('mapping-editor')).toHaveAttribute('data-name', 'dbo.Lines')
+
+  // an unsaved edit (Diagnostics) shows in Files, and is still there back in the Designer
+  await page.getByTestId('mapping-tab-diagnostics').click()
+  await page.getByTestId('trace-timing-toggle').click()
+  await page.locator(`[data-testid="wsp-file"][data-path="${mappingFile('dbo.Lines')}"]`).click()
+  await expect(area(page)).toHaveAttribute('data-area', 'files')
+  await expect(page.getByTestId('wsp-dirty')).toBeVisible()
+  await page.getByTestId('wsp-mode-yaml').click()
+  await expect(page.getByTestId('wsp-code')).toContainText('traceTiming: true')
+  await expect(page.getByTestId('wsp-code')).toContainText('strategyName: by-month')
+  await expect(page.getByTestId('wsp-code')).toContainText('kind: RowCount')
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await expect(area(page)).toHaveAttribute('data-area', 'designer')
+  await page.getByTestId('tab-mappings').click()
+  await page.getByTestId('mapping-item-dbo.Lines').click()
+  await page.getByTestId('mapping-tab-diagnostics').click()
+  await expect(page.getByTestId('trace-timing-toggle')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+})
+
 const CATALOG_RUNNER = 'runner-eu-1'
 const READ_AT = '2026-11-23T09:00:00Z'
 

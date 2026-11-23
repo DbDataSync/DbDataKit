@@ -18,6 +18,7 @@ function fakeServer(files: Record<string, string>) {
   const writes: string[] = []
   const deletes: string[] = []
   const calls: string[] = []
+  const bulkCreates: string[] = []
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -40,9 +41,30 @@ function fakeServer(files: Record<string, string>) {
     if (rest === 'changes') return reply({ changes: [], uncommitted: false })
     if (rest === 'history') return reply({ commits: [] })
     if (rest === 'events') return reply({ events: [] })
+    // the Workspace's own answers the Designer asks for: the files Create mappings makes, what is inferred, the plan (each worked out simply)
+    if (rest === 'sync/bulk-create') {
+      const asked = JSON.parse(String(init?.body)) as { replication: string; tables: { schema: string; table: string }[] }
+      const names = asked.tables.map((t) => `${t.schema}.${t.table}`)
+      bulkCreates.push(names.join(','))
+      return reply({
+        files: asked.tables.map((t, i) => ({ path: `config/replications/${asked.replication}/table-mappings/${names[i]}.yaml`,
+          text: `schemaVersion: 1\nname: ${names[i]}\nsources:\n- schema: ${t.schema}\n  table: ${t.table}\ntargets:\n- schema: ${t.schema}\n  table: ${t.table}\ncolumnMappings:\n- sourceColumn: id\n  targetColumn: id\n` })),
+        created: names, skipped: [],
+        inferred: Object.fromEntries(names.map((n) => [n, { columns: [{ sourceColumn: 'id', sourceType: 'int', targetType: 'integer', fidelity: null, problem: null }], naturalKey: { columns: ['id'], problem: null } }])),
+        notes: names.map((n) => ({ mapping: n, side: 'target', reason: 'the target table is not in the catalog cache: it is created with these columns when the target is provisioned' })),
+      })
+    }
+    if (rest === 'sync/inferred-columns') {
+      const asked = JSON.parse(String(init?.body)) as { replication: string; mapping: string }
+      return reply({ ...asked, problem: null, columns: [{ sourceColumn: 'id', sourceType: 'int', targetType: 'integer', fidelity: null, problem: null }], naturalKey: { columns: ['id'], problem: null } })
+    }
+    if (rest === 'provisioning-plan') return reply({ ok: true, diagnostics: [], data: { replication: 'orders', cache_generated_at: null, cache_server: null, mappings: [{
+      mapping: 'dbo.orders', source: null, target: { connection: 'dw', table: 'dbo.orders' }, excluded: null, source_plan: null,
+      target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE dbo.orders (id integer)', rationale: null, scope: 'table' }], warnings: [] },
+    }] } })
     return reply({ error: 'no' }, 404)
   })
-  return { files, writes, deletes, calls, fetcher }
+  return { files, writes, deletes, calls, bulkCreates, fetcher }
 }
 
 let root: Root
@@ -110,7 +132,9 @@ describe('the sync Designer in the Workspace frame', () => {
     await click('[data-testid="create-mappings-button"]')
     const made = 'config/replications/orders/table-mappings/dbo.customers.yaml'
     expect(q(`[data-testid="mapping-item-dbo.customers"]`)).not.toBeNull()
-    expect(q('[data-testid="bulk-create-notes"]')?.textContent).toContain('dbo.customers')
+    expect(server.bulkCreates).toEqual(['dbo.customers'])
+    expect(q('[data-testid="bulk-create-inferred-dbo.customers"]')?.textContent).toBe('dbo.customers1 target type inferred · natural key id')
+    expect(q('[data-testid="bulk-create-note-dbo.customers"]')?.textContent).toContain('created with these columns')
     expect(server.writes).toEqual([])
     expect(q('[data-testid="wsp-unsaved"]')?.dataset.count).toBe('1')
     expect(q(`[data-testid="wsp-file"][data-path="${made}"]`)?.dataset.dirty).toBe('true')
@@ -143,6 +167,74 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(saved.columnMappings.map((c: { targetColumn: string }) => c.targetColumn)).toEqual(['id', 'customer_id', 'total'])
     expect(saved.primaryKey).toEqual(['id'])
     expect(saved.sources).toEqual([{ schema: 'dbo', table: 'orders' }])
+  })
+
+  it('shows each target type nobody set as the type the Workspace infers, and writes none', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
+    expect(q('[data-testid="column-mapping-type-0-text"]')?.textContent).toBe('integer')
+    expect(server.files['config/replications/orders/table-mappings/dbo.orders.yaml']).not.toContain('targetType')
+  })
+
+  it('draws every tab of a mapping at its own address, the Provisioning tab with the count of its plan\'s statements', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
+    expect(all('[data-testid="mapping-subtabs"] a').map((a) => a.textContent)).toEqual(['Notes', 'Column Mapping', 'Custom Transforms', 'Bulk Load', 'Provisioning1', 'Pipeline', 'Diagnostics', 'Verify'])
+    expect(q('[data-testid="mapping-tab-provisioning-badge"]')?.textContent).toBe('1')
+    for (const tab of ['notes', 'transforms', 'segmenting', 'provisioning', 'pipeline', 'diagnostics', 'verify']) {
+      await click(`[data-testid="mapping-tab-${tab}"]`)
+      expect(where).toBe(`/plant/ws-p/designer/replications/orders/mappings/dbo.orders/${tab}`)
+      expect(q(`[data-testid="mapping-panel-${tab}"]`)).not.toBeNull()
+    }
+    await click('[data-testid="mapping-tab-provisioning"]')
+    expect(q('[data-testid="provisioning-plan-target"]')?.dataset.state).toBe('missing')
+    expect(q('[data-testid="mapping-provisioning-saved-only"]')?.textContent).toContain('applied from the replication\'s Provisioning tab')
+  })
+
+  it('writes Diagnostics, a verification check and a default segmenting into the mapping, as edits Save mapping writes', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/diagnostics')
+    await click('[data-testid="trace-timing-toggle"]')
+    await click('[data-testid="mapping-tab-verify"]')
+    await click('[data-testid="add-check-button"]')
+    const name = q('[data-testid="check-name-input"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'rows')
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click('[data-testid="save-check-button"]')
+    await click('[data-testid="mapping-tab-segmenting"]')
+    const mode = q('[data-testid="default-segmenting-mode"]') as HTMLSelectElement
+    await act(async () => {
+      mode.value = 'full'
+      mode.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+    expect(server.writes).toEqual([])
+    await click('[data-testid="save-mapping-button"]')
+    const saved = yamlOf(server.files['config/replications/orders/table-mappings/dbo.orders.yaml'])
+    expect(saved.traceTiming).toBe(true)
+    expect(saved.verification).toEqual([{ name: 'rows', kind: 'RowCount', groupBy: [], measures: [], parameters: {}, compareCurrentOnly: false, differenceThreshold: 0 }])
+    expect(saved.defaultSegmenting).toEqual([{ mode: 'full' }])
+  })
+
+  it('makes the source a query with Custom query, not a table, dropping its table, and back to a table drops the query', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
+    expect(q('[data-testid="source-filter-applied-pill"]')).toBeNull()
+    await click('[data-testid="source-query-source-toggle"]')
+    expect(q('[data-testid="source-table-select"]')).toBeNull()
+    expect(q('[data-testid="source-query-line"]')?.textContent).toBe('No query written yet')
+    expect(q('[data-testid="column-mappings-waiting"]')?.textContent).toContain('edited in Files')
+    await click('[data-testid="source-query-source-toggle"]')
+    expect(q('[data-testid="source-table-select"]')).not.toBeNull()
+  })
+
+  it('opens a filtered mapping with its filter shown', async () => {
+    server.files['config/replications/orders/table-mappings/dbo.orders.yaml'] = server.files['config/replications/orders/table-mappings/dbo.orders.yaml'].replace('  table: orders\ntargets:', '  table: orders\n  filter: total > 0\ntargets:')
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
+    expect(q('[data-testid="source-filter-applied-pill"]')?.textContent).toBe('FILTERS APPLIED')
+  })
+
+  it('links each mapping of the replication\'s plan to that mapping\'s Provisioning tab', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/overview/provisioning')
+    expect(q('[data-testid="provisioning-mapping-link-dbo.orders"]')?.getAttribute('href')).toBe('/plant/ws-p/designer/replications/orders/mappings/dbo.orders/provisioning')
   })
 
   it('shows a mapping of a newer format as a line that opens it in Files', async () => {
@@ -198,9 +290,10 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(unsavedNote(3)).toBe('3 edits of this draft are not saved, so a build leaves them out. Save first to build them.')
   })
 
-  it('asks the Workspace for files only: no Runner, Gateway or run route is called', async () => {
+  it('asks the Workspace only, for its files, what is inferred and the plan: no Runner, Gateway or run route is called', async () => {
     await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
-    expect(server.calls.filter((c) => !/^(GET|PUT|DELETE) \/api\/(auth\/status|notifications|v1\/projects)\b/.test(c))).toEqual([])
+    const asked = server.calls.filter((c) => !/^(GET|PUT|DELETE) \/api\/(auth\/status|notifications|v1\/projects)\b/.test(c))
+    expect([...new Set(asked)].sort()).toEqual(['POST /api/v1/projects/plant/workspaces/ws-p/provisioning-plan', 'POST /api/v1/projects/plant/workspaces/ws-p/sync/inferred-columns'])
   })
 })
 
