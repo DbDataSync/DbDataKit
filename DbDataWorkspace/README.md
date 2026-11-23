@@ -75,7 +75,15 @@ The schedule on the Overview keeps only the settings of the mode it shows, becau
 
 Switching the mode removes the other mode's settings from `task.yaml`. Switching to Periodic writes the cron expression the replication had, or `*/15 * * * *`. Switching to Continuous writes `frequencySeconds: 60` and no idle timeout. Example: the replication `orders` runs Continuous with `frequencySeconds: 60` and `idleTimeoutSeconds: 120`. Ana switches it to Periodic, and `task.yaml` now has `cronExpression: "*/15 * * * *"` and neither of the other two. When she switches it back to Continuous, the file has `frequencySeconds: 60` and no cron expression, and she types the idle timeout of 120 again if she wants it.
 
-The screens read the catalog cache as the draft holds it and do not read a database. A connection the cache has nothing for shows a line saying so, and its pickers are empty until its catalog is read into the cache. The Overview's other sub-tabs, a mapping's other tabs and the tab Quality Checks are not in the Designer yet: their keys are edited in Files.
+The pickers, the overview and Column Mapping read the catalog cache as the draft holds it. A connection the cache has nothing for shows a line saying so, and its pickers stay empty until its catalog is read into the cache. Three buttons read a database again through the console, which starts the read on a Runner as the person:
+
+- **Refresh catalog** on an endpoint card whose connection is one of the draft's and has nothing in the cache: the whole connection.
+- **Refresh** on the Table Mappings overview: the replication's source connection.
+- **Refresh** beside each side of a mapping's cached-metadata card: that side's table.
+
+Each opens the channel picker of the Files area's Catalog tab, reads in the channel chosen, and lists the tables and columns added, removed or retyped before anything is replaced ([docs/authoring-metadata.md](../docs/authoring-metadata.md), "The catalog cache"). **Accept** puts the new cache in the draft as an unsaved edit of `catalog-cache.yaml`, which the pickers and Files show at once; **Save** keeps it. Accepting a read does not change any mapping: the cached-metadata card then compares the mapping's own columns with the new cache. Example: on the mapping `dbo.Invoices`, Ana presses **Refresh** beside Source, keeps the channel `dev` and presses **Refresh**. The panel says "1 column added" and lists `App.dbo.Invoices.segment`. She presses **Accept**, and the card now says "the catalog cache has 1 column added (segment)"; she adds the column to the mapping on Column Mapping.
+
+The Overview's other sub-tabs, a mapping's other tabs and the tab Quality Checks are not in the Designer yet: their keys are edited in Files.
 
 Example: on the replication `orders`, Ana picks the target `dw` and the database `warehouse` on the Overview, opens Table Mappings, ticks `dbo.customers` and `dbo.invoices` and clicks **Create 2 mappings**. Two files appear under `config/replications/orders/table-mappings/` marked not saved; `dbo.invoices` has no key in the source, so on its Column Mapping tab she ticks `invoice_no` under Primary key, presses **Save mapping**, then **Save** in the chrome for the rest.
 
