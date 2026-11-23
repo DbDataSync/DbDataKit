@@ -141,6 +141,16 @@ release moves the entries into its notes and empties this file.
 - **Changed: SQL Server's and MySQL's `binary(n)` stay fixed-length in Transfer and the Store too** (Sync already kept them): a `binary(16)` copied to
   SQL Server or MySQL is created as `binary(16)`, where it was `varbinary(16)`. The catalog shows such a column as `binary(fixed,16)`, and the
   Gateway reads an Arrow fixed-size binary column as one, with no note.
+- **Changed, for authors of Sync scripts and `driver.csx` files: a column type is the shared `DbDataKit.Dialect.CanonicalType`; Sync's own
+  `CanonicalType` and `CanonicalTypeKind` are gone.** A lifecycle hook, a `driver.csx` provisioner (`ProvisioningColumn.Type`) and a `driver.csx`
+  dialect that used them no longer compile until they are changed; the namespace `DbDataKit.Dialect` is imported for every script, so no `using`
+  is needed. What to change: `CanonicalTypeKind.X` becomes `CanonicalKind.X` (`CanonicalTypeKind.Unmappable` is `CanonicalKind.Unmappable`);
+  `IsUnicode` becomes `Unicode == true`; `IsMax` becomes `Length is null`; `IsFixed` becomes `Fixed == true`; `CanonicalTypeKind.TimestampTz`
+  becomes `CanonicalKind.Timestamp` with `TimeZone == true` (written `timestamp(tz)`); a reading's note (`SourceNote`) is no longer on the type.
+  A `driver.csx` dialect implements `ReadColumnType` and `WriteColumnType` in place of `ToCanonicalType` and `RenderColumnType`. A hook's
+  `IScriptDialect.ToCanonicalType` and `RenderColumnType` keep their names.
+- **Changed: a generic Arrow Flight SQL target gets `TIME(6)` and `TIMESTAMP(6)`** for a time or timestamp with no stated precision, where Sync
+  wrote `TIME` and `TIMESTAMP`; an Oracle target gets `timestamp(s)` for a time in Transfer and the Store too, where they wrote an interval.
 - **Changed: Sync's JDBC driver reads and writes PostgreSQL's types through the same table as the PostgreSQL driver**, so a `bytea` or `time`
   column it refused before is provisioned, and a `varchar` with no length becomes `text`, where it was `varchar(255)`.
 

@@ -218,22 +218,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P28: the column type authors' scripts see (default, awaiting the owner)
-
-Sync's dialects now read and write every column type through the shared tables (`ReadColumnType` and `WriteColumnType`, the shared
-`DbDataKit.Dialect.CanonicalType`). Sync's own `CanonicalType` and `CanonicalTypeKind` stay as the shape a script sees, converted to and from the
-shared type without changing an answer: `IScriptDialect.ToCanonicalType` and `RenderColumnType` in a lifecycle hook, `ProvisioningColumn.Type` in a
-`driver.csx` provisioner, and the `ToCanonicalType`/`RenderColumnType` a `driver.csx` dialect implements. C# has no alias a script can pick up from
-an assembly, so removing the type means changing what scripts compile against. Scenario: Ana's `add-missing-columns.csx` hook does
-`var t = context.SourceDialect.ToCanonicalType(c.NativeType); if (t.Kind == CanonicalTypeKind.Unmappable) continue;` and then
-`context.TargetDialect.RenderColumnType(t)`. Under option A it compiles and runs unchanged. Under option B it fails to compile ("The name
-'CanonicalTypeKind' does not exist") until she writes `CanonicalKind.Unmappable` and the shared type's names (`Unicode` for `IsUnicode`, a null
-`Length` for `IsMax`, `timestamp(tz)` for `TimestampTz`). Option A, as built: Sync's type stays as the scripts' shape, its rules are the shared
-tables', and nothing in Sync decides a type on its own. Option B, the script contracts take the shared type, with a check that names each script
-of a set that uses the old names, and Sync's type is deleted. Recommendation: A, since the names are part of what an author's script compiles against.
-
-Answer from the owner, 2026-11-23: P: 28, but no extra check (option B without the check that names each script using the old names)
-
 ## Open designs
 
 ### Monitoring and operations, second pass
