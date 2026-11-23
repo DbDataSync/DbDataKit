@@ -105,22 +105,14 @@ public sealed class MsSqlDialect : SqlDialect
         parameters.Count == 0 ? null : string.Join(
             "\n", parameters.Select(p => $"DECLARE {ParameterReference(p.Name)} {p.SqlType} = {p.Literal};"));
 
-    /// <summary>The shared table decides every mapping except fixed-length binary: Sync keeps <c>binary(n)</c> and
-    /// <c>rowversion</c>/<c>timestamp</c> (always 8 bytes, engine-assigned) as fixed-length so a replicated copy is
-    /// <c>binary(8)</c>, where the shared table widens them to <c>varbinary</c> and says so.</summary>
-    public override CanonicalType ToCanonicalType(string nativeType)
-    {
-        var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
-        return baseName switch
-        {
-            "binary" => new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, false, false, IsFixed: true),
-            "timestamp" or "rowversion" => new CanonicalType(CanonicalTypeKind.Binary, 8, null, null, false, false, IsFixed: true),
-            _ => SharedTypes.ToSync(Shared.ToCanonical(nativeType)),
-        };
-    }
+    /// <summary>The shared <c>sqlserver</c> table (<c>dialects/sqlserver.yaml</c>): <c>tinyint</c> is an unsigned 8-bit integer, <c>binary(n)</c>
+    /// and <c>rowversion</c> are fixed-length binary.</summary>
+    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) =>
-        type is { Kind: CanonicalTypeKind.Binary, IsFixed: true, IsMax: false }
-            ? new RenderedColumnType($"binary({type.Length ?? 255})", type.SourceNote)
-            : SharedTypes.Render(Shared, type);
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+        DialectTypes.Write(Shared, type, sourceNote);
+
+    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
+
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

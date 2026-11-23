@@ -13,11 +13,10 @@ namespace DbDataSync.Core.Sql;
 /// <c>OdbcCommand</c> uses for the identical ordinal-only-placeholder problem) — see phase 165V.
 /// </para>
 /// <para>
-/// <see cref="ToCanonicalType"/>/<see cref="RenderColumnType"/> cover exactly the native type names
-/// pgJDBC's own <c>DatabaseMetaData</c> reports for Postgres (<c>int4</c>, <c>int8</c>, <c>varchar</c>,
-/// <c>numeric</c>, <c>timestamp</c>, <c>bool</c> — the same pg_catalog spellings
-/// <see cref="PostgresDialect"/> already maps, since pgJDBC's metadata queries pg_catalog directly), not
-/// a generic mapping from every JDBC vendor's own type names.
+/// <see cref="ReadColumnType"/>/<see cref="WriteColumnType"/> read the native type names pgJDBC's own <c>DatabaseMetaData</c> reports for
+/// Postgres (<c>int4</c>, <c>int8</c>, <c>varchar</c>, <c>numeric</c>, <c>timestamp</c>, <c>bool</c>: the pg_catalog spellings, since
+/// pgJDBC's metadata queries pg_catalog directly) through the shared <c>postgres</c> table, not a mapping from every JDBC vendor's own
+/// type names.
 /// </para>
 /// </summary>
 public sealed class JdbcDialect : SqlDialect
@@ -46,59 +45,15 @@ public sealed class JdbcDialect : SqlDialect
     /// </summary>
     public override string ParameterName(string name) => name;
 
-    public override CanonicalType ToCanonicalType(string nativeType)
-    {
-        var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
-        return baseName switch
-        {
-            "bool" or "boolean" => Simple(CanonicalTypeKind.Boolean),
-            "int2" or "smallint" => Simple(CanonicalTypeKind.Int16),
-            "int4" or "integer" => Simple(CanonicalTypeKind.Int32),
-            "int8" or "bigint" => Simple(CanonicalTypeKind.Int64),
+    /// <summary>pgJDBC reports PostgreSQL's own catalog names, so the types are the shared <c>postgres</c> table's.</summary>
+    private static readonly ISqlDialect Types = DialectCatalog.Builtin.Get("postgres");
 
-            "numeric" or "decimal" => new CanonicalType(
-                CanonicalTypeKind.Decimal, null, CanonicalTypeSpec.IntAt(args, 0, 18), CanonicalTypeSpec.IntAt(args, 1, 0), false, false),
+    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Types, nativeType);
 
-            "float4" or "real" => Simple(CanonicalTypeKind.Float),
-            "float8" or "double precision" => Simple(CanonicalTypeKind.Double),
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+        DialectTypes.Write(Types, type, sourceNote);
 
-            "varchar" or "character varying" =>
-                new CanonicalType(CanonicalTypeKind.String, CanonicalTypeSpec.IntAt(args, 0, null), null, null, true, false),
-            "text" => new CanonicalType(CanonicalTypeKind.String, null, null, null, true, true),
+    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
 
-            "timestamp" =>
-                new CanonicalType(CanonicalTypeKind.Timestamp, null, null, CanonicalTypeSpec.IntAt(args, 0, 6), false, false),
-            "timestamptz" =>
-                new CanonicalType(CanonicalTypeKind.TimestampTz, null, null, CanonicalTypeSpec.IntAt(args, 0, 6), false, false),
-            "date" => Simple(CanonicalTypeKind.Date),
-
-            // Everything else is genuinely out of scope for this spike's dialect — see the class doc.
-            _ => Simple(CanonicalTypeKind.Unmappable),
-        };
-
-        static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
-    }
-
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind switch
-    {
-        CanonicalTypeKind.Boolean => new("boolean", type.SourceNote),
-        CanonicalTypeKind.Int16 => new("smallint", type.SourceNote),
-        CanonicalTypeKind.Int32 => new("integer", type.SourceNote),
-        CanonicalTypeKind.Int64 => new("bigint", type.SourceNote),
-        CanonicalTypeKind.Decimal => new($"numeric({type.Precision ?? 18},{type.Scale ?? 0})", type.SourceNote),
-        CanonicalTypeKind.Float => new("real", type.SourceNote),
-        CanonicalTypeKind.Double => new("double precision", type.SourceNote),
-        CanonicalTypeKind.String when type.IsMax => new("text", type.SourceNote),
-        CanonicalTypeKind.String => new($"varchar({type.Length ?? 255})", type.SourceNote),
-        CanonicalTypeKind.Date => new("date", type.SourceNote),
-        CanonicalTypeKind.Timestamp => new($"timestamp({type.Scale ?? 6})", type.SourceNote),
-        CanonicalTypeKind.TimestampTz => new("timestamptz", type.SourceNote),
-
-        CanonicalTypeKind.Unmappable => throw new InvalidOperationException(
-            "RenderColumnType must never be called for Unmappable — the caller checks CanonicalType.Kind " +
-            "first and reports the plan as Unsupported instead."),
-
-        _ => throw new NotSupportedException(
-            $"JdbcDialect.RenderColumnType: '{type.Kind}' is out of scope for the JDBC spike dialect."),
-    };
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

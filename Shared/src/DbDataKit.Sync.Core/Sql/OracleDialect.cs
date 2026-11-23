@@ -166,17 +166,19 @@ public sealed class OracleDialect : SqlDialect
     /// <summary>The type tables are the shared <c>oracle</c> dialect's (<c>dialects/oracle.yaml</c>): Oracle <c>DATE</c> reads as a
     /// timestamp (it carries a time of day), <c>NUMBER(n,0)</c> as the smallest integer that holds it, a bare <c>NUMBER</c> as
     /// <c>DECIMAL(38,10)</c> with a note, and <c>ROWID</c>/<c>UROWID</c>/<c>BFILE</c>/spatial types are unmappable.</summary>
-    public override CanonicalType ToCanonicalType(string nativeType) => SharedTypes.ToSync(Shared.ToCanonical(nativeType));
+    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
+
+    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
 
     /// <summary>Sync keeps a canonical <c>TIME</c> as a <c>TIMESTAMP</c> column, where the shared table says an interval of the day.
     /// Existing Oracle targets were created that way, and the interval reads back as a different canonical type.</summary>
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind == CanonicalTypeKind.Time
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) => type.Kind == CanonicalKind.Time
         ? new RenderedColumnType(
             $"timestamp({Math.Min(type.Scale ?? 6, 9)})",
-            type.SourceNote is null
-                ? "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless."
-                : $"{type.SourceNote} Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless.")
-        : SharedTypes.Render(Shared, type);
+            DialectTypes.Join(sourceNote, "Oracle has no native TIME-only type; stored as TIMESTAMP, whose date portion is meaningless."))
+        : DialectTypes.Write(Shared, type, sourceNote);
+
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
     /// <summary>The comma-separated expressions of a tuple body, split at the commas that are not inside parentheses or a quoted string.</summary>
     private static IEnumerable<string> SplitTopLevel(string body)
     {

@@ -1,17 +1,13 @@
+using DbDataKit.Dialect;
+using Shared = DbDataKit.Dialect;
+
 namespace DbDataSync.Core.Sql;
 
 /// <summary>
-/// The intermediate a column's native type is translated through so that supporting N engines costs
-/// 2N translations (native → canonical, canonical → native) rather than N² (every engine pair
-/// directly). See <see cref="SqlDialect.ToCanonicalType"/> and
-/// <see cref="SqlDialect.RenderColumnType"/>.
-/// <para>
-/// In <c>DbDataSync.Core</c> alongside <see cref="SqlDialect"/> since phase 63. It used to live in
-/// <c>DbDataSync.Drivers.Abstractions</c>, which was the lowest project both the dialects and
-/// <c>IProvisioner</c> could see; once the dialects moved down to <c>Core</c> so that
-/// <c>DbDataSync.State</c> could reach them, leaving this behind would have meant a type in <c>Core</c>
-/// referencing one in a project above it — exactly the layering the move exists to avoid.
-/// </para>
+/// The kinds of <see cref="CanonicalType"/>, the shape authors' scripts and <c>driver.csx</c> files see a column type in
+/// (<c>IScriptDialect</c>, <c>ProvisioningColumn</c>, a dialect's <see cref="SqlDialect.ToCanonicalType"/>). The type rules themselves are the shared
+/// dialects' (<see cref="Shared.CanonicalType"/>); <see cref="CanonicalType.FromShared(TypeMapping{Shared.CanonicalType})"/> and
+/// <see cref="CanonicalType.ToShared"/> convert between the two without changing an answer.
 /// </summary>
 public enum CanonicalTypeKind
 {
@@ -59,12 +55,10 @@ public enum CanonicalTypeKind
 /// any target has been chosen. <see cref="RenderedColumnType.Fidelity"/> folds this in with whatever
 /// the render side finds, so a caller only ever has one warning to read rather than two places to
 /// check.</param>
-/// <param name="IsFixed">Only meaningful for <see cref="CanonicalTypeKind.Binary"/>: the source column
-/// is a fixed-length <c>binary(n)</c> (SQL Server's <c>rowversion</c>/<c>timestamp</c> included — it is
-/// always exactly 8 bytes) rather than a variable-length <c>varbinary(n)</c>. Only SQL Server has a
-/// real fixed-length binary type distinct from its variable-length one, so this is set by
-/// <c>MsSqlDialect.ToCanonicalType</c> and read by <c>MsSqlDialect.RenderColumnType</c> alone — every
-/// other dialect ignores it and keeps rendering its one binary type, exactly as before this existed.</param>
+/// <param name="IsFixed">Only meaningful for <see cref="CanonicalTypeKind.Binary"/>: the column is a fixed-length <c>binary(n)</c> (SQL Server's
+/// <c>rowversion</c> included, always 8 bytes) rather than a variable-length <c>varbinary(n)</c>; the shared <c>binary(fixed,n)</c>.</param>
+/// <param name="IsUnsigned">Only meaningful for the integer kinds: the column holds no negative values and the full unsigned range (SQL Server's
+/// <c>tinyint</c>, MySQL's <c>int unsigned</c>, DuckDB's <c>UBIGINT</c>). An engine without unsigned types writes the next wider signed type.</param>
 public sealed record CanonicalType(
     CanonicalTypeKind Kind,
     int? Length,
@@ -73,7 +67,81 @@ public sealed record CanonicalType(
     bool IsUnicode,
     bool IsMax,
     string? SourceNote = null,
-    bool IsFixed = false);
+    bool IsFixed = false,
+    bool IsUnsigned = false)
+{
+    /// <summary>
+    /// A shared dialect's reading as this shape. The reading's note is kept when it is not exact. Kinds Sync does not replicate
+    /// (an interval, a list) are <see cref="CanonicalTypeKind.Unmappable"/> with a note saying so, as is a type the dialect does not know.
+    /// </summary>
+    public static CanonicalType FromShared(TypeMapping<Shared.CanonicalType> mapping)
+    {
+        if (!mapping.IsMapped || mapping.Result is not { } t)
+            return new CanonicalType(CanonicalTypeKind.Unmappable, null, null, null, false, false, mapping.Note);
+        var note = mapping.Fidelity == Fidelity.Exact ? null : mapping.Note;
+        return FromShared(t, note);
+    }
+
+    /// <summary>The shared type as this shape, with <paramref name="note"/> as its <see cref="SourceNote"/>.</summary>
+    public static CanonicalType FromShared(Shared.CanonicalType t, string? note = null)
+    {
+        var unsigned = t.Unsigned == true;
+        return t.Kind switch
+        {
+            CanonicalKind.Boolean => Simple(CanonicalTypeKind.Boolean),
+            CanonicalKind.Int8 => Simple(CanonicalTypeKind.Int8) with { IsUnsigned = unsigned },
+            CanonicalKind.Int16 => Simple(CanonicalTypeKind.Int16) with { IsUnsigned = unsigned },
+            CanonicalKind.Int32 => Simple(CanonicalTypeKind.Int32) with { IsUnsigned = unsigned },
+            CanonicalKind.Int64 => Simple(CanonicalTypeKind.Int64) with { IsUnsigned = unsigned },
+            CanonicalKind.Decimal => new(CanonicalTypeKind.Decimal, null, t.Precision, t.Scale, false, false, note),
+            CanonicalKind.Float => Simple(CanonicalTypeKind.Float),
+            CanonicalKind.Double => Simple(CanonicalTypeKind.Double),
+            CanonicalKind.String => new(CanonicalTypeKind.String, t.Length, null, null, t.Unicode == true, t.Length is null, note),
+            CanonicalKind.Binary => new(CanonicalTypeKind.Binary, t.Length, null, null, false, t.Length is null, note, IsFixed: t.Fixed == true),
+            CanonicalKind.Date => Simple(CanonicalTypeKind.Date),
+            CanonicalKind.Time => new(CanonicalTypeKind.Time, null, null, t.Scale, false, false, note),
+            CanonicalKind.Timestamp => new(t.TimeZone == true ? CanonicalTypeKind.TimestampTz : CanonicalTypeKind.Timestamp, null, null, t.Scale, false, false, note),
+            CanonicalKind.Guid => Simple(CanonicalTypeKind.Guid),
+            CanonicalKind.Json => Simple(CanonicalTypeKind.Json),
+            CanonicalKind.Xml => Simple(CanonicalTypeKind.Xml),
+            CanonicalKind.Interval or CanonicalKind.List => Simple(CanonicalTypeKind.Unmappable) with
+            {
+                SourceNote = $"Sync does not replicate {t.Kind.ToString().ToLowerInvariant()} columns; leave the column out, or give it a transform that reads it as text",
+            },
+            _ => Simple(CanonicalTypeKind.Unmappable) with { SourceNote = note ?? $"no canonical equivalent of {t}" },
+        };
+
+        CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false, note);
+    }
+
+    /// <summary>
+    /// This type as the shared dialects' type. A string or binary with no length and not <see cref="IsMax"/> is unbounded there, as is a
+    /// decimal with no precision, and a time with no scale is one with no stated precision; each engine's table then decides what to write.
+    /// </summary>
+    public Shared.CanonicalType ToShared() => Kind switch
+    {
+        CanonicalTypeKind.Boolean => Shared.CanonicalType.Of(CanonicalKind.Boolean),
+        CanonicalTypeKind.Int8 => Integer(CanonicalKind.Int8),
+        CanonicalTypeKind.Int16 => Integer(CanonicalKind.Int16),
+        CanonicalTypeKind.Int32 => Integer(CanonicalKind.Int32),
+        CanonicalTypeKind.Int64 => Integer(CanonicalKind.Int64),
+        CanonicalTypeKind.Decimal => new(CanonicalKind.Decimal, Precision: Precision, Scale: Scale),
+        CanonicalTypeKind.Float => Shared.CanonicalType.Of(CanonicalKind.Float),
+        CanonicalTypeKind.Double => Shared.CanonicalType.Of(CanonicalKind.Double),
+        CanonicalTypeKind.String => Shared.CanonicalType.String(IsMax ? null : Length, IsUnicode),
+        CanonicalTypeKind.Binary => Shared.CanonicalType.Binary(IsMax ? null : Length, IsFixed),
+        CanonicalTypeKind.Date => Shared.CanonicalType.Of(CanonicalKind.Date),
+        CanonicalTypeKind.Time => Shared.CanonicalType.Time(Scale),
+        CanonicalTypeKind.Timestamp => Shared.CanonicalType.Timestamp(Scale),
+        CanonicalTypeKind.TimestampTz => Shared.CanonicalType.Timestamp(Scale, tz: true),
+        CanonicalTypeKind.Guid => Shared.CanonicalType.Of(CanonicalKind.Guid),
+        CanonicalTypeKind.Json => Shared.CanonicalType.Of(CanonicalKind.Json),
+        CanonicalTypeKind.Xml => Shared.CanonicalType.Of(CanonicalKind.Xml),
+        _ => Shared.CanonicalType.Unmappable,
+    };
+
+    private Shared.CanonicalType Integer(CanonicalKind kind) => new(kind, Unsigned: IsUnsigned ? true : null);
+}
 
 /// <param name="Sql">The DDL-ready type spec for the target dialect, e.g. <c>"varchar(50)"</c>,
 /// <c>"numeric(18,2)"</c>. Never populated for <see cref="CanonicalTypeKind.Unmappable"/> — a caller
@@ -83,13 +151,3 @@ public sealed record CanonicalType(
 /// is lost — this is the output that stops a silent truncation, so it is a return value, not a doc
 /// comment.</param>
 public sealed record RenderedColumnType(string Sql, string? Fidelity);
-
-/// <summary>
-/// Sync's <see cref="CanonicalType"/> as the shared dialects' <see cref="DbDataKit.Dialect.CanonicalType"/>, for a caller that judges with the shared
-/// rules whether one type fits another (<c>DbDataKit.Transfer.FidelityRules</c>) after Sync's own dialect has read each side's native type.
-/// </summary>
-public static class CanonicalTypes
-{
-    /// <summary>The same shape in the shared form; a length, precision or scale Sync leaves open takes the shared table's default, as rendering does.</summary>
-    public static DbDataKit.Dialect.CanonicalType ToShared(CanonicalType type) => SharedTypes.ToShared(type);
-}

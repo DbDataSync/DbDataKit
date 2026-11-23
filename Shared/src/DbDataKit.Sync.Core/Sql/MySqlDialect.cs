@@ -110,19 +110,14 @@ public sealed class MySqlDialect : SqlDialect
         _ => base.ClassifyForBucketing(baseTypeName),
     };
 
-    /// <summary>The type tables are the shared <c>mysql</c> dialect's (<c>dialects/mysql.yaml</c>). Sync keeps fixed-length
-    /// <c>binary(n)</c> as fixed, where the shared table widens it to <c>varbinary</c> and says so.</summary>
-    public override CanonicalType ToCanonicalType(string nativeType)
-    {
-        var (baseName, args) = CanonicalTypeSpec.Parse(nativeType);
-        return baseName == "binary"
-            ? new CanonicalType(CanonicalTypeKind.Binary, CanonicalTypeSpec.IntAt(args, 0, 1), null, null, false, false, IsFixed: true)
-            : SharedTypes.ToSync(Shared.ToCanonical(nativeType));
-    }
+    /// <summary>The type tables are the shared <c>mysql</c> dialect's (<c>dialects/mysql.yaml</c>): <c>binary(n)</c> is fixed-length, and a time
+    /// or timestamp with no stated precision is written with microseconds.</summary>
+    public override TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) => DialectTypes.Read(Shared, nativeType);
 
-    /// <summary>A time or timestamp with no stated precision renders at microseconds (6), where the shared table's default is whole seconds.</summary>
-    public override RenderedColumnType RenderColumnType(CanonicalType type) =>
-        type is { Kind: CanonicalTypeKind.Binary, IsFixed: true, IsMax: false }
-            ? new RenderedColumnType($"binary({type.Length ?? 255})", type.SourceNote)
-            : SharedTypes.Render(Shared, SharedTypes.MicrosecondsByDefault(type));
+    public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
+        DialectTypes.Write(Shared, type, sourceNote);
+
+    public override CanonicalType ToCanonicalType(string nativeType) => CanonicalType.FromShared(ReadColumnType(nativeType));
+
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => WriteColumnType(type.ToShared(), type.SourceNote);
 }

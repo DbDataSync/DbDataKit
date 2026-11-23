@@ -67,7 +67,16 @@ public sealed class AnsiDialect : SqlDialect
         static CanonicalType Simple(CanonicalTypeKind kind) => new(kind, null, null, null, false, false);
     }
 
-    public override RenderedColumnType RenderColumnType(CanonicalType type) => type.Kind switch
+    public override RenderedColumnType RenderColumnType(CanonicalType type) => type switch
+    {
+        { IsUnsigned: true, Kind: CanonicalTypeKind.Int8 } => new("SMALLINT", Combine(type, "ANSI SQL has no unsigned integer; widened to SMALLINT.")),
+        { IsUnsigned: true, Kind: CanonicalTypeKind.Int16 } => new("INTEGER", Combine(type, "ANSI SQL has no unsigned integer; widened to INTEGER.")),
+        { IsUnsigned: true, Kind: CanonicalTypeKind.Int32 } => new("BIGINT", Combine(type, "ANSI SQL has no unsigned integer; widened to BIGINT.")),
+        { IsUnsigned: true, Kind: CanonicalTypeKind.Int64 } => new("DECIMAL(20,0)", Combine(type, "ANSI SQL has no unsigned integer; widened to DECIMAL(20,0).")),
+        _ => RenderSigned(type),
+    };
+
+    private static RenderedColumnType RenderSigned(CanonicalType type) => type.Kind switch
     {
         CanonicalTypeKind.Boolean => new("BOOLEAN", type.SourceNote),
         CanonicalTypeKind.Int8 => new("SMALLINT", Combine(type, "ANSI SQL has no one-byte integer; widened to SMALLINT.")),

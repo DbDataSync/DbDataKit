@@ -34,7 +34,6 @@ Every product that reads or writes a column type (Sync, Build, Transfer, the Gat
   binary as that type: `bytea` on PostgreSQL, `raw(16)` on Oracle, `blob` on DuckDB. A fixed binary longer than the engine's fixed type
   (8000 bytes on SQL Server, 255 on MySQL) is written as variable-length binary.
 
-
 ## Decisions
 - Compiled overrides are small: SQL Server (`#temp` names), Fabric, MySQL (trailing-space names), Oracle (no `"` in names). Everything else is data.
 - Oracle: `NUMBER` unconstrained maps Lossy to unconstrained decimal; ints render `number(p)`; `DATE` reads as `timestamp(0)`; no TIME type (interval); boolean as `number(1)` (pre-23ai).
