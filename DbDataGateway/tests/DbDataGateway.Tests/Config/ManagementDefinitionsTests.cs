@@ -67,6 +67,13 @@ public sealed partial class ManagementTests
         Assert.Equal(HttpStatusCode.OK, added.StatusCode);
         Assert.Equal(key.Fingerprint, (string)JsonNode.Parse(await added.Content.ReadAsStringAsync())!["key_id"]!);
 
+        // every kind the Gateway takes, as one read for a viewer (what a console reads to trust its own key here); a publisher reads none of it
+        var all = JsonNode.Parse(await (await CallAsync(server, HttpMethod.Get, "/api/v1/trust", ServerRole.Viewer)).Content.ReadAsStringAsync())!["kinds"]!.AsArray();
+        Assert.Contains(all, k => (string)k!["kind"]! == "semantic-model");
+        Assert.Contains(all, k => (string)k!["kind"]! == "dashboard");
+        Assert.Equal([key.Fingerprint], all.Single(k => (string)k!["kind"]! == "app-nav")!["keys"]!.AsArray().Select(k => (string)k!["key_id"]!));
+        Assert.Equal(HttpStatusCode.Forbidden, (await AsPublisherAsync(server, HttpMethod.Get, "/api/v1/trust", null)).StatusCode);
+
         // a viewer reads and publishes nothing; a publisher publishes a signed version and changes no version that is served
         Assert.Equal(HttpStatusCode.Forbidden, (await CallAsync(server, HttpMethod.Put, "/api/v1/definitions/app-nav/menu", ServerRole.Viewer, Menu("one", Sign(key, "one")))).StatusCode);
         var published = await AsPublisherAsync(server, HttpMethod.Put, "/api/v1/definitions/app-nav/menu", Menu("one", Sign(key, "one")));

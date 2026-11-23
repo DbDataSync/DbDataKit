@@ -6,7 +6,7 @@ namespace DbDataKit.Server.Servers.Tests;
 
 /// <summary>
 /// Plan 28c E22 (owner decision S2 of 2026-11-14): the Runner is Sync's only scheduler, and since plan 33 SC23d2 there is no Sync server in the story at all (see <see cref="SyncOnRunner"/>). SQL Server to PostgreSQL (a continuous
-/// replication and a periodic one) and SQL Server to SQL Server (<c>inc</c>, the pair that has positions and a merge writer), written as files, published once with <c>dbdatasync package publish</c> and run by the runner's drains:
+/// replication and a periodic one) and SQL Server to SQL Server (<c>inc</c>, the pair that has positions and a merge writer), written as files, written as a package with <c>dbdatasync package publish --out</c>, sent once and run by the runner's drains:
 /// run now, a drain that stays up, a pause and a resume, a resync and the set's <c>provision</c> task, each a run of the runner with its inputs. One story, because setting it up (a runner, the engine's runtime package, the set
 /// published with its libraries) is most of the cost.
 /// </summary>

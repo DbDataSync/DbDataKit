@@ -19,7 +19,8 @@ namespace DbDataKit.Server.Servers.Tests;
 /// <item>the configuration repository is <b>files</b> (<c>config/connections</c>, <c>config/replications/&lt;name&gt;/task.yaml</c> and its mappings with their column cache), as a person or the Workspace writes them; no Sync server reads them;</item>
 /// <item>a <b>runner</b> (<c>dbdatarunner server run</c>, its own directory) with the engine as the runtime package <c>dbdatasync-runtime</c>, installed and active in the channel (the TaskRunner's build output with the manifest
 /// <c>scripts/runtime-manifest.sh</c> prints);</item>
-/// <item>the replication set published with the real <c>dbdatasync package publish --to runner</c>, its slots bound to the connections the runner knows: <c>connection/2</c> files in the runner's <c>connections</c> directory and the
+/// <item>the replication set written as a package by the real <c>dbdatasync package publish --to runner --out</c> and sent with the runner client the console's deploy uses (the command line sends nothing), its slots
+/// bound to the connections the runner knows: <c>connection/2</c> files in the runner's <c>connections</c> directory and the
 /// logins as <c>DBDATAKIT_SECRET_*</c> in the runner's environment (plan 28c E02);</item>
 /// <item>the tasks (a replication's drain, <c>provision</c>) run on the runner with their inputs (<c>run_all</c>, <c>requests</c>: a bulk load, a verification, a resync; <c>provision</c>'s replication, mapping and action): run now, pause
 /// and resume through a <b>console</b> in this process paired with the runner, as a person on the Runner's screens does; what only a paired client may do (a work item for a drain that is up, a checkpoint, a step and its payload) with the
@@ -266,11 +267,15 @@ internal sealed class SyncOnRunner : IAsyncDisposable
 
         Step("runner is up");
 
-        // the replication set, published as the verb publishes it, with the slots bound to the runner's connections (the verb pairs its client with the code)
-        var published = await RealProcess.RunAsync(sync, "package", "publish", "--to", "runner", "--repo", SyncDirectory, "--server", RunnerUrl.AbsoluteUri.TrimEnd('/'), "--channel", Channel, "--package", Package,
-            "--code", syncClientCode, "--client-dir", ClientDirectory, "--bind", "src=src", "--bind", "tgt=tgt", "--bind", "dw=dw", "--runtime-range", "*", "--serve");
-        Assert.Contains("Published", published);
+        // the replication set: the verb writes the package, and the runner client sends it (pairing with the code), with the slots bound to the runner's connections and the version served at once
+        var packageFolder = Path.Combine(Root, "sync-package");
+        var written = await RealProcess.RunAsync(sync, "package", "publish", "--to", "runner", "--repo", SyncDirectory, "--package", Package, "--runtime-range", "*", "--out", packageFolder);
+        Assert.Contains("Wrote the package", written);
         client = new RunnerPublishClient(new RunnerClientStore(ClientDirectory), Environment.GetEnvironmentVariable);
+        var server = RunnerUrl.AbsoluteUri.TrimEnd('/');
+        await client.BindAsync(server, syncClientCode, Package, Channel, new Dictionary<string, string> { ["src"] = "src", ["tgt"] = "tgt", ["dw"] = "dw" });
+        var published = await client.PublishAsync(server, null, Path.Combine(packageFolder, "package.yaml"), Path.Combine(packageFolder, "files"), Channel, stage: false, expectedVersion: null);
+        Assert.True(published.Version >= 1, $"{published.Mode} {published.Version}");
         Step("replication set published");
     }
 

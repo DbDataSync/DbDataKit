@@ -49,6 +49,41 @@ public sealed class JoinByTokenTests
         return null!;
     }
 
+    /// <summary>Waits until every kind <paramref name="server"/> lists trusts <paramref name="keyId"/> (the console's pass retries until the server holds the console as a client).</summary>
+    private static async Task TrustedAsync(ConsoleRelay relay, RegisteredInstance server, string keyId, RealProcess process)
+    {
+        var said = "";
+        for (var until = DateTime.UtcNow + TimeSpan.FromSeconds(90); DateTime.UtcNow < until; await Task.Delay(500))
+        {
+            var (status, body) = await relay.CallAsConsoleAsync(server, ServerRole.Viewer, HttpMethod.Get, "/api/v1/trust", null, default);
+            said = $"{status} {body?.ToJsonString()}";
+            if (status != 200 || body?["kinds"] is not System.Text.Json.Nodes.JsonArray kinds || kinds.Count == 0) continue;
+            if (kinds.All(k => k!["keys"]!.AsArray().Any(key => (string?)key!["key_id"] == keyId && !(bool)key["revoked"]!))) return;
+        }
+        Assert.Fail($"{server.Name} did not trust the console's publisher key within 90 s; it answered {said}\n{process.Output}");
+    }
+
+    /// <summary>Publishes a version signed with the console's publisher key to the Runner, with signatures required there, as an administrator of the console through its relay.</summary>
+    private static async Task SignedVersionVerifiesAsync(WebApplication console, ConsoleRelay relay, RegisteredInstance runner, ConsoleSigningKey key)
+    {
+        var person = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ana", null, UserRole.Admin);
+        using (var required = await relay.SendAsAsync(runner, person.Id, person.DisplayName, UserRole.Admin, HttpMethod.Put, "api/v1/settings/require_signatures",
+            System.Net.Http.Json.JsonContent.Create(new { value = true }), default))
+            Assert.True(required.IsSuccessStatusCode, await required.Content.ReadAsStringAsync());
+        var dll = System.Text.Encoding.UTF8.GetBytes("a stand-in assembly");
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(dll));
+        using (var upload = await relay.SendAsAsync(runner, person.Id, person.DisplayName, UserRole.Admin, HttpMethod.Put, $"api/v1/artifacts/{sha}", new ByteArrayContent(dll), default))
+            Assert.True(upload.IsSuccessStatusCode, await upload.Content.ReadAsStringAsync());
+        const string manifest = "schema: package/1\nname: signed\nlaunch: { kind: assembly, assembly: DbDataKit.Runner.TestPackage.dll }\n"
+            + "built_against: { dotnet: \"10.0\", kit: \"1\", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: ok\n    entry: { type: T }\n";
+        var signature = DbDataKit.State.Api.DefinitionSigning.Sign(key, "integration", "signed", manifest, [new ArtifactRef("DbDataKit.Runner.TestPackage.dll", sha, dll.Length, null)]);
+        using var publish = await relay.SendAsAsync(runner, person.Id, person.DisplayName, UserRole.Admin, HttpMethod.Put, "api/v1/definitions/integration/signed",
+            System.Net.Http.Json.JsonContent.Create(new { manifest, channel = "dev", mode = "stage", artifacts = new[] { new { path = "DbDataKit.Runner.TestPackage.dll", sha256 = sha, size = dll.Length } }, signature }), default);
+        var answer = System.Text.Json.Nodes.JsonNode.Parse(await publish.Content.ReadAsStringAsync());
+        Assert.True(publish.IsSuccessStatusCode, answer?.ToJsonString());
+        Assert.Equal("verified", (string?)answer!["signature"]);
+    }
+
     [Theory, MemberData(nameof(Engines))]
     public async Task A_Gateway_a_Runner_and_a_Workspace_join_by_their_printed_commands_and_a_reused_token_is_refused(string engine)
     {
@@ -125,6 +160,13 @@ public sealed class JoinByTokenTests
                 Assert.Equal(product, status.Product);
             }
             Assert.Equal(PairingProof.CertificateFingerprint(DbDataKit.Hosting.Certificates.DirectoryCertificate.Load(runnerDirectory)), runnerListed.CertificateFingerprint);
+
+            // the Runner and the Gateway trust the console's publisher key for every kind they take, with no administrator adding it; a version the console signs verifies on the Runner
+            var publisherKey = await console.Services.GetRequiredService<ConsolePublisherKeyStore>().GetOrCreateAsync();
+            var relay = console.Services.GetRequiredService<ConsoleRelay>();
+            foreach (var (listed, process) in new[] { (runnerListed, runner), (gatewayListed, gateway) })
+                await TrustedAsync(relay, listed, publisherKey.Fingerprint, process);
+            await SignedVersionVerifiesAsync(console, relay, runnerListed, publisherKey);
 
             // the Runner's command again, on another machine's folder: the token was used, so that start fails at the join step and says why
             var secondDirectory = Path.Combine(root, "runner-2");
