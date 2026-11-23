@@ -266,9 +266,14 @@ binding, never a staged or served version.
 
 ## Checking before production: `preflight`
 
-Each kind's package has a read-only manual task `preflight`: Build's is its `status`, the Store's the `deploy` dry run and the `contract` plan, Sync's its checks of a replication's source and target ([A sync project](#a-sync-project)). The publish panel stages the version in `prod` (staged, not served), runs `preflight` there with production's bound logins, shows its
-findings and activates only when the person goes on: a warning shows with its run link; an error refuses activation unless the person confirms, and the
-confirmation is recorded. After publish the same task is **Re-check** on the Runs tab.
+A package's read-only manual task `preflight` reads its databases with the logins its channel binds and reports findings. Build's runs `connection status`
+for each connection, and the Store's runs the `deploy` dry run and the `contract` plan. Sync's checks of a replication's source and target
+([A sync project](#a-sync-project)) are not built yet, so a Sync set has no `preflight`.
+
+When a person serves a version in `prod` from the publish panel, the console stages it held, runs `preflight` there with production's bound logins,
+and shows the findings with the run's link. With no error the console activates the version. An error leaves the version staged until the person
+presses **Activate anyway**, and the Runner records that confirmation with the activation. After publish, **Re-check** on the Runs tab runs the same
+task on the version the channel serves. [Preflight before activation](publishing.md#preflight-before-activation) has the calls and an example.
 
 ## Every kind uses the same pieces
 

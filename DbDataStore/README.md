@@ -98,6 +98,11 @@ the model's storage when the schema has nothing of it, adds what is missing when
 nothing; a change that would remove or retype is left for a contract step (noted in the run's `deploy-report` step) and a
 blocked one fails the run without writing. The run is recorded under the name of whoever started it.
 
+The package also has the manual task `preflight`. It reads the schema with the login `deploy` uses and records, as the step `preflight-findings`,
+what `deploy` would do (its dry run) and the plan `contract` would make. A change the deploy does not make is an error, because the deploy would fail.
+The contract's steps are information and what blocks it a warning, since a person approves the contract on its own. Nothing is written. The console
+runs `preflight` on a version it stages in `prod` before it serves it (`docs/publishing.md`, "Preflight before activation").
+
 ## Decisions
 
 - The name is DbDataStore; the table-structure planner is `DbDataKit.Schema`, shared with Build.

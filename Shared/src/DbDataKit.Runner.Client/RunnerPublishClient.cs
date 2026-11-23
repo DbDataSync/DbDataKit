@@ -149,11 +149,13 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
     /// <summary>
     /// Publishes the package of <paramref name="manifestPath"/> with the files of <paramref name="directory"/> in <paramref name="channel"/> (staged, or served): files the runner holds are not sent again. <paramref name="build"/>, when given,
     /// is the record of the build the package is deployed from, which the runner keeps with the version; <paramref name="sign"/>, when given, is asked for the version's signature once the files are on the runner (the package's name,
-    /// the manifest and the files) and answers null to publish it unsigned; what it signs covers <paramref name="build"/>.
+    /// the manifest and the files) and answers null to publish it unsigned; what it signs covers <paramref name="build"/>. <paramref name="hold"/>, with <paramref name="stage"/>, asks the runner to keep the staged version from activating by
+    /// itself until an administrator activates it (<see cref="ActivateAsync"/>); the text says what it waits for.
     /// </summary>
     public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null,
-        PackageSigner? sign = null, string? build = null)
+        PackageSigner? sign = null, string? build = null, string? hold = null)
     {
+        if (hold is not null && !stage) throw new RunnerClientException("A hold is asked of a staged version; a version served at once has nothing to wait for.");
         if (!File.Exists(manifestPath)) throw new RunnerClientException($"The manifest '{manifestPath}' does not exist.");
         if (!Directory.Exists(directory)) throw new RunnerClientException($"The package directory '{directory}' does not exist.");
         var text = File.ReadAllText(manifestPath);
@@ -205,6 +207,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         };
         if (expectedVersion is { } expected) body["expected_version"] = expected;
         if (build is not null) body["build"] = build;
+        if (hold is not null) body["hold"] = hold;
         if (sign is not null && await sign(manifest.PackageName, text, [.. files.Select(f => new ArtifactRef(f.Path, f.Sha, f.Size, null))], build, ct) is { } signature) body["signature"] = signature;
         // where the version came from, kept with it on the runner (a Workspace names its project, so the Runner's screens link back to it, plan 33 SC22l)
         if (!string.IsNullOrWhiteSpace(note)) body["note"] = note;
@@ -318,6 +321,21 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to describe {package}", ct);
         return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
+    }
+
+    /// <summary>
+    /// Activates the version staged in <paramref name="channel"/> (<c>POST /api/v1/definitions/integration/{name}/activate</c>), an administrator's call on the runner: a version staged with a hold waits for it. <paramref name="reason"/> is kept
+    /// in the runner's record of the activation. The answer is the version now active, or null while the activation waits for runs in flight (the runner tries again).
+    /// </summary>
+    public async Task<int?> ActivateAsync(string server, string? code, string package, string channel, string? reason, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        var body = new JsonObject { ["channel"] = channel };
+        if (!string.IsNullOrWhiteSpace(reason)) body["reason"] = reason;
+        using var response = await link.SendAsync(HttpMethod.Post, $"api/v1/definitions/integration/{Uri.EscapeDataString(package)}/activate", JsonContent.Create(body, options: Json), ct);
+        if (!response.IsSuccessStatusCode) throw await link.RefusedAsync(response, $"to activate {package} in {channel}", ct);
+        var answer = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
+        return response.StatusCode == HttpStatusCode.Accepted ? null : answer?["active"] is JsonValue v && v.TryGetValue<int>(out var active) ? active : answer?["version"] is JsonValue w && w.TryGetValue<int>(out var version) ? version : null;
     }
 
     /// <summary>

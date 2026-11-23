@@ -99,6 +99,16 @@ public sealed class RunnerCalls
         catch (RunnerClientException ex) { throw Refused(ex); }
     }
 
+    /// <summary>
+    /// Activates the version staged in <paramref name="channel"/>, the Runner's administrator call: a version the deploy staged with a hold waits for it. <paramref name="reason"/> is kept in the Runner's record of the activation (what the
+    /// person confirmed). The answer is the version now active, or null while the Runner waits for runs in flight before it activates.
+    /// </summary>
+    public async Task<int?> ActivateAsync(string package, string channel, string? reason, CancellationToken ct = default)
+    {
+        try { return await client.ActivateAsync(target.Name, null, package, channel, reason, null, ct); }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
     /// <summary>A Runner's refusal as a status: 502 when it could not be reached, 403 or 404 when it said so (404 only when <paramref name="notFound"/>), 409 otherwise.</summary>
     internal static DeployException Refused(RunnerClientException ex, bool notFound = true) =>
         new(ex.Message, ex.Message.Contains("could not be reached", StringComparison.Ordinal) ? 502 : ex.Message.Contains("(403)", StringComparison.Ordinal) ? 403 : notFound && ex.Message.Contains("(404)", StringComparison.Ordinal) ? 404 : 409);

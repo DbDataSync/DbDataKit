@@ -35,6 +35,8 @@ export interface FakeWorkspace {
   runs: { deploy: string; task: string; inputs: Record<string, string>; served: boolean }[]
   /** The slots tested through the console, by deploy. */
   bindingTests: { deploy: string; slot: string }[]
+  /** The activations asked of a version staged for its preflight, and whether the person confirmed what it found. */
+  activations: { deploy: string; confirm: boolean }[]
   /** The calls to the Workspace server's own run routes (`.../builds/{b}/run`, `/runs/{run}`, `/binding-test`, `/contract`): the screens make none. */
   workspaceRuns: string[]
 }
@@ -43,9 +45,17 @@ export interface FakeWorkspace {
 function stepsOf(task: string, inputs: Record<string, string>, step: string | null) {
   const at = '2026-11-11T11:00:00Z'
   if (step === 'pass-record') return [{ key: 'orders', started: at, completed: at, result: { mapping: 'orders', kind: 'Primary', status: 'Succeeded', rowsRead: 3, rowsWritten: 3 } }]
+  // the preflight of a Build package: the status of its connection, with an error (the structure is behind the project) and a warning
+  if (step === 'preflight-findings' && task === 'preflight') return [{ key: 'status warehouse', started: at, completed: at, result: { part: 'status warehouse', findings: PREFLIGHT_FINDINGS } }]
   if (step === 'provision-applied' && task === 'provision') return [{ key: inputs.mapping ?? '', started: at, completed: at, result: { steps: [{ title: `Create the table of ${inputs.mapping}`, succeeded: true }] } }]
   return []
 }
+
+/** What the preflight of a Build package finds in the stories: the deployed structure behind the project, and a table changed by hand. */
+const PREFLIGHT_FINDINGS = [
+  { severity: 'error', message: 'The deployed structure is behind the project: 2 deploy step(s) are pending (0 risky, 0 destructive), and a refresh is refused until they are applied (apply_plan).', about: 'warehouse' },
+  { severity: 'warning', message: 'marts.dim_store was changed outside dbdatabuild since it was deployed.', about: 'warehouse' },
+]
 
 const lineOf = (text: string, needle: string) => { const i = text.split('\n').findIndex((l) => l.includes(needle)); return i < 0 ? null : i + 1 }
 
@@ -244,6 +254,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
   const deploys: Record<string, unknown>[] = []
   const runs: FakeWorkspace['runs'] = []
   const bindingTests: FakeWorkspace['bindingTests'] = []
+  const activations: FakeWorkspace['activations'] = []
   const workspaceRuns: string[] = []
   const reads = new Map<string, number>()
   const fake = { adoptRefusal: null as string | null }
@@ -270,10 +281,11 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     const target = String(sent.target)
     const gateway = target === GATEWAY
     const record = (outcome: string, answer: Record<string, unknown> | null, error: string | null) => {
-      const kept = { id: `deploy-${counter}`, workspace_server: sent.workspaceServer, project: project.id, workspace: sent.workspace, build: sent.build, item: gateway ? 'model' : 'package', kind: project.kind,
+      const kept: Record<string, unknown> = { id: `deploy-${counter}`, workspace_server: sent.workspaceServer, project: project.id, workspace: sent.workspace, build: sent.build, item: gateway ? 'model' : 'package', kind: project.kind,
         target, target_name: target, product: gateway ? 'gateway' : 'runner', route: gateway ? 'model' : 'package', name: project.id, channel: gateway ? null : sent.channel ?? null,
         version: answer ? 1 : null, mode: gateway || !answer ? null : sent.serve ? 'serve' : 'stage', signature: answer ? 'verified' : null, deployed_by: 'tester', deployed_at: stamp(), outcome, error,
-        tasks: answer && !gateway ? (answer.tasks as string[] | undefined) ?? [] : [] }
+        tasks: answer && !gateway ? (answer.tasks as string[] | undefined) ?? [] : [], preflight: answer?.preflight ?? null }
+      if (answer?.mode === 'stage') kept.mode = 'stage'
       deploys.unshift(kept)
       return kept
     }
@@ -284,7 +296,17 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     }
     const answer = gateway
       ? { target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.dataSource ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] }
-      : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified', tasks: project.kind === 'sync' ? ['orders', 'provision'] : [] }
+      : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified',
+          tasks: project.kind === 'sync' ? ['orders', 'provision'] : project.kind === 'build' ? [`${project.id}-nightly`, 'preflight'] : [] } as Record<string, unknown>
+    // a Build package served in prod waits for its preflight, which finds an error: the version stays staged and the deploy answers 409 with what was found
+    if (!gateway && project.kind === 'build' && sent.channel === 'prod' && sent.serve) {
+      answer.mode = 'stage'
+      answer.preflight = { declared: true, run: `6f1c0f1e-0000-4000-8000-${String(runs.length + 1).padStart(12, '0')}`, link: `/servers/${target}/runs?run=6f1c0f1e-0000-4000-8000-${String(runs.length + 1).padStart(12, '0')}`,
+        state: 'finished', outcome: 'succeeded', errors: 1, warnings: 1, findings: PREFLIGHT_FINDINGS, activation: 'refused' }
+      runs.push({ deploy: `deploy-${counter}`, task: 'preflight', inputs: {}, served: false })
+      const error = `The preflight of version 1 found 1 error, so it was not activated in prod: warehouse: ${PREFLIGHT_FINDINGS[0].message} It stays staged. To activate it anyway, confirm; the confirmation is kept in the Runner's record of the activation.`
+      return json(route, { error, steps: [...steps, `Staged ${project.id} on prod: version 1.`, 'The preflight found 1 error(s) and 1 warning(s).'], deployed: answer, deploy: record('ok', answer, null) }, 409)
+    }
     return json(route, { steps, deployed: answer, deploy: record('ok', answer, null) })
   })
 
@@ -309,6 +331,17 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       reads.set(runId, n)
       if (n === 1) return json(route, { error: `${String(deploy.target_name)} has no run ${runId}.` }, 404)   // queued: not on the Runner's record yet
       return json(route, { run: { id: runId, task: started.task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(started.task, started.inputs, url.searchParams.get('step')) } })
+    }
+    // the activation of a version staged for its preflight: refused while its error is not confirmed, the confirmation kept with it
+    if (what === 'activate' && request.method() === 'POST') {
+      const body = JSON.parse(request.postData() ?? '{}') as { confirm?: boolean }
+      const preflight = deploy.preflight as Record<string, unknown> | null
+      if (!preflight) return json(route, { error: 'This deploy did not stage a version for a preflight.' }, 409)
+      activations.push({ deploy: deployId!, confirm: body.confirm === true })
+      if (!body.confirm) return json(route, { error: 'The preflight of version 1 found 1 error, so it was not activated in prod.' }, 409)
+      deploy.mode = 'serve'
+      deploy.preflight = { ...preflight, activation: 'activated', confirmed_by: 'tester' }
+      return json(route, { activation: 'activated', message: `Version 1 of ${String(deploy.name)} is active in prod.`, active: 1, preflight: deploy.preflight, deploy })
     }
     if (what === 'binding-test' && request.method() === 'POST') {
       const body = JSON.parse(request.postData() ?? '{}') as { slot: string }
@@ -416,7 +449,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     return json(route, { error: 'There is no such call.' }, 404)
   })
 
-  return { published, workspacePublishes, runs, bindingTests, workspaceRuns, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
+  return { published, workspacePublishes, runs, bindingTests, activations, workspaceRuns, files: (project, name) => workspaces.find((w) => w.project === project && w.name === name)?.files, get adoptRefusal() { return fake.adoptRefusal }, set adoptRefusal(v) { fake.adoptRefusal = v } }
 }
 
 function buildSummary(w: Workspace, b: Build) {

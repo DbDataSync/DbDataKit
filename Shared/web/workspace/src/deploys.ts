@@ -4,6 +4,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { request, useModule } from '@dbdatakit/shell'
 import type { BindingTestAnswer, ProjectKindInfo, PublishOptions, PublishedAnswer, StagedRun, StagedRunStarted } from './api'
+import type { DeployPreflight } from './pages/PreflightCard'
 
 /** A server of the console as `GET /api/instances` lists it (only what the publish panel needs). */
 export interface ConsoleServer { id: string; name: string; product: string | null; reachable: boolean }
@@ -24,6 +25,8 @@ export interface DeployRecord {
   signature: string | null; deployed_by: string; deployed_at: string; outcome: string; error: string | null
   /** The tasks the Runner said the package has (none for what is not a Runner package). */
   tasks?: string[]
+  /** The preflight the deploy waited for before it served the version in production, and what became of the activation; null when it waited for none. */
+  preflight?: DeployPreflight | null
 }
 
 /** A run started through the console on what a deploy put on a Runner (`POST /api/deploys/{id}/runs`). */
@@ -33,7 +36,10 @@ export interface DeployRunAnswer { steps: string[]; run: StagedRunStarted }
 export interface ContractBody { planRun: string; approve: string; allowConsumer: string[] }
 
 /** What a deploy answered: the steps, the target's own answer and the record the console kept. */
-export interface DeployAnswer { steps: string[]; deployed: PublishedAnswer; deploy: DeployRecord }
+export interface DeployAnswer { steps: string[]; deployed: PublishedAnswer & { preflight?: DeployPreflight }; deploy: DeployRecord }
+
+/** What `POST /api/deploys/{id}/activate` answered: what became of the activation, in words, the version active now and the preflight it was checked against. */
+export interface ActivateAnswer { activation: string; message: string; active: number | null; preflight: DeployPreflight; deploy: DeployRecord }
 
 /** Which deploys to list: the Workspace server's, narrowed by project, workspace and build. */
 export interface DeployQuery { workspaceServer: string; project?: string; workspace?: string; build?: string }
@@ -57,6 +63,9 @@ export const deployApi = {
   /** The Runner's test of the login the deploy's channel binds to a slot. */
   bindingTest: (deploy: string, slot: string, role: 'default' | 'read' | 'write' = 'default') =>
     request<{ test: BindingTestAnswer }>(`/api/deploys/${encodeURIComponent(deploy)}/binding-test`, { method: 'POST', body: JSON.stringify({ slot, role }) }).then((r) => r.test),
+  /** Activates the version a deploy staged in production for its preflight, once the run has ended; `confirm` when the person confirms the errors it found (kept in the Runner's record). */
+  activate: (deploy: string, confirm: boolean) =>
+    request<ActivateAnswer>(`/api/deploys/${encodeURIComponent(deploy)}/activate`, { method: 'POST', body: JSON.stringify({ confirm }) }),
   /** Runs a Store model's approved contract plan, after the console asked the Gateways it manages who reads what it drops (409 naming them, unless each is allowed). */
   contract: (deploy: string, body: ContractBody) =>
     request<DeployRunAnswer & { checked: number; gateways: number }>(`/api/deploys/${encodeURIComponent(deploy)}/contract`, { method: 'POST', body: JSON.stringify(body) }),

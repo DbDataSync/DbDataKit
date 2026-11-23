@@ -8,7 +8,10 @@ namespace DbDataKit.Server;
 
 /// <summary>The body of <c>POST api/deploys</c>: the build (Workspace server, project, workspace, build), the target, and what the deploy of its kind takes (<see cref="DeployBuildRequest"/>).</summary>
 public sealed record DeployBody(string? WorkspaceServer, string? Project, string? Workspace, string? Build, string? Target, string? Channel = null, bool Serve = false, int? ExpectedVersion = null,
-    Dictionary<string, string>? Bind = null, string? DataSource = null, List<string>? Adopt = null, string? Model = null, string? Note = null);
+    Dictionary<string, string>? Bind = null, string? DataSource = null, List<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false);
+
+/// <summary>The body of <c>POST api/deploys/{id}/activate</c>: whether the person confirms the errors the preflight found (the Runner keeps the confirmation with the activation).</summary>
+public sealed record DeployActivateBody(bool Confirm = false);
 
 /// <summary>The body of <c>POST api/deploys/{id}/runs</c>: the task, its inputs (names and text values) and whether the version the channel serves runs it (<c>served</c>) rather than the version the deploy staged.</summary>
 public sealed record DeployRunBody(string? Task, Dictionary<string, string>? Inputs = null, bool Served = false);
@@ -23,7 +26,7 @@ public sealed record DeployContractBody(string? PlanRun, string? Approve, List<s
 /// The deploy of a build from a Workspace server to a Runner or a Gateway, by the console as the signed-in person (<see cref="ConsoleDeploys"/>): <c>POST api/deploys</c> deploys, <c>GET api/deploys?workspace_server=&amp;project=&amp;workspace=&amp;build=</c>
 /// lists what was deployed from a Workspace server, newest first (each parameter after the server narrows the one before), the record the Builds and Runs tabs read. The runs of a deploy to a Runner go through the console too
 /// (<see cref="ConsoleDeployRuns"/>): <c>POST api/deploys/{id}/runs</c> starts a task, <c>GET api/deploys/{id}/runs/{run}?step=</c> reads a run and its steps, <c>POST api/deploys/{id}/binding-test</c> tests a slot's login on the Runner,
-/// and <c>POST api/deploys/{id}/contract</c> runs a Store model's approved contract.
+/// <c>POST api/deploys/{id}/contract</c> runs a Store model's approved contract, and <c>POST api/deploys/{id}/activate</c> activates a version a deploy staged in production for its preflight.
 /// </summary>
 [ApiController]
 [Route("api/deploys")]
@@ -38,7 +41,7 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
         if (string.IsNullOrWhiteSpace(body.WorkspaceServer) || string.IsNullOrWhiteSpace(body.Project) || string.IsNullOrWhiteSpace(body.Workspace) || string.IsNullOrWhiteSpace(body.Build) || string.IsNullOrWhiteSpace(body.Target))
             return BadRequest(new { error = "Name the build (\"workspaceServer\", \"project\", \"workspace\", \"build\") and the Runner or Gateway it goes to (\"target\")." });
         var done = await deploys.DeployAsync(new DeployBuildRequest(body.WorkspaceServer, body.Project, body.Workspace, body.Build, body.Target, body.Channel, body.Serve, body.ExpectedVersion, body.Bind, body.DataSource, body.Adopt,
-            body.Model, body.Note), Person, ct);
+            body.Model, body.Note, body.ConfirmPreflight), Person, ct);
         return StatusCode(done.Status, done.Body);
     }
 
@@ -79,6 +82,14 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
         if (string.IsNullOrWhiteSpace(slot) || slot.Length > 64 || role is not ("default" or "read" or "write"))
             return BadRequest(new { error = "The body is a JSON object with the \"slot\" to try (the connection's slot in the deployed package) and optionally the \"role\" of its login (default, read or write)." });
         var done = await runs.TestBindingAsync(id, slot, role, Person, ct);
+        return StatusCode(done.Status, done.Body);
+    }
+
+    [HttpPost("{id}/activate")]
+    [Authorize(Policies.Viewer)]
+    public async Task<IActionResult> Activate(string id, [FromBody] DeployActivateBody? body, CancellationToken ct)
+    {
+        var done = await runs.ActivateAsync(id, body?.Confirm ?? false, Person, ct);
         return StatusCode(done.Status, done.Body);
     }
 

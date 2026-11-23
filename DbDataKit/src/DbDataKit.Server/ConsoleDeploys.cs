@@ -13,7 +13,7 @@ namespace DbDataKit.Server;
 /// the channel, staged or served, the version the person saw and the slots to bind; for a Gateway the data source and the adoptions the person confirmed; the model of a Store build, and a note kept with the version.
 /// </summary>
 public sealed record DeployBuildRequest(string WorkspaceServer, string Project, string Workspace, string Build, string Target, string? Channel = null, bool Serve = false, int? ExpectedVersion = null,
-    IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null);
+    IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false);
 
 /// <summary>What a deploy answered: the HTTP status and the body (the steps, the target's answer and the deploy record; or the refusal in words, with the data source to confirm when an adoption is asked).</summary>
 public sealed record DeployBuildOutcome(int Status, JsonObject Body);
@@ -27,12 +27,19 @@ public sealed record DeployBuildOutcome(int Status, JsonObject Body);
 /// <para>
 /// Only a person who may approve on the Workspace server deploys from it (its approver role, as the Workspace's own publish asked), and only a build that succeeded, which is one the kind's validators passed.
 /// </para>
+/// <para>
+/// A Runner package served in <c>prod</c> whose package declares a preflight is staged held, checked by its preflight on the staged version and activated only when the preflight found no error, or the person confirmed what it found
+/// (<see cref="ConsoleDeployPreflight"/>).
+/// </para>
 /// </summary>
 public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions, ConsolePublisherKeyStore keys, ConsoleKeyStore identity, AuditLog audit)
 {
     public const string AuditVerb = "build.deploy";
 
     public DeployStore Store { get; } = new(state);
+
+    /// <summary>How long a deploy waits for the preflight of a version it staged in production before it answers that the run goes on (the person activates it once the run has ended).</summary>
+    public TimeSpan PreflightWait { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>The deploys of the builds of a Workspace server (by its id or name), newest first; each part after the server narrows the one before.</summary>
     public IReadOnlyList<DeployRecord> List(string workspaceServer, string? project = null, string? workspace = null, string? build = null) =>
@@ -89,7 +96,11 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             var provenance = $"From workspace {request.Workspace} of project {request.Project}, build {request.Build}" + ((string?)described["commit"] is { Length: > 0 } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "")
                 + (described["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", deployed by {person.Name ?? person.Id}.";
             var note = (string.IsNullOrWhiteSpace(request.Note) ? provenance : request.Note.Trim() + " | " + provenance) + " " + DeployOrigin.Token(workspaceServer.InstanceId, request.Project, request.Workspace);
-            var options = new DeployOptions(request.Channel, request.Serve, request.ExpectedVersion, request.Bind, request.DataSource, request.Adopt, item.Model, note);
+            // a package served in prod is checked first when it declares a preflight: staged held, the preflight run on the staged version, then activated (below)
+            var preflightAsked = ConsoleDeployPreflight.AskedFor(request.Channel, request.Serve, deployProduct, route.What);
+            var gated = preflightAsked && ArtifactDeploy.PackageTasks(root).Contains(DbDataKit.Runner.Preflight.TaskName);
+            if (preflightAsked && !gated) steps.Add($"The package declares no {DbDataKit.Runner.Preflight.TaskName} task, so nothing is checked before it is served in {request.Channel}.");
+            var options = new DeployOptions(request.Channel, request.Serve && !gated, request.ExpectedVersion, request.Bind, request.DataSource, request.Adopt, item.Model, note, gated ? ConsoleDeployPreflight.HoldReason(person) : null);
             JsonObject answer;
             try
             {
@@ -99,7 +110,9 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             }
             catch (DeployException ex) { throw new Refusal(ex.Status, ex.Message, ex.Adopt); }
 
+            if (preflightAsked && !gated) answer["preflight"] = new JsonObject { ["declared"] = false };
             var kept = Keep(request, person, workspaceServer, target, deployProduct, kind, route.What, item, record, AuditEvent.Ok, null, answer, publisher.Key.Fingerprint);
+            if (gated) return await PreflightThenActivateAsync(kept, answer, new RunnerCalls(link, deployTarget), target, request.ConfirmPreflight, person, steps, ct);
             return new DeployBuildOutcome(200, new JsonObject { ["steps"] = Steps(steps), ["deployed"] = answer, ["deploy"] = Describe(kept) });
         }
         catch (Exception ex) when (ex is Refusal or DeployException)
@@ -119,6 +132,64 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* a temporary copy; the next start of the machine clears it */ }
         }
+    }
+
+    /// <summary>
+    /// The preflight of the version <paramref name="kept"/> staged held in production, then its activation: the preflight runs on the staged version as the person and is waited for (<see cref="PreflightWait"/>); with no error, or
+    /// with the person's confirmation (<paramref name="confirmed"/>), the Runner activates it and keeps the reason. An error not confirmed answers 409 with the findings and leaves the version staged; a run still going answers 202. Either way
+    /// the deploy record keeps the preflight, and <c>POST api/deploys/{id}/activate</c> activates it later.
+    /// </summary>
+    private async Task<DeployBuildOutcome> PreflightThenActivateAsync(DeployRecord kept, JsonObject answer, RunnerCalls calls, RegisteredInstance runner, bool confirmed, RelayPerson person, List<string> steps, CancellationToken ct)
+    {
+        var (package, channel, version) = (kept.DefinitionName!, kept.Channel!, kept.Version!.Value);
+        steps.Add($"Version {version} waits on {runner.Name} for its preflight before it is activated in {channel}.");
+        JsonObject report;
+        try
+        {
+            var started = await calls.RunStagedTaskAsync(package, channel, version.ToString(System.Globalization.CultureInfo.InvariantCulture), DbDataKit.Runner.Preflight.TaskName, null, person.Name ?? person.Id, steps.Add, ct);
+            var run = Guid.Parse((string)started["run_id"]!);
+            report = ConsoleDeployPreflight.Report(run, await ConsoleDeployPreflight.WaitAsync(calls, package, channel, run, PreflightWait, ct), runner.InstanceId);
+        }
+        catch (DeployException ex)
+        {
+            // the preflight could not be started (one is running already, the Runner refused): the version stays staged and held, and the words say why
+            answer["preflight"] = new JsonObject { ["declared"] = true, ["state"] = "not-started", ["error"] = ex.Message, ["activation"] = "refused" };
+            Store.Revise(kept.Id, kept.Mode, answer.ToJsonString());
+            return new DeployBuildOutcome(409, new JsonObject { ["error"] = $"The preflight of version {version} could not be started, so it was not activated in {channel}: {ex.Message}", ["steps"] = Steps(steps), ["deployed"] = answer, ["deploy"] = Describe(Store.Get(kept.Id)!) });
+        }
+
+        report["declared"] = true;
+        steps.Add((string?)report["state"] == "finished"
+            ? $"The preflight (run {report["run"]}) found {report["errors"]} error(s) and {report["warnings"]} warning(s)."
+            : $"The preflight (run {report["run"]}) has not ended after {PreflightWait.TotalSeconds:0} seconds.");
+        var activation = await ConsoleDeployPreflight.ActivateAsync(calls, package, channel, version, report, confirmed, person, ct);
+        Settle(kept, answer, report, activation, confirmed, person, runner);
+        steps.Add(activation.Message);
+        // a preflight still running is not a refusal: the version is staged and waits, and the person activates it once the run has ended
+        var status = (string?)report["state"] == "finished" ? activation.Status : 202;
+        var body = new JsonObject { ["steps"] = Steps(steps), ["deployed"] = answer, ["deploy"] = Describe(Store.Get(kept.Id)!) };
+        if (status >= 400) body["error"] = activation.Message;
+        return new DeployBuildOutcome(status, body);
+    }
+
+    /// <summary>
+    /// Keeps what became of an activation after a preflight in the deploy record (the report, the activation, who confirmed errors; the mode <c>serve</c> once it is active) and audits it as <see cref="ConsoleDeployPreflight.ActivateVerb"/>,
+    /// with a confirmation of errors also as <see cref="ConsoleDeployPreflight.ConfirmVerb"/>.
+    /// </summary>
+    internal void Settle(DeployRecord kept, JsonObject answer, JsonObject report, PreflightActivation activation, bool confirmed, RelayPerson person, RegisteredInstance runner)
+    {
+        report["activation"] = activation.State;
+        var confirming = confirmed && (int?)report["errors"] > 0 && activation.State is "activated" or "waiting";
+        if (confirming) { report["confirmed_by"] = person.Id; report["confirmed_at"] = DateTimeOffset.UtcNow.UtcDateTime.ToString("O"); }
+        answer["preflight"] = report;
+        if (activation.State == "activated") { answer["mode"] = "serve"; answer["version"] = activation.Active; }
+        Store.Revise(kept.Id, activation.State == "activated" ? "serve" : kept.Mode, answer.ToJsonString());
+
+        if ((string?)report["state"] != "finished") return;   // nothing was asked of the Runner yet
+        var outcome = activation.Status < 400 ? AuditEvent.Ok : AuditEvent.Refused;
+        var detail = JsonSerializer.Serialize(new { deploy = kept.Id, package = kept.DefinitionName, channel = kept.Channel, version = kept.Version, preflight = (string?)report["run"], errors = (int?)report["errors"], activation = activation.State });
+        audit.Record(new AuditEvent("user", person.Id, ConsoleDeployPreflight.ActivateVerb, outcome, TargetKind: "server", TargetId: runner.InstanceId, Detail: detail));
+        if (confirming) audit.Record(new AuditEvent("user", person.Id, ConsoleDeployPreflight.ConfirmVerb, AuditEvent.Ok, TargetKind: "server", TargetId: runner.InstanceId, Detail: detail));
     }
 
     /// <summary>The item of the build that goes by <paramref name="route"/>: the only one, or for a Store build's model packages the model the person named (the only one when the build has one).</summary>
@@ -175,7 +246,15 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
         ["id"] = d.Id, ["workspace_server"] = d.WorkspaceServer, ["project"] = d.Project, ["workspace"] = d.Workspace, ["build"] = d.Build, ["item"] = d.Item, ["kind"] = d.ProjectKind,
         ["target"] = d.Target, ["target_name"] = d.TargetName, ["product"] = d.Product, ["route"] = d.Route, ["name"] = d.DefinitionName, ["channel"] = d.Channel, ["version"] = d.Version, ["mode"] = d.Mode,
         ["signature"] = d.Signature, ["build_record"] = BuildRecord.Read(d.BuildRecord), ["deployed_by"] = d.DeployedBy, ["deployed_at"] = d.DeployedAt.UtcDateTime.ToString("O"), ["outcome"] = d.Outcome, ["error"] = d.Error,
+        ["preflight"] = PreflightOf(d.Answer),
     };
+
+    /// <summary>The preflight the deploy waited for (its run, link, findings and what became of the activation), or null for a deploy that waited for none.</summary>
+    public static JsonObject? PreflightOf(string? answer)
+    {
+        try { return (string.IsNullOrEmpty(answer) ? null : JsonNode.Parse(answer))?["preflight"]?.DeepClone() as JsonObject; }
+        catch (JsonException) { return null; }
+    }
 
     private static JsonArray TasksOf(string? answer)
     {

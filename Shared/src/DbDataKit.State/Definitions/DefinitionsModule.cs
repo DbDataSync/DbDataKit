@@ -157,10 +157,24 @@ public static class DefinitionsModule
             -- build's checks found), kept as it was sent so the signature can be checked again; null for a version published without one.
             ALTER TABLE {table:definition_version} {{addcolumn}} build_record {{text}} NULL;
             """,
+            """
+            -- A staged version that waits for an administrator: it is prepared as any staged version is, but never activated by itself. The publisher asked for the wait (a deploy that runs the package's
+            -- preflight on the staged version before it is served); the administrator's activation removes the row. One row per channel, naming the version it holds; a later stage replaces it.
+            CREATE TABLE {table:definition_staged_hold} (
+                kind        {{key}} NOT NULL,
+                name        {{key}} NOT NULL,
+                channel     {{key}} NOT NULL,
+                version     {{int}} NOT NULL,
+                reason      {{text}} NOT NULL,
+                held_by     {{key}} NOT NULL,
+                held_at     {{time}} NOT NULL,
+                PRIMARY KEY (kind, name, channel)
+            );
+            """,
         ],
         // an instance that left the group: its status rows are history after the retention age
         retention: [new RetentionRule("definition_instance_status", "gone_at")],
-        // the sixth migration (the build record) adds a nullable column, which the code of version 5 never reads; the fifth (signatures and the trust store) adds nullable columns and a table, which the code of version 4 never reads, so it is compatible as the fourth is; the fourth only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
+        // the seventh migration (the staged hold) adds a table, which the code of version 6 never reads, so a version it staged without a hold activates as before; the sixth migration (the build record) adds a nullable column, which the code of version 5 never reads; the fifth (signatures and the trust store) adds nullable columns and a table, which the code of version 4 never reads, so it is compatible as the fourth is; the fourth only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
         compatibleWithPrevious: 1);
 }
 

@@ -174,6 +174,10 @@ internal static class RunnerProject
         if (named.TryGetValue(DbDataKit.Quality.QualityCheckTask.Name, out var checkClash)) { diagnostics.Add(Invalid(RenderCommand.RenderedDir, $"The plan `{checkClash}` makes the task `{DbDataKit.Quality.QualityCheckTask.Name}`, which is the name of the task that evaluates the checks again; rename the plan.")); return null; }
         tasks.Add(DbDataKit.Quality.QualityCheckTask.Declare(catchUpSlots));
 
+        // the preflight: the status of every connection the plans use, read only, by hand; a control service runs it on a version staged in production before it serves it
+        if (named.TryGetValue(DbDataKit.Runner.Preflight.TaskName, out var preflightClash)) { diagnostics.Add(Invalid(RenderCommand.RenderedDir, $"The plan `{preflightClash}` makes the task `{DbDataKit.Runner.Preflight.TaskName}`, which is the name of the task that checks a version before it is served; rename the plan.")); return null; }
+        tasks.Add(DbDataKit.Runner.Preflight.Declare(catchUpSlots, inputs: [BuildPreflight.InputOf(catchUpSlots.Select(s => s.Name))]));
+
         var manifest = new PackageManifest(package, $"The dbdatabuild project {package}: {refreshPlans} refresh plan(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
             new BuiltAgainst($"{Environment.Version.Major}.{Environment.Version.Minor}", null, RunnerProtocol.V1), tasks);
