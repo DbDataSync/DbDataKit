@@ -1,12 +1,17 @@
+import { useState } from 'react'
 import { Field } from '@dbdatakit/shell'
+import { useDraft } from '@dbdatakit/workspace'
 import { EndpointSideCard, EndpointSidePair } from '../components/EndpointSidePair'
+import { RefreshPanel } from '../components/RefreshPanel'
 import { useDatabases, useReadLine } from '../metadata'
 import type { ConnectionView, EndpointRef, TaskEndpoints } from '../types'
 
 /**
  * The replication's source and target, which every table mapping takes unless it overrides them. The "inherited by N mappings" note is on both
  * cards, since a mapping overrides each side on its own. The connections are the draft's connection files; the databases are those the draft's
- * catalog cache lists for the connection, with where and when it was read.
+ * catalog cache lists for the connection, with where and when it was read. A connection of the draft that the cache has nothing for offers
+ * **Refresh catalog**: its shape read from a Runner channel, the difference shown, and accepted into the cache as an unsaved edit, which fills the
+ * database picker.
  */
 export function EndpointsCard({ endpoints, connections, mappingCount, onChange }: {
   endpoints: TaskEndpoints
@@ -47,6 +52,9 @@ function EndpointFields({ value, connections, onChange, testIdPrefix }: {
   const databases = useDatabases(connectionName || undefined)
   const read = useReadLine(connectionName || undefined)
   const known = connections.some((c) => c.name === connectionName)
+  const draft = useDraft()
+  const [refreshing, setRefreshing] = useState(false)
+  const uncached = connectionName !== '' && !read && databases.problem !== null
 
   return (
     <>
@@ -55,7 +63,7 @@ function EndpointFields({ value, connections, onChange, testIdPrefix }: {
           <select
             className="select"
             value={connectionName}
-            onChange={(e) => onChange({ ...value, connectionName: e.target.value || null, database: null })}
+            onChange={(e) => { setRefreshing(false); onChange({ ...value, connectionName: e.target.value || null, database: null }) }}
             data-testid={`${testIdPrefix}-connection-select`}
           >
             <option value="">Select…</option>
@@ -80,6 +88,15 @@ function EndpointFields({ value, connections, onChange, testIdPrefix }: {
       {connectionName && (read
         ? <span className="hint" data-testid={`${testIdPrefix}-read`}>Catalog {read}.</span>
         : databases.problem && <span className="hint" data-testid={`${testIdPrefix}-no-cache`}>{databases.problem}</span>)}
+      {uncached && known && draft.canEdit && (refreshing
+        ? <RefreshPanel key={connectionName} connection={connectionName} onClose={() => setRefreshing(false)} testId={`${testIdPrefix}-refresh`} />
+        : (
+          <div>
+            <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => setRefreshing(true)} data-testid={`${testIdPrefix}-refresh-catalog`}>
+              Refresh catalog
+            </button>
+          </div>
+        ))}
     </>
   )
 }

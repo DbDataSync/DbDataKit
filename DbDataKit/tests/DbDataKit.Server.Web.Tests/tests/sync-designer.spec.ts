@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 import YAML from 'yaml'
 import { signInNewAdmin } from './people'
 import { SERVER, mockWorkspace } from './workspace-fake'
@@ -289,4 +289,132 @@ test('table mappings: Create mappings from two ticked tables, then Auto-map, the
   expect(invoices.primaryKey).toEqual(['customer_id'])
   expect(workspace.files('plant', 'mappings-edit')?.has(mappingFile('dbo.Customers'))).toBe(false)
   await expect(page.getByTestId('wsp-unsaved')).toHaveAttribute('data-count', '1')
+})
+
+const RUNNER = 'runner-eu-1'
+const READ_AT = '2026-11-23T09:00:00Z'
+
+/** A `catalog-cache/2` file of one connection as the console's read answers it, recorded as read from `runners-eu` in the channel asked. */
+function readAnswer(connection: string, engine: string, channel: string, databases: string[], tables: string[]) {
+  return [
+    'schema: catalog-cache/2', `generated_at: '${READ_AT}'`, 'connections:', `  '${connection}':`, `    engine: '${engine}'`,
+    `    read: {server: 'runners-eu', product: 'runner', channel: '${channel}', at: '${READ_AT}'}`, '    databases:', ...databases, '    tables:', ...tables, '',
+  ].join('\n')
+}
+const tableLines = (database: string, name: string, columns: string[]) => [
+  `      - database: '${database}'`, "        schema: 'dbo'", `        name: '${name}'`, '        kind: table', '        columns:', ...columns.map((c) => `          - ${c}`),
+]
+const ID = "{name: 'id', type: 'int', nullable: false, key: true}"
+const INVOICE_COLUMNS = [ID, "{name: 'customer_id', type: 'int', nullable: false}", "{name: 'total', type: 'decimal(12,2)', nullable: true}"]
+
+/**
+ * The console's catalog read (`/api/workspace-catalog/...`), faked in the page: the channels of the project's package on one Runner, and a read that
+ * answers at once. `target-db` has `dw` with `dbo.Orders`; `source-db` has gained `dbo.Payments`, and `dbo.Invoices` the column `segment`. The real
+ * route is tested with real servers (`CatalogReadFromRunnerTests`); the follow of a slow read is `workspace-catalog-refresh.spec.ts`'s.
+ */
+async function mockCatalogRead(page: Page) {
+  const reads: Record<string, unknown>[] = []
+  const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+  await page.route('**/api/instances', (route) => route.request().method() === 'GET'
+    ? json(route, [
+      { id: SERVER, name: 'Workspace server', url: 'https://workspace.invalid', product: 'dbdataworkspace', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
+      { id: RUNNER, name: 'runners-eu', url: 'https://runner.invalid', product: 'dbdatarunner', version: '1', apiVersion: 1, reachable: true, ready: true, problem: null, pairedAt: null },
+    ])
+    : route.fallback())
+  await page.route('**/api/workspace-catalog/**', async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/channels')) {
+      const connection = url.searchParams.get('connection')!
+      return json(route, {
+        runner: RUNNER, runner_name: 'runners-eu', connection, package: 'plant', slot: connection.replace(/[^a-z0-9_]/g, '_'), default: 'dev',
+        channels: [{ channel: 'dev', production: false, bound: true, bound_to: `${connection}-dev` }, { channel: 'prod', production: true, bound: true, bound_to: connection }],
+      })
+    }
+    if (url.pathname.endsWith('/read') && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { connection: string; channel: string; table?: string }
+      reads.push(body)
+      const cache = body.connection === 'target-db'
+        ? readAnswer('target-db', 'postgres', body.channel, ["      - {name: 'dw', schemas: ['dbo']}"], tableLines('dw', 'Orders', [ID]))
+        : body.table === 'Invoices'
+          ? readAnswer('source-db', 'sqlserver', body.channel, ["      - {name: 'App', schemas: ['dbo']}"], tableLines('App', 'Invoices', [...INVOICE_COLUMNS, "{name: 'segment', type: 'nvarchar(20)', nullable: true}"]))
+          : readAnswer('source-db', 'sqlserver', body.channel, ["      - {name: 'App', schemas: ['dbo']}", "      - {name: 'Archive', schemas: ['dbo']}"], [
+            ...tableLines('App', 'Customers', [ID, "{name: 'name', type: 'nvarchar(100)', nullable: true}"]), ...tableLines('App', 'Invoices', INVOICE_COLUMNS),
+            ...tableLines('App', 'Orders', INVOICE_COLUMNS), ...tableLines('App', 'Payments', [ID]),
+          ])
+      return json(route, { runner: RUNNER, runner_name: 'runners-eu', connection: body.connection, state: 'done', run_id: `run-${reads.length}`, link: `/servers/${RUNNER}/runs?run=run-${reads.length}`, channel: body.channel, production: false, cache })
+    }
+    return json(route, { error: 'There is no such call.' }, 404)
+  })
+  return { reads }
+}
+
+test('the Designer\'s Refresh buttons read through the console: an endpoint\'s catalog, the source\'s tables, one table on a mapping, each an unsaved edit of the cache', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Refresh', `sync-refresh-${Date.now()}@example.com`)
+  const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE } })
+  const catalog = await mockCatalogRead(page)
+  await makeDraft(page, 'plant', 'sync', 'refresh-edit')
+  const cacheFile = page.locator('[data-testid="wsp-file"][data-path="catalog-cache.yaml"]')
+
+  // the target connection has no cache: Refresh catalog in dev reads it through the console, shows what it found, and accepted fills the database picker
+  await page.getByTestId('task-source-connection-select').selectOption('source-db')
+  await page.getByTestId('task-source-database-select').selectOption('App')
+  await expect(page.getByTestId('task-source-refresh-catalog')).toHaveCount(0)
+  await page.getByTestId('task-target-connection-select').selectOption('target-db')
+  await expect(page.getByTestId('task-target-no-cache')).toBeVisible()
+  await page.getByTestId('task-target-refresh-catalog').click()
+  const endpoint = page.getByTestId('task-target-refresh')
+  await expect(endpoint.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  await endpoint.getByTestId('wsp-refresh-go').click()
+  await expect(endpoint.getByTestId('wsp-refresh-summary')).toHaveText('1 table added')
+  await shot(page, '06-endpoint-refresh')
+  await endpoint.getByTestId('wsp-refresh-accept').click()
+  await expect(page.locator('[data-testid="task-target-database-select"] option')).toHaveText(['Select…', 'dw'])
+  await page.getByTestId('task-target-database-select').selectOption('dw')
+  await expect(page.getByTestId('task-target-read')).toContainText(`read from runners-eu (runner) in dev at ${READ_AT}`)
+  await expect(cacheFile).toHaveAttribute('data-dirty', 'true')
+  expect(workspace.files('plant', 'refresh-edit')?.get('catalog-cache.yaml')).not.toContain('target-db')
+  await page.getByTestId('save-settings-button').click()
+
+  // Refresh on the Table Mappings overview reads the source again: one table added, listed once accepted, before anything is saved
+  await page.getByTestId('tab-mappings').click()
+  await expect(page.locator('[data-testid^="select-table-"]')).toHaveCount(3)
+  await page.getByTestId('mappings-refresh-button').click()
+  const overview = page.getByTestId('mappings-refresh')
+  await overview.getByTestId('wsp-refresh-go').click()
+  await expect(overview.getByTestId('wsp-refresh-summary')).toHaveText('1 table added')
+  await expect(overview.locator('[data-testid="wsp-refresh-change"][data-change="table-added"]')).toContainText('App.dbo.Payments')
+  await overview.getByTestId('wsp-refresh-accept').click()
+  await expect(page.getByTestId('select-table-dbo.Payments')).toBeVisible()
+  await expect(page.getByTestId('mappings-refresh')).toHaveCount(0)
+
+  // on a mapping made from the cache, Refresh of its source table on the cached-metadata card: "1 column added", and the card compares against it
+  await page.getByTestId('select-table-dbo.Invoices').check()
+  await page.getByTestId('create-mappings-button').click()
+  await page.getByTestId('mapping-item-dbo.Invoices').click()
+  await expect(page.getByTestId('cached-metadata-source-outcome')).toHaveText('the same as the catalog cache')
+  await page.getByTestId('cached-metadata-source-refresh-button').click()
+  const card = page.getByTestId('cached-metadata-source-refresh')
+  await card.getByTestId('wsp-refresh-go').click()
+  await expect(card.getByTestId('wsp-refresh-summary')).toHaveText('1 column added')
+  await expect(card.locator('[data-testid="wsp-refresh-change"][data-change="column-added"]')).toContainText('App.dbo.Invoices.segment')
+  await card.getByTestId('wsp-refresh-accept').click()
+  await expect(page.getByTestId('cached-metadata-source-outcome')).toHaveText('the catalog cache has 1 column added (segment)')
+  await shot(page, '07-cached-metadata-refresh')
+
+  // Files shows the new cache as an unsaved edit; saved, it holds all three reads
+  expect(catalog.reads).toEqual([
+    { runner: RUNNER, channel: 'dev', connection: 'target-db' },
+    { runner: RUNNER, channel: 'dev', connection: 'source-db' },
+    { runner: RUNNER, channel: 'dev', connection: 'source-db', schema: 'dbo', table: 'Invoices' },
+  ])
+  await cacheFile.click()
+  await expect(area(page)).toHaveAttribute('data-area', 'files')
+  await expect(page.getByTestId('wsp-dirty')).toBeVisible()
+  await expect(cacheFile).toHaveAttribute('data-dirty', 'true')
+  await page.getByTestId('wsp-save-all').click()
+  await expect(page.getByTestId('wsp-unsaved')).toHaveCount(0)
+  const cache = saved(workspace, 'refresh-edit', 'catalog-cache.yaml')
+  expect(cache.connections['target-db'].read).toEqual({ server: 'runners-eu', product: 'runner', channel: 'dev', at: READ_AT })
+  expect(cache.connections['source-db'].tables.map((t: { name: string }) => t.name).sort()).toEqual(['Customers', 'Invoices', 'Orders', 'Payments'])
+  expect(cache.connections['source-db'].tables.find((t: { name: string }) => t.name === 'Invoices').columns.map((c: { name: string }) => c.name)).toContain('segment')
 })

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@dbdatakit/shell'
 import { useDraft } from '@dbdatakit/workspace'
+import { RefreshPanel } from '../components/RefreshPanel'
 import { tablesIn, useCacheConnection } from '../metadata'
 import type { SyncDraft } from '../useSyncDraft'
 import { createMappings, type CreateNote } from './createMappings'
@@ -14,7 +15,8 @@ const labelOf = (t: { schema: string; table: string }) => (t.schema ? `${t.schem
 /**
  * The tables of the replication's source database, from the draft's catalog cache, with how many of the replication's mappings read each one, and
  * **Create mappings** for the ticked ones. A mapping made here states its tables and nothing else, so it follows the replication; the files are
- * unsaved edits of the draft until Save. Select-all acts on the tables shown, never on ones a filter hides.
+ * unsaved edits of the draft until Save. Select-all acts on the tables shown, never on ones a filter hides. **Refresh** reads the source connection
+ * again from a Runner channel and shows what changed before the cache is replaced; accepted, a new table is listed here at once, before any save.
  */
 export function MappingsOverview({ model, pathOf }: { model: SyncDraft; pathOf: (mapping: string) => string }) {
   const draft = useDraft()
@@ -29,6 +31,7 @@ export function MappingsOverview({ model, pathOf }: { model: SyncDraft; pathOf: 
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState<CreateNote[]>([])
+  const [refreshing, setRefreshing] = useState(false)
 
   // a count rather than yes or no: two mappings may read one table, and "mapped" would hide the second
   const mappedCounts = useMemo(() => {
@@ -85,11 +88,21 @@ export function MappingsOverview({ model, pathOf }: { model: SyncDraft; pathOf: 
               ? <>{source.connectionName}{source.database ? ` · ${source.database}` : ''}</>
               : <>this replication has no source endpoint yet: pick one on the Overview tab</>}
           </span>
+          {source?.connectionName && draft.canEdit && (
+            <button type="button" className="btn btn-sm" disabled={refreshing} onClick={() => setRefreshing(true)} data-testid="mappings-refresh-button"
+              title={`Read the tables of ${source.connectionName} again from a Runner channel`}>Refresh</button>
+          )}
           <input className="input sm spacer" style={{ maxWidth: 220 }} placeholder="Filter tables…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter tables" data-testid="table-filter" />
           <button type="button" className="btn btn-sm btn-primary" disabled={selected.size === 0 || !draft.canEdit} onClick={createSelected} data-testid="create-mappings-button">
             {selected.size === 0 ? 'Create mappings' : `Create ${selected.size} mapping${selected.size === 1 ? '' : 's'}`}
           </button>
         </div>
+
+        {refreshing && source?.connectionName && (
+          <div style={{ padding: '0 14px', borderBottom: '1px solid var(--row-edge)' }}>
+            <RefreshPanel key={source.connectionName} connection={source.connectionName} onClose={() => setRefreshing(false)} testId="mappings-refresh" />
+          </div>
+        )}
 
         <div className="grid-head" style={{ gridTemplateColumns: COLUMNS, gap: 0, height: 29 }}>
           <input type="checkbox" checked={allShownSelected} onChange={toggleAll} aria-label="Select all tables" data-testid="select-all-tables" />
