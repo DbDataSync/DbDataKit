@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseYaml } from '@dbdatakit/shell'
-import { readCatalogCache } from '@dbdatakit/workspace'
-import { editTask, editText, mappingsOf, newTaskText, readConnection, readMapping, readScript, readTask, scriptPathsOf } from './model'
-import { createMappings } from './mappings/createMappings'
+import { editTask, editText, mappingsOf, newMappingText, newTaskText, readConnection, readMapping, readScript, readTask, scriptPathsOf } from './model'
 import { columnDifference } from './mappings/CachedMetadataCard'
-import { CATALOG } from './fixtures'
 
 const TASK = `# the nightly orders copy
 schemaVersion: 2
@@ -99,46 +96,15 @@ describe('the draft model of a table mapping', () => {
   })
 })
 
-describe('Create mappings', () => {
-  const cache = readCatalogCache(CATALOG).cache!
-
-  it('writes a mapping per ticked table with the cached columns paired by name, the key marked in them and stated nowhere else, and no target type', () => {
-    const made = createMappings('orders', ['dbo.customers'], [{ schema: 'dbo', table: 'orders' }, { schema: 'dbo', table: 'customers' }],
-      { endpoint: { connectionName: 'erp', database: 'sales' }, connection: cache.connections.erp },
-      { endpoint: { connectionName: 'dw', database: 'warehouse' }, connection: cache.connections.dw })
-    expect(made.created).toEqual(['dbo.orders'])
-    expect(made.skipped).toEqual(['dbo.customers'])
-    expect(made.files.map((f) => f.path)).toEqual(['config/replications/orders/table-mappings/dbo.orders.yaml'])
-    const m = readMapping(made.files[0].path, made.files[0].text).value!
-    expect(m.sources[0]).toMatchObject({ connectionName: null, schema: 'dbo', table: 'orders' })
-    expect(m.columnMappings.map((c) => c.sourceColumn)).toEqual(['id', 'customer_id', 'total'])
-    expect(m.columnMappings.every((c) => c.targetType === undefined)).toBe(true)
-    expect(m.primaryKey).toEqual([])
-    expect(m.sourceColumns?.map((c) => c.name)).toEqual(['id', 'customer_id', 'total', 'placed_at'])
-    expect(m.sourceColumns?.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual(['id'])
-    expect(m.targetColumns?.filter((c) => c.isPrimaryKey).map((c) => c.name)).toEqual(['id'])
-    expect(made.notes).toEqual([])
-  })
-
-  it('maps every source column of a target the cache does not have, caches no target columns, and says so', () => {
-    const made = createMappings('orders', [], [{ schema: 'dbo', table: 'customers' }],
-      { endpoint: { connectionName: 'erp', database: 'sales' }, connection: cache.connections.erp },
-      { endpoint: { connectionName: 'dw', database: 'warehouse' }, connection: cache.connections.dw })
-    const m = readMapping(made.files[0].path, made.files[0].text).value!
-    expect(m.columnMappings.map((c) => c.targetColumn)).toEqual(['id', 'name'])
-    expect(m.targetColumns).toBeUndefined()
-    expect(made.notes).toEqual([{ mapping: 'dbo.customers', side: 'target', reason: expect.stringContaining('created with these columns when the target is provisioned') }])
-  })
-
+describe('a new mapping', () => {
   it('writes the target as a mapping of its own, never an alias of the source, so one side can be edited alone', () => {
-    const made = createMappings('orders', [], [{ schema: 'dbo', table: 'customers' }],
-      { endpoint: { connectionName: 'erp', database: 'sales' }, connection: cache.connections.erp },
-      { endpoint: { connectionName: 'dw', database: 'warehouse' }, connection: cache.connections.dw })
-    const text = made.files[0].text
+    const side = { schema: 'dbo', table: 'customers' }
+    const path = 'config/replications/orders/table-mappings/dbo.customers.yaml'
+    const text = newMappingText('dbo.customers', side, side)
     expect(text).not.toMatch(/[&*]a\d/)
-    const before = readMapping(made.files[0].path, text).value!
+    const before = readMapping(path, text).value!
     const after = { ...before, targets: [{ ...before.targets[0], connectionName: 'dw', schema: 'staging' }] }
-    const edited = readMapping(made.files[0].path, editText(text, before, after)).value!
+    const edited = readMapping(path, editText(text, before, after)).value!
     expect(edited.targets[0]).toMatchObject({ connectionName: 'dw', schema: 'staging', table: 'customers' })
     expect(edited.sources[0]).toMatchObject({ connectionName: null, schema: 'dbo', table: 'customers' })
   })
