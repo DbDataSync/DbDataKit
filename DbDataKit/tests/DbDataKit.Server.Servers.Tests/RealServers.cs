@@ -16,6 +16,9 @@ internal sealed class RealProcess : IAsyncDisposable
 
     public int Id => process.Id;
 
+    /// <summary>The program has ended.</summary>
+    public bool HasExited => process.HasExited;
+
     /// <summary>The processes this program started (its task processes), found by walking the parent ids of <c>/proc</c> (Linux); each is a process of this test's own tree, never another one on the machine.</summary>
     public IReadOnlyList<(int Pid, string Command)> Descendants()
     {
