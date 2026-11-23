@@ -281,7 +281,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     }
 
     // the replication reads by watermark, so its writer is the default behind an incremental reader: ChangeApply, which matches rows on the target's key
-    private const string WatermarkTask = """
+    private const string WatermarkTaskText = """
         schemaVersion: 2
         name: orders
         scheduling:
@@ -302,6 +302,17 @@ public sealed class WorkspaceSyncOfflineCheckTests
             connectionName: dw
             database: dw
         """;
+
+    // the source file may be checked out with CRLF, and the tests below edit this text by lines
+    private static readonly string WatermarkTask = WatermarkTaskText.ReplaceLineEndings("\n");
+
+    /// <summary><paramref name="text"/> with <paramref name="old"/> replaced, failing when <paramref name="old"/> is not in it, so an edit that misses
+    /// (a line ending, a changed fixture) fails here rather than leaving the fixture unchanged.</summary>
+    private static string Edited(string text, string old, string replacement)
+    {
+        Assert.Contains(old, text, StringComparison.Ordinal);
+        return text.Replace(old, replacement, StringComparison.Ordinal);
+    }
 
     private static readonly string NoSourceKey = Cache.Replace("{name: id, type: int, nullable: false, key: true}", "{name: id, type: int, nullable: false}");
 
@@ -343,20 +354,20 @@ public sealed class WorkspaceSyncOfflineCheckTests
     [Fact]
     public void An_scd2_writer_needs_a_natural_key_stated_or_derived_from_the_source()
     {
-        var scd2 = WatermarkTask.Replace("  cache:\n    kind: StagingTable", "  cache:\n    kind: StagingTable\n  writer:\n    kind: Scd2");
+        var scd2 = Edited(WatermarkTask, "  cache:\n    kind: StagingTable", "  cache:\n    kind: StagingTable\n  writer:\n    kind: Scd2");
         var found = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: scd2));
         var key = One(found, SyncOfflineCheck.Key, "'Scd2' would refuse");
         Assert.Equal((int?)5, key.Line);
         Assert.Contains("naturalKey", key.Message);
 
-        var stated = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: scd2.Replace("    kind: Scd2", "    kind: Scd2\n    options:\n      naturalKey: id")));
+        var stated = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: Edited(scd2, "    kind: Scd2", "    kind: Scd2\n    options:\n      naturalKey: id")));
         Assert.DoesNotContain(stated, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
     }
 
     [Fact]
     public void An_engines_own_reader_is_said_once_to_be_unchecked_for_its_key()
     {
-        var found = CheckOf(Draft(Unkeyed, task: WatermarkTask.Replace("kind: Watermark\n    options:\n      column: created", "kind: MsSqlChangeTracking")));
+        var found = CheckOf(Draft(Unkeyed, task: Edited(WatermarkTask, "kind: Watermark\n    options:\n      column: created", "kind: MsSqlChangeTracking")));
         var skipped = One(found, SyncOfflineCheck.NotChecked, "'MsSqlChangeTracking' is a driver's own");
         Assert.Equal("info", skipped.Severity);
         Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
