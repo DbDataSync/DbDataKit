@@ -198,7 +198,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   - `AppDeploy`: an app to a Gateway (`Read`, then `SendAsync`; `PreviewChannel`).
   - `ArtifactDeploy`: what a kind made, by its route: a Runner package (`model-package` takes the one model's folder the caller chose), Store models,
     a Build project's semantic models and views.
-  - `GatewayDefinitionsPublish`: the former `WorkspaceGatewayPublish`. It writes the key's id as `managedBy` (WORKSPACEISOLATION-P6).
+  - `GatewayDefinitionsPublish`: the former `WorkspaceGatewayPublish`. It writes the key's id as `managedBy` (WORKSPACEISOLATION-13 moves what the Workspace's keys made).
   - `RunnerCalls`: runs of a staged or served version, a run and its steps, a binding test.
   - `GatewayCalls`: a data source's catalog (`ReadSchemaAsync`) and the lineage of a list of Gateways (`LineageAsync`).
   - `ContractPlans`: the contract route's checks (the plan's run and hash, the consumers through `ContractGuard`, the inputs of the run).
