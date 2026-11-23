@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The types moved to the shared library DbDataKit.Sync.Drivers.Abstractions with their namespace; this assembly forwards to it (TypeForwards.cs),
+       so a compiled driver plugin built against this package still finds IDriver. -->
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
   </ItemGroup>
 
   <PropertyGroup>
