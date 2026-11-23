@@ -8,25 +8,32 @@ public class DuckDbCanonicalTypeTests
     private static CanonicalType Read(string native) => DuckDbDialect.Instance.ToCanonicalType(native);
 
     [Theory]
-    [InlineData("UTINYINT", CanonicalTypeKind.Int16)]
-    [InlineData("USMALLINT", CanonicalTypeKind.Int32)]
-    [InlineData("UINTEGER", CanonicalTypeKind.Int64)]
-    public void AnUnsignedInteger_IsReadAsTheNextWiderSignedType_WithANote(string native, CanonicalTypeKind expected)
+    [InlineData("UTINYINT", CanonicalTypeKind.Int8)]
+    [InlineData("USMALLINT", CanonicalTypeKind.Int16)]
+    [InlineData("UINTEGER", CanonicalTypeKind.Int32)]
+    [InlineData("UBIGINT", CanonicalTypeKind.Int64)]
+    public void AnUnsignedInteger_IsReadAsUnsigned(string native, CanonicalTypeKind expected)
     {
         var type = Read(native);
 
         Assert.Equal(expected, type.Kind);
-        Assert.Contains("Unsigned", type.SourceNote);
+        Assert.True(type.IsUnsigned);
+        Assert.Null(type.SourceNote);
     }
 
-    [Fact]
-    public void AnUnsigned64BitInteger_IsReadAsDecimal20()
-    {
-        var type = Read("UBIGINT");
+    [Theory]
+    [InlineData("UTINYINT", "utinyint")]
+    [InlineData("UBIGINT", "ubigint")]
+    public void AnUnsignedInteger_IsWrittenBackAsTheSameType(string native, string written) =>
+        Assert.Equal(written, DuckDbDialect.Instance.RenderColumnType(Read(native)).Sql);
 
-        Assert.Equal(CanonicalTypeKind.Decimal, type.Kind);
-        Assert.Equal(20, type.Precision);
-        Assert.Equal(0, type.Scale);
+    [Fact]
+    public void AnUnsigned64BitInteger_IsWrittenAsDecimal20_WhereTheTargetHasNoUnsignedType()
+    {
+        var rendered = PostgresDialect.Instance.RenderColumnType(Read("UBIGINT"));
+
+        Assert.Equal("numeric(20,0)", rendered.Sql);
+        Assert.Contains("unsigned", rendered.Fidelity);
     }
 
     [Fact]
