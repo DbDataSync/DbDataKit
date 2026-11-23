@@ -18,6 +18,7 @@
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
     <ProjectReference Include="..\DbDataKit.Catalog.Cache\DbDataKit.Catalog.Cache.csproj" />
     <ProjectReference Include="..\DbDataKit.Sync.Provisioning\DbDataKit.Sync.Provisioning.csproj" />   <!-- Sync's configuration model and column reader, run in process for a sync draft -->
+    <ProjectReference Include="..\DbDataKit.Sync.Drivers.Descriptor\DbDataKit.Sync.Drivers.Descriptor.csproj" />   <!-- the type map and quoting of a draft's driver.yaml, for its offline checks -->
     <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
     <ProjectReference Include="..\DbDataKit.Dialect\DbDataKit.Dialect.csproj" />   <!-- the type tables and the lexer the offline checks of a sync draft read -->
     <ProjectReference Include="..\DbDataKit.Transfer\DbDataKit.Transfer.csproj" />   <!-- FidelityRules: whether a source type fits a target type -->

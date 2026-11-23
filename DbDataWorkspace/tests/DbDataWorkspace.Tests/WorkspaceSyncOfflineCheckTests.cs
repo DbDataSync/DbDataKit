@@ -98,7 +98,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     private static readonly string Mapping = MappingText.ReplaceLineEndings("\n");
     private static readonly string Cache = CacheText.ReplaceLineEndings("\n");
 
-    private static string Draft(string? mapping = null, string? cache = "", string sourceEngine = "sqlserver")
+    private static string Draft(string? mapping = null, string? cache = "", string sourceEngine = "sqlserver", string? task = null, (string Path, string Text)[]? files = null)
     {
         var root = Directory.CreateTempSubdirectory("ddw-sync-offline-").FullName;
         void Write(string path, string text)
@@ -109,8 +109,9 @@ public sealed class WorkspaceSyncOfflineCheckTests
         }
         Write("config/connections/crm.yaml", $"schema: connection/1\nname: crm\nengine: {sourceEngine}\naddress:\n  host: crm.example.com\n  database: crm");
         Write("config/connections/dw.yaml", "schema: connection/1\nname: dw\nengine: postgres\naddress:\n  host: dw.example.com\n  database: dw");
-        Write("config/replications/orders/task.yaml", Task);
+        Write("config/replications/orders/task.yaml", task ?? Task);
         Write(MappingFile, mapping ?? Mapping);
+        foreach (var (path, text) in files ?? []) Write(path, text);
         if (cache is not null) Write("catalog-cache.yaml", cache.Length == 0 ? Cache : cache);   // "" stands for the draft's usual cache
         return root;
     }
@@ -130,12 +131,12 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var found = CheckOf(Draft());
 
         var missing = One(found, SyncOfflineCheck.Column, "'shipped_on'");
-        Assert.Equal(("warning", MappingFile, (int?)13), (missing.Severity, missing.File, missing.Line));
+        Assert.Equal(("error", MappingFile, (int?)13), (missing.Severity, missing.File, missing.Line));
         Assert.Contains("crm.dbo.orders", missing.Message);
         Assert.Contains("channel dev", missing.Message);
 
         var filter = One(found, SyncOfflineCheck.Column, "'regoin_code'");
-        Assert.Equal(6, filter.Line);
+        Assert.Equal(("error", (int?)6), (filter.Severity, filter.Line));
         Assert.Contains("source filter", filter.Message);
 
         var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
@@ -156,9 +157,10 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var notTheKey = One(found, SyncOfflineCheck.Key, "is not the primary key");
         Assert.Contains("(order_no)", notTheKey.Message);
 
-        // the rest agrees: id, status and the filter's status are checked and say nothing; every finding is a warning, never an error
+        // the rest agrees: id, status and the filter's status are checked and say nothing; a missing column is an error, a type or a key a warning
         Assert.Equal(7, found.Count);
-        Assert.All(found, d => Assert.Equal("warning", d.Severity));
+        Assert.All(found.Where(d => d.Code == SyncOfflineCheck.Column), d => Assert.Equal("error", d.Severity));
+        Assert.All(found.Where(d => d.Code != SyncOfflineCheck.Column), d => Assert.Equal("warning", d.Severity));
     }
 
     [Fact]
@@ -183,7 +185,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     {
         var found = CheckOf(Draft(Mapping.Replace("  table: orders\n  filter", "  table: order\n  filter")));
         var table = One(found, SyncOfflineCheck.Table, "crm.dbo.order ");
-        Assert.Equal(5, table.Line);
+        Assert.Equal(("error", (int?)5), (table.Severity, table.Line));
         Assert.DoesNotContain(found, d => d.Code is SyncOfflineCheck.Column or SyncOfflineCheck.UnknownType or SyncOfflineCheck.Types);
     }
 
@@ -216,13 +218,148 @@ public sealed class WorkspaceSyncOfflineCheckTests
     }
 
     [Fact]
-    public void A_driver_whose_type_map_is_syncs_own_is_said_to_be_unchecked_and_its_types_are_not_reported()
+    public void A_driver_with_no_driver_yaml_in_the_draft_is_said_to_be_unchecked_and_its_types_are_not_reported()
     {
         var found = CheckOf(Draft(sourceEngine: "acme-odbc"));
-        var skipped = One(found, SyncOfflineCheck.NotChecked, "type map is Sync's own");
+        var skipped = One(found, SyncOfflineCheck.NotChecked, "has no driver.yaml under drivers/");
         Assert.Contains("'acme-odbc'", skipped.Message);
         Assert.DoesNotContain(found, d => d.Code is SyncOfflineCheck.UnknownType or SyncOfflineCheck.Types);
         Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("'shipped_on'", StringComparison.Ordinal));   // the names are still checked
+    }
+
+    // a driver.yaml as `dbdatasync driver install` writes one, its type map without the spatial types
+    private const string AcmeDriver = """
+        id: acme-odbc
+        displayName: Acme over ODBC
+        library: system-data-odbc
+        dialect:
+          quoteIdentifier: bracket
+          parameterPrefix: "@"
+          rowLimit: topN
+        typeMap:
+          int: Int32
+          "decimal(p,s)": { kind: Decimal, precision: p, scale: s }
+          "nvarchar(n)": { kind: String, length: n, unicode: true }
+          datetime2: Timestamp
+        capabilities:
+          readers: [Watermark, BatchReload]
+          writers: [DeleteInsert]
+        """;
+
+    [Fact]
+    public void A_yaml_drivers_types_and_filters_are_read_through_its_driver_yaml()
+    {
+        var found = CheckOf(Draft(Mapping.Replace("status = 'open' AND regoin_code > 3", "'[region code] > 3 AND regoin_code > 3'"),
+            sourceEngine: "acme-odbc", files: [("drivers/acme/driver.yaml", AcmeDriver)]));
+
+        var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
+        Assert.Equal(("warning", (int?)15), (unknown.Severity, unknown.Line));
+        Assert.Contains("the acme-odbc driver's type map (drivers/acme/driver.yaml) does not know", unknown.Message);
+        One(found, SyncOfflineCheck.Types, "'amount'");   // its decimal(18,2) read by the type map, into the target's integer
+        Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("filter names 'regoin_code'", StringComparison.Ordinal));
+        Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("filter names 'region code'", StringComparison.Ordinal));   // a bracketed name, unwrapped
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
+    }
+
+    [Fact]
+    public void A_driver_yaml_that_does_not_read_is_named_and_its_types_are_not_checked()
+    {
+        var found = CheckOf(Draft(sourceEngine: "acme-odbc", files: [("drivers/acme-odbc/driver.yaml", AcmeDriver.Replace("quoteIdentifier: bracket", "quoteIdentifier: chevron"))]));
+        var skipped = One(found, SyncOfflineCheck.NotChecked, "drivers/acme-odbc/driver.yaml does not read");
+        Assert.Contains("chevron", skipped.Message);
+        Assert.DoesNotContain(found, d => d.Code is SyncOfflineCheck.UnknownType or SyncOfflineCheck.Types);
+    }
+
+    [Fact]
+    public void A_flight_sql_connection_with_no_dialect_reads_its_types_as_ansi_names()
+    {
+        var found = CheckOf(Draft(sourceEngine: "flightsql"));
+        var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
+        Assert.Contains("the flightsql driver's type map", unknown.Message);
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
+        Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("filter names 'regoin_code'", StringComparison.Ordinal));
+    }
+
+    // the replication reads by watermark, so its writer is the default behind an incremental reader: ChangeApply, which matches rows on the target's key
+    private const string WatermarkTask = """
+        schemaVersion: 2
+        name: orders
+        scheduling:
+          mode: Continuous
+          frequencySeconds: 30
+        changeProcessing:
+          reader:
+            kind: Watermark
+            options:
+              column: created
+          cache:
+            kind: StagingTable
+        endpoints:
+          source:
+            connectionName: crm
+            database: crm
+          target:
+            connectionName: dw
+            database: dw
+        """;
+
+    private static readonly string NoSourceKey = Cache.Replace("{name: id, type: int, nullable: false, key: true}", "{name: id, type: int, nullable: false}");
+
+    private static readonly string NoStatedKey = Mapping[..Mapping.IndexOf("primaryKey:", StringComparison.Ordinal)];
+
+    // the mapping with no stated key, into a target the cache does not hold yet (provisioning creates it)
+    private static readonly string Unkeyed = NoStatedKey.Replace("  table: orders\ncolumnMappings", "  table: orders_copy\ncolumnMappings");
+
+    [Fact]
+    public void A_change_apply_writer_on_a_source_table_with_no_key_in_the_cache_is_a_finding_on_the_mapping()
+    {
+        var found = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: WatermarkTask));
+
+        var key = One(found, SyncOfflineCheck.Key, "'ChangeApply' would refuse");
+        Assert.Equal(("warning", MappingFile, (int?)8), (key.Severity, key.File, key.Line));   // the targets
+        Assert.Contains("dw.public.orders_copy is not in catalog-cache.yaml, so it is checked as provisioning would create it", key.Message);
+        Assert.Contains("has no primary key", key.Message);   // Sync's own words
+    }
+
+    [Fact]
+    public void A_change_apply_writer_is_satisfied_by_the_sources_key_and_by_a_stated_one()
+    {
+        var keyed = CheckOf(Draft(Unkeyed, task: WatermarkTask));
+        Assert.DoesNotContain(keyed, d => d.Code == SyncOfflineCheck.Key);
+
+        var stated = CheckOf(Draft(Unkeyed + "primaryKey:\n- status\n", cache: NoSourceKey, task: WatermarkTask));
+        Assert.DoesNotContain(stated, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_change_apply_writer_on_a_cached_target_with_no_primary_key_is_a_finding()
+    {
+        var found = CheckOf(Draft(NoStatedKey, cache: Cache.Replace("{name: order_no, type: bigint, nullable: false, key: true}", "{name: order_no, type: bigint, nullable: false}"), task: WatermarkTask));
+        var key = One(found, SyncOfflineCheck.Key, "'ChangeApply' would refuse");
+        Assert.Contains("target table 'public.orders' has no primary key", key.Message);
+        Assert.DoesNotContain("provisioning would create it", key.Message);
+    }
+
+    [Fact]
+    public void An_scd2_writer_needs_a_natural_key_stated_or_derived_from_the_source()
+    {
+        var scd2 = WatermarkTask.Replace("  cache:\n    kind: StagingTable", "  cache:\n    kind: StagingTable\n  writer:\n    kind: Scd2");
+        var found = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: scd2));
+        var key = One(found, SyncOfflineCheck.Key, "'Scd2' would refuse");
+        Assert.Equal((int?)5, key.Line);
+        Assert.Contains("naturalKey", key.Message);
+
+        var stated = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: scd2.Replace("    kind: Scd2", "    kind: Scd2\n    options:\n      naturalKey: id")));
+        Assert.DoesNotContain(stated, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_engines_own_reader_is_said_once_to_be_unchecked_for_its_key()
+    {
+        var found = CheckOf(Draft(Unkeyed, task: WatermarkTask.Replace("kind: Watermark\n    options:\n      column: created", "kind: MsSqlChangeTracking")));
+        var skipped = One(found, SyncOfflineCheck.NotChecked, "'MsSqlChangeTracking' is a driver's own");
+        Assert.Equal("info", skipped.Severity);
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -235,7 +372,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     }
 
     [Fact]
-    public async Task The_drafts_check_carries_the_offline_findings_and_stays_ok()
+    public async Task The_drafts_check_carries_the_offline_findings_and_a_missing_table_stops_it()
     {
         var program = FakeSync.Create();
         if (program is null) Assert.Skip("the stand-in dbdatasync is a shell script");
@@ -254,9 +391,9 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var write = await server.AsAda(HttpMethod.Put, url + "/files/catalog-cache.yaml", new JsonObject { ["content"] = cache }.ToJsonString());
         Assert.True(write.Response.IsSuccessStatusCode);
         var after = (await server.AsAda(HttpMethod.Get, url + "/check")).Body!;
-        Assert.True((bool)after["ok"]!, after.ToJsonString());
+        Assert.False((bool)after["ok"]!, after.ToJsonString());
         var table = after["diagnostics"]!.AsArray().Single(d => (string)d!["code"]! == SyncOfflineCheck.Table)!;
-        Assert.Equal(("warning", MappingFile, 8), ((string)table["severity"]!, (string)table["file"]!, (int)table["line"]!));
+        Assert.Equal(("error", MappingFile, 8), ((string)table["severity"]!, (string)table["file"]!, (int)table["line"]!));
         Assert.Contains("App.dbo.Orders", (string)table["message"]!);
     }
 }
