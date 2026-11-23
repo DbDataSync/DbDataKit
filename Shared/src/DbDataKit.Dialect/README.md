@@ -16,6 +16,17 @@ List fields accept `X`, `X_add`, `X_remove`. Strict: unknown/duplicate keys, ali
 Type rows: `{ native: "varchar({n})", canonical: "string({n})", direction, fidelity, note, defaults, n_min/n_max/p_*/s_* }`. First match wins per direction. `{n}` length, `{p}` precision, `{s}` scale; a parenthesised group is optional when reading. Canonical pattern flags: `unicode`, `~unicode` (either), `tz`, `unsigned`. A Widened/Lossy row must carry a note. Defaults fill a missing precision/scale, never an unbounded length. Unknown native types are `Unmappable` with a note.
 `types.golden.yml` (in the tests project) renders every canonical type per engine; regenerate with `UPDATE_GOLDEN=1`.
 
+## Types with no stated size, unsigned integers and fixed-length binary
+
+Every product that reads or writes a column type (Sync, Build, Transfer, the Gateway, the Store) gets these answers from the tables above.
+
+- An unsigned integer keeps its `unsigned` flag. An engine with unsigned types writes them (MySQL `tinyint unsigned`, DuckDB `utinyint`, SQL Server
+  `tinyint` for an unsigned 8-bit integer). An engine without them writes the next wider signed type with a note: a SQL Server `tinyint` becomes
+  `smallint` on PostgreSQL, and a MySQL `bigint unsigned` becomes `numeric(20,0)`.
+- A time or timestamp with no stated precision is written with microseconds (6 digits) on PostgreSQL, MySQL, DuckDB and Oracle, and with 7 digits on
+  SQL Server. On MySQL that is `time(6)`, `datetime(6)` and `timestamp(6)`, so two changes in the same second keep different times. Reading MySQL's
+  `datetime` with no precision gives `timestamp(0)`, MySQL's own default.
+
 ## Decisions
 - Compiled overrides are small: SQL Server (`#temp` names), Fabric, MySQL (trailing-space names), Oracle (no `"` in names). Everything else is data.
 - Oracle: `NUMBER` unconstrained maps Lossy to unconstrained decimal; ints render `number(p)`; `DATE` reads as `timestamp(0)`; no TIME type (interval); boolean as `number(1)` (pre-23ai).

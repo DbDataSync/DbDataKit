@@ -287,21 +287,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P23: a time or timestamp with no stated precision on MySQL (awaiting the owner)
-
-Sync renders a time or timestamp whose precision is not stated with microseconds; the shared `mysql` table renders it with whole seconds. Every other
-engine already agrees (PostgreSQL, DuckDB and Oracle 6, SQL Server 7). Sync has such types in the history columns of a historized target, in a Flight
-SQL column and in a `driver.yaml` type map. Scenario: Ana historizes `crm.dbo.customer` into MySQL. Today the target gets `valid_from datetime(6)`. On
-the shared table as it is, it gets `datetime(0)`, and two changes to one customer in the same second get the same `valid_from`. Option A, the shared
-`mysql` table renders a time, timestamp or zoned timestamp with no precision as `time(6)`, `datetime(6)`, `timestamp(6)` (reading `datetime` with no
-precision stays `timestamp(0)`, MySQL's own default). This also changes the Store's `at` columns of a model on MySQL (`timestamp(0)` today) and the
-tables Transfer creates on MySQL from a probed .NET `DateTime` column. Option B, the shared tables stay; Sync states a precision of 6 wherever it makes
-such a type itself (history columns, Flight SQL, descriptors), which also turns SQL Server's history columns from `datetime2(7)` into `datetime2(6)`.
-Option C, the shared tables stay and Sync takes `datetime(0)` on MySQL. Recommendation: A, since a missing precision should not lose the fractions a
-value may carry; the ANSI `time` default (0) follows the answer to SYNCAUTHORING-P27.
-
-Answer from the owner, 2026-11-23: A
-
 ### SYNCAUTHORING-P24: a decimal with no precision (awaiting the owner)
 
 PostgreSQL's `numeric` with no precision reads as a decimal with no precision or scale. Sync then fills in 18 and 0, so every target gets
@@ -351,7 +336,8 @@ column. Today Sync reads them as `tinyint` and `varbinary` and replicates both; 
 mapping is refused. Option A, add Sync's reads and writes to the shared `ansi` table (the Gateway, Build, ODBC and Transfer then read those names
 and write those types too). Option B, a new shared dialect `flightsql` that extends `ansi` with the names the Flight SQL driver gives Arrow types and
 Sync's writes for a generic target, used by Sync's Flight SQL driver and the offline check; no other product changes. Option C, Sync takes the
-shared `ansi` table as it is. Recommendation: B.
+shared `ansi` table as it is. Recommendation: B. The same answer decides how ANSI writes a time with no stated precision (`time(0)` in the
+shared `ansi` table today, Sync's `TIME`), since every other engine writes one with microseconds.
 
 ## Open designs
 
