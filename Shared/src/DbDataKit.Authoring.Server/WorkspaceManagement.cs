@@ -17,7 +17,8 @@ namespace DbDataKit.Authoring.Server;
 /// The management API of the Workspace server (plan 22a GP31). Every call needs a token a paired console issued, and the role the call says:
 /// <list type="bullet">
 /// <item><c>GET /api/v1/info</c>: who the server is (any role).</item>
-/// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one.</item>
+/// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one. <c>GET /api/v1/projects/{project}</c> (viewer of that project): one project and the
+/// package it becomes on a Runner (<c>package</c>, null for a kind that makes none).</item>
 /// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, the files of a draft: list, read, write, move, delete; changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
 /// <item><c>GET /api/v1/app-build</c> (viewer): whether this server can build an app, and what it lacks. <c>POST .../workspaces/{id}/builds</c> (author) asks for a build of a draft; <c>GET .../builds</c>, <c>.../builds/{build}</c> and <c>.../builds/{build}/preview[/{path}]</c> (viewer) read them and show the built app, read only; <c>POST .../builds/{build}/publish</c> (approver, <c>{"target","note"?}</c>) sends a succeeded build to a paired Gateway (<see cref="WorkspaceBuilds"/>, <see cref="WorkspacePreview"/>, <see cref="WorkspacePublishing"/>).</item>
 /// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused. <c>POST /api/v1/publisher-keys/{name}/pair</c> (admin, <c>{"url","code"}</c>) makes the key and pairs it with a Gateway. <c>GET /api/v1/publish-targets</c> (approver): the targets a publish may name, with no reference.</item>
@@ -147,6 +148,20 @@ public static class WorkspaceManagement
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), needed, found.Id);
             return decision.Allowed ? null : Refused(decision);
         }
+
+        // one project, for a person who may read it: what the console asks before it starts a read of a database for the project (it learns the package the project becomes on a Runner, and that the person has access).
+        // `package` is null for a kind that makes no one package of tasks (an app; a Store project makes one package per model).
+        app.MapGet("/api/v1/projects/{project}", (string project, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (store.FindProject(hosted.Id) is not { } row) return Results.NotFound();
+            var package = projects.Kinds.Find(row.Kind)?.Publishes.Any(r => r is { Product: "runner", What: "package" }) == true ? PackageArtifacts.NameOf(row.Id) : null;
+            return Results.Json(new JsonObject
+            {
+                ["id"] = row.Id, ["kind"] = row.Kind, ["title"] = row.Title, ["created"] = row.CreatedAt,
+                ["workspaces"] = store.Workspaces().Count(w => w.Project == row.Id), ["package"] = package,
+            });
+        });
 
         // ---- the kinds of project and the check of a draft (plan 33 SC20a) ----
 

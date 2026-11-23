@@ -7,6 +7,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
     <DbDataKitReference Include="Cli" />   <!-- the shared noun-verb grammar -->
+    <DbDataKitReference Include="Catalog.Cache" />   <!-- a Runner's answer of a database's shape, read for a Workspace draft as a connection of catalog-cache/2 -->
     <DbDataKitReference Include="Config.Git" />
     <DbDataKitReference Include="Config.Yaml" />
     <DbDataKitReference Include="Connections.Files" />   <!-- the clients and the Test of a connection of kind sftp, scp or ftps; plan 27a IX04 -->

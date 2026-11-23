@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Scheduling;
@@ -87,12 +86,7 @@ public static class ReplicationSetPackage
     public static string NameOf(string text) => DbDataSync.State.RunnerTaskNames.Of(text);
 
     /// <summary>The slot a connection becomes: its name in the identifier alphabet (lower-case letters, digits and <c>_</c>, starting with a letter).</summary>
-    public static string SlotNameOf(string connection)
-    {
-        var name = Regex.Replace(connection.ToLowerInvariant(), "[^a-z0-9_]", "_");
-        if (name.Length == 0 || !char.IsAsciiLetter(name[0])) name = "c_" + name;
-        return name.Length > 64 ? name[..64] : name;
-    }
+    public static string SlotNameOf(string connection) => ConnectionSlots.NameOf(connection);
 
     /// <summary>
     /// The package of the repository in <paramref name="repoRoot"/>, or null with the reasons in <paramref name="problems"/>. <paramref name="package"/> is the package name, <paramref name="runtimeRange"/> the engines the set accepts.
