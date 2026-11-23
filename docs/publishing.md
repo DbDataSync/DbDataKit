@@ -91,6 +91,53 @@ the build's deploys (`GET /api/deploys`), taken or refused.
 A build's panel has its own address: `/servers/<Workspace server>/<project>/<workspace>/files?tab=builds&build=<build>` opens the Builds tab with
 that build and its publish panel.
 
+### Runs of a deployed build
+
+A version the console deployed to a Runner is run through the console too. The console's deploy record names the Runner, the package, the channel
+and the version, so the Workspace server is never asked where a build went and never calls the Runner. These tabs of a draft run it:
+
+- The **Provisioning** tab of a Sync project: **Apply on the Runner** runs the set's task `provision` of the deployed version.
+- The **Runs** tab of a Sync or Build project: **Run now** runs a task of the version the channel serves, and **Test** tries the login bound to a
+  connection's slot.
+- The **Deploy** tab of a Store project: **Dry run** builds the draft, has the console stage the model's package (`POST /api/deploys` with the
+  `model` and the slot `storage` bound), then runs its task `deploy`; **Deploy** and the contract step run on that same deploy.
+
+Each tab takes the newest deploy of a build of the draft that the Runner took (`GET /api/deploys?workspace_server=&project=&workspace=`). A refused
+deploy and a deploy to a Gateway are skipped. When no deploy put a version on a Runner, the tab says to publish the build first.
+
+The calls name the deploy by its id. The console calls the Runner as the signed-in person, so the Runner checks that person's roles there too:
+
+| Call | Role on the Workspace server | Role on the Runner | What it does |
+| --- | --- | --- | --- |
+| `POST /api/deploys/{id}/runs` | approver | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
+| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
+| `POST /api/deploys/{id}/binding-test` | approver | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
+| `POST /api/deploys/{id}/contract` | approver | operator | Runs a Store model's approved contract plan (below). |
+
+A Store model's contract step removes what the model no longer has. It runs in two steps:
+
+1. **Plan the contract** runs the task `contract` with no approval. The run records the plan, its hash and the columns it drops (the step
+   `contract-report`).
+2. **Contract** sends `{"planRun": "<that run>", "approve": "<its hash>", "allowConsumer": [...]}`. The console checks that the run read a plan with
+   that hash. It then reads the lineage of every Gateway it manages, as the person. A published dashboard, report, app or model member that reads a
+   dropped column refuses the step and is named, until it is published without the column or the person allows it as `<name>@<channel>`. A server
+   that does not answer and is a Gateway, or whose product the console does not know yet, refuses the step too; `gateway:<name>` allows it. Then
+   the console runs `contract` with the hash, and the Runner runs exactly that plan or nothing.
+
+Example: Ana deployed build `4f1c...` of the Sync project `orders` to `jobs` in `dev` (deploy `01a2...`). On the Provisioning tab she applies the
+setup of the mapping `orders`:
+
+```
+POST /api/deploys/01a2.../runs
+{"task": "provision", "inputs": {"replication": "orders", "mapping": "orders", "action": "createTargetTable"}}
+```
+
+The answer (202) has the run's id. The tab then reads `GET /api/deploys/01a2.../runs/<run>?step=provision-applied` until the run ends, and shows
+each statement the run reports.
+
+The console audits each call under the person, with the deploy and the Runner: `build.run`, `build.binding_test`, `build.contract` and
+`build.contract.allow_consumer`, refused calls included.
+
 ## The build record
 
 A version deployed from a build carries the record of that build (`build-record/1`), as one line of JSON:
