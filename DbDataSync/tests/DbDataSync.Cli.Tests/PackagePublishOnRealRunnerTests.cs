@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using DbDataKit.Runner;
+using DbDataKit.Runner.Client;
 using DbDataKit.Runner.Api;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
@@ -12,7 +13,8 @@ using SyncRoot = DbDataSync.Cli.PackageCommand;
 namespace DbDataSync.Cli.Tests;
 
 /// <summary>
-/// Plan 28c E08, the staging proof: `dbdatasync package publish --to runner` against a real runner host (DbDataRunner.Server in this process, SQLite state, its own HTTPS listener and pairing; the `dbdatasync-runtime` package a stand-in file, because staging
+/// Plan 28c E08, the staging proof: the package `dbdatasync package publish --to runner --out` writes, sent with the runner client the console's deploy uses (<see cref="RunnerPublishClient"/>; the command line no longer sends it),
+/// against a real runner host (DbDataRunner.Server in this process, SQLite state, its own HTTPS listener and pairing; the `dbdatasync-runtime` package a stand-in file, because staging
 /// only materializes it). A replication set of three replications is published and the version stages, is prepared and goes ready and is served; the manifest the runner stored declares each task's checkpoint and
 /// <see cref="ProgressMigration.Plan"/> reads it; a change to one replication sends only its files; a repository with a library script, its `library.lock` and a `.csx` script stages with the locked closure in the version; and a slot nobody bound
 /// refuses the publish naming the slot and the channel. No database engine is needed (nothing reads or writes a database), so it runs on Windows as well; the library closure comes from the machine's NuGet folder, as the loader tests' does.
@@ -125,19 +127,48 @@ public sealed class PackagePublishOnRealRunnerTests : IDisposable
     private static string PublisherVersion() =>
         typeof(SyncRoot).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "0";
 
+    /// <summary>
+    /// Writes the package with the verb (<c>--out</c>, <c>--json</c>) and sends it with the runner client from this test's client directory: pairing with <paramref name="code"/> when given, binding the slots
+    /// <c>--bind slot=connection</c> names in <paramref name="extra"/>, then staging the version. The answer is the verb's document of what the package holds with what the runner made of it (version, changed, uploaded,
+    /// skipped), or the refusal.
+    /// </summary>
     private async Task<(int Exit, JsonNode? Doc, string Error)> PublishAsync(Runner runner, string? code, params string[] extra)
     {
+        var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
+        var verbExtra = new List<string>();
+        for (var i = 0; i < extra.Length; i++)
+        {
+            if (extra[i] == "--bind" && i + 1 < extra.Length) { var eq = extra[++i].IndexOf('='); bindings[extra[i][..eq]] = extra[i][(eq + 1)..]; }
+            else verbExtra.Add(extra[i]);
+        }
+
+        var folder = Directory.CreateTempSubdirectory("dbdatasync-realrunner-out-").FullName;
         var (originalOut, originalErr) = (Console.Out, Console.Error);
         var (o, e) = (new StringWriter(), new StringWriter());
         Console.SetOut(o);
         Console.SetError(e);
+        int exit;
+        try { exit = await PackageCommand.RunAsync(["publish", "--to", "runner", "--json", "--out", folder, "--package", Package, "--repo", _repo.Root, .. verbExtra]); }
+        finally { Console.SetOut(originalOut); Console.SetError(originalErr); }
         try
         {
-            string[] args = ["publish", "--to", "runner", "--json", "--server", runner.Url, "--channel", Channel, "--package", Package, "--client-dir", _client, "--repo", _repo.Root, .. (code is null ? [] : new[] { "--code", code }), .. extra];
-            var exit = await PackageCommand.RunAsync(args);
-            return (exit, o.ToString().Trim() is { Length: > 0 } text ? JsonNode.Parse(text) : null, e.ToString());
+            if (exit != 0) return (exit, null, e.ToString());
+            var doc = JsonNode.Parse(o.ToString().Trim())!;
+            var client = new RunnerPublishClient(new RunnerClientStore(_client), _ => null);
+            try
+            {
+                if (bindings.Count > 0) await client.BindAsync(runner.Url, code, Package, Channel, bindings);
+                var published = await client.PublishAsync(runner.Url, bindings.Count > 0 ? null : code, Path.Combine(folder, "package.yaml"), Path.Combine(folder, "files"), Channel, stage: true, expectedVersion: null);
+                doc["mode"] = published.Mode;
+                doc["version"] = published.Version;
+                doc["changed"] = published.Changed;
+                doc["uploaded"] = published.Uploaded;
+                doc["skipped"] = published.Skipped;
+                return (0, doc, "");
+            }
+            catch (RunnerClientException ex) { return (1, null, ex.Message); }
         }
-        finally { Console.SetOut(originalOut); Console.SetError(originalErr); }
+        finally { try { Directory.Delete(folder, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ } }
     }
 
     private static JsonNode Ok((int Exit, JsonNode? Doc, string Error) result)
