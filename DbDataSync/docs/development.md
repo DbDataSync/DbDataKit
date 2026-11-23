@@ -51,9 +51,10 @@ dotnet build
 ```
 
 `DbDataSync.Cli` builds `dbdatasync`; `DbDataSync.TaskRunner` builds the engine, whose output is the package `dbdatasync-runtime` a Runner
-runs (`scripts/runtime-manifest.sh` prints its manifest). To run a replication end to end, publish a repository to a Runner of your own
-(`dbdatarunner server run`, see the Runner's README) with `dbdatasync package publish --to runner`; the console's servers suite does exactly that
-(`DbDataKit/tests/DbDataKit.Server.Servers.Tests`, `SyncOnRunner`).
+runs (`scripts/runtime-manifest.sh` prints its manifest). To run a replication end to end, write the package with `dbdatasync package publish --to runner --out
+<directory>` and send it to a Runner of your own (`dbdatarunner server run`, see the Runner's README) with the Runner client library
+(`RunnerPublishClient` in `DbDataKit.Runner.Client`), as the console's servers suite does (`DbDataKit/tests/DbDataKit.Server.Servers.Tests`,
+`SyncOnRunner`). The command line itself never sends a package to a Runner.
 
 ## Running the tests
 

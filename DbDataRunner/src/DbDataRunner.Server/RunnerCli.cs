@@ -36,9 +36,18 @@ public static class RunnerCli
         ConsoleCancelEventHandler onCancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
         Console.CancelKeyPress += onCancel;
         using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, c => { c.Cancel = true; stop.Cancel(); });
-        try { return await Router().RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
+        try { return await Removed.TryAnswerAsync(args, context.Error) ?? await Router().RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
         finally { Console.CancelKeyPress -= onCancel; }
     }
+
+    /// <summary>
+    /// The commands that are gone, each answering the sentence that names what replaced it (exit code 2): pairing this machine as a publisher went
+    /// with publishing from the command line, since the console deploys.
+    /// </summary>
+    public static RemovedCommands Removed { get; } = new(Program, new Dictionary<string, string>
+    {
+        ["package pair"] = RemovedCommands.ConsoleDeploys,
+    });
 
     public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
     [
@@ -373,9 +382,6 @@ public static class RunnerCli
 
     private static Noun PackageNoun(Func<string, string?>? environment) => new("package", "Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)",
     [
-        new Verb("pair", "Pair this machine with a runner as a publisher, using the single-use code its administrator made with 'server pair --max-role publisher'; the runner's certificate is pinned", EffectClass.RepoFilesOnly,
-            "<https address> --code <code> [--name <label>] [--client-dir <directory>]", (args, context) => PackagePairAsync(args, context, environment),
-            DataSchemas.Object([("name", DataSchemas.String), ("url", DataSchemas.String), ("instance_id", DataSchemas.String), ("fingerprint", DataSchemas.String)], "name", "url", "instance_id", "fingerprint")),
         new Verb("publish", "Publish a package to a runner's API: uploads only the files the runner does not have, then publishes the version (served at once, or staged with --stage)", EffectClass.TargetDataWrites,
             "<manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]", (args, context) => PackagePublishAsync(args, context, environment),
             DataSchemas.Object([("package", DataSchemas.String), ("channel", DataSchemas.String), ("version", DataSchemas.Integer), ("changed", DataSchemas.Boolean), ("mode", DataSchemas.String), ("uploaded", DataSchemas.Integer), ("skipped", DataSchemas.Integer), ("signature", DataSchemas.String), ("tasks", DataSchemas.StringList)], "package", "channel", "version", "changed", "mode", "uploaded", "skipped")),
@@ -426,33 +432,6 @@ public static class RunnerCli
             return CliExit.Ok;
         }
         catch (PackageInstallException ex)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Failure;
-        }
-    }
-
-    private static async Task<int> PackagePairAsync(string[] args, CliContext context, Func<string, string?>? environment)
-    {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "code", "name", "client-dir" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("code") is not { } code || !Uri.TryCreate(parsed.Words[0], UriKind.Absolute, out var url))
-        {
-            await context.Error.WriteLineAsync("Usage: package pair <https address> --code <code> [--name <label>] [--client-dir <directory>]");
-            return CliExit.Usage;
-        }
-
-        try
-        {
-            var client = new RunnerPublishClient(new RunnerClientStore(parsed.Get("client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
-            var runner = await client.PairAsync(url, code, parsed.Get("name"), context.Cancellation);
-            await context.Out.WriteLineAsync($"Paired with {runner.Name} ({runner.InstanceId}) at {runner.Url} with the roles {string.Join(", ", runner.Roles)}. Its certificate is pinned: {runner.Fingerprint}");
-            context.Data["name"] = runner.Name;
-            context.Data["url"] = runner.Url;
-            context.Data["instance_id"] = runner.InstanceId;
-            context.Data["fingerprint"] = runner.Fingerprint;
-            return CliExit.Ok;
-        }
-        catch (RunnerClientException ex)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;

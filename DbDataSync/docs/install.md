@@ -41,14 +41,18 @@ old files. The engine a Runner runs is updated by installing a newer `dbdatasync
 
 ## Running replications
 
-`dbdatasync` runs no replication itself. Publish the repository's replications to a Runner, which runs them on their schedules:
+`dbdatasync` runs no replication itself, and it does not send anything to a Runner. Author the replications as a sync project in the Workspace and
+publish it from there: the console deploys the package to a Runner, which runs the replications on their schedules. Each slot of the package is a
+connection of the set, bound on the Runner to a connection it holds. See [Getting started](getting-started.md).
+
+The command line makes the package and says what it holds, without sending it:
 
 ```sh
-dbdatasync package publish --to runner --server <runner> --channel prod --code <pairing code> --bind <slot>=<connection> --serve
+dbdatasync package publish --to runner --check
+dbdatasync package publish --to runner --out <directory>
 ```
 
-The pairing code comes from the Runner (`dbdatarunner server pair`), and each slot is a connection of the set, bound to a connection the Runner holds. The
-Workspace publishes a sync project the same way from its screens. See [Getting started](getting-started.md).
+`--server` and `--code`, which sent the package to a Runner, exit with code 2 and say that the console deploys.
 
 ## Next: Configuration
 

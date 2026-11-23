@@ -108,6 +108,10 @@ public static class ConsoleHost
         builder.Services.AddSingleton(_ => new PendingInstances(settings.PendingPath));
         builder.Services.AddSingleton(RelayTimeouts.Default);
         builder.Services.AddSingleton<ConsoleRelay>();
+        builder.Services.AddSingleton(sp => new ConsolePublisherKeyStore(sp.GetRequiredService<EncryptedFileSecretStore>(), sp.GetRequiredService<EncryptedFileSecretStore>()));
+        builder.Services.AddSingleton<ConsoleTrust>();   // the console's publisher key in the trust store of every Runner and Gateway group it manages
+        builder.Services.AddSingleton<ConsoleTrustService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsoleTrustService>());
         builder.Services.AddSingleton<ConsoleGroupKeys>();   // plan 28c E20d: the keys of the groups this console manages, handed to each instance it joins
         builder.Services.TryAddSingleton<IBuildRelay>(sp => sp.GetRequiredService<ConsoleRelay>());   // an agent's Build commands run on a server as the person (plan 27a AG14)
         builder.Services.AddSingleton<ConsoleLineage>();
@@ -236,7 +240,12 @@ public static class ConsoleHost
         // a joining server has no sign-in, only the signature its token makes: the route is outside the sign-in, and the join checks the signature itself
         var ownFingerprint = PairingProof.CertificateFingerprint(certificate);
         app.MapJoin((http, ct) => http.RequestServices.GetRequiredService<ConsoleJoins>().ServiceAsync(() => ownFingerprint, ct),
-            (server, ct) => app.Services.GetRequiredService<ConsoleJoins>().RecordAsync(server, ct)).AllowAnonymous();
+            async (server, ct) =>
+            {
+                await app.Services.GetRequiredService<ConsoleJoins>().RecordAsync(server, ct);
+                // the server keeps the console as a client once it has the answer; the pass retries until it does
+                app.Services.GetRequiredService<ConsoleTrustService>().Request(server.InstanceId);
+            }).AllowAnonymous();
         app.MapRelay();
         if (settings.Home is not null) app.MapFederation();
 

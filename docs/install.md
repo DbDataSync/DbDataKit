@@ -266,6 +266,34 @@ prints. The console then connects to the server and pins it, with the same token
 can reach but that cannot reach the console's 7800; the administrator runs the generated command on it, types the address it prints into the console's
 Add a server screen, and the Runner is listed ready.
 
+## The console's publisher key
+
+The console signs each version it deploys to a Runner or a Gateway with a publisher key of its own. Every Runner and Gateway group the console
+manages trusts that key for each kind of definition the group takes, so a version the console signs verifies there when the group requires
+signatures. Command lines do not publish to a Runner or a Gateway: the console deploys.
+
+The console adds its key to each group itself:
+
+- A server joins: the console adds the key to the server's group a few seconds after the join, once the server holds the console as a client.
+- The console starts: it checks every Runner and Gateway it manages and adds the key where the group does not list it yet. A group that joined, or
+  was paired by code, before the console had a publisher key gets it this way.
+- A server does not answer: the console tries again later, waiting longer each time, up to ten minutes between tries.
+
+The console asks the group which kinds it takes (`GET /api/v1/trust`) and adds the key for each kind that does not list it
+(`PUT /api/v1/trust/{kind}/keys`), labelled `dbdatakit console <console id>`. Adding a key needs the administrator role on the server, which a
+join gives the console unless the token named a lower ceiling. The group's Publishers page (the Gateway's `/trust`, the Runner's Publishing card)
+shows the key. A key an administrator revoked there stays revoked: the trust store keeps it revoked, and the console does not add it again. A server
+that refuses the key is recorded in the console's audit as `server.trust`, and the console tries again later.
+
+Example: Ana joins a Runner with the command the Add a server screen printed. A few seconds later the Runner's Publishing card lists the key
+`dbdatakit console console-3f2a9c1e07b4` for `integration`, and a package the console deploys to that Runner is recorded as signed and verified.
+
+These commands answer that the console deploys, and exit with code 2:
+
+- `dbdatarunner package pair`;
+- `dbdatasync package publish --to runner` with `--server` or `--code` (`--out` and `--check` still write the package or say what it holds);
+- `dbdatagateway apps publish --to` (`apps publish --dir` still publishes into the Gateway whose data folder it is given).
+
 ## Setting up one machine, or inviting another
 
 `dbdatakit setup single-server` registers, starts and joins every suite service installed on the machine, through the shared service library (a library

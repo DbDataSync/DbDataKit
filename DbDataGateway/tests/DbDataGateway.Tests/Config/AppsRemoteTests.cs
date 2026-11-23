@@ -16,8 +16,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DbDataGateway.Tests.Config;
 
 /// <summary>
-/// Plan 26, AP26: <c>apps publish|instance-save|rollback|list|approve --to</c> against a real Gateway started in this process, over its management API with a paired server client: the pairing's ceiling, the pinned certificate, and the
-/// author the Gateway records (the paired client's name, never the operating-system user). The command runs as a person's would, with a client directory of its own that stands for another machine.
+/// Plan 26, AP26: <c>apps instance-save|rollback|list|approve --to</c> against a real Gateway started in this process, over its management API with a paired server client: the pairing's ceiling, the pinned certificate, and the
+/// author the Gateway records (the paired client's name, never the operating-system user). The command runs as a person's would, with a client directory of its own that stands for another machine. An app version is sent
+/// with the remote client itself (<see cref="PublishRemoteAsync"/>): <c>apps publish --to</c> is gone, since the console deploys.
 /// </summary>
 [Collection(ProcessStateCollection.Name)]
 public sealed class AppsRemoteTests : IAsyncLifetime
@@ -80,6 +81,22 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         return (exit, output.ToString(), error.ToString());
     }
 
+    /// <summary>
+    /// An app version sent to the Gateway with the remote client the command used (<see cref="AppsRemote"/>), from a client directory of its own: what the console's deploy of an app calls. The answer has the shape of a
+    /// command's (an exit code, what was said, the refusal), so a test reads it as it read <c>apps publish --to</c>.
+    /// </summary>
+    private async Task<(int Exit, string Out, string Error)> PublishRemoteAsync(string clientDirectory, string folder, string? code = null, string? clientName = null, string? note = null)
+    {
+        var said = new StringBuilder();
+        try
+        {
+            var answer = (await new AppsRemote(new AppsClientStore(clientDirectory)).PublishAsync(Address, code, null, clientName, AppPackage.FromFolder(folder, Path.Combine(folder, "app.yaml")), note, line => said.AppendLine(line))).Body;
+            said.Append($"Published {(string?)answer["name"]} version {(int?)answer["version"]} as {(string?)answer["published_by"]}.");
+            return (0, said.ToString(), "");
+        }
+        catch (Exception ex) when (ex is AppsRemoteException or AppPackageException or AppInstanceException) { return (1, said.ToString(), ex.Message); }
+    }
+
     private string MakeApp(string name, string manifestExtra = "", string version = "1.0.0")
     {
         var folder = Path.Combine(root, name + "-" + version);
@@ -98,7 +115,7 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         var folder = MakeApp("notes");
 
         // the first call pairs with the single-use code and pins the certificate; later calls need neither
-        var first = await RunAsync(client, "apps", "publish", "--to", Address, "--code", NewCode(ServerRole.Publisher), "--client-name", "ada-laptop", "--dir", folder, "--note", "from afar");
+        var first = await PublishRemoteAsync(client, folder, NewCode(ServerRole.Publisher), "ada-laptop", "from afar");
         Assert.True(first.Exit == 0, first.Error);
         Assert.Contains("Paired with", first.Out);
         Assert.Contains("Published notes version 1", first.Out);
@@ -110,7 +127,7 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         Assert.Equal("from afar", recorded.Note);
         Assert.Equal(3, AppPackage.Parse(recorded.Content).Files.Count + 1);     // the files and the manifest arrived whole
 
-        var second = await RunAsync(client, "apps", "publish", "--to", Address, "--dir", MakeApp("notes", version: "1.1.0"));
+        var second = await PublishRemoteAsync(client, MakeApp("notes", version: "1.1.0"));
         Assert.True(second.Exit == 0, second.Error);
         Assert.DoesNotContain("Paired with", second.Out);
         Assert.Equal([1, 2], Instances.AppVersions("notes").Select(v => v.Version).Order().ToList());
@@ -142,20 +159,20 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         var folder = MakeApp("notes");
 
         // not paired, no code
-        var unpaired = await RunAsync(Path.Combine(root, "nobody"), "apps", "publish", "--to", Address, "--dir", folder);
+        var unpaired = await PublishRemoteAsync(Path.Combine(root, "nobody"), folder);
         Assert.Equal(1, unpaired.Exit);
         Assert.Contains("not paired", unpaired.Error);
         Assert.Contains("server pair --max-role publisher", unpaired.Error);
         Assert.Empty(Instances.AppVersions("notes"));
 
         // a code that is wrong
-        var wrong = await RunAsync(Path.Combine(root, "nobody"), "apps", "publish", "--to", Address, "--code", "AAAAA-AAAAA-AAAAA-AAAAA", "--dir", folder);
+        var wrong = await PublishRemoteAsync(Path.Combine(root, "nobody"), folder, "AAAAA-AAAAA-AAAAA-AAAAA");
         Assert.Equal(1, wrong.Exit);
         Assert.Contains("did not accept the code", wrong.Error);
 
         // a publisher cannot approve, and the message says which pairing does
         var publisher = Path.Combine(root, "publisher");
-        Assert.Equal(0, (await RunAsync(publisher, "apps", "publish", "--to", Address, "--code", NewCode(ServerRole.Publisher), "--dir", folder)).Exit);
+        Assert.Equal(0, (await PublishRemoteAsync(publisher, folder, NewCode(ServerRole.Publisher))).Exit);
         var approve = await RunAsync(publisher, "apps", "approve", "--to", Address, "--path", folder, "--by", "Grace Hopper");
         Assert.Equal(1, approve.Exit);
         Assert.Contains("approver role", approve.Error);
@@ -163,14 +180,26 @@ public sealed class AppsRemoteTests : IAsyncLifetime
 
         // a viewer pairing cannot publish
         var viewer = Path.Combine(root, "viewer");
-        var denied = await RunAsync(viewer, "apps", "publish", "--to", Address, "--code", NewCode(ServerRole.Viewer), "--dir", MakeApp("other"));
+        var denied = await PublishRemoteAsync(viewer, MakeApp("other"), NewCode(ServerRole.Viewer));
         Assert.Equal(1, denied.Exit);
         Assert.Contains("publisher role", denied.Error);
         Assert.Empty(Instances.AppVersions("other"));
 
         // --repo and --to together are a mistake
-        var mixed = await RunAsync(publisher, "apps", "publish", "--to", Address, "--repo", DataDirectory, "--dir", folder);
+        var mixed = await RunAsync(publisher, "apps", "instance-save", "--to", Address, "--repo", DataDirectory, "--name", "acme", "--app", "notes");
         Assert.Equal(2, mixed.Exit);
+    }
+
+    [Fact]
+    public async Task Apps_publish_to_a_gateway_elsewhere_is_gone_and_names_the_console_s_deploy()
+    {
+        var folder = MakeApp("notes");
+        var gone = await RunAsync(Path.Combine(root, "laptop"), "apps", "publish", "--to", Address, "--code", NewCode(ServerRole.Publisher), "--dir", folder);
+        Assert.Equal(CliExit.Usage, gone.Exit);
+        Assert.Equal(RemovedCommands.PublishingGone("dbdatagateway apps publish --to"), gone.Error.Trim());
+        Assert.Contains("the console deploys", gone.Error);
+        Assert.Empty(Instances.AppVersions("notes"));
+        Assert.False(Directory.Exists(Path.Combine(root, "laptop")));   // nothing was paired either
     }
 
     [Fact]
@@ -189,7 +218,7 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         var folder = MakeApp("vault", "trust: trusted\n");
 
         // no approval yet: refused by the Gateway, which names the hash; nothing is published
-        var refused = await RunAsync(publisher, "apps", "publish", "--to", Address, "--code", NewCode(ServerRole.Publisher), "--client-name", "ada-laptop", "--dir", folder);
+        var refused = await PublishRemoteAsync(publisher, folder, NewCode(ServerRole.Publisher), "ada-laptop");
         Assert.Equal(1, refused.Exit);
         Assert.Contains("no approval", refused.Error);
         Assert.Matches("hash [0-9a-f]{64}", refused.Error);
@@ -211,11 +240,11 @@ public sealed class AppsRemoteTests : IAsyncLifetime
         Assert.Equal("Grace Hopper", approval.ApprovedBy);
 
         // the same bytes now publish; a changed byte needs a new approval
-        var published = await RunAsync(publisher, "apps", "publish", "--to", Address, "--dir", folder);
+        var published = await PublishRemoteAsync(publisher, folder);
         Assert.True(published.Exit == 0, published.Error);
         Assert.Equal("ada-laptop", Instances.AppVersions("vault").Single().PublishedBy);
         File.AppendAllText(Path.Combine(folder, "index.html"), "<!-- changed -->");
-        var changed = await RunAsync(publisher, "apps", "publish", "--to", Address, "--dir", folder);
+        var changed = await PublishRemoteAsync(publisher, folder);
         Assert.Equal(1, changed.Exit);
         Assert.Contains("no approval", changed.Error);
 

@@ -16,8 +16,9 @@ console's: the Workspace's for authoring, the Runner's for runs.
    pipeline (reader, cache, writer).
 4. **Table mappings.** Pick the source and target tables and map the columns. The engine reads the mapping's column cache and nothing else, so refresh it from the
    catalog cache of the project before you publish (a mapping with no source cache is refused at publish).
-5. **Publish to a Runner.** From the Workspace, or with `dbdatasync package publish --to runner --server <runner> --channel prod --bind <slot>=<connection> --serve`.
-   Each connection of the set is a slot, bound on the Runner to a connection it holds with the run login.
+5. **Publish to a Runner.** From the Workspace: the console deploys the package. Each connection of the set is a slot, bound on the Runner to a
+   connection it holds with the run login. `dbdatasync package publish --to runner --check` says what the package would hold; the command line does not
+   send it to a Runner.
 6. **Run.** The Runner runs each replication's drain on its schedule; **Run now**, pause and resume are on its Tasks page, and its Runs page shows each run with its log.
 
 A target table that does not exist yet is created by the set's manual task `provision` on the Runner (the replication, the mapping and the action
