@@ -113,7 +113,8 @@ Builds tab. Its tasks, in build order:
 5. Built: the Runner's built-in package `dbdatakit-metadata` with `discover` and `describe` (`docs/authoring-metadata.md`).
 6. Built: a replication's page with its Overview, sub-tabs and Quality Checks, the chrome, New replication (`DbDataWorkspace/README.md`,
    "A project's two areas"; the story `sync-designer.spec.ts`).
-7. Built: the part of SYNCAUTHORING-5: the Table Mappings sidebar and overview with Create mappings, the editor's two sides, Column Mapping
+7. Built: the Table Mappings sidebar and overview with Create mappings, the editor's two sides, Column Mapping, and the rest of a mapping (its
+   source filter or query, its tabs)
    (`DbDataWorkspace/README.md`, "A project's two areas"; the story `sync-designer.spec.ts`).
 8. Built: the catalog read from a Runner channel, a route of the console (`docs/authoring-metadata.md`, "How a screen asks for a read").
 9. Built: the channel picker and **Refresh** (connection or table, the difference shown, then accepted), the shared pieces the slice's Refresh buttons
@@ -134,9 +135,9 @@ the slice built and names the slice task it follows. Where a slice task uses som
   opens the Builds tab, whose panel deploys through the console (`POST /api/deploys`).
 - **No ported service.** The slice's screens read the draft's files and `catalog-cache.yaml` in the browser (`catalogCache.ts`, unsaved edits
   included) and fill the cache through the console's catalog read (`api/workspace-catalog/...`), which starts the built-in package's `discover` on the Runner; none of the Workspace's `sync/` routes
-  (`DbDataWorkspace/README.md`) is called, so the slice uses neither Sync's shared libraries (`Shared/src/DbDataKit.Sync.*`) nor SYNCAUTHORING-8. What the slice does without them: Create mappings writes each file through the
-  client's mapping writer (`mappingColumns.ts`) with the cache's columns and key and no `targetType`, which SYNCAUTHORING-5 changes to the Workspace's
-  `sync/bulk-create` and `sync/inferred-columns`; a table with no key gets none until then. The cache stays read in the browser
+  (`DbDataWorkspace/README.md`) is called, so the slice uses neither Sync's shared libraries (`Shared/src/DbDataKit.Sync.*`) nor SYNCAUTHORING-8. The slice's Create mappings wrote each file through the
+  client's mapping writer with the cache's columns and key and no `targetType`; the Designer now asks the Workspace's `sync/bulk-create` for the files
+  and `sync/inferred-columns` for the types and key it shows (`DbDataWorkspace/README.md`, "A project's two areas"). The cache stays read in the browser
   with those routes too: the Workspace has no metadata route (`docs/authoring-metadata.md`, "A sync project").
 - **No Set up for development** (AUTHORING-19, which needs CHANNELS-1): a read needs the project's package on the Runner with the connection's slot
   bound in the channel, done by hand as `docs/authoring-metadata.md` says; the channel picker names a channel that binds no slot and says how.
@@ -153,11 +154,10 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
-| SYNCAUTHORING-5 | The sidebar, the overview with Create mappings, the editor's two sides and Column Mapping are built (`@dbdatakit/sync-ui`), and so are the cards it places, not yet on any page (`SourceFilterCard`, `QuerySourcePanel`, `DefaultSegmentingCard`, `ProvisioningCard` with `pendingSteps` for the badge, `ChecksCard`, `MappingPipelineCard` with the derived natural key; `useBulkCreate` and `useInferredColumns`). Designer, the rest of a mapping: Create mappings and Column Mapping take the inferred target types and natural key from the Workspace's `sync/inferred-columns` (bulk create by `sync/bulk-create`); the source filter; **Custom query, not a table** (the query text, no rows); the sub-tabs Notes, Custom Transforms, Bulk Load (`DefaultSegmentingCard`), Provisioning (the mapping's plan, its pending steps as the tab's badge), Pipeline (the overrides), Diagnostics (`traceTiming`), Verify (the `verification:` checks as `ChecksCard`); once the mapping's Provisioning tab is drawn, the replication's Provisioning sub-tab links each mapping there (`mappingLink` in `OverviewPanel.tsx`, which opens Column Mapping until then) | none | L | Playwright: Create mappings on a table with no primary key writes the inferred natural key and target types; add a row-count verification and a default segmenting by month; the Provisioning badge counts the missing table's step; Files shows the same changes |
-| SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | SYNCAUTHORING-5 | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
+| SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-9 | The replication set's manual read-only task `preflight` in its own package (`dbdatasync-runtime`), with the run login each replication uses, per mapping, findings as step outputs: on the source, the table and mapped columns exist, the filter's columns exist and it compiles (a zero-row read), the login can read the table (the engine's privilege function, then the zero-row read), change tracking, CDC or a logical slot and publication are on where the reader's strategy needs them (a missing one as a provisioning step of the source side, with its statement: the source side of the provisioning plan, which was a task of AUTHORING before), source types the driver reads, a key where a reader or writer needs one; on the target, the table exists or provisioning can create it (the plan from the live catalog), the login can insert, update and delete and, for provisioning, create and alter (privilege functions, never a trial write), types compatible, keys agreeing with no nullable key column, the `tracking:` schema and tables exist or may be created; nothing is written; started on the version staged in `prod` before activation and as **Re-check** after publish (AUTHORING-22) (`docs/authoring-metadata.md`, "A sync project") | AUTHORING-22 | L | Sync conformance on SQL Server and PostgreSQL: change tracking off on `dbo.orders` is a finding with the statement that enables it, and on it is satisfied; a login without insert on the target is a finding; a filter naming a missing column is a finding; the target's row count and every table are unchanged after the run |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package `dbdatakit-metadata` (`docs/authoring-metadata.md`) through Sync's metadata service, started through the console's catalog read as the built-in package's are (`api/workspace-catalog/...`); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
-| SYNCAUTHORING-12 | Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card are built (`RefreshPanel.tsx` of `@dbdatakit/sync-ui`). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (the console's run calls, `/api/deploys/{id}/runs`) | SYNCAUTHORING-5, AUTHORING-6 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
+| SYNCAUTHORING-12 | Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card are built (`RefreshPanel.tsx` of `@dbdatakit/sync-ui`). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (the console's run calls, `/api/deploys/{id}/runs`) | AUTHORING-6 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
 
 ## Needs from other subjects
 
@@ -242,9 +242,10 @@ type and the natural key (or why there is none). The file itself carries no `tar
 columns, Column Mapping shows `varchar(100)` for `name` as inferred, and the Pipeline tab says `dbo.Lines` has no key to derive a natural key from;
 a later change of `name` to `nvarchar(200)` at the source is followed at the next provisioning. With option B each file states `targetType:
 varchar(100)` and, for an `Scd2` writer, `naturalKey: customer_id`; the types no longer follow the source, as if a person had set them. Option A,
-as built. Option B, write the inferred types and key into the files. SYNCAUTHORING-5's "Done when" says Create mappings "writes the inferred natural
-key and target types", which B matches; for a table with no primary key nothing can be derived either way. Recommendation: A, and SYNCAUTHORING-5's
-test checks that Column Mapping shows the inferred types and the Pipeline tab the derived key.
+as built. Option B, write the inferred types and key into the files. The mapping task's "Done when" said Create mappings "writes the inferred natural
+key and target types", which B matches; for a table with no primary key nothing can be derived either way. As built (A), Create mappings lists what
+is inferred for each new mapping, Column Mapping shows the inferred types in grey and the Pipeline tab the derived key, and the story
+`sync-designer.spec.ts` checks those and that the file has neither. Recommendation: A.
 
 ### SYNCAUTHORING-P34: which of an engine's own readers need a key (default, awaiting the owner)
 
@@ -353,6 +354,33 @@ Notes is at the replication's own address (`designer/replications/orders`), the 
 sub-tab that does not exist opens Notes. Scenario: Ana sends Ben `.../designer/replications/orders/overview/provisioning`; it opens the plan of
 `orders`. Option A, as built. Option B, the sub-tabs directly under the replication (`.../orders/pipeline`), which share one level with `mappings` and
 `checks`. Recommendation: A.
+
+### SYNCAUTHORING-P46: the addresses of a mapping's tabs (default, awaiting the owner)
+
+Each of a mapping's eight tabs is at `.../mappings/<mapping>/<tab>` (`notes`, `columns`, `transforms`, `segmenting`, `provisioning`, `pipeline`,
+`diagnostics`, `verify`); the sidebar and Create mappings open `columns`, and the mapping's own address, or one naming no tab, opens Column Mapping.
+The old screens had Notes at the mapping's own address and Verify at `.../verification`, beside the editor. Scenario: Ana sends Ben
+`.../designer/replications/orders/mappings/dbo.Lines/verify`; it opens the mapping's checks. Ben opens `.../mappings/dbo.Lines` and lands on Column
+Mapping. Option A, as built. Option B, Notes at the mapping's own address as on the replication (SYNCAUTHORING-P45), the sidebar still opening
+`columns`. Recommendation: A, since a person opening a mapping almost always wants its columns.
+
+### SYNCAUTHORING-P47: the Provisioning badge of a mapping that is not saved (default, awaiting the owner)
+
+A mapping's Provisioning tab shows its entry of the replication's plan, which the Workspace makes from the saved files (SYNCAUTHORING-P44), and the
+tab's badge counts that entry's statements. A mapping made by Create mappings and not saved has no entry, so its tab has no badge and says it is
+planned once saved; a saved mapping with unsaved edits shows the plan of its saved file and says so. Scenario: Ana creates `dbo.Lines`, whose target
+table `dw` does not have; the tab reads **Provisioning** with no number. She presses **Save mapping** and it reads **Provisioning 1**. Option A, as
+built. Option B, the plan takes the unsaved edits (SYNCAUTHORING-P44's option B), so the badge counts before the save. Recommendation: B with
+SYNCAUTHORING-P44's B; A until then.
+
+### SYNCAUTHORING-P48: the column pairs of a query source (default, awaiting the owner)
+
+**Custom query, not a table** writes `query:` and removes the source's schema and table. A query's columns are not in the catalog cache, and
+reading them (**Describe columns**) is SYNCAUTHORING-12's, so Column Mapping says the column pairs of a query source are edited in Files, and
+**Save mapping** takes a query source with no column pairs. Scenario: Ana turns the source of `dbo.Lines` into `SELECT line_no, shipped_on FROM
+dbo.Lines WHERE shipped_on IS NOT NULL` and saves; the draft's check reports the mapping until she writes its `columnMappings:` in Files. Option A, as
+built. Option B, offer **Custom query** only once Describe columns is built. Option C, let Column Mapping take column names typed by hand for a query
+source. Recommendation: A until SYNCAUTHORING-12.
 
 ## Open designs
 
