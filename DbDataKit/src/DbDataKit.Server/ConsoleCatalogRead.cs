@@ -223,7 +223,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     }
 
     /// <summary>The project's package on a Runner (<see cref="ProjectAsync"/>); a project whose kind makes none is refused, since its connections are not read on a Runner.</summary>
-    private async Task<(string? Package, CatalogReadAnswer? Error)> PackageAsync(string workspace, string project, CancellationToken ct)
+    internal async Task<(string? Package, CatalogReadAnswer? Error)> PackageAsync(string workspace, string project, CancellationToken ct)
     {
         var (found, refused) = await ProjectAsync(workspace, project, ct);
         if (refused is not null) return (null, refused);
@@ -243,7 +243,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         return (found, null);
     }
 
-    private async Task<(RegisteredInstance? Runner, CatalogReadAnswer? Error)> RunnerAsync(string? runner, CancellationToken ct)
+    internal async Task<(RegisteredInstance? Runner, CatalogReadAnswer? Error)> RunnerAsync(string? runner, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(runner)) return (null, CatalogReadAnswer.Error(400, "Name the Runner to read from: `runner`."));
         if (instances.Registry.Find(runner) is not { } target) return (null, CatalogReadAnswer.Error(404, $"No server '{runner}' is registered."));
@@ -252,10 +252,10 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     }
 
     /// <summary>The connection is a name of the project's (a file under <c>connections/</c>); the package reads it through the slot <see cref="ConnectionSlots.NameOf"/> makes of it.</summary>
-    private static string? SlotProblem(string? connection) =>
+    internal static string? SlotProblem(string? connection) =>
         connection is { Length: > 0 and <= 128 } && !connection.Any(char.IsControl) && connection.Trim() == connection ? null : "Name the project's connection to read: `connection`.";
 
     /// <summary>A server's refusal handed on with its own words, or <paramref name="otherwise"/> when it gave none.</summary>
-    private static CatalogReadAnswer Passed(int status, JsonNode? body, string otherwise) =>
+    internal static CatalogReadAnswer Passed(int status, JsonNode? body, string otherwise) =>
         CatalogReadAnswer.Error(status is >= 400 ? status : 502, (body as JsonObject)?["error"]?.GetValue<string>() ?? otherwise);
 }
