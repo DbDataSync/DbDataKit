@@ -8,7 +8,7 @@ labelled and kept in one place, no new screens. It follows `docs/architecture.md
 for what a person is doing, and the servers' own screens sit under one group for administering them.
 
 **Scope: quick and dirty, refined later.** Very moderate organization, borrowing the nav and tab styles of the old Sync admin screens; no page is
-redesigned. It will be refined once the owner can use it. The arrangement is described in `DbDataKit/README.md`, "Finding a screen: the navigation".
+redesigned. It will be refined once the owner can use it.
 
 **The styles to borrow.** The Sync server's web app as it was before it was deleted, `git show 96601f27^:Shared/web/sync/src/<file>`:
 `components/AppShell.tsx` (the shell's rail, breadcrumbs and `tabs` slot), `pages/ReplicationDetailPage.tsx` (the `tabbar` of `NavLink` tabs with its
@@ -67,51 +67,7 @@ Read from the code of `Shared/web/*` on 2026-11-18 and rendered at 1440x900 with
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 
-None open: the four tasks are built (the arrangement is in `DbDataKit/README.md`, "Finding a screen: the navigation"). What remains waits for the owner:
-the proposed decisions and the open designs below.
-
-## Proposed decisions
-
-### NAVIGATION-P4: when the navigation is the icon rail (default, awaiting the owner)
-
-Scenario: a person opens the navigation on a 1440-pixel laptop and leaves it open; the same browser later shows a dashboard in an 800-pixel window, then
-the window is made wide again.
-
-- **Option A (built, recommended): under 1000 pixels it always starts as the icon rail**, whatever the person chose; at 1000 and more it is as they last
-  left it (the browser keeps it), and open when they never chose. Made narrow, it collapses at once; made wide again, it goes back to their choice. The
-  button still opens it in a narrow window for that page.
-- **Option B: the person's choice wins at every width**; only a person who never chose gets the rail under 1000 pixels. A dashboard at 800 pixels then
-  loses 164 pixels to the names for whoever once left it open.
-
-### NAVIGATION-P5: which tab rows are the page's tab bar and which are a level down (default, awaiting the owner)
-
-Scenario: a person opens Agents, then a workspace of a build project, then a Gateway's Server settings.
-
-- **Built (recommended for now):** the tabs that choose what a whole page shows (Views, Agents, Knowledge, Delivery, Backlog) are the shell's tab bar
-  under the breadcrumb (`.tabbar`); the rows inside a page (a workspace's row under its file editor, Server settings' Form and server.yaml) are the
-  `.subtabbar` a level down, where they were. A workspace's row was left inside the page because it belongs to the file column, not to the whole page.
-- **Other option:** a workspace's row in the tab bar too (the file list and editor would sit under it). It waits for the open design "Tabs inside pages".
-
-### NAVIGATION-P6: what Projects opens, with one Workspace and with several (default, awaiting the owner)
-
-Scenario: a person opens **Projects** under Build and release; later a second Workspace, `workspace-b`, is paired.
-
-- **Built (recommended for now):** with one Workspace, **Projects** opens that Workspace's list of projects and workspaces (its first screen,
-  `/servers/<id>`); with several, one entry each, **Projects on workspace-a** and **Projects on workspace-b**. The Workspace is also listed under Servers
-  by its name, where its own entries (Workspaces) are nested while it is open.
-- **Other option:** one **Projects** entry that lists the projects of every paired Workspace on one console page. It needs a new page (a console list
-  over the Workspaces), which this quick pass does not build.
-
-### NAVIGATION-P7: what a server's screens show at the top, and who sees the servers (default, awaiting the owner)
-
-Scenario: an administrator opens `gateway-east`'s Data sources; a viewer signs in on a console with three paired servers.
-
-- **Built (recommended for now):** the breadcrumb reads `DbDataGateway / gateway-east / Data sources` (the product, the server's name as a link to
-  its first screen, the page). The servers are listed under Servers for whoever the console's list of servers answers (`/api/instances`); a viewer it
-  answers sees each server by name but not **All servers**. On a server's screens a console entry whose test id the server also uses is
-  `rail-console-<name>` (the console's Runs beside a runner's Runs), and the module's back arrow is gone, so `first-run.spec.ts` opens **All
-  servers** (`rail-instances`) where it pressed the arrow.
-- **Other option:** the breadcrumb starts with the console (`dbdatakit / Servers / gateway-east / Data sources`), one crumb longer on every server page.
+None open: the four tasks are built. What remains is the open designs below.
 
 ## Needs from other subjects
 
