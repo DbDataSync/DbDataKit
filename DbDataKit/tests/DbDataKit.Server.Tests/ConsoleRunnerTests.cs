@@ -117,6 +117,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         server.MapGet("/api/v1/tasks/{package}/{channel}/{task}/decisions", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { decisions = Array.Empty<object>() })));
         server.MapMethods("/api/v1/artifacts/{sha}", ["HEAD"], (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.NotFound()));
         server.MapGet("/api/v1/artifacts/{sha}", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Bytes([1, 2, 3], "application/octet-stream")));
+        server.MapGet("/api/v1/trust/integration", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { kind = "integration", required = false, keys = Array.Empty<object>() })));
         server.MapGet("/api/v1/definitions/integration/{name}/versions/{n}", (HttpContext c, string name, string n) => Needs(c, ServerRole.Viewer, () => Results.Json(new { name, version = n })));
         server.MapPut("/api/v1/tasks/{package}/{channel}/{task}/owner", (HttpContext c) => Needs(c, ServerRole.Operator, () => Results.Json(new { owner = "runner" })));
         server.MapPut("/api/v1/instances/{id}/labels", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { added = Array.Empty<string>() })));
@@ -303,6 +304,7 @@ public sealed class ConsoleRunnerTests : IAsyncLifetime
         ("GET", "api/v1/tasks/{name}/{name}/{name}/schedule", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/decisions", ServerRole.Viewer, ServerRole.None),
         ("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),
         ("GET", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/definitions/integration/{name}/versions/{name}", ServerRole.Viewer, ServerRole.None),
+        ("GET", "api/v1/trust/integration", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/posture-choices", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/units", ServerRole.Viewer, ServerRole.None), ("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/in-doubt", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/dead-letters", ServerRole.Operator, ServerRole.None),
         ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints", ServerRole.Operator, ServerRole.None), ("GET", "api/v1/tasks/{name}/{name}/{name}/checkpoints/{name}/history", ServerRole.Operator, ServerRole.None),

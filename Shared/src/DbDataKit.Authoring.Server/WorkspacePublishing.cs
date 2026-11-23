@@ -1,8 +1,7 @@
 using System.Buffers.Text;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using DbDataKit.Apps;
+using DbDataKit.Deploy;
 using DbDataKit.Secrets;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
@@ -16,21 +15,45 @@ public sealed class WorkspacePublishException(string message, int status, System
 
     /// <summary>Set when the Gateway refused for want of an adoption (plan 33 SC21f): the data source a model would go on and who made it (<c>data_source</c>, <c>made_by</c>); a screen asks the person and publishes again with <c>adopt</c>.</summary>
     public System.Text.Json.Nodes.JsonObject? Adopt { get; } = adopt;
+
+    /// <summary>The same refusal as the shared deploy library's, with its status and adoption.</summary>
+    public static WorkspacePublishException From(DeployException ex) => new(ex.Message, ex.Status, ex.Adopt);
+
+    /// <summary>Runs a call of the shared deploy library and gives its refusal as this server's.</summary>
+    internal static void Adapt(Action call)
+    {
+        try { call(); }
+        catch (DeployException ex) { throw From(ex); }
+    }
+
+    /// <summary>Runs a call of the shared deploy library and gives its refusal as this server's.</summary>
+    internal static T Adapt<T>(Func<T> call)
+    {
+        try { return call(); }
+        catch (DeployException ex) { throw From(ex); }
+    }
+
+    /// <summary>Awaits a call of the shared deploy library and gives its refusal as this server's.</summary>
+    internal static async Task<T> AdaptAsync<T>(Func<Task<T>> call)
+    {
+        try { return await call(); }
+        catch (DeployException ex) { throw From(ex); }
+    }
 }
 
 /// <summary>A server this server publishes to (a Gateway, or since plan 33 SC20b a Runner): where it is, its instance id, the certificate fingerprint every call pins, the roles the pairing allows, the name the client was paired under and the product it is (<c>gateway</c> or <c>runner</c>; a file written before the field existed has none, and those targets are Gateways). Kept in <c>publish-targets.json</c>, never the key.</summary>
 public sealed record PublishTarget(string Name, string Url, string InstanceId, string Fingerprint, IReadOnlyList<string> Roles, string ClientName, DateTimeOffset PairedAt, string Product = PublishProducts.Gateway);
 
-/// <summary>The products a publish target can be (plan 33 SC20b) and how a server's own name (<c>GET /version</c>) says which.</summary>
+/// <summary>The products a publish target can be (plan 33 SC20b) and how a server's own name (<c>GET /version</c>) says which: <see cref="DeployProducts"/>, under this server's name.</summary>
 public static class PublishProducts
 {
-    public const string Gateway = "gateway";
-    public const string Runner = "runner";
+    public const string Gateway = DeployProducts.Gateway;
+    public const string Runner = DeployProducts.Runner;
 
-    public static IReadOnlyList<string> All { get; } = [Gateway, Runner];
+    public static IReadOnlyList<string> All => DeployProducts.All;
 
     /// <summary>The product a server name stands for, or null when it is neither (<c>dbdatagateway</c>, <c>dbdatarunner</c>).</summary>
-    public static string? OfServer(string? serverName) => serverName switch { "dbdatagateway" => Gateway, "dbdatarunner" => Runner, _ => null };
+    public static string? OfServer(string? serverName) => DeployProducts.OfServer(serverName);
 }
 
 /// <summary>
@@ -38,6 +61,10 @@ public static class PublishProducts
 /// <b>publisher key</b> of the target. The key is an identity (an id and a signing seed) kept in this server's own secret store; what the <c>publisher_key</c> table holds is only its <b>reference</b> (<c>secret:dbdatakit:workspace:...</c>), read
 /// through the server's secret resolver at the moment of publishing and never returned by any call. A target is made by <see cref="PairAsync"/> (a single-use pairing code made on the Gateway with <c>server pair --max-role publisher</c>):
 /// it makes the key, pairs with the Gateway so it knows the key's public half, and records the reference and the Gateway's address and certificate fingerprint.
+/// <para>
+/// The calls to a Gateway or a Runner are the shared deploy library's (<c>DbDataKit.Deploy</c>): this class finds the target and its key, makes a <see cref="PinnedLink"/> that signs each call with the key, and gives the library's
+/// <see cref="DeployException"/> as a <see cref="WorkspacePublishException"/>.
+/// </para>
 /// </summary>
 public sealed partial class WorkspacePublishing(string directory, WorkspaceStore store, Func<ISecretStore> keys, Func<ISecretResolver> secrets)
 {
@@ -45,7 +72,7 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
     private readonly object gate = new();
 
     /// <summary>The Gateway channel a preview with data goes to (plan 21, plan 22a GP35d).</summary>
-    public const string PreviewChannel = "preview";
+    public const string PreviewChannel = AppDeploy.PreviewChannel;
 
     private ISecretResolver Resolver => secrets();
 
@@ -113,15 +140,13 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
 
     /// <summary>
     /// Whether a project of <paramref name="kind"/> may be published to <paramref name="target"/> (plan 33 SC20b): the kind's <see cref="IProjectKind.Publishes"/> must list the target's product. Returns the route (what arrives there), or throws a
-    /// <see cref="WorkspacePublishException"/> naming the kind, the target, its product and the products the kind goes to.
+    /// <see cref="WorkspacePublishException"/> naming the kind, the target, its product and the products the kind goes to (<see cref="DeployRoutes.RouteFor"/>).
     /// </summary>
-    public static ProjectPublishRoute RouteFor(IProjectKind kind, PublishTarget target, string? what = null)
-    {
-        var routes = kind.Publishes.Where(r => r.Product == target.Product && (what is null || r.What == what)).ToList();
-        if (routes.Count > 0) return routes[0];
-        var goes = kind.Publishes.Count == 0 ? "nowhere" : string.Join(" and ", kind.Publishes.Select(r => $"a {r.Product} ({r.What})").Distinct());
-        throw new WorkspacePublishException($"The {kind.Name} kind of project is published to {goes}, and '{target.Name}' is a {target.Product} ({target.Url}). Publish it to a target of the right product.", 409);
-    }
+    public static ProjectPublishRoute RouteFor(IProjectKind kind, PublishTarget target, string? what = null) =>
+        WorkspacePublishException.Adapt(() => DeployRoutes.RouteFor(kind.Name, kind.Publishes, DeployTargetOf(target), what));
+
+    /// <summary>A paired target as the shared deploy library names it.</summary>
+    internal static DeployTarget DeployTargetOf(PublishTarget target) => new(target.Name, target.Url, target.InstanceId, target.Product);
 
     /// <summary>The key a reference names: its identity. Refused, in words, when the reference names nothing or something that is not a key.</summary>
     private async Task<ConsoleIdentity> KeyAsync(string name, string reference, CancellationToken ct)
@@ -164,62 +189,32 @@ public sealed partial class WorkspacePublishing(string directory, WorkspaceStore
     public async Task<JsonObject> PublishAsync(string targetName, string appFolder, string? note, string actor, Action<string> step, CancellationToken ct = default, string? previewInstance = null)
     {
         var (target, key, role) = ResolveTarget(targetName, "an app");
-
-        step("Read the built app.");
-        AppPackage package;
-        try { package = AppPackage.FromFolder(appFolder); }
-        catch (Exception ex) when (ex is AppPackageException or IOException) { throw new WorkspacePublishException($"The built app cannot be sent: {ex.Message}", 409); }
-        var body = new JsonObject { ["manifest"] = package.ManifestYaml, ["files"] = new JsonObject(package.Files.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)Convert.ToBase64String(f.Value)))), ["note"] = note };
-        var name = AppManifestLoader.Load(package.ManifestYaml) is { Ok: true } load ? load.Manifest!.Name : throw new WorkspacePublishException("The built app's manifest is not valid.", 409);
+        var app = WorkspacePublishException.Adapt(() => AppDeploy.Read(appFolder, note, step));
 
         step("Read the publisher key '" + targetName + "' from the secret store.");
         var identity = await KeyAsync(targetName, key.SecretRef, ct);
 
-        using var http = new HttpClient(PairingClient.Pinned(target.Fingerprint)) { BaseAddress = new Uri(target.Url + "/"), Timeout = TimeSpan.FromMinutes(5) };
-        async Task<JsonObject> Call(HttpMethod method, string path, string doing, JsonObject? content = null)
+        using var link = new PinnedLink(target, identity, "client:" + identity.Id, target.ClientName, role, TimeSpan.FromMinutes(5));
+        return await WorkspacePublishException.AdaptAsync(() => AppDeploy.SendAsync(link, DeployTargetOf(target), app, step, ct, previewInstance));
+    }
+
+    /// <summary>
+    /// A paired server as the shared deploy library reaches it: requests relative to <c>/api/v1/</c> over the pinned certificate, each with a fresh token signed with the publisher key and naming its client (<c>subject</c>),
+    /// the display name and the role the pairing allows. Its name is the server's address, which messages name.
+    /// </summary>
+    internal sealed class PinnedLink(PublishTarget target, ConsoleIdentity identity, string subject, string displayName, ServerRole role, TimeSpan timeout) : IDefinitionsLink, IDisposable
+    {
+        private readonly HttpClient http = new(PairingClient.Pinned(target.Fingerprint)) { BaseAddress = new Uri(target.Url + "/"), Timeout = timeout };
+
+        public string Name => target.Url;
+
+        public Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct)
         {
-            using var request = new HttpRequestMessage(method, path);
-            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, identity.Issuer().Issue(new ConsoleTokenRequest(target.InstanceId, "client:" + identity.Id, target.ClientName, role)));
-            request.Content = JsonContent.Create(content ?? body, options: Json);
-            HttpResponseMessage response;
-            try { response = await http.SendAsync(request, ct); }
-            catch (HttpRequestException ex) { throw new WorkspacePublishException($"{target.Url} could not be reached ({ex.Message}).", 502); }
-            using (response)
-            {
-                var text = await response.Content.ReadAsStringAsync(ct);
-                JsonObject? answer = null;
-                try { answer = string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text) as JsonObject; }
-                catch (JsonException) { /* not JSON: the text is the answer */ }
-                if (!response.IsSuccessStatusCode)
-                    throw new WorkspacePublishException($"The Gateway refused {doing} ({(int)response.StatusCode}): {(string?)answer?["error"] ?? (text.Length > 0 ? text : response.ReasonPhrase)}", response.StatusCode == System.Net.HttpStatusCode.Forbidden ? 403 : 409);
-                return answer ?? [];
-            }
+            var request = new HttpRequestMessage(method, "api/v1/" + path) { Content = content };
+            request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, identity.Issuer().Issue(new ConsoleTokenRequest(target.InstanceId, subject, displayName, role)));
+            return http.SendAsync(request, ct);
         }
 
-        step($"Asked {target.Url} what publishing {name} would do.");
-        var check = await Call(HttpMethod.Post, "api/v1/apps/check", $"the check of the app {name}");
-        if (check["diagnostics"] is JsonArray diagnostics && diagnostics.Any(d => (string?)d?["severity"] is "error" or "Error"))
-            throw new WorkspacePublishException("The Gateway's check of the app found errors: " + string.Join(" ", diagnostics.Where(d => (string?)d?["severity"] is "error" or "Error").Select(d => (string?)d?["message"] ?? d!.ToJsonString())), 409);
-        if (previewInstance is not null)
-        {
-            // plan 22a GP35d: not production. The build goes to the Gateway's preview channel and a preview of the instance runs it; that instance reads the data the production one reads and writes nothing
-            step($"Published {name} to the preview channel of {target.Url}.");
-            var sent = await Call(HttpMethod.Put, $"api/v1/apps/{Uri.EscapeDataString(name)}/channels/{PreviewChannel}", $"the preview of the app {name}");
-            var instance = await Call(HttpMethod.Put, $"api/v1/app-instances/{Uri.EscapeDataString(previewInstance)}/channels/{PreviewChannel}", $"the preview of the instance {previewInstance}", new JsonObject { ["app"] = name });
-            step($"Saved the preview of {previewInstance}{((string?)instance["address"] is { } at ? " at " + at : "")}.");
-            sent["app"] = name;
-            sent["instance"] = previewInstance;
-            sent["preview_path"] = (string?)instance["path"];
-            sent["preview_address"] = (string?)instance["address"];
-            sent["target"] = targetName;
-            sent["gateway"] = target.Url;
-            return sent;
-        }
-        step($"Published {name} to {target.Url}.");
-        var published = await Call(HttpMethod.Put, $"api/v1/apps/{Uri.EscapeDataString(name)}", $"the app {name}");
-        published["app"] = name;
-        published["target"] = targetName;
-        published["gateway"] = target.Url;
-        return published;
+        public void Dispose() => http.Dispose();
     }
 }

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DbDataKit.Deploy</RootNamespace>
+    <Description>Deploying a build to a Runner or a Gateway, and the calls around a deploy: an app, a Runner package, Store models, and a Build project's semantic models and views, sent over the shared publish API; runs, a run's steps, a binding test, the lineage of Gateways, a data source's catalog and the checks of a Store model's contract. Each call goes through a link the caller gives and signs with the key it gives, so a server that holds a publisher key and a control service that calls as the signed-in person use the same code. It holds no key and starts no program.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\DbDataKit.Authoring\DbDataKit.Authoring.csproj" />   <!-- ProjectPublishRoute: where a kind of project goes -->
+    <ProjectReference Include="..\DbDataKit.Apps.Instances\DbDataKit.Apps.Instances.csproj" />   <!-- AppPackage: a built app read from its folder -->
+    <ProjectReference Include="..\DbDataKit.Apps.Manifest\DbDataKit.Apps.Manifest.csproj" />
+    <ProjectReference Include="..\DbDataKit.Config.Yaml\DbDataKit.Config.Yaml.csproj" />
+    <ProjectReference Include="..\DbDataKit.Connections.Abstractions\DbDataKit.Connections.Abstractions.csproj" />   <!-- the secret slots a data source document names -->
+    <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />   <!-- a Store model, read to name its entity model -->
+    <ProjectReference Include="..\DbDataKit.Lineage\DbDataKit.Lineage.csproj" />   <!-- the Gateways' lineage graphs and ContractGuard -->
+    <ProjectReference Include="..\DbDataKit.Runner.Abstractions\DbDataKit.Runner.Abstractions.csproj" />   <!-- package.yaml -->
+    <ProjectReference Include="..\DbDataKit.Runner.Client\DbDataKit.Runner.Client.csproj" />   <!-- the Runner's publish, run and binding calls -->
+    <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
+    <ProjectReference Include="..\DbDataKit.State.Api\DbDataKit.State.Api.csproj" />   <!-- DefinitionsClient: the shared publish API's client and signing -->
+    <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />   <!-- the models a dashboard or report depends on -->
+    <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+  </ItemGroup>
+</Project>

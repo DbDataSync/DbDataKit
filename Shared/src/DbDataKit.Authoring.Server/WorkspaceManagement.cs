@@ -1,5 +1,5 @@
 using DbDataKit.DataModel.Runner;
-using DbDataKit.Lineage;
+using DbDataKit.Deploy;
 using DbDataKit.Catalog;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -17,9 +17,11 @@ namespace DbDataKit.Authoring.Server;
 /// The management API of the Workspace server (plan 22a GP31). Every call needs a token a paired console issued, and the role the call says:
 /// <list type="bullet">
 /// <item><c>GET /api/v1/info</c>: who the server is (any role).</item>
-/// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one.</item>
+/// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one. <c>GET /api/v1/projects/{project}</c> (viewer of that project): one project and the
+/// package it becomes on a Runner (<c>package</c>, null for a kind that makes none).</item>
 /// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, the files of a draft: list, read, write, move, delete; changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
 /// <item><c>GET /api/v1/app-build</c> (viewer): whether this server can build an app, and what it lacks. <c>POST .../workspaces/{id}/builds</c> (author) asks for a build of a draft; <c>GET .../builds</c>, <c>.../builds/{build}</c> and <c>.../builds/{build}/preview[/{path}]</c> (viewer) read them and show the built app, read only; <c>POST .../builds/{build}/publish</c> (approver, <c>{"target","note"?}</c>) sends a succeeded build to a paired Gateway (<see cref="WorkspaceBuilds"/>, <see cref="WorkspacePreview"/>, <see cref="WorkspacePublishing"/>).</item>
+/// <item><c>GET .../builds/{build}/contents</c> and <c>.../builds/{build}/files/{sha256}</c> (viewer): what a build holds to send and its record (<see cref="BuildContents"/>, <see cref="BuildRecord"/>), and each file by hash, which the control service reads to deploy the build.</item>
 /// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused. <c>POST /api/v1/publisher-keys/{name}/pair</c> (admin, <c>{"url","code"}</c>) makes the key and pairs it with a Gateway. <c>GET /api/v1/publish-targets</c> (approver): the targets a publish may name, with no reference.</item>
 /// </list>
 /// What happens to a draft is recorded in the state module as it happens; a record that cannot be written is logged and never turns a finished git operation into an error.
@@ -147,6 +149,20 @@ public static class WorkspaceManagement
             var decision = ManagementAuthorization.Authorize(context.ManagementToken(), needed, found.Id);
             return decision.Allowed ? null : Refused(decision);
         }
+
+        // one project, for a person who may read it: what the console asks before it starts a read of a database for the project (it learns the package the project becomes on a Runner, and that the person has access).
+        // `package` is null for a kind that makes no one package of tasks (an app; a Store project makes one package per model).
+        app.MapGet("/api/v1/projects/{project}", (string project, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (store.FindProject(hosted.Id) is not { } row) return Results.NotFound();
+            var package = projects.Kinds.Find(row.Kind)?.Publishes.Any(r => r is { Product: "runner", What: "package" }) == true ? PackageArtifacts.NameOf(row.Id) : null;
+            return Results.Json(new JsonObject
+            {
+                ["id"] = row.Id, ["kind"] = row.Kind, ["title"] = row.Title, ["created"] = row.CreatedAt,
+                ["workspaces"] = store.Workspaces().Count(w => w.Project == row.Id), ["package"] = package,
+            });
+        });
 
         // ---- the kinds of project and the check of a draft (plan 33 SC20a) ----
 
@@ -375,6 +391,31 @@ public static class WorkspaceManagement
                 ["result"] = found.Result,
                 ["publishes"] = builds.Publishes(hosted.Id, buildId),
             });
+        });
+
+        // what a build holds to send, for the control service that deploys it: the build's record (where and from which commit it was built, what the kind's validators found) and each item its kind's routes made, with its files
+        // by SHA-256; the files themselves are read one by one, by hash. Read only: this server sends nothing anywhere.
+        // Design: docs/publishing.md#deploying-a-build-from-the-control-service
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/contents", (string project, string id, string build, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
+            var kind = store.FindProject(hosted.Id)!.Kind;
+            var items = found.Row.Status == "succeeded" && projects.Kinds.Find(kind) is { } projectKind ? BuildContents.Of(projectKind.Publishes, builds.FolderOf(hosted.Id, buildId)) : [];
+            return Results.Json(new JsonObject
+            {
+                ["record"] = BuildRecord.Describe(instanceId, hosted.Id, kind, id, buildId, found.Row.Status, found.Row.CommitSha, found.Result),
+                ["items"] = new JsonArray([.. items.Select(i => (JsonNode)i.ToJson())]),
+            });
+        });
+
+        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/files/{sha256}", (string project, string id, string build, string sha256, HttpContext context) =>
+        {
+            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
+            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { Row.Status: "succeeded" } || projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is not { } projectKind) return Results.NotFound();
+            var folder = builds.FolderOf(hosted.Id, buildId);
+            var file = BuildContents.Of(projectKind.Publishes, folder).SelectMany(i => i.Files).FirstOrDefault(f => f.Sha256 == sha256.ToLowerInvariant());
+            return file is null ? Results.NotFound() : Results.File(Path.Combine(folder, file.Path.Replace('/', Path.DirectorySeparatorChar)), "application/octet-stream");
         });
 
         // the built app, for a preview: read only, from this server, nothing else (see WorkspacePreview)
@@ -678,15 +719,15 @@ public static class WorkspaceManagement
                 // the plan the person read, from the Runner: its run of contract, its report, the hash it approved
                 if (await publishing.RunOfAsync(staged.Target, staged.Package, staged.Channel, planId, "contract-report", Actor(token), context.RequestAborted) is not { } read || (string?)read["task"] != ModelDeployPackage.ContractTask)
                     return Results.Json(new { error = $"{staged.Target} has no run {planId} of contract of {staged.Package}. Read the plan again." }, statusCode: StatusCodes.Status409Conflict);
-                var report = (read["steps"] as JsonArray)?.Select(x => x?["result"]).OfType<JsonObject>().LastOrDefault();
-                if (report is null || report["dryRun"]?.GetValue<bool>() != true || !string.Equals((string?)report["hash"], approve, StringComparison.OrdinalIgnoreCase))
-                    return Results.Json(new { error = $"The run {planId} did not read a plan with the hash {approve}. Read the plan again and approve the hash it gives." }, statusCode: StatusCodes.Status409Conflict);
-                if (report["blocked"] is JsonArray { Count: > 0 } blocked)
-                    return Results.Json(new { error = "The plan has items a contract does not do, so it is not run: " + string.Join(" ", blocked.Select(b => (string?)b)), hash = approve }, statusCode: StatusCodes.Status409Conflict);
-                var changes = (report["dropped"] as JsonArray ?? []).OfType<JsonObject>()
-                    .Select(c => new ContractedColumn((string)c["description"]!, (string)c["columnId"]!, (string?)c["datasetId"])).ToList();
+                // the checks of the plan and of its consumers are the shared deploy library's (ContractPlans)
+                var reading = ContractPlans.Read(read, planId, approve!);
+                if (reading.Plan is not { } plan)
+                    return reading.Blocked
+                        ? Results.Json(new { error = reading.Refusal, hash = approve }, statusCode: StatusCodes.Status409Conflict)
+                        : Results.Json(new { error = reading.Refusal }, statusCode: StatusCodes.Status409Conflict);
+                var changes = plan.Dropped;
                 var (graphs, unreachable) = changes.Count == 0 ? ([], []) : await publishing.GatewayLineageAsync(context.RequestAborted);
-                var verdict = ContractGuard.Check(changes, graphs, unreachable, allowed, "allow");
+                var verdict = ContractPlans.CheckConsumers(plan, graphs, unreachable, allowed);
                 if (verdict.Refusals.Count > 0)
                 {
                     Audit(token, "build.contract", what, "refused: consumers");
@@ -694,7 +735,7 @@ public static class WorkspaceManagement
                 }
                 foreach (var used in verdict.AllowancesUsed) Audit(token, "build.contract.allow-consumer", what, used);
                 var steps = new List<string>();
-                var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { ["approve"] = approve!, ["schema"] = (string?)report["schema"] ?? "" };
+                var inputs = ContractPlans.Inputs(plan, approve!);
                 var answer = await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, ModelDeployPackage.ContractTask, inputs, Actor(token), steps.Add, context.RequestAborted);
                 Audit(token, "build.contract", what, $"queued {(string)answer["run_id"]!} for {approve![..Math.Min(12, approve.Length)]}");
                 return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer, ["checked"] = changes.Count, ["gateways"] = graphs.Count }, statusCode: StatusCodes.Status202Accepted);

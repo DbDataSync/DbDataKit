@@ -71,6 +71,7 @@ public static class ServerProducts
         new("HEAD", "api/v1/artifacts/{sha}", ServerRole.Viewer, ServerRole.Publisher),                    // UE10: does the runner have this file
         new("GET", "api/v1/artifacts/{sha}", ServerRole.Viewer),                                           // PB06: a file by hash, which the console reads from one group to send to another
         new("GET", "api/v1/definitions/integration/{name}/versions/{name}", ServerRole.Viewer),             // PB06: one version whole (manifest, files, dependencies, signature), what a promotion publishes in another group
+        new("GET", "api/v1/trust/integration", ServerRole.Viewer),                                       // the keys the runner trusts for packages: whether a deploy signs with the console's publisher key
         new("GET", "api/v1/posture-choices", ServerRole.Viewer),                                                    // R19: the loosened defaults with their effect and the recorded choices
         new("GET", "api/v1/runs/{id}/units", ServerRole.Viewer),                                            // R25: the table of units of a run
         new("GET", "api/v1/runs/{id}/steps", ServerRole.Viewer),                                            // R25: the steps of its attempt chain
@@ -208,6 +209,9 @@ public static class ServerProducts
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview/{path}", ServerRole.Viewer),
+        // what a build holds to send and its record, and each file by hash: what the console reads to deploy a build as the person
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contents", ServerRole.Viewer),
+        ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/files/{name}", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/publish", ServerRole.Approver),
         // plan 28c E21 step e: a manual task (Sync's provision) of the version a build staged on a Runner, for the person, and that run read back
         ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/run", ServerRole.Approver),

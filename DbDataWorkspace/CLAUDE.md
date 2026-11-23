@@ -7,10 +7,10 @@ The Workspace server (`dbdataworkspace`): plan 22a GP31 and decision D8, with pl
 | `WorkspaceCli.cs` | the command line: the router, `server run`, the shared nouns |
 | `WorkspaceAdminCommand.cs` | `project add\|create\|list` and `workspace list` on the server's directory |
 | `WorkspaceServer.cs` | the web host: Kestrel, pairing, announcement to a console, the token check, maintenance, the state API, the management API |
-| `WorkspaceManagement.cs` | the management API: info, projects, the shared workspace calls (`DbDataKit.Authoring.WorkspaceApi`), a draft's events, the publisher's key reference; what happens to a draft is recorded in the state module as it happens |
+| `WorkspaceManagement.cs` | the management API: info, projects, the shared workspace calls (`DbDataKit.Authoring.WorkspaceApi`), a draft's events, what a build holds to send and its record, served to the control service that deploys it (`.../builds/{b}/contents` and `.../files/{sha256}`), the publisher's key reference; what happens to a draft is recorded in the state module as it happens |
 | `WorkspaceBuilds.cs`, `WorkspaceAppSettings.cs` | the builds of a draft (a row of `build`, a result file, Bun as the child process with a time limit, the vendored store, the allow-list, the isolation) and the `apps:` section of `server.yaml` they are built with, with the sentences that say what a server lacks |
 | `WorkspacePreview.cs` | the read-only preview of a build: `GET` only, one document with its script and style inlined, a policy that leaves it no network, a sandbox |
-| `WorkspacePublishing.cs` | publishing a build to a paired Gateway as a publisher key (a reference to a secret of the server's own store), and making that key by pairing |
+| `WorkspacePublishing.cs` | publishing a build to a paired Gateway as a publisher key (a reference to a secret of the server's own store), and making that key by pairing; the calls to the Gateway or Runner are the shared library `DbDataKit.Deploy` (`Shared/src`), which this file reaches with a link that signs with the key |
 | `WorkspaceProjects.cs` | the projects (kept in the module), made or added, served to the authoring calls (`IAuthoringProjects`) |
 | `WorkspaceState.cs`, `WorkspaceSettings.cs`, `WorkspaceSecrets.cs` | the modules the state is built from and how it is opened; the directory and the listen address; the server's own secret store |
 | `WorkspaceService.cs` | the `service` noun |

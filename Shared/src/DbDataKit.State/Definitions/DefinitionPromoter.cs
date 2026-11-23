@@ -38,7 +38,7 @@ public sealed record Promotion(string Kind, string Name, string FromChannel, str
 
 /// <summary>
 /// Promotion between groups (plan 30 PB06): the same stored version is read from the source group and published to the target group over the shared publish API, so a test group's version reaches a production group without a second build.
-/// The manifest, the format, the dependencies and the <b>signature</b> travel with the version (the target verifies the signature against its own trust store, so a key it does not trust is refused there), the files go by hash (<c>HEAD</c> first, and only the
+/// The manifest, the format, the dependencies, the <b>signature</b> and the build record it covers travel with the version (the target verifies the signature against its own trust store, so a key it does not trust is refused there), the files go by hash (<c>HEAD</c> first, and only the
 /// files the target lacks are read from the source and sent: a second call sends nothing), the version is published in the channel asked, and the target's checks decide: a slot the channel does not bind and a dependency that is not active there refuse the move naming it.
 /// </summary>
 public sealed class DefinitionPromoter
@@ -98,6 +98,8 @@ public sealed class DefinitionPromoter
             ["depends_on"] = new JsonArray([.. (read["depends_on"] as JsonArray ?? []).Select(d => (JsonNode)JsonValue.Create((string)d!)!)]),
         };
         if ((string?)read["signature"] is { Length: > 0 } signature) publish["signature"] = signature;
+        // the build record is part of what a signature of a deployed build covers, so it travels with the signature
+        if ((string?)read["build"] is { Length: > 0 } build) publish["build"] = build;
         if (request.Mode is { } mode) publish["mode"] = mode;
         if (request.ExpectedVersion is { } expected) publish["expected_version"] = expected;
         using var response = await target.SendAsync(HttpMethod.Put, $"definitions/{kind}/{name}", JsonContent.Create(publish, options: Json), ct);
