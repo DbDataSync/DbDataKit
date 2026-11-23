@@ -44,6 +44,10 @@ public sealed class PublishTrustTests
         var trust = (await h.GetAsync("/api/v1/trust/integration")).Body!;
         Assert.True((bool)trust["required"]!);
         Assert.Equal([key.Fingerprint], trust["keys"]!.AsArray().Select(k => Text(k, "key_id")));
+        // every kind the runner takes, as one read: what a console reads to trust its own key here
+        var all = (await h.GetAsync("/api/v1/trust")).Body!;
+        Assert.Equal(["integration"], all["kinds"]!.AsArray().Select(k => Text(k, "kind")));
+        Assert.Equal([key.Fingerprint], all["kinds"]![0]!["keys"]!.AsArray().Select(k => Text(k, "key_id")));
 
         // unsigned: refused in the runner's own words; forged (signed over another manifest) and unknown key: refused with the verifier's
         Assert.Equal(HttpStatusCode.Forbidden, (await publisher.JsonAsync(HttpMethod.Put, "/api/v1/definitions/integration/orders", package.Body("dev", "stage"))).Status);

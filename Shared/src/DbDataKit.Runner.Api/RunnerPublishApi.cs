@@ -199,6 +199,9 @@ public static class RunnerPublishApi
 
         app.MapGet($"{root}/trust/{Integration}", Handler(context => Forward(publishing, context, caller(context), "GET", $"trust/{Integration}", hasBody: false)));
 
+        // every kind the runner takes with its trusted keys: what a console reads to trust its own key here
+        app.MapGet($"{root}/trust", Handler(context => Forward(publishing, context, caller(context), "GET", "trust", hasBody: false)));
+
         app.MapPost($"{root}/definitions/{Integration}/{{name}}/{{act}}", (string name, string act, HttpContext context) =>
             Forward(publishing, context, caller(context), "POST", $"definitions/{Integration}/{Esc(name)}/{Esc(act)}", optionalBody: true));
 

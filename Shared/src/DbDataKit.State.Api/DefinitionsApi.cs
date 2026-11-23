@@ -31,6 +31,8 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// POST definitions/{kind}/{name}/activate|switch|rollback|retire|prune          {channel, expected_version, version | keep | versions, dry_run}  (admin)
 /// POST definitions/{kind}/{name}/adopt   {client, adopt}                       (admin; a kind whose hook does it: the Gateway's data-source)
 /// PUT  bindings/{channel}/{kind}/{name}  {slots: {slot: boundTo}, expected_revision}  |  DELETE bindings/{channel}/{kind}/{name}/{slot}   (publisher: own; admin)
+/// GET  trust                                                                    every kind this host takes, each with its trusted keys            (viewer; how a console finds the kinds to trust its key for)
+/// GET  trust/{kind}  |  PUT trust/{kind}/keys {public_key, label}  |  POST trust/{kind}/{keyId}/revoke   the trust store of one kind   (viewer; admin)
 /// </code>
 /// The caller's roles and the owner rules (a publisher changes only the definitions it created) are the API's; what a kind checks is the registry's. A host that serves a kind from what the group serves (the Gateway) is told of each change
 /// through <paramref name="changed"/> so it applies it at once. Framework-free: the host maps the routes and hands over the body text.
@@ -50,7 +52,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex ChannelRule();
 
-    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions" || route.StartsWith("trust/", StringComparison.Ordinal) || route.StartsWith("settings/signatures/", StringComparison.Ordinal) || route == "settings/group";
+    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions" || route == "trust" || route.StartsWith("trust/", StringComparison.Ordinal) || route.StartsWith("settings/signatures/", StringComparison.Ordinal) || route == "settings/group";
 
     private static DefinitionsResult Error(int status, string message, string? code = null) =>
         new(status, new JsonObject { ["error"] = message, ["code"] = code ?? (status switch { 400 => "invalid", 403 => "denied", 404 => "not_found", 409 => "refused", 413 => "too_large", _ => "error" }), ["message"] = message });
@@ -132,6 +134,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (parts is ["definitions", var kv, var nv, "versions", var number] && method == "GET") return VersionOf(kv, nv, number, caller);
             if (parts is ["definitions", var k2, var n2] && method == "PUT") return await Publish(k2, n2, body, caller, ct).ConfigureAwait(false);
             if (parts is ["definitions", var k3, var n3, var act] && method == "POST") return await Act(k3, n3, act, body, caller, ct).ConfigureAwait(false);
+            if (parts is ["trust"] && method == "GET") return TrustOfAllKinds(caller);
             if (parts is ["trust", var tk] && method == "GET") return Trust(tk, caller);
             if (parts is ["trust", var tk2, "keys"] && method == "PUT") return AddKey(tk2, body, caller);
             if (parts is ["trust", var tk3, var keyId, "revoke"] && method == "POST") return RevokeKey(tk3, keyId, caller);
@@ -491,10 +494,26 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     {
         if (CheckKind(kind) is { } bad) return bad;
         if (CanRead(kind, caller) is { } denied) return denied;
+        return new(200, TrustOf(kind));
+    }
+
+    private JsonObject TrustOf(string kind) => new()
+    {
+        ["kind"] = kind, ["required"] = SignaturesRequired(kind), ["test_group"] = policy?.IsTestGroup ?? false,
+        ["keys"] = new JsonArray([.. (trust?.List(kind) ?? []).Select(k => (JsonNode)new JsonObject { ["key_id"] = k.KeyId, ["label"] = k.Label, ["added_by"] = k.AddedBy, ["added_at"] = k.AddedAt.UtcDateTime.ToString("O"), ["revoked"] = k.Revoked, ["revoked_by"] = k.RevokedBy })]),
+    };
+
+    /// <summary>
+    /// Every kind this host takes (its registry's kinds for its target type), each as <c>GET trust/{kind}</c> answers it: what a console that deploys here
+    /// reads to know which kinds to trust its key for, so a kind a later release adds is found without the console knowing it. Only for a viewer or an
+    /// administrator: a publisher learns nothing of the keys of the kinds it does not publish.
+    /// </summary>
+    private DefinitionsResult TrustOfAllKinds(DefinitionsCaller caller)
+    {
+        if (!caller.Admin && !caller.Viewer) return Error(403, "This needs the viewer role.");
         return new(200, new JsonObject
         {
-            ["kind"] = kind, ["required"] = SignaturesRequired(kind), ["test_group"] = policy?.IsTestGroup ?? false,
-            ["keys"] = new JsonArray([.. (trust?.List(kind) ?? []).Select(k => (JsonNode)new JsonObject { ["key_id"] = k.KeyId, ["label"] = k.Label, ["added_by"] = k.AddedBy, ["added_at"] = k.AddedAt.UtcDateTime.ToString("O"), ["revoked"] = k.Revoked, ["revoked_by"] = k.RevokedBy })]),
+            ["kinds"] = new JsonArray([.. kinds.All.Where(k => k.TargetTypes.Contains(targetType)).Select(k => k.Name).Order(StringComparer.Ordinal).Select(k => (JsonNode)TrustOf(k))]),
         });
     }
 

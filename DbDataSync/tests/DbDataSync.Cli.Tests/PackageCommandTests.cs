@@ -66,26 +66,37 @@ public sealed class PackageCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task CheckTakesNeitherAServerNorAnOutDirectory()
+    public async Task CheckTakesNoOutDirectory()
     {
-        var (exit, _, error) = await RunAsync("--to", "runner", "--check", "--server", "runner-1", "--repo", _repo.Root);
+        var (exit, _, error) = await RunAsync("--to", "runner", "--check", "--out", Path.Combine(_repo.Root, "out"), "--repo", _repo.Root);
 
         Assert.Equal(2, exit);
-        Assert.Contains("--check builds the package and sends nothing", error);
+        Assert.Contains("--check builds the package and writes nothing", error);
+    }
+
+    [Theory]
+    [InlineData("--server", "runner-1", "--channel", "prod")]
+    [InlineData("--server", "https://runner.example:7840", "--code", "AAAAA-AAAAA", "--channel", "prod", "--json")]
+    [InlineData("--check", "--server", "runner-1")]
+    public async Task SendingThePackageToARunnerIsGoneAndNamesTheConsolesDeploy(params string[] extra)
+    {
+        var client = Path.Combine(_repo.Root, "client");
+        var (exit, output, error) = await RunAsync(["--to", "runner", .. extra, "--client-dir", client, "--repo", _repo.Root]);
+
+        Assert.Equal(2, exit);
+        Assert.Equal("", output);
+        Assert.Equal(DbDataKit.Cli.RemovedCommands.PublishingGone("dbdatasync package publish --to runner --server"), error.Trim());
+        Assert.Contains("the console deploys", error);
+        Assert.False(Directory.Exists(client));       // nothing was paired
     }
 
     [Fact]
-    public async Task APublishToARunnerThisMachineIsNotPairedWithIsRefusedInTheClientsWords_AsJsonToo()
+    public async Task WithNeitherOutNorCheckItSaysWhatToGive()
     {
-        var client = Directory.CreateTempSubdirectory("dbdatasync-pkgcmd-client-").FullName;
-        try
-        {
-            var (exit, output, error) = await RunAsync("--to", "runner", "--json", "--server", "runner-1", "--channel", "prod", "--client-dir", client, "--repo", _repo.Root);
+        var (exit, _, error) = await RunAsync("--to", "runner", "--repo", _repo.Root);
 
-            Assert.Equal(1, exit);
-            Assert.Equal("", output);
-            Assert.Contains("is not paired with a runner called or at 'runner-1'", error);
-        }
-        finally { Directory.Delete(client, recursive: true); }
+        Assert.Equal(2, exit);
+        Assert.Contains("--out <directory>", error);
+        Assert.Contains("console's deploy", error);
     }
 }

@@ -190,6 +190,29 @@ public sealed class DefinitionsApiTests : IDisposable
     }
 
     [Fact]
+    public void The_trust_of_every_kind_the_host_takes_is_one_read_for_a_viewer_and_never_for_a_publisher()
+    {
+        var api = Open(signatures: true);
+        var key = ConsoleSigningKey.Generate();
+        AddKey(api, key, "model");
+        Assert.True(DefinitionsApi.Handles("trust"));
+
+        var all = api.Handle("GET", "trust", null, Viewer);
+        Assert.Equal(200, all.Status);
+        var kinds = ((JsonArray)all.Body["kinds"]!).Select(k => k!.AsObject()).ToList();
+        // the kinds of this host's target type, in name order; the runner's kind of the registry is not one of them
+        Assert.Equal(["model", "page"], kinds.Select(k => (string)k["kind"]!));
+        Assert.Equal([key.Fingerprint], ((JsonArray)kinds[0]["keys"]!).Select(k => (string)k!["key_id"]!));
+        Assert.Empty((JsonArray)kinds[1]["keys"]!);
+        Assert.True((bool)kinds[1]["required"]!);
+        // each kind as its own read answers it
+        Assert.Equal(api.Handle("GET", "trust/model", null, Viewer).Body.ToJsonString(), kinds[0].ToJsonString());
+
+        Assert.Equal(403, api.Handle("GET", "trust", null, new DefinitionsCaller("p", false, true, false, "client-p")).Status);
+        Assert.Equal(200, api.Handle("GET", "trust", null, Admin).Status);
+    }
+
+    [Fact]
     public void An_administrator_turns_signatures_off_for_a_kind_or_marks_the_group_test_and_only_an_administrator_manages_keys()
     {
         var api = Open(signatures: true);
