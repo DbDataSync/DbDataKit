@@ -365,12 +365,34 @@ public sealed class WorkspaceSyncOfflineCheckTests
     }
 
     [Fact]
-    public void An_engines_own_reader_is_said_once_to_be_unchecked_for_its_key()
+    public void An_engines_own_reader_is_checked_for_the_key_the_built_in_drivers_table_says_it_needs()
     {
-        var found = CheckOf(Draft(Unkeyed, task: Edited(WatermarkTask, "kind: Watermark\n    options:\n      column: created", "kind: MsSqlChangeTracking")));
-        var skipped = One(found, SyncOfflineCheck.NotChecked, "'MsSqlChangeTracking' is a driver's own");
+        var tracking = Edited(WatermarkTask, "kind: Watermark\n    options:\n      column: created", "kind: MsSqlChangeTracking");
+        var found = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: tracking));
+        var key = One(found, SyncOfflineCheck.Key, "'MsSqlChangeTracking' would refuse");
+        Assert.Equal(("warning", MappingFile, (int?)5), (key.Severity, key.File, key.Line));   // the source's table
+        Assert.Contains("crm.dbo.orders has no primary key", key.Message);
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked && d.Message.Contains("MsSqlChangeTracking", StringComparison.Ordinal));
+
+        // the source's key in the cache satisfies it
+        Assert.DoesNotContain(CheckOf(Draft(Unkeyed, task: tracking)), d => d.Message.Contains("'MsSqlChangeTracking' would refuse", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_logical_slot_reader_on_a_keyed_table_is_no_finding()
+    {
+        var slot = Edited(WatermarkTask, "kind: Watermark\n    options:\n      column: created", "kind: PgLogicalSlot");
+        var found = CheckOf(Draft(sourceEngine: "postgres", task: slot));
+        Assert.DoesNotContain(found, d => d.Message.Contains("'PgLogicalSlot'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_kind_the_connections_driver_does_not_have_is_said_once_to_be_unchecked_for_its_key()
+    {
+        var merge = Edited(WatermarkTask, "  cache:\n    kind: StagingTable", "  cache:\n    kind: StagingTable\n  writer:\n    kind: MsSqlMerge");
+        var found = CheckOf(Draft(Unkeyed, task: merge));   // the target dw is PostgreSQL, whose driver has no MsSqlMerge
+        var skipped = One(found, SyncOfflineCheck.NotChecked, "'MsSqlMerge' is not a Kind of the built-in driver");
         Assert.Equal("info", skipped.Severity);
-        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
     }
 
     [Fact]
