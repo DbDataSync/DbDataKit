@@ -14,8 +14,9 @@ namespace DbDataKit.Authoring.Server;
 /// knows, the key columns are not nullable, each source type fits the target column's cached type, and the mapping's key is the target's primary key or one of
 /// its unique keys.
 /// <para>
-/// The cache is a picture of the databases taken in one channel at one moment, so every finding is a warning: the live checks of the set's
-/// <c>preflight</c> read the databases again. A connection whose driver is Sync's own (a YAML driver) has its type map in Sync, which the Workspace does not
+/// A table or column the mapping names that the cache does not hold is an error, so a build never carries a mapping the cache contradicts: the author
+/// refreshes the cache or corrects the name. A type that does not fit and a key that does not agree are warnings, since the live checks of the set's
+/// <c>preflight</c> judge them again on the databases themselves. A connection whose driver is Sync's own (a YAML driver) has its type map in Sync, which the Workspace does not
 /// load, so its types and filters are reported as not checked offline. Files that do not parse are left to the program's check, which names them.
 /// Design: docs/authoring-metadata.md#a-sync-project
 /// </para>
@@ -185,7 +186,7 @@ public static class SyncOfflineCheck
                 {
                     sourceTable = Find(sourceCache, source.Database, source.Schema, source.Table);
                     if (sourceTable is null)
-                        Found.Add(new("warning", Table, $"The source table {Label(source)} of the connection '{source.Connection}' is not in {CatalogCache.FileName}{Where(sourceCache)}. Refresh the connection's catalog, or correct the table's name.", file, source.TableLine));
+                        Found.Add(new("error", Table, $"The source table {Label(source)} of the connection '{source.Connection}' is not in {CatalogCache.FileName}{Where(sourceCache)}. Refresh the connection's catalog, or correct the table's name.", file, source.TableLine));
                     else SourceColumns(file, mapping, source, sourceCache, sourceTable, sourceInfo, columns);
                 }
             }
@@ -215,14 +216,14 @@ public static class SyncOfflineCheck
                     var found = Find(sourceCache, joinedSide.Database, joinedSide.Schema, joinedSide.Table);
                     if (found is null)
                     {
-                        Note($"rel:{file}:{relationship}", "warning", Table, $"The table {fromLabel} of the relationship '{relationship}' is not in {CatalogCache.FileName}{Where(sourceCache)}.", file, LineOf(joined, "table"));
+                        Note($"rel:{file}:{relationship}", "error", Table, $"The table {fromLabel} of the relationship '{relationship}' is not in {CatalogCache.FileName}{Where(sourceCache)}.", file, LineOf(joined, "table"));
                         continue;
                     }
                     from = found;
                 }
                 if (ColumnOf(from, name) is not { } cached)
                 {
-                    Found.Add(new("warning", Column, $"The source column '{name}' is not a column of {fromLabel} in {CatalogCache.FileName}{Where(sourceCache)}.", file, at));
+                    Found.Add(new("error", Column, $"The source column '{name}' is not a column of {fromLabel} in {CatalogCache.FileName}{Where(sourceCache)}.", file, at));
                     continue;
                 }
                 if (info?.Dialect is not { } dialect || !checkedTypes.Add(fromLabel + "." + cached.Name)) continue;
@@ -245,7 +246,7 @@ public static class SyncOfflineCheck
                 return;
             }
             foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
-                Found.Add(new("warning", Column, $"The source filter names '{name}', which is not a column of {Label(source)} in {CatalogCache.FileName}{Where(sourceCache)}.", file, source.FilterLine));
+                Found.Add(new("error", Column, $"The source filter names '{name}', which is not a column of {Label(source)} in {CatalogCache.FileName}{Where(sourceCache)}.", file, source.FilterLine));
         }
 
         private void TypesAgree(string file, Side source, Side target, CacheTable sourceTable, CacheTable targetTable, ConnectionInfo? sourceInfo, ConnectionInfo? targetInfo, List<YamlMapping> columns)

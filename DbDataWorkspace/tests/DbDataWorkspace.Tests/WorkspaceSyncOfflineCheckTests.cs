@@ -130,12 +130,12 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var found = CheckOf(Draft());
 
         var missing = One(found, SyncOfflineCheck.Column, "'shipped_on'");
-        Assert.Equal(("warning", MappingFile, (int?)13), (missing.Severity, missing.File, missing.Line));
+        Assert.Equal(("error", MappingFile, (int?)13), (missing.Severity, missing.File, missing.Line));
         Assert.Contains("crm.dbo.orders", missing.Message);
         Assert.Contains("channel dev", missing.Message);
 
         var filter = One(found, SyncOfflineCheck.Column, "'regoin_code'");
-        Assert.Equal(6, filter.Line);
+        Assert.Equal(("error", (int?)6), (filter.Severity, filter.Line));
         Assert.Contains("source filter", filter.Message);
 
         var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
@@ -156,9 +156,10 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var notTheKey = One(found, SyncOfflineCheck.Key, "is not the primary key");
         Assert.Contains("(order_no)", notTheKey.Message);
 
-        // the rest agrees: id, status and the filter's status are checked and say nothing; every finding is a warning, never an error
+        // the rest agrees: id, status and the filter's status are checked and say nothing; a missing column is an error, a type or a key a warning
         Assert.Equal(7, found.Count);
-        Assert.All(found, d => Assert.Equal("warning", d.Severity));
+        Assert.All(found.Where(d => d.Code == SyncOfflineCheck.Column), d => Assert.Equal("error", d.Severity));
+        Assert.All(found.Where(d => d.Code != SyncOfflineCheck.Column), d => Assert.Equal("warning", d.Severity));
     }
 
     [Fact]
@@ -183,7 +184,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     {
         var found = CheckOf(Draft(Mapping.Replace("  table: orders\n  filter", "  table: order\n  filter")));
         var table = One(found, SyncOfflineCheck.Table, "crm.dbo.order ");
-        Assert.Equal(5, table.Line);
+        Assert.Equal(("error", (int?)5), (table.Severity, table.Line));
         Assert.DoesNotContain(found, d => d.Code is SyncOfflineCheck.Column or SyncOfflineCheck.UnknownType or SyncOfflineCheck.Types);
     }
 
@@ -235,7 +236,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     }
 
     [Fact]
-    public async Task The_drafts_check_carries_the_offline_findings_and_stays_ok()
+    public async Task The_drafts_check_carries_the_offline_findings_and_a_missing_table_stops_it()
     {
         var program = FakeSync.Create();
         if (program is null) Assert.Skip("the stand-in dbdatasync is a shell script");
@@ -254,9 +255,9 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var write = await server.AsAda(HttpMethod.Put, url + "/files/catalog-cache.yaml", new JsonObject { ["content"] = cache }.ToJsonString());
         Assert.True(write.Response.IsSuccessStatusCode);
         var after = (await server.AsAda(HttpMethod.Get, url + "/check")).Body!;
-        Assert.True((bool)after["ok"]!, after.ToJsonString());
+        Assert.False((bool)after["ok"]!, after.ToJsonString());
         var table = after["diagnostics"]!.AsArray().Single(d => (string)d!["code"]! == SyncOfflineCheck.Table)!;
-        Assert.Equal(("warning", MappingFile, 8), ((string)table["severity"]!, (string)table["file"]!, (int)table["line"]!));
+        Assert.Equal(("error", MappingFile, 8), ((string)table["severity"]!, (string)table["file"]!, (int)table["line"]!));
         Assert.Contains("App.dbo.Orders", (string)table["message"]!);
     }
 }

@@ -6,7 +6,7 @@ project asks of it. This page says who reads the database for that, with which l
 connection at all. It applies to every kind of project; what a sync project checks is [its own section](#a-sync-project).
 
 **Built today:** the catalog cache (`catalog-cache.yaml`, `catalog-cache/2`, below) filled from a paired Gateway's read-only schema call; the offline readers of the
-cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the Runner's slot binding
+cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the offline checks of a Sync draft against the cache ([The offline findings](#a-sync-project)); the Runner's slot binding
 test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
@@ -209,6 +209,20 @@ reads every table mapping against `catalog-cache.yaml` and the connection files,
 mapping `orders` maps the column `shipped_on`, and the cache's `crm.dbo.orders` has no such column. The Check tab then shows "The source column
 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml (read from runners-eu, channel dev at 2026-11-18T10:00:00Z)" on that line of
 `config/replications/orders/table-mappings/orders.yaml`. Refresh the connection, or correct the mapping.
+
+How much a finding weighs:
+
+- A table or a column that the mapping names and the cache does not hold is an error. This covers a mapped column, a column a source filter names
+  and the table of a relationship. The check fails, and a build stops until the cache is refreshed or the name is corrected, so a build never carries
+  a mapping the cache contradicts.
+- A source type that does not fit the target column, a type the driver's type map does not know, and a key that does not agree with the target are
+  warnings. The Check tab counts them and a build goes on; the set's `preflight` checks them again on the databases.
+- What could not be checked offline (no cache, a connection with no entry in it, a filter the lexer cannot read) is a note.
+
+Example: Ana's cache of `crm` was read in `dev` a month ago. A DBA has since added `shipped_on` to `dbo.orders`, and Ana maps it. Her check fails with
+"The source column 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml". She presses **Refresh** on `orders`, accepts "1 column
+added", and the check passes. Her mapping also writes `amount` (`decimal(18,2)`) into an `integer` column of the target; the check warns that it "may
+not fit", and she can still build and stage.
 
 What is left unchecked offline, and what the check says:
 

@@ -189,16 +189,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 
 ## Proposed decisions
 
-### SYNCAUTHORING-P12: offline findings are warnings (default, awaiting the owner)
-
-The sync draft's check reports the offline findings over `catalog-cache.yaml` (a mapped column missing from the cache, an unknown source type, a source
-type that does not fit the target column, a nullable key column, a key that is not the target's) as warnings: the Check tab counts them and a build goes
-on. Scenario: Ana's cache of `crm` was read in `dev` a month ago; a DBA has since added `shipped_on` to `dbo.orders` and Ana maps it. As warnings, her
-check shows "The source column 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml" and she can still build and stage; the set's
-`preflight` reads the live table. As errors, her build fails until she refreshes the cache. Option A, warnings (built). Option B, errors, so a build
-never carries a mapping the cache contradicts. Option C, errors for a missing table or column, warnings for types and keys. Recommendation: A, since the
-cache is a picture taken in one channel at one moment and `preflight` is the check that reads the database.
-
 ### SYNCAUTHORING-P13: which code decides a type offline (default, awaiting the owner)
 
 The offline type checks read the shared dialect tables (`DbDataKit.Dialect`), the same tables Sync's built-in drivers read their types through, and
