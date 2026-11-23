@@ -38,7 +38,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-3 | The Workspace service serves a build's package (manifest and files by hash) and its build record (the manifest hash and the commit) to the control service. The control service runs the checks and deploys to a Runner or Gateway as the person, signing with its own key a message that holds the build record; for trusted code, the approver's signature is added once PUBLISHING-3 is built. The Workspace service holds no signing key | none | L | a test publishes a build, a sync and a store project and an app through the control service; the checks refuse a bad package with the same message as today; the target records the person, the signature and the build record; the Workspace service made no outbound call |
+| WORKSPACEISOLATION-3 | The control service's deploy of a build is built: the Workspace serves a build's items and record (`.../builds/{b}/contents`, `.../files/{sha256}`), the console deploys an item as the person (`POST /api/deploys`, `ConsoleDeploys`), signs each version with its publisher key over the build record, and keeps the deploy record (`GET /api/deploys`; `docs/publishing.md`, "Deploying a build from the control service"). Left: the deploy to a Gateway tested end to end through the console (an app build, which needs Bun and the vendored store; a Build project's semantic models; a Store project's models), so far tested against a stand-in Gateway in `DbDataKit.Deploy.Tests`; an app version is sent over the Gateway's app calls, with no signature and no build record on the Gateway, until PUBLISHING-1 puts apps on the shared publish API; for trusted code, the approver's signature once PUBLISHING-3 is built | none | M | a test through the console deploys an app build, a Build project's semantic models and a Store project's models to a Gateway; the Gateway records the person, and for the models the signature and the build record; the deploy record lists each |
 | WORKSPACEISOLATION-4 | The publish panel on the Workspace screens calls the control service's deploy (the Designer's **Build and publish…** opens this panel; SYNCAUTHORING-17 waits for this task) | WORKSPACEISOLATION-3 | M | Playwright: publish from the panel; the target shows the version |
 | WORKSPACEISOLATION-5 | Runs, run results, binding tests and lineage reads go through the control service | WORKSPACEISOLATION-3 | M | the Runs tab's tests pass with the Workspace service unable to reach the Runner |
 | WORKSPACEISOLATION-6 | Catalog refresh goes through the control service: the Gateway refresh (`WorkspaceCatalogRefresh`) moves there, onto the console route AUTHORING-21 builds first for the Runner read | none | S | the catalog refresh test passes with the Workspace service unable to reach a Gateway or Runner |
@@ -223,6 +223,8 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 ## Needs from other subjects
 
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
+- PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
+  Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
 - AUTHORING-21: the console's catalog read from a Runner channel; WORKSPACEISOLATION-6 puts the Gateway refresh on the same route (AUTHORING-21 is built
   first).
@@ -293,6 +295,65 @@ or for an administrator of the Gateway to bind the slot.
 
 Recommendation: B, with the control service's client as the owner of what it publishes from then on; the person is recorded as the publisher of each
 version.
+
+### WORKSPACEISOLATION-P8: where the build record of a deployed version goes (default, awaiting the owner)
+
+Scenario: Ana deploys build `4f1c...` of the Sync project `orders` to the Runner `jobs`. The console signs the version with its publisher key, and the
+Runner must keep the build record (the Workspace server, project, workspace, build, commit and what the validators found) with the version.
+
+- Option A (built): the record is a field of the publish (`build`, one line of JSON, `build-record/1`). The signature covers it: the message is
+  `dbdatakit-definition/2`, with the record's SHA-256 after the manifest's. The Runner or Gateway stores the text in a new nullable column
+  (`definition_version.build_record`, an appended migration of the `definitions` module), returns it with the version, verifies it again at
+  preparation, and a promotion carries it.
+- Option B: the record is a file of the package (`build-record.json`), covered by the signature as every file is. No schema change, but the same
+  content from another build is a new version, and the Runner installs the file with the package.
+- Option C: the record goes in the version's note. It is kept, but the signature does not cover it.
+
+Recommendation: A.
+
+### WORKSPACEISOLATION-P9: who may deploy a build through the console (default, awaiting the owner)
+
+Scenario: Ben holds the author role on the Workspace server and the publisher role on the Runner `jobs`. He asks the console to deploy his build to
+`jobs`.
+
+- Option A (built): the console asks for the approver role on the Workspace server (what the Workspace's own publish asked), then the target decides
+  with the person's roles there. Ben is refused: "Deploying a build needs the approver role on Workspace."
+- Option B: only the target's roles count; anyone who may read the build and publish on the target deploys it.
+- Option C: an administrator of the console only.
+
+Recommendation: A.
+
+### WORKSPACEISOLATION-P10: a deploy of the same content from another build (default, awaiting the owner)
+
+Scenario: Ana deploys build 1 of `orders` to `jobs` in `dev`, then builds again without a change and deploys build 2. The package's files and
+manifest are the same.
+
+- Option A (built): the Runner answers "the same content as before, nothing changed" and keeps version 1 with build 1's record; the console's deploy
+  record names build 2 and version 1.
+- Option B: the build record is part of what makes a version different, so build 2 becomes version 2 with its own record.
+
+Recommendation: A: a version is its content, and the console's deploy records say which builds sent it.
+
+### WORKSPACEISOLATION-P11: who the console names as owner of what it publishes on a Gateway (default, awaiting the owner)
+
+Scenario: the console deploys the Store project `territories` to the Gateway `gw1`. The entity model's manifest names an owner (`managedBy`), and the
+Gateway gives the caller's client the definition.
+
+- Option A (built): `managedBy` is the console's own id (its identity's id, `console-...`), and the Gateway records the console's client as the
+  definition's owner. This is option B of WORKSPACEISOLATION-P6 for what the console publishes from now on; what the Workspace's keys made before
+  still needs P6's answer.
+- Option B: `managedBy` names the person who deployed it, as option C of WORKSPACEISOLATION-P6.
+
+Recommendation: A, following P6's recommendation.
+
+### WORKSPACEISOLATION-P12: how long the console keeps its deploy records (default, awaiting the owner)
+
+Scenario: a team deploys twenty builds a day for two years. The console's `deploys` state module keeps one row per deploy, with the build record.
+
+- Option A (built): every deploy is kept until an administrator removes it, as releases are.
+- Option B: a retention age (180 days, say), as the runs have.
+
+Recommendation: A for now: a row is small, and the Builds and Runs tabs read the history.
 
 ## Shared areas touched
 
