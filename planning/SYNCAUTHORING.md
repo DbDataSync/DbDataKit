@@ -287,6 +287,66 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
+### SYNCAUTHORING-P23: a time or timestamp with no stated precision on MySQL (awaiting the owner)
+
+Sync renders a time or timestamp whose precision is not stated with microseconds; the shared `mysql` table renders it with whole seconds. Every other
+engine already agrees (PostgreSQL, DuckDB and Oracle 6, SQL Server 7). Sync has such types in the history columns of a historized target, in a Flight
+SQL column and in a `driver.yaml` type map. Scenario: Ana historizes `crm.dbo.customer` into MySQL. Today the target gets `valid_from datetime(6)`. On
+the shared table as it is, it gets `datetime(0)`, and two changes to one customer in the same second get the same `valid_from`. Option A, the shared
+`mysql` table renders a time, timestamp or zoned timestamp with no precision as `time(6)`, `datetime(6)`, `timestamp(6)` (reading `datetime` with no
+precision stays `timestamp(0)`, MySQL's own default). This also changes the Store's `at` columns of a model on MySQL (`timestamp(0)` today) and the
+tables Transfer creates on MySQL from a probed .NET `DateTime` column. Option B, the shared tables stay; Sync states a precision of 6 wherever it makes
+such a type itself (history columns, Flight SQL, descriptors), which also turns SQL Server's history columns from `datetime2(7)` into `datetime2(6)`.
+Option C, the shared tables stay and Sync takes `datetime(0)` on MySQL. Recommendation: A, since a missing precision should not lose the fractions a
+value may carry; the ANSI `time` default (0) follows the answer to SYNCAUTHORING-P27.
+
+### SYNCAUTHORING-P24: a decimal with no precision (awaiting the owner)
+
+PostgreSQL's `numeric` with no precision reads as a decimal with no precision or scale. Sync then fills in 18 and 0, so every target gets
+`numeric(18,0)` or `decimal(18,0)`, with only the note "unconstrained numeric has no fixed precision or scale", and a value 1.5 arrives as 2. The
+shared tables answer three ways: SQL Server `decimal(18,0)` and MySQL `decimal(10,0)` with no note (the same rounding), PostgreSQL, Oracle and DuckDB
+unmappable. The shared Arrow map answers a fourth: `decimal(38,9)`, lossy, with a note. Scenario: Ana replicates `billing.public.invoice`, whose
+`amount numeric` holds 12.75, into PostgreSQL and into SQL Server. Today both targets hold 13. Option A, the shared tables render a decimal with no
+precision as PostgreSQL's `numeric` (exact) and elsewhere as `decimal(38,9)` / `number(38,9)` (lossy, with a note naming the assumed precision, as
+the Arrow map does). Transfer and the Store then create those types where they now round or refuse. Option B, every shared table refuses a decimal
+with no precision, and Sync asks for a type override on the column, as it does for an unmappable type. Option C, as today. Recommendation: A.
+
+### SYNCAUTHORING-P25: fixed-length binary (awaiting the owner)
+
+Sync keeps SQL Server's and MySQL's `binary(n)`, and SQL Server's `rowversion`, as fixed-length: a SQL Server `binary(16)` key becomes `binary(16)` on a
+SQL Server or MySQL target, and a `rowversion` becomes `binary(8)`. The shared type has no fixed-length flag: it reads `binary(16)` as variable-length
+with the note "fixed-length binary becomes variable-length", and renders `varbinary(16)`. Scenario: Ana replicates `crm.dbo.device`, whose key is
+`device_hash binary(16)`, into SQL Server. Today the target column is `binary(16)`; on the shared tables as they are, a new target gets `varbinary(16)`
+(her existing target keeps `binary(16)`: the plan reads it back as the type it would write). Option A, the shared type gains a fixed-length flag (canonical
+text `binary(fixed,16)`): SQL Server and MySQL read and write `binary(n)` exactly, `rowversion` reads as `binary(fixed,8)` with its note, and every other
+engine writes its one binary type as now. Transfer then creates `binary(16)` where it now creates `varbinary(16)`, the catalog screens show the flag,
+and the Gateway's Arrow map can read `FixedSizeBinary` exactly. Option B, no flag: Sync's new targets get `varbinary(n)` and a lossy note. Recommendation: A.
+
+### SYNCAUTHORING-P26: a time column on Oracle (awaiting the owner)
+
+Oracle has no time-of-day type. Sync writes a time as `timestamp(6)`, with the note that its date part means nothing; the shared `oracle` table writes
+`interval day(0) to second(6)`, which reads back as an interval rather than a time. Scenario: Ana replicates `shop.dbo.opening_hours` (`opens time(0)`)
+into Oracle. Today the target has `opens TIMESTAMP(0)`. On the shared table it would get `INTERVAL DAY(0) TO SECOND(0)`, and her existing target
+would show a type change from `TIMESTAMP` to `INTERVAL` in its next provisioning plan, which Oracle cannot apply to a column with rows. Option A, the
+shared `oracle` table writes a time as `timestamp(s)` with Sync's note; Transfer and the Store then write `timestamp` where they now write an interval.
+Option B, Sync takes the interval for new targets; the shared table also reads `interval day(0) to second(s)` back as a time, and Sync's existing
+targets keep `TIMESTAMP` (their plans would propose the change; Ana declines it). Recommendation: A, since Sync's targets already hold timestamps
+and a timestamp is how Oracle tools show a time of day.
+
+### SYNCAUTHORING-P27: ANSI type names, for Flight SQL columns and a generic Flight SQL target (awaiting the owner)
+
+The Flight SQL driver names each Arrow column's type in ANSI words (`tinyint`, `varbinary`, `time`, `varchar`), and Sync reads those names, and writes
+the tables of a generic "Arrow Flight SQL" target, with its own ANSI table. The shared `ansi` table reads `tinyint`, `varbinary`, `float`, `double`,
+`bool`, `text` and `char` as unmappable and `time` as `time(0)`; it writes an unbounded string as `clob` (Sync: `VARCHAR(4000)` with a note), a
+binary as `blob` (Sync: `VARBINARY(4000)`), and refuses an 8-bit integer, an unsigned one, a guid, JSON and XML (Sync: `SMALLINT`, `CHAR(36)`,
+`VARCHAR(4000)`, each with a note). The shared `ansi` table is also the Gateway's Flight SQL dialect, Build's `ansi` connections, the base of every
+ODBC dialect and Transfer's fallback. Scenario: Ana's source is a Flight SQL server with a `flags` column of Arrow type int8 and a `payload` binary
+column. Today Sync reads them as `tinyint` and `varbinary` and replicates both; on the shared `ansi` table as it is, both are unmappable and the
+mapping is refused. Option A, add Sync's reads and writes to the shared `ansi` table (the Gateway, Build, ODBC and Transfer then read those names
+and write those types too). Option B, a new shared dialect `flightsql` that extends `ansi` with the names the Flight SQL driver gives Arrow types and
+Sync's writes for a generic target, used by Sync's Flight SQL driver and the offline check; no other product changes. Option C, Sync takes the
+shared `ansi` table as it is. Recommendation: B.
+
 ## Open designs
 
 ### Monitoring and operations, second pass
