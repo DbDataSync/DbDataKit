@@ -13,7 +13,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
   (`project publish --operations`: `init`, `seed`, `apply_plan`, `ack`) is not built by the Workspace, so those run from the Runner's screens only.
 - Sync publish: the platform comes from `WorkspaceSettings.SyncPlatform`, not from the target Runner.
 - Sync forms: all YAML-only parts have forms except the mapping preview and the segmenting strategy's try-run (both read a database).
-- `dbdatasync provisioning plan --from-cache` plans the target side offline; the source side (change tracking, logical slots) is `unknown` (SYNCAUTHORING-9's `preflight` checks it live).
+- `dbdatasync provisioning plan --from-cache` plans the target side offline; the source side (change tracking, logical slots) is `unknown` (the Sync set's `preflight` checks it live).
 - A model's `queries:` are edited as YAML only (the Build server's editor went with the server).
 - The offline verb `dbdatabuild project publish --to gateway --out` and the per-publish adopt confirmation of a hand-made data source still exist beside
   the slot bindings that replace them.
@@ -22,8 +22,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
   the Gateway's screens are written and have never run in CI.
 - Resync and reconcile-deletes buttons of a sync project's Runs tab are paused (owner, 2026-11-16).
 - A package's read-only manual task `preflight` runs before the console serves a version in `prod` and from **Re-check** on the Runs tab
-  (`docs/publishing.md`, "Preflight before activation"). Build's refresh package and a Store model's package declare it; a Sync set does not yet
-  (SYNCAUTHORING-9).
+  (`docs/publishing.md`, "Preflight before activation"). Build's refresh package, a Store model's package and a Sync set declare it.
 
 ## Tasks
 
