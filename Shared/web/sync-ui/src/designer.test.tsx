@@ -114,6 +114,20 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(q(`[data-testid="wsp-file"][data-path="${made}"]`)?.dataset.dirty).toBe('true')
   })
 
+  it('overrides the target side of a mapping Create mappings made, leaving its source as it was', async () => {
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings')
+    await click('[data-testid="select-table-dbo.customers"]')
+    await click('[data-testid="create-mappings-button"]')
+    await click('[data-testid="mapping-item-dbo.customers"]')
+    await click('[data-testid="target-override-toggle"]')
+    expect(q('[data-testid="target-override-toggle"]')?.getAttribute('aria-pressed')).toBe('true')
+    expect((q('[data-testid="target-connection-select"]') as HTMLSelectElement).value).toBe('dw')
+    await click('[data-testid="save-mapping-button"]')
+    const saved = yamlOf(server.files['config/replications/orders/table-mappings/dbo.customers.yaml'])
+    expect(saved.targets).toEqual([{ schema: 'dbo', table: 'customers', connectionName: 'dw', database: 'warehouse' }])
+    expect(saved.sources).toEqual([{ schema: 'dbo', table: 'customers' }])
+  })
+
   it('edits a mapping\'s columns with Auto-map by name and the key ticks, as unsaved edits Save mapping writes', async () => {
     await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings/dbo.orders/columns')
     expect(q('[data-testid="mapping-editor"]')?.dataset.name).toBe('dbo.orders')

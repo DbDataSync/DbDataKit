@@ -129,6 +129,19 @@ describe('Create mappings', () => {
     expect(m.targetColumns).toBeUndefined()
     expect(made.notes).toEqual([{ mapping: 'dbo.customers', side: 'target', reason: expect.stringContaining('created with these columns when the target is provisioned') }])
   })
+
+  it('writes the target as a mapping of its own, never an alias of the source, so one side can be edited alone', () => {
+    const made = createMappings('orders', [], [{ schema: 'dbo', table: 'customers' }],
+      { endpoint: { connectionName: 'erp', database: 'sales' }, connection: cache.connections.erp },
+      { endpoint: { connectionName: 'dw', database: 'warehouse' }, connection: cache.connections.dw })
+    const text = made.files[0].text
+    expect(text).not.toMatch(/[&*]a\d/)
+    const before = readMapping(made.files[0].path, text).value!
+    const after = { ...before, targets: [{ ...before.targets[0], connectionName: 'dw', schema: 'staging' }] }
+    const edited = readMapping(made.files[0].path, editText(text, before, after)).value!
+    expect(edited.targets[0]).toMatchObject({ connectionName: 'dw', schema: 'staging', table: 'customers' })
+    expect(edited.sources[0]).toMatchObject({ connectionName: null, schema: 'dbo', table: 'customers' })
+  })
 })
 
 describe('the cached metadata card', () => {
