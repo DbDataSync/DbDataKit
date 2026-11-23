@@ -34,6 +34,10 @@ public interface IChangeWriter
     /// </summary>
     bool SupportsPositionLog => false;
 
+    /// <summary>The key this writer matches rows on and refuses a mapping without; <see cref="KeyNeed.None"/> for a writer that replaces
+    /// whole rows or whole scopes.</summary>
+    KeyNeed NeedsKey => KeyNeed.None;
+
     /// <param name="mappingName">The table mapping this write belongs to — see
     /// <see cref="IChangeReader.ReadChangesAsync"/>'s identical parameter.</param>
     /// <param name="targetColumns">The target's cached shape — see

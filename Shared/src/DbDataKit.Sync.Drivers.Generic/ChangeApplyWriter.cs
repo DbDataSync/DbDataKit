@@ -46,6 +46,9 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
 
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
 
+    /// <summary>An update and a delete find their target row by the target's primary key (<see cref="RequireKey"/>).</summary>
+    public KeyNeed NeedsKey => KeyNeed.TargetKey;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,

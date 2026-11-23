@@ -41,41 +41,16 @@ namespace DbDataSync.Drivers.MsSql;
 /// </summary>
 public sealed class MsSqlBulkInsertWriter : IPassThroughWriter, IStatementPreview
 {
-    public const string ClearOption = "clear";
-    public const string TransactionOption = "transaction";
-    public const string ClearDelete = "Delete";
-    public const string ClearTruncate = "Truncate";
+    public const string ClearOption = BuiltInDriverOptions.Clear;
+    public const string TransactionOption = BuiltInDriverOptions.Transaction;
+    public const string ClearDelete = BuiltInDriverOptions.ClearDelete;
+    public const string ClearTruncate = BuiltInDriverOptions.ClearTruncate;
 
     public string Kind => MsSqlDriverKinds.BulkInsert;
 
     public bool SupportsReconciliation => true;
 
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
-    [
-        new ParameterDescriptor
-        {
-            Name = ClearOption,
-            Label = "Clear the target first",
-            Description =
-                "Delete removes the rows in this pass's scope (the whole table, or just the segment when the " +
-                "load is segmented). Truncate empties the whole table and is much cheaper, but is refused for a " +
-                "segmented load and for a table a foreign key references.",
-            Type = ParameterType.Dropdown,
-            DropdownOptions = [ClearDelete, ClearTruncate],
-            Default = ClearDelete,
-        },
-        new ParameterDescriptor
-        {
-            Name = TransactionOption,
-            Label = "Clear and load in one transaction",
-            Description =
-                "On, a failed load leaves the previous rows in place and readers never see the table empty, " +
-                "but locks are held for the whole load. Off, a failure leaves the table cleared or partly " +
-                "loaded until the next run.",
-            Type = ParameterType.Bool,
-            Default = "true",
-        },
-    ];
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.MsSqlBulkInsert;
 
     /// <summary>The settings as configured; an unstated or unrecognised one takes its default, a
     /// recognised-but-wrong one is an error naming the setting.</summary>

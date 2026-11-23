@@ -28,23 +28,13 @@ public sealed class MsSqlChangeTrackingReader : IChangeReader, IStatementPreview
     /// changes database settings (see the type doc). Without it the reader stays correct by skipping
     /// those rows instead.
     /// </summary>
-    public const string SnapshotIsolationOption = "snapshotIsolation";
+    public const string SnapshotIsolationOption = BuiltInDriverOptions.SnapshotIsolation;
 
-    /// <summary>Declared beside the code that reads it, so the two cannot describe different things.</summary>
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } =
-    [
-        new()
-        {
-            Name = SnapshotIsolationOption,
-            Label = "Snapshot isolation",
-            Description =
-                "Reads the change window inside a snapshot transaction, so a row changing mid-pass " +
-                "cannot be read in two states. Requires the source database to allow snapshot isolation.",
-            Type = ParameterType.Bool,
-            Default = "false",
-        },
-        BoundedRead.CappedDescriptor,
-    ];
+    /// <summary>Listed in the built-in drivers' capability table, so a screen offers the same settings this reader reads.</summary>
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.MsSqlChangeTracking;
+
+    /// <summary>CHANGETABLE reports a change by the source row's primary key, so a table without one is refused.</summary>
+    public KeyNeed NeedsKey => KeyNeed.SourceKey;
 
     /// <summary>Snapshot isolation transaction failed because it isn't allowed in this database.</summary>
     private const int SnapshotIsolationNotAllowedError = 3952;

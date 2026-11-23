@@ -47,7 +47,7 @@ public sealed class MsSqlCdcReader : IChangeReader, IStatementPreview, IReadInte
     /// own: the setting means the same thing here as it does for Change Tracking, and declaring it once
     /// is what puts it in the SPA's reader-options form for CDC without any frontend change.
     /// </summary>
-    public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [BoundedRead.CappedDescriptor];
+    public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.MsSqlCdc;
 
     /// <summary>CDC records a delete as its own change carrying the row's key, so a delete at the
     /// source reaches the writer as one.</summary>

@@ -25,6 +25,9 @@ public sealed class KeyReconcileDeleteWriter(SqlDialect dialect, ITableCatalog c
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>The sweep anti-joins the staged keys against the target's primary key.</summary>
+    public KeyNeed NeedsKey => KeyNeed.TargetKey;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,
