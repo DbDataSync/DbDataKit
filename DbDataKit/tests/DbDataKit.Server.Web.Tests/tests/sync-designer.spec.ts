@@ -375,6 +375,9 @@ test('the rest of a mapping: Create mappings with what is inferred, a verificati
   await expect(area(page)).toHaveAttribute('data-area', 'files')
   await expect(page.getByTestId('wsp-dirty')).toBeVisible()
   await page.getByTestId('wsp-mode-yaml').click()
+  // the editor draws only the lines in view, and the mapping's settings are at the end of a file longer than the editor: go there
+  await page.getByTestId('wsp-code').locator('.monaco-editor').click()
+  await page.keyboard.press('Control+End')
   await expect(page.getByTestId('wsp-code')).toContainText('traceTiming: true')
   await expect(page.getByTestId('wsp-code')).toContainText('strategyName: by-month')
   await expect(page.getByTestId('wsp-code')).toContainText('kind: RowCount')
@@ -594,6 +597,15 @@ test('the rest of a replication: error counts in the navigation, Unpublished cha
   await page.getByTestId('stage-writer').click()
   await expect(page.getByTestId('writer-kind-select').locator('option')).toContainText(['ChangeApply', 'DeleteInsert', 'Scd2'])
   await expect(page.getByTestId('reconcile-config-card')).toBeVisible()
+
+  // a draft whose check finds an error does not build: invoices gets a reader its source offers, saved, and its error count goes
+  await page.locator('[data-testid="sd-nav-replication"][data-name="invoices"]').click()
+  await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'invoices')
+  await page.getByTestId('overview-tab-pipeline').click()
+  await page.getByTestId('reader-kind-select').selectOption('BatchReload')
+  await page.getByTestId('save-settings-button').click()
+  await expect(page.getByTestId('sd-task-dirty')).toHaveCount(0)
+  await expect(page.locator('[data-testid="sd-nav-replication"][data-name="invoices"] [data-testid="sd-nav-errors"]')).toHaveCount(0)
 
   // a build of the draft staged on the Runner's dev through the console, from the rail of orders
   await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()

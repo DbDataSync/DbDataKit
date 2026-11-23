@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModuleProvider } from '@dbdatakit/shell'
 import { BuildsPanel } from './BuildsPanel'
+import { useRunnerVersion } from '../deploys'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -50,6 +51,8 @@ let root: Root
 let host: HTMLDivElement
 let where = ''
 function Where() { const l = useLocation(); where = l.pathname + l.search; return null }
+/** What another screen of the draft (a replication's rail) reads of the version on a Runner, mounted beside the tab. */
+function RunnerVersion() { const v = useRunnerVersion('orders', 'd1'); return <span data-testid="runner-version" data-version={v.data?.version ?? 'none'} /> }
 
 async function mount(at: string) {
   host = document.createElement('div')
@@ -58,7 +61,7 @@ async function mount(at: string) {
   await act(async () => {
     root.render(
       <ModuleProvider info={{ basePath: '', apiBase: '/relay/ws-1', host: { nav: [], serverId: 'ws-1', serverName: 'Workspace' } }}>
-        <MemoryRouter initialEntries={[at]}><Where /><BuildsPanel project="orders" id="d1" canWrite /></MemoryRouter>
+        <MemoryRouter initialEntries={[at]}><Where /><RunnerVersion /><BuildsPanel project="orders" id="d1" canWrite /></MemoryRouter>
       </ModuleProvider>,
     )
   })
@@ -105,6 +108,8 @@ describe('publishing a build from the Builds tab', () => {
     expect(record?.textContent).toContain('ana to jobs')
     expect(record?.textContent).toContain('Staged orders on dev of jobs as version 1.')
     expect(console_.calls.some((c) => c.method === 'GET' && c.path === '/api/deploys?workspace_server=ws-1&project=orders&workspace=d1&build=b1')).toBe(true)
+    // the draft's other reads of its deploys are asked again too: what the replication's rail says a Runner has is the version just staged
+    expect(q('[data-testid="runner-version"]')?.dataset.version).toBe('1')
   })
 
   it('opens the build the address names, and puts the build chosen in the address', async () => {
