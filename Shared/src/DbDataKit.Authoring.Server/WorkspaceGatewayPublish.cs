@@ -6,7 +6,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>
-/// The Workspace's publish of what a Store or a Build project made, over plan 30's shared route (plan 33 SW01), signed with the target's publisher key. The publish itself is the shared deploy library's
+/// The Workspace's publish of what a Store or a Build project made, over the Gateway's shared publish API, signed with the target's publisher key. The publish itself is the shared deploy library's
 /// <see cref="GatewayDefinitionsPublish"/>; this class gives its refusals as a <see cref="WorkspacePublishException"/>.
 /// </summary>
 public sealed class WorkspaceGatewayPublish(IDefinitionsLink link, ConsoleIdentity identity, Action<string> step, CancellationToken ct = default)
