@@ -83,7 +83,10 @@ const KINDS = [
 
 function json(route: Route, body: unknown, status = 200) { return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }) }
 
-export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
+/** What a story adds to the fake: `syncFiles` are put in every new sync draft beside the template's (a `catalog-cache.yaml`, for the Designer's pickers). */
+export interface FakeOptions { syncFiles?: Record<string, string> }
+
+export async function mockWorkspace(page: Page, options: FakeOptions = {}): Promise<FakeWorkspace> {
   const projects: Project[] = []
   const workspaces: Workspace[] = []
   const published: FakeWorkspace['published'] = []
@@ -126,6 +129,7 @@ export async function mockWorkspace(page: Page): Promise<FakeWorkspace> {
     if (parts.length === 3 && method === 'POST') {
       const name = (JSON.parse(body) as { name: string }).name
       const w: Workspace = { id: `ws-${counter}-${name}`, project: project.id, name, branch: `workspace/${name}`, base: 'abc1234', created: stamp(), files: template(project.id, project.kind), builds: [] }
+      if (project.kind === 'sync') for (const [path, text] of Object.entries(options.syncFiles ?? {})) w.files.set(path, text)
       workspaces.push(w)
       const { files: _f, builds: _b, ...summary } = w
       return json(route, { ...summary, owner: 'tester', mine: true }, 201)
