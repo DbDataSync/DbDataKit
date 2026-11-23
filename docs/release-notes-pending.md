@@ -123,6 +123,8 @@ release moves the entries into its notes and empties this file.
 ## A sync project's Designer edits a replication
 
 - **New: a replication's page in the Designer of a Workspace sync project.** It has the tabs Overview (the source and target connections and databases, the schedule) and Table Mappings (the source's tables with **Create mappings**, and a mapping's two sides and **Column Mapping**), with **Enabled**, **Save settings** and **Delete** in its chrome. The databases, tables and columns are those of the draft's `catalog-cache.yaml`. Each change is an unsaved edit of the draft's file, the same one Files shows, and keeps the file's comments and the keys the page does not show. What to do: nothing; everything the page does not offer is still edited in Files.
+- **New: the Workspace answers a sync draft's authoring questions in its own process.** `GET .../sync/script-slots`, `POST .../sync/capabilities`, `POST .../sync/inferred-columns` and `POST .../sync/bulk-create` (author) answer the script slots, what a connection's driver offers with the key each reader and writer needs, a mapping's inferred target types and natural key, and the files Create mappings makes, from Sync's libraries and the draft's `catalog-cache.yaml`, with no database. A question may carry the person's unsaved edits. What to do: nothing.
+- **New: the draft's check warns when an engine's own reader or writer would refuse a mapping for want of a key.** `MsSqlChangeTracking` and `PgLogicalSlot` need the source's primary key in `catalog-cache.yaml`, `MsSqlMerge` and `MsSqlMergeReconcile` the target's. Before, the check said it could not tell. What to do: add the key, or pick a reader or writer that needs none.
 
 ## Column types: one set of answers for every product
 
