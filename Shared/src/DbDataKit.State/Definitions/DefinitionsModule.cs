@@ -152,10 +152,15 @@ public static class DefinitionsModule
                 PRIMARY KEY (kind, key_id)
             );
             """,
+            """
+            -- The build record a version was deployed from: the text the publisher sent and signed with the version (the Workspace server, project, workspace and build, the commit and what the
+            -- build's checks found), kept as it was sent so the signature can be checked again; null for a version published without one.
+            ALTER TABLE {table:definition_version} {{addcolumn}} build_record {{text}} NULL;
+            """,
         ],
         // an instance that left the group: its status rows are history after the retention age
         retention: [new RetentionRule("definition_instance_status", "gone_at")],
-        // the fifth migration (signatures and the trust store) adds nullable columns and a table, which the code of version 4 never reads, so it is compatible as the fourth is; the fourth only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
+        // the sixth migration (the build record) adds a nullable column, which the code of version 5 never reads; the fifth (signatures and the trust store) adds nullable columns and a table, which the code of version 4 never reads, so it is compatible as the fourth is; the fourth only adds a column with a default, which the code of version 3 never reads and whose inserts it leaves to the default (format 1): an instance of the previous version still works with it
         compatibleWithPrevious: 1);
 }
 

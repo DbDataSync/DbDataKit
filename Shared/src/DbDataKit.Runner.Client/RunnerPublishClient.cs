@@ -14,6 +14,9 @@ using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Runner.Client;
 
+/// <summary>Signs a version of a package as it is published: its name, its manifest's text and its files (path, SHA-256, size); null publishes it unsigned. A refusal to sign is a <see cref="RunnerClientException"/>.</summary>
+public delegate Task<string?> PackageSigner(string package, string manifest, IReadOnlyList<ArtifactRef> files, string? build, CancellationToken ct);
+
 /// <summary>A call to a runner failed or was refused; the message is the server's own, or says what could not be done here.</summary>
 public sealed class RunnerClientException(string message) : InvalidOperationException(message);
 
@@ -143,7 +146,13 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return runner;
     }
 
-    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null)
+    /// <summary>
+    /// Publishes the package of <paramref name="manifestPath"/> with the files of <paramref name="directory"/> in <paramref name="channel"/> (staged, or served): files the runner holds are not sent again. <paramref name="build"/>, when given,
+    /// is the record of the build the package is deployed from, which the runner keeps with the version; <paramref name="sign"/>, when given, is asked for the version's signature once the files are on the runner (the package's name,
+    /// the manifest and the files) and answers null to publish it unsigned; what it signs covers <paramref name="build"/>.
+    /// </summary>
+    public async Task<ClientPublished> PublishAsync(string server, string? code, string manifestPath, string directory, string channel, bool stage, int? expectedVersion, Action<string>? log = null, CancellationToken ct = default, string? note = null,
+        PackageSigner? sign = null, string? build = null)
     {
         if (!File.Exists(manifestPath)) throw new RunnerClientException($"The manifest '{manifestPath}' does not exist.");
         if (!Directory.Exists(directory)) throw new RunnerClientException($"The package directory '{directory}' does not exist.");
@@ -195,6 +204,8 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             ["artifacts"] = new JsonArray([.. files.Select(f => (JsonNode)new JsonObject { ["path"] = f.Path, ["sha256"] = f.Sha, ["size"] = f.Size })]),
         };
         if (expectedVersion is { } expected) body["expected_version"] = expected;
+        if (build is not null) body["build"] = build;
+        if (sign is not null && await sign(manifest.PackageName, text, [.. files.Select(f => new ArtifactRef(f.Path, f.Sha, f.Size, null))], build, ct) is { } signature) body["signature"] = signature;
         // where the version came from, kept with it on the runner (a Workspace names its project, so the Runner's screens link back to it, plan 33 SC22l)
         if (!string.IsNullOrWhiteSpace(note)) body["note"] = note;
         using var publish = await Send(HttpMethod.Put, $"api/v1/definitions/integration/{Uri.EscapeDataString(manifest.PackageName)}", JsonContent.Create(body, options: Json));

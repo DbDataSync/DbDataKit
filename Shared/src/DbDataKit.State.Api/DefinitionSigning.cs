@@ -7,21 +7,27 @@ namespace DbDataKit.State.Api;
 
 /// <summary>
 /// What a publisher signs and how (plan 30 decision 5): the message is <c>dbdatakit-definition/1</c>, the kind, the name, the SHA-256 of the manifest and the path and SHA-256 of each file in path order, one per line, so a changed manifest,
-/// file, kind or name is a different message. The signature text is <c>ed25519:&lt;key id&gt;:&lt;base64url signature&gt;</c>; the key is the Ed25519 key of a <see cref="ConsoleSigningKey"/> (the one a client pairs with, as the update system signs releases).
+/// file, kind or name is a different message. A version deployed from a build carries the build's record (where it was built, the commit, what the build's checks found): its message is <c>dbdatakit-definition/2</c>, with the line
+/// <c>build</c>, a tab and the SHA-256 of the record's text after the manifest's hash, so the record cannot be changed or moved to another version without breaking the signature. The signature text is
+/// <c>ed25519:&lt;key id&gt;:&lt;base64url signature&gt;</c>; the key is the Ed25519 key of a <see cref="ConsoleSigningKey"/> (the one a client pairs with, as the update system signs releases).
+/// Design: docs/publishing.md#the-build-record
 /// </summary>
 public static class DefinitionSigning
 {
     public const string Scheme = "ed25519";
 
-    public static byte[] Message(string kind, string name, string manifest, IEnumerable<ArtifactRef> artifacts)
+    public static byte[] Message(string kind, string name, string manifest, IEnumerable<ArtifactRef> artifacts, string? build = null)
     {
-        var text = new StringBuilder("dbdatakit-definition/1\n").Append(kind).Append('\n').Append(name).Append('\n').Append(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(manifest)))).Append('\n');
+        var text = new StringBuilder(build is null ? "dbdatakit-definition/1\n" : "dbdatakit-definition/2\n").Append(kind).Append('\n').Append(name).Append('\n').Append(Sha256(manifest)).Append('\n');
+        if (build is not null) text.Append("build\t").Append(Sha256(build)).Append('\n');
         foreach (var file in artifacts.OrderBy(a => a.Path, StringComparer.Ordinal)) text.Append(file.Path).Append('\t').Append(file.Sha256.ToLowerInvariant()).Append('\n');
         return Encoding.UTF8.GetBytes(text.ToString());
     }
 
-    public static string Sign(ConsoleSigningKey key, string kind, string name, string manifest, IEnumerable<ArtifactRef> artifacts) =>
-        $"{Scheme}:{key.Fingerprint}:{Url.Encode(key.Sign(Message(kind, name, manifest, artifacts)))}";
+    public static string Sign(ConsoleSigningKey key, string kind, string name, string manifest, IEnumerable<ArtifactRef> artifacts, string? build = null) =>
+        $"{Scheme}:{key.Fingerprint}:{Url.Encode(key.Sign(Message(kind, name, manifest, artifacts, build)))}";
+
+    private static string Sha256(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }
 
 /// <summary>Verifies a version's signature against the group's trust store: the key must be one the kind trusts and has not revoked, and the signature must hold over the message. <paramref name="allowRevoked"/> is for a version already stored (an instance preparing it): a revoked key refuses new versions, and versions it signed stay.</summary>
@@ -37,7 +43,7 @@ public sealed class TrustStoreVerifier(DefinitionTrustStore trust, bool allowRev
         if (key.Revoked && !allowRevoked) return new SignatureVerdict(SignatureState.Invalid, parts[1], $"the key {parts[1]} was revoked for {request.Kind}");
         var publicKey = Url.Decode(key.PublicKey);
         var signature = Url.Decode(parts[2]);
-        if (publicKey is null || signature is null || !ConsoleSigningKey.Verify(publicKey, DefinitionSigning.Message(request.Kind, request.Name, request.Manifest, request.Artifacts), signature))
+        if (publicKey is null || signature is null || !ConsoleSigningKey.Verify(publicKey, DefinitionSigning.Message(request.Kind, request.Name, request.Manifest, request.Artifacts, request.Build), signature))
             return new SignatureVerdict(SignatureState.Invalid, parts[1], $"the signature does not hold over the {request.Kind} '{request.Name}' (the manifest or a file changed after it was signed)");
         return new SignatureVerdict(SignatureState.Verified, parts[1]);
     }

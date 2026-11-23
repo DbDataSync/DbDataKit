@@ -221,7 +221,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             ["kind"] = kind, ["name"] = name, ["owner"] = Owner(kind, name), ["latest_version"] = versions.Max(v => v.Version),
             ["versions"] = new JsonArray([.. versions.OrderByDescending(v => v.Version).Select(v => (JsonNode)new JsonObject
             {
-                ["version"] = v.Version, ["hash"] = v.Hash, ["published_by"] = v.PublishedBy, ["published_at"] = v.PublishedAt.UtcDateTime.ToString("O"), ["note"] = v.Note, ["format"] = v.Format,
+                ["version"] = v.Version, ["hash"] = v.Hash, ["published_by"] = v.PublishedBy, ["published_at"] = v.PublishedAt.UtcDateTime.ToString("O"), ["note"] = v.Note, ["format"] = v.Format, ["signer"] = v.Signer, ["build"] = v.Build,
                 ["depends_on"] = new JsonArray([.. v.DependsOn.Select(d => (JsonNode)JsonValue.Create(d)!)]), ["files"] = publisher.Artifacts(kind, name, v.Version).Count,
             })]),
             ["channels"] = Heads(kind, name),
@@ -242,7 +242,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         if (v is null) return Error(404, $"There is no version {n} of {kind} '{name}'.");
         return new(200, new JsonObject
         {
-            ["kind"] = kind, ["name"] = name, ["version"] = v.Version, ["hash"] = v.Hash, ["format"] = v.Format, ["manifest"] = v.Content, ["note"] = v.Note, ["signature"] = v.Signature, ["signer"] = v.Signer,
+            ["kind"] = kind, ["name"] = name, ["version"] = v.Version, ["hash"] = v.Hash, ["format"] = v.Format, ["manifest"] = v.Content, ["note"] = v.Note, ["signature"] = v.Signature, ["signer"] = v.Signer, ["build"] = v.Build,
             ["depends_on"] = new JsonArray([.. v.DependsOn.Select(d => (JsonNode)JsonValue.Create(d)!)]),
             ["artifacts"] = new JsonArray([.. publisher.Artifacts(kind, name, n).Select(a => (JsonNode)new JsonObject { ["path"] = a.Path, ["sha256"] = a.Sha256, ["size"] = a.Size, ["media_type"] = a.MediaType })]),
         });
@@ -315,7 +315,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
                 throw;
             }
 
-        var verdict = (verifier ?? new NoSignatureVerifier()).Verify(new VersionSignatureRequest(kind, name, manifest, files, Text(json, "signature")));
+        var verdict = (verifier ?? new NoSignatureVerifier()).Verify(new VersionSignatureRequest(kind, name, manifest, files, Text(json, "signature"), Text(json, "build")));
         if (verdict.State == SignatureState.Invalid || (verdict.State != SignatureState.Verified && SignaturesRequired(kind)))
         {
             var why = verdict.State == SignatureState.Invalid ? $"the signature is refused: {verdict.Message}" : hook?.UnsignedRefusal(name, verdict) ?? $"this group requires signed versions of {kind} and the {kind} '{name}' has no signature (publish it signed with a key an administrator trusts for {kind}, or have an administrator turn signatures off for {kind})";
@@ -327,7 +327,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         var existed = store.Versions(kind, name).Count > 0;
         try
         {
-            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format, Signature: verdict.State == SignatureState.Verified ? Text(json, "signature") : null, Signer: verdict.Signer));
+            var result = publisher.Publish(new PublishRequest(kind, name, manifest, caller.Actor, channel, mode, depends, Text(json, "note"), files, ExpectedVersion: expected, Format: format, Signature: verdict.State == SignatureState.Verified ? Text(json, "signature") : null, Signer: verdict.Signer, Build: Text(json, "build")));
             if (!existed && !caller.Admin && caller.ClientId is not null) settings.Put(OwnerKey(kind, name), caller.ClientId);
             audit?.Invoke("definition.publish", caller, kind, name, channel, "ok", new { version = result.Version.Version, mode = result.Mode.ToString().ToLowerInvariant(), changed = result.Changed, files = files.Count, signature = verdict.Word, signer = verdict.Signer });
             changed?.Invoke(kind, name, channel);

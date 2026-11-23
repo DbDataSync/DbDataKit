@@ -20,7 +20,7 @@ public sealed class VersionSignatureGate(Func<string, string, int, IReadOnlyList
         var label = $"version {version.Version} of the {version.Kind} '{version.Name}'";
         if (string.IsNullOrWhiteSpace(version.Signature))
             return unsignedRefused(version.Kind) ? $"{label} is unsigned and signatures are required for {version.Kind}: publish it signed with a key an administrator trusts, or have an administrator make signatures optional for {version.Kind}" : null;
-        var verdict = _verifier.Verify(new VersionSignatureRequest(version.Kind, version.Name, version.Content, artifacts(version.Kind, version.Name, version.Version), version.Signature));
+        var verdict = _verifier.Verify(new VersionSignatureRequest(version.Kind, version.Name, version.Content, artifacts(version.Kind, version.Name, version.Version), version.Signature, version.Build));
         return verdict.State == SignatureState.Verified ? null : $"{label} is not served here because its signature is refused: {verdict.Message ?? "it does not verify"}";
     }
 }
