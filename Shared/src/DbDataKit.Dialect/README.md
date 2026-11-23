@@ -13,7 +13,7 @@ Depends on `DbDataKit.Dialect.Abstractions` and YamlDotNet (parser events only).
 ## dialect.yaml (schema `dialect/1`)
 Keys: `schema id extends display quote parameters row_limit identifier reserved_words capabilities syntax read_only literals types types_prepend`.
 List fields accept `X`, `X_add`, `X_remove`. Strict: unknown/duplicate keys, aliases, tags and bad enum values fail with `source:line`. Not depending on `DbDataKit.Config`; when it lands, the loader can sit behind its schema/version checks.
-Type rows: `{ native: "varchar({n})", canonical: "string({n})", direction, fidelity, note, defaults, n_min/n_max/p_*/s_* }`. First match wins per direction. `{n}` length, `{p}` precision, `{s}` scale; a parenthesised group is optional when reading. Canonical pattern flags: `unicode`, `~unicode` (either), `tz`, `unsigned`. A Widened/Lossy row must carry a note. Defaults fill a missing precision/scale, never an unbounded length. Unknown native types are `Unmappable` with a note.
+Type rows: `{ native: "varchar({n})", canonical: "string({n})", direction, fidelity, note, defaults, n_min/n_max/p_*/s_* }`. First match wins per direction. `{n}` length, `{p}` precision, `{s}` scale; a parenthesised group is optional when reading. Canonical pattern flags: `unicode`, `~unicode` (either), `tz`, `unsigned`, `fixed` (a row without `fixed` also writes a fixed binary). A Widened/Lossy row must carry a note. Defaults fill a missing precision/scale, never an unbounded length. Unknown native types are `Unmappable` with a note.
 `types.golden.yml` (in the tests project) renders every canonical type per engine; regenerate with `UPDATE_GOLDEN=1`.
 
 ## Types with no stated size, unsigned integers and fixed-length binary
@@ -29,6 +29,11 @@ Every product that reads or writes a column type (Sync, Build, Transfer, the Gat
 - A decimal with no stated precision (PostgreSQL's `numeric`) is written as PostgreSQL's `numeric`, which holds it exactly. Every other engine writes
   `decimal(38,9)` (`number(38,9)` on Oracle, `numeric(38,9)` for ANSI) with a note, so 12.75 stays 12.75; digits beyond 38, or beyond 9 after the
   point, are rounded.
+- A fixed-length binary is `binary(fixed,n)`. SQL Server and MySQL read and write `binary(n)` as one (`binary(16)` stays `binary(16)`), and
+  SQL Server's `rowversion` reads as `binary(fixed,8)` with a note that the engine no longer sets it. An engine with one binary type writes a fixed
+  binary as that type: `bytea` on PostgreSQL, `raw(16)` on Oracle, `blob` on DuckDB. A fixed binary longer than the engine's fixed type
+  (8000 bytes on SQL Server, 255 on MySQL) is written as variable-length binary.
+
 
 ## Decisions
 - Compiled overrides are small: SQL Server (`#temp` names), Fabric, MySQL (trailing-space names), Oracle (no `"` in names). Everything else is data.

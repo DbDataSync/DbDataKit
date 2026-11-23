@@ -287,19 +287,6 @@ the class it copies. Option B, move each rule into a public method of the shared
 `Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
 this subject or with SYNCAUTHORING-8.
 
-### SYNCAUTHORING-P25: fixed-length binary (awaiting the owner)
-
-Sync keeps SQL Server's and MySQL's `binary(n)`, and SQL Server's `rowversion`, as fixed-length: a SQL Server `binary(16)` key becomes `binary(16)` on a
-SQL Server or MySQL target, and a `rowversion` becomes `binary(8)`. The shared type has no fixed-length flag: it reads `binary(16)` as variable-length
-with the note "fixed-length binary becomes variable-length", and renders `varbinary(16)`. Scenario: Ana replicates `crm.dbo.device`, whose key is
-`device_hash binary(16)`, into SQL Server. Today the target column is `binary(16)`; on the shared tables as they are, a new target gets `varbinary(16)`
-(her existing target keeps `binary(16)`: the plan reads it back as the type it would write). Option A, the shared type gains a fixed-length flag (canonical
-text `binary(fixed,16)`): SQL Server and MySQL read and write `binary(n)` exactly, `rowversion` reads as `binary(fixed,8)` with its note, and every other
-engine writes its one binary type as now. Transfer then creates `binary(16)` where it now creates `varbinary(16)`, the catalog screens show the flag,
-and the Gateway's Arrow map can read `FixedSizeBinary` exactly. Option B, no flag: Sync's new targets get `varbinary(n)` and a lossy note. Recommendation: A.
-
-Answer from the owner, 2026-11-23: A add fixed length flag.
-
 ### SYNCAUTHORING-P26: a time column on Oracle (awaiting the owner)
 
 Oracle has no time-of-day type. Sync writes a time as `timestamp(6)`, with the note that its date part means nothing; the shared `oracle` table writes
