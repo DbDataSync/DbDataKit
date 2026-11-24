@@ -38,7 +38,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-6 | The channel picker and Refresh exist (`ChannelPicker`, `CatalogRefresh` of `@dbdatakit/workspace`; the tab **Catalog**'s **Refresh from a Runner**). The rest of the Designer's shared pieces of authoring-time reads (`DbDataKit.Authoring`, `Shared/web/workspace`), used by every kind's Designer and Files area: **Describe** (a query's columns into the kind's file, read through the console as Refresh is), **Test** (AUTHORING-18), **Set up for development** offered by the channel picker when the channel does not bind the slot (AUTHORING-19), and the newest-check card (the newest `preflight` or test run per channel, read through the control service (the console's run calls, `/api/deploys/{id}/runs`): time, run link, findings); the console's posture page lists the non-production bindings made from the Workspace. The Gateway refresh stays as a second way to fill the cache for a connection that is already a Gateway data source; nothing new is built on it | AUTHORING-18, AUTHORING-19 | M | vitest of each piece; Playwright: a build draft with no binding offers Set up for development, then Refresh fills the Catalog tab; Test shows its steps; the posture page lists the binding |
 | AUTHORING-7 | Retire the offline verb `project publish --to gateway --out` and the per-publish adopt confirmation (adapter first: the slot bindings' tests have run) | PUBLISHING-2 | S | the verb and `adopt` answer their sentence; `gateway-publish/1` leaves `docs/formats.json` and `docs/ui-editors.md`; the Workspace's publish tests pass unchanged |
 | AUTHORING-9 | Browser stories for the Workspace screens never opened in a browser: column lineage, model files from cached tables, the provisioning plan, scripts, the slot bindings screen, the Sync forms, the catalog refresh form; and the stories written and never run in CI: `workspace-authoring.spec.ts` (the kind picker on a new project with what each kind publishes to, check, fix, and the publish panel by product for a build, a sync and a store project), `workspace-publish.spec.ts` (create, edit, build, preview, commit, merge, publish an app) and the preview with live data; each listed in `docs/ui-coverage.md` | none | M | the Playwright specs run in CI; `scripts/check_ui_coverage.py` passes with the stories named |
-| AUTHORING-10 | The secrets overview of a Workspace project's connections (decided 2026-11-12, not built): every secret reference of the project, where it is bound, whether the target holds it (read by the control service from the Runner, never by the Workspace service) | none | S | vitest and a Playwright story: a project with three references shows each with its binding and state |
+| AUTHORING-10 | The secrets overview of a Workspace project's connections (decided 2026-11-12, not built): every secret reference of the project, where it is bound, whether the target holds it (read by the control service from the Runner, never by the Workspace service); the Sync parameter form picks a `Secret` parameter's reference from it (today the person types `secret:<name>`) | none | S | vitest and a Playwright story: a project with three references shows each with its binding and state |
 | AUTHORING-12 | Resync and reconcile-deletes buttons on a sync project's Runs tab, started through the control service (the console's run calls, `/api/deploys/{id}/runs`) (paused, owner 2026-11-16; queued until the drain works out a mapping's source key) | none | M | Sync conformance: resync of one mapping reloads it; reconcile removes target rows the source lost |
 | AUTHORING-13 | The form editor of the `access:` section (rules tables, row rules, column rules) in the Workspace's build and store model panels | none | M | vitest: the form round-trips a model's `access:` section; Playwright: add a column rule, see the check's finding for a missing rules table, publish |
 | AUTHORING-15 | Browser stories of the console's own screens that are written and never run in CI, run there like AUTHORING-9: the agents' evaluation panel (`screens-agents-evaluation.spec.ts`), the Runner's Link flow, the store approvals (`store-approvals.spec.ts`), the monitoring story against real servers (`monitoring.spec.ts`), and the others `docs/ui-coverage.md` lists as not run | none | M | the Playwright specs run in a CI job of the console; `docs/ui-coverage.md` no longer lists them as not run |
@@ -57,45 +57,16 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 
 ## Open designs
 
+### The Runner the channel picker offers first
+
+The picker offers the Runner the catalog cache says the connection was last read from, or else the first Runner the console lists. Once a project names the Runner it deploys to, the picker offers that one.
+
 ### The Runner's built-in package where a group requires signed versions
 
 **What.** The Runner puts its built-in package `dbdatakit-metadata` in a channel through its own publish, so a group with `require_signatures` on
 refuses it and a catalog read answers 409 naming the missing signature. The direction is to exempt that package, because it ships beside the Runner's
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
-
-### AUTHORING-P12: a read of one table that no longer finds it (default, awaiting the owner)
-
-Built as the default: a Refresh of one table whose read no longer finds the table (it was dropped or renamed) shows "1 table removed", and Accept takes
-the table out of the cache. Scenario: the DBA drops `dbo.accounts`; Ana refreshes that table on the tab **Catalog**. Option A (built): the difference
-says the table is removed; she accepts, and the draft's check then names every mapping over it. Option B: the read of one table never removes it: the
-tab says the table was not found and leaves the cache as it was, and only a read of the whole connection removes a table. Recommendation: A, since the
-difference is shown before anything is replaced and the person decides.
-
-### AUTHORING-P13: the Runner the channel picker offers first (default, awaiting the owner)
-
-Built as the default: the picker offers the Runner the cache says the connection was last read from; with none (a first read, or a cache read through a
-Gateway), it offers the first Runner the console lists. Scenario: the console is paired with `runners-eu` and `runners-us`; Ana refreshes `crm` for the
-first time. Option A (built): `runners-eu` is offered (the first listed) and she can pick the other. Option B: the project names its Runner (a setting of
-the project, as its publish target is) and the picker offers that one. Option C: no Runner is offered until she picks one. Recommendation: B once a
-project names its Runner (WORKSPACEISOLATION's deploy will know it); A until then.
-
-### AUTHORING-P14: a channel that does not bind the slot, in the picker (default, awaiting the owner)
-
-Built as the default: such a channel is listed as "not bound", cannot be picked, and the picker says how an administrator binds it. Scenario: the package
-`crm-to-dw` is on the Runner in `dev` and `test`, and only `dev` binds `crm`. Option A (built): `test` is listed and greyed out, with the sentence on how
-to bind it. Option B: `test` can be picked, and Refresh answers the Runner's own refusal ("has no binding in channel 'test'"). Option C: such a channel
-is not listed at all. Recommendation: A until Set up for development (AUTHORING-19) is built; then picking it offers Set up for development, as
-AUTHORING-6 says.
-
-### AUTHORING-P17: what in a Build project's status is an error (default, awaiting the owner)
-
-Built as the default: in the refresh package's preflight, an object of the project that is not on the connection, a deployed structure behind the
-project (pending deploy steps), a blocked deploy step and a status that could not be read are errors; an object changed outside dbdatabuild is a
-warning; what the status noticed is information. A preflight run that fails counts as an error. Scenario: Ana adds a column to `marts.fct_orders`
-and serves the new package in `prod` before `apply_plan` has run. Option A (built): the pending step is an error, the version is not activated until
-she confirms, and the refresh would have been refused anyway. Option B: pending steps are a warning, the version is activated, and the next refresh
-fails naming the structure. Recommendation: A.
 
 ## Shared areas touched
 

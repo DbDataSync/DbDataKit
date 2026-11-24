@@ -37,6 +37,12 @@ abandoned; a release is proven in a browser. How channels work is `docs/publishi
 
 None.
 
+## Open designs
+
+### The tabs that run a deployed build, when a draft goes to several channels
+
+The Runs, Provisioning and Deploy tabs of a Workspace project run the newest deploy of the draft that a Runner took. When a draft is often deployed to more than one Runner or channel, the tabs list every Runner and channel it was deployed to, and the person picks one.
+
 ## Shared areas touched
 
 - `DbDataKit.Runner.Client`, `DbDataKit.Authoring.Server`, Build's and Sync's runtime packages, `DbDataKit.Lineage`, `Shared/web/console` (Releases).
