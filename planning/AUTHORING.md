@@ -88,14 +88,6 @@ to bind it. Option B: `test` can be picked, and Refresh answers the Runner's own
 is not listed at all. Recommendation: A until Set up for development (AUTHORING-19) is built; then picking it offers Set up for development, as
 AUTHORING-6 says.
 
-### AUTHORING-P16: how long the deploy waits for the preflight (default, awaiting the owner)
-
-Built as the default: the deploy waits up to two minutes for the preflight run. Scenario: Ana serves `sales` in `prod`, and the preflight takes five
-minutes on a slow warehouse. Option A (built): after two minutes the deploy answers 202, the version stays staged and held, and Ana presses
-**Activate** once the run has ended. Option B: the deploy answers at once and the panel follows the run, then offers Activate. Option C: the console
-activates the version by itself when the run ends with no error, and only an error waits for Ana. Recommendation: C, so a slow preflight with nothing
-found needs no second visit.
-
 ### AUTHORING-P17: what in a Build project's status is an error (default, awaiting the owner)
 
 Built as the default: in the refresh package's preflight, an object of the project that is not on the connection, a deployed structure behind the
