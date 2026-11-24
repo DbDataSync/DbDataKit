@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link as ConsoleLink } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import type { BindingTestAnswer, StagedRun, StagedRunStarted } from '../api'
 import { deployApi, useRunnerVersion } from '../deploys'
 import { connectionsOf, replicationsOf } from '../syncSchemas'
 import { followStagedRun } from './SyncProvisioningPanel'
+import { NewestChecks } from './AuthoringReads'
 import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
 /** The task a replication is on a Runner (`RunnerTaskNames.Of`): lower case, what a task name does not take made a dash, no leading dash or underscore, at most 64. */
@@ -253,6 +254,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
   const published = useRunnerVersion(project, id)
   const at = published.data ?? null
   const instance = at?.target ?? null
+  const queries = useQueryClient()
   const start = useMutation({
     mutationFn: async ({ task, inputs }: { task: string; inputs: Record<string, string> }): Promise<Started> => {
       if (!at) throw new Error('No build of this draft is published to a Runner. Build it and publish it to a Runner (Builds tab); then its tasks run from here.')
@@ -260,6 +262,8 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       const step = task === PREFLIGHT_TASK ? PREFLIGHT_STEP : kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined
       return { started, run: await followStagedRun(() => deployApi.runOf(at.deploy, started.run_id, step)) }
     },
+    // a Re-check is the newest check of its channel now
+    onSuccess: (_, { task }) => { if (task === PREFLIGHT_TASK) void queries.invalidateQueries({ queryKey: ['console', 'newest-run'] }) },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
   const [tests, setTests] = useState<Record<string, { answer?: BindingTestAnswer; error?: string }>>({})
@@ -311,6 +315,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       {at && views.map((v) => <BuildViewRow key={v} view={v} connections={buildConnectionsOf(paths)} busy={start.isPending} onRun={(inputs) => start.mutate({ task: v, inputs })} />)}
       {at && recheck && <CheckRow busy={start.isPending} onRun={(inputs) => start.mutate({ task: CHECK_TASK, inputs })} />}
       {at && preflight && <PreflightRow busy={start.isPending} onRun={() => start.mutate({ task: PREFLIGHT_TASK, inputs: {} })} />}
+      {at && preflight && <NewestChecks project={project} id={id} />}
       {start.isPending && <div className="hint" data-testid="wsp-runs-running">Running on the Runner...</div>}
       {start.data && <RunLine result={start.data} instance={start.data.started.instance ?? instance} />}
     </div>

@@ -178,8 +178,9 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
   COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight` (`SetPreflightJob` in `DbDataSync.TaskRunner`) and SYNCAUTHORING-11's tasks.
-- AUTHORING-17, AUTHORING-18, AUTHORING-19 and AUTHORING-6, after the slice: `facts`, the connection test before publish and Set up for development
-  (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in the Designer.
+- AUTHORING-17, AUTHORING-19 and AUTHORING-6, after the slice: `facts`, Set up for development and the Designer's **Test**
+  (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in the Designer. The connection test before publish exists: the console's
+  `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 

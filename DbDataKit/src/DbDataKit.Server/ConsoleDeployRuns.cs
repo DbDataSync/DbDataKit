@@ -102,6 +102,26 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         catch (Exception ex) when (ex is Refusal or DeployException) { return DeployRunOutcome.Error(StatusOf(ex), ex.Message); }
     }
 
+    /// <summary>
+    /// The newest run of <paramref name="task"/> in the deploy's channel (of any version: a preflight before activation, or a Re-check of the version served later), with the steps named <paramref name="step"/> it recorded; <c>run</c> is
+    /// null when the task never ran there. What a screen shows as the newest check of a channel.
+    /// </summary>
+    public async Task<DeployRunOutcome> NewestAsync(string deployId, string task, string? step, RelayPerson person, CancellationToken ct)
+    {
+        try
+        {
+            var deployed = await FindAsync(deployId, person, ct);
+            var found = await CallsOf(deployed, person).NewestRunAsync(deployed.Package, deployed.Channel, task, string.IsNullOrWhiteSpace(step) ? null : step, ct);
+            return new(200, new JsonObject
+            {
+                ["package"] = deployed.Package, ["channel"] = deployed.Channel, ["task"] = task, ["runner"] = deployed.Runner.InstanceId, ["runner_name"] = deployed.Runner.Name,
+                ["link"] = found is null ? null : $"/servers/{Uri.EscapeDataString(deployed.Runner.InstanceId)}/runs?run={found["id"]?.ToJsonString().Trim('"')}",
+                ["run"] = found,
+            });
+        }
+        catch (Exception ex) when (ex is Refusal or DeployException) { return DeployRunOutcome.Error(StatusOf(ex), ex.Message); }
+    }
+
     /// <summary>The Runner's test of the login the deploy's channel binds to <paramref name="slot"/> (<paramref name="role"/>: default, read or write), tried on the Runner; no value comes back.</summary>
     public async Task<DeployRunOutcome> TestBindingAsync(string deployId, string slot, string role, RelayPerson person, CancellationToken ct)
     {

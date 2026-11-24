@@ -107,15 +107,28 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
             var seen = looks.AddOrUpdate(id, 1, (_, n) => n + 1);
             var channel = started.LastOrDefault()?["channel"]?.GetValue<string>() ?? "dev";
             var outcome = seen <= runningLooks ? "running" : failure is null ? "succeeded" : "failed";
+            var task = started.LastOrDefault()?["task"]?.GetValue<string>() ?? "discover";
             return Results.Json(new JsonObject
             {
-                ["id"] = id, ["package"] = "dbdatakit-metadata", ["channel"] = channel, ["task"] = "discover", ["outcome"] = outcome,
+                ["id"] = id, ["package"] = "dbdatakit-metadata", ["channel"] = channel, ["task"] = task, ["outcome"] = outcome,
                 ["failure"] = outcome == "failed" ? new JsonObject { ["kind"] = "error", ["message"] = failure } : null,
             });
         });
         server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/discover/steps/discover", (string channel, string key) => Results.Json(new JsonObject
         {
             ["steps"] = new JsonArray(new JsonObject { ["key"] = key, ["completed"] = "2026-11-22T10:00:04Z", ["payload"] = "6f1c2c8e-0000-4000-8000-000000000001" }),
+        }));
+        server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/describe/steps/describe", (string channel, string key) => Results.Json(new JsonObject
+        {
+            ["steps"] = new JsonArray(new JsonObject
+            {
+                ["key"] = key, ["completed"] = "2026-11-22T10:00:04Z",
+                ["result"] = new JsonObject
+                {
+                    ["engine"] = "sqlserver", ["strategy"] = "SqlServerDescribeFirstResultSet",
+                    ["columns"] = new JsonArray(new JsonObject { ["name"] = "id", ["type"] = "int", ["nullable"] = false, ["sample"] = "42" }, new JsonObject { ["name"] = "segment", ["type"] = "nvarchar(20)", ["nullable"] = true }),
+                },
+            }),
         }));
         server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/discover/steps/discover/payloads/{id}", () => Results.Json(new JsonObject
         {
@@ -224,6 +237,49 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
         var (refused, why) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "dev", connection = "CRM-db" });
         Assert.Equal(HttpStatusCode.BadGateway, refused);
         Assert.DoesNotContain("hunter2", why.ToJsonString());
+    }
+
+    [Fact]
+    public async Task Describe_starts_the_runners_describe_for_the_person_and_answers_the_querys_columns_with_nothing_else_of_them()
+    {
+        const string sql = "SELECT id, segment FROM dbo.accounts";
+        var (status, body) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql });
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("done", (string?)body["state"]);
+        var asked = Assert.Single(started);
+        Assert.Equal(("crm-to-dw", "crm_db", "Ada Admin", "dev", "describe"), ((string)asked["package"]!, (string)asked["slot"]!, (string)asked["on_behalf_of"]!, (string)asked["channel"]!, (string)asked["task"]!));
+        Assert.Equal(sql, (string?)asked["inputs"]!["sql"]);
+        Assert.Equal("SqlServerDescribeFirstResultSet", (string?)body["strategy"]);
+        Assert.Equal("""[{"name":"id","type":"int","nullable":false},{"name":"segment","type":"nvarchar(20)","nullable":true}]""", body["columns"]!.ToJsonString());
+        Assert.Equal($"/servers/{RunnerId}/runs?run={(string)body["run_id"]!}", (string?)body["link"]);
+    }
+
+    [Fact]
+    public async Task Describe_that_takes_longer_than_the_wait_is_followed_and_a_query_the_runner_refuses_answers_its_reason()
+    {
+        app.Services.GetRequiredService<ConsoleCatalogRead>().Wait = TimeSpan.FromMilliseconds(100);
+        runningLooks = 1_000;
+        var (status, body) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql = "SELECT 1 AS one" });
+        Assert.Equal(HttpStatusCode.Accepted, status);
+        var follow = $"{Base}/describe/{(string)body["run_id"]!}?runner={RunnerId}&channel=dev&connection=CRM-db";
+        runningLooks = 0;
+        var (ended, done) = await Call(HttpMethod.Get, follow);
+        Assert.Equal(HttpStatusCode.OK, ended);
+        Assert.Equal(2, done["columns"]!.AsArray().Count);
+
+        // a discover run is not a description: the follow of one names what it is not
+        var (_, read) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "dev", connection = "CRM-db" });
+        var (wrong, said) = await Call(HttpMethod.Get, $"{Base}/describe/{(string)read["run_id"]!}?runner={RunnerId}&channel=dev&connection=CRM-db");
+        Assert.Equal(HttpStatusCode.NotFound, wrong);
+        Assert.Contains("not a description of a query", (string)said["error"]!);
+
+        failure = "The query writes: UPDATE is not allowed in a description.";
+        var (refused, why) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql = "UPDATE dbo.accounts SET name = 'x'" });
+        Assert.Equal((HttpStatusCode)422, refused);
+        Assert.Contains("UPDATE is not allowed", (string)why["error"]!);
+
+        var (noSql, _) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql = " " });
+        Assert.Equal(HttpStatusCode.BadRequest, noSql);
     }
 
     [Fact]
