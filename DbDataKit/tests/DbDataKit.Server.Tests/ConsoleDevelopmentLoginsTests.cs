@@ -14,8 +14,8 @@ namespace DbDataKit.Server.Tests;
 
 /// <summary>
 /// A development login a Workspace screen sends to the console (<see cref="ConsoleDevelopmentLogins"/>), against a fake Workspace server and a fake Runner: the console asks the Workspace server only which package the project is,
-/// and puts the login in the Runner's secret store as the signed-in person, under names of the package, the channel and the slot. The fake Workspace server fails any request that carries the login, in its address, a header
-/// or its body. Production is refused before anything is sent. The real programs are in <c>DbDataKit.Server.Servers.Tests</c>.
+/// and puts the login's password, and only the password, in the Runner's secret store as the signed-in person, under a name of the package, the channel and the slot; the user comes back as plain text. The fake Workspace
+/// server fails any request that carries the login, in its address, a header or its body. Every channel is accepted, production too. The real programs are in <c>DbDataKit.Server.Servers.Tests</c>.
 /// </summary>
 public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
 {
@@ -125,22 +125,39 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
     private static StringContent JsonContent(object body) => new(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
     [Fact]
-    public async Task A_login_for_dev_reaches_the_runners_store_for_the_package_channel_and_slot_and_no_request_to_the_workspace_server_carries_it()
+    public async Task A_login_for_dev_stores_its_password_only_for_the_package_channel_and_slot_and_no_request_to_the_workspace_server_carries_it()
     {
         var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "dev", connection = "crm", user = User, password = Password });
 
         Assert.True(status == HttpStatusCode.OK, $"{status} {body}");
         Assert.Empty(carried);
         Assert.Equal(["GET /api/v1/projects/crm-to-dw"], workspaceCalls.ToArray());
-        Assert.Equal((Password, "Ada Admin"), held["dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password"]);
-        Assert.Equal((User, "Ada Admin"), held["dbdatakit:runner:dev-login:crm-to-dw.dev.crm:user"]);
-        Assert.Equal(2, held.Count);
+        Assert.Equal((Password, "Ada Admin"), Assert.Single(held, h => h.Key == "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password").Value);
+        Assert.Single(held);
+        Assert.DoesNotContain(held, h => h.Value.Value.Contains(User, StringComparison.Ordinal));
         Assert.Equal("crm-to-dw", (string?)body["package"]);
         Assert.Equal("dev", (string?)body["channel"]);
+        Assert.False((bool?)body["production"]);
         Assert.Equal("runners-eu", (string?)body["runner_name"]);
-        Assert.Equal("dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password", (string?)body["secrets"]?["password"]);
+        Assert.Equal(User, (string?)body["user"]);
+        Assert.Equal("dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password", (string?)Assert.Single(body["secrets"]!.AsObject()).Value);
+        Assert.Equal("password", Assert.Single(body["secrets"]!.AsObject()).Key);
         Assert.DoesNotContain(Password, body.ToJsonString());
-        Assert.DoesNotContain(User, body.ToJsonString());
+    }
+
+    [Fact]
+    public async Task A_login_for_prod_is_stored_the_same_way_under_the_name_of_prod()
+    {
+        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "prod", connection = "crm", user = User, password = Password });
+
+        Assert.True(status == HttpStatusCode.OK, $"{status} {body}");
+        Assert.Equal((Password, "Ada Admin"), held["dbdatakit:runner:dev-login:crm-to-dw.prod.crm:password"]);
+        Assert.Single(held);
+        Assert.DoesNotContain(held, h => h.Value.Value.Contains(User, StringComparison.Ordinal));
+        Assert.True((bool?)body["production"]);
+        Assert.Equal(User, (string?)body["user"]);
+        Assert.Equal("password", Assert.Single(body["secrets"]!.AsObject()).Key);
+        Assert.Empty(carried);
     }
 
     [Fact]
@@ -152,19 +169,8 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
         Assert.Equal("crm_main", (string?)body["slot"]);
         Assert.Equal(Password, held["dbdatakit:runner:dev-login:crm-to-dw.test.crm_main:password"].Value);
         Assert.Single(held);
+        Assert.Null(body["user"]);
         Assert.Empty(carried);
-    }
-
-    [Fact]
-    public async Task Production_is_refused_naming_the_rule_and_nothing_is_sent_to_either_server()
-    {
-        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "prod", connection = "crm", password = Password });
-
-        Assert.Equal(HttpStatusCode.Conflict, status);
-        Assert.Contains("channel other than prod", (string?)body["error"]);
-        Assert.Contains("Packages page (Bindings)", (string?)body["error"]);
-        Assert.Empty(workspaceCalls);
-        Assert.Empty(held);
     }
 
     [Theory]
