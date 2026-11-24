@@ -36,6 +36,9 @@ Rules the suite does not add:
 
 - Refusing to store a login for a production channel from the Workspace screens. A person who has production's password can store it under a
   development channel instead. The refusal changes where the login is recorded, not who can use it.
+- Asking for a role on the Workspace before the console deploys a build, when the person may already publish on the Runner. A publisher who is
+  refused can still upload the package's folder on the Runner's Packages screen, which skips the build record, the console's signature and the
+  preflight check. The rule would push them onto the way the suite can trace least.
 - Hiding a failure's full message from an administrator. They are the person who has to fix it, and without the message they guess.
 
 Who may do what is set by the roles of each service. The roles are deliberately broad for now, and a rule does not narrow them on its own.
