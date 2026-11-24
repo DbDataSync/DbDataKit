@@ -6,6 +6,7 @@ import type { BindingTestAnswer, StagedRun, StagedRunStarted } from '../api'
 import { deployApi, useRunnerVersion } from '../deploys'
 import { connectionsOf, replicationsOf } from '../syncSchemas'
 import { followStagedRun } from './SyncProvisioningPanel'
+import { NewestChecks } from './AuthoringReads'
 import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
 /** The task a replication is on a Runner (`RunnerTaskNames.Of`): lower case, what a task name does not take made a dash, no leading dash or underscore, at most 64. */
@@ -311,6 +312,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       {at && views.map((v) => <BuildViewRow key={v} view={v} connections={buildConnectionsOf(paths)} busy={start.isPending} onRun={(inputs) => start.mutate({ task: v, inputs })} />)}
       {at && recheck && <CheckRow busy={start.isPending} onRun={(inputs) => start.mutate({ task: CHECK_TASK, inputs })} />}
       {at && preflight && <PreflightRow busy={start.isPending} onRun={() => start.mutate({ task: PREFLIGHT_TASK, inputs: {} })} />}
+      {at && preflight && <NewestChecks project={project} id={id} />}
       {start.isPending && <div className="hint" data-testid="wsp-runs-running">Running on the Runner...</div>}
       {start.data && <RunLine result={start.data} instance={start.data.started.instance ?? instance} />}
     </div>
