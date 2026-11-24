@@ -12,7 +12,9 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - Build's `tests`, `status` and `compare` are manual tasks of the refresh package (`ViewJobs.cs`) on the Runs tab. The operations package
   (`project publish --operations`: `init`, `seed`, `apply_plan`, `ack`) is not built by the Workspace, so those run from the Runner's screens only.
 - Sync publish: the platform comes from `WorkspaceSettings.SyncPlatform`, not from the target Runner.
-- Sync forms: all YAML-only parts have forms except the mapping preview and the segmenting strategy's try-run (both read a database).
+- Sync forms: all YAML-only parts have forms. A mapping's **Preview rows** and a segmenting strategy's **Try** run the set's tasks `preview` and
+  `try-strategy` on the Runner through the console; their answer is kept nowhere (`docs/authoring-metadata.md`, "Rows and trials are answered, never
+  kept").
 - `dbdatasync provisioning plan --from-cache` plans the target side offline; the source side (change tracking, logical slots) is `unknown` (the Sync set's `preflight` checks it live).
 - A model's `queries:` are edited as YAML only (the Build server's editor went with the server).
 - The offline verb `dbdatabuild project publish --to gateway --out` and the per-publish adopt confirmation of a hand-made data source still exist beside
@@ -33,7 +35,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | --- | --- | --- | --- | --- |
 | AUTHORING-1 | The Workspace builds the operations package beside the refresh package, and the control service deploys both to the same channel (WORKSPACEISOLATION-3); the Runs tab offers `init`, `seed`, `apply_plan` and `ack` with their inputs | WORKSPACEISOLATION-3 | M | `WorkspaceBuildPublishTests`: a build stages both packages; vitest of `ProjectRunsPanel`: the four tasks are offered; a conformance run of `seed` started from the console through the control service |
 | AUTHORING-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (WORKSPACEISOLATION-3), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | WORKSPACEISOLATION-3 | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
-| AUTHORING-3 | The mapping preview and the strategy try-run as Runner tasks of the published set, started by the control service as the person (the console's run calls, `/api/deploys/{id}/runs`), the preview's rows returned in the call's answer and never stored | none | M | a Sync conformance test: the preview of a mapping returns its first rows through the Runner; the try-run's SQL runs against the bound login |
 | AUTHORING-5 | A form editor for a model's `queries:` in a build project (name, description, `sql` or `request`, parameters), checked as you type | none | M | vitest on the form and its YAML; Playwright: add a query with a list parameter, see a translation error at its line, fix it, publish |
 | AUTHORING-17 | Adds to the Runner's built-in package `dbdatakit-metadata` (its tasks `discover` and `describe` exist: `DbDataKit.Runner.Metadata`, the route `POST /api/v1/metadata/{channel}/{task}`, `docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
 | AUTHORING-19 | **Set up for development**: from a draft on a Workspace screen, the person types a login once; the screen sends it to the console, which stores it in the project's Runner's secret store for the channel and the slot (built: `POST /api/workspace-dev-logins/...`, `ConsoleDevelopmentLogins`, `developmentLoginApi` of `@dbdatakit/workspace`; `docs/authoring-metadata.md`, "How a screen sends a development login"); the control service puts the connection's copy on the Runner, with the user as plain text and its password naming the stored secret, and binds the slot in the channel the person picked (CHANNELS-1's client); the Runner checks the person's role; the Workspace service only learns which binding exists | CHANNELS-1 | M | a test: set up `crm` for `dev`, the Runner's Bindings show it with the user; the login reaches no Workspace service |
@@ -100,6 +101,48 @@ Packages page, as before.
   does for `dev` (the Runner still asks for its admin role).
 
 Recommendation: A, so a login typed on an authoring screen never becomes production's; B only if the owner wants production set up from the Designer.
+
+### AUTHORING-P53: Preview rows and Try in `prod` show production's values (default, awaiting the owner)
+
+Scenario: Ben designs a sync between two systems that have no development copy, so the draft's newest deploy is to `prod` of the Runner `plant`. On a
+mapping he presses **Preview rows**. The screen warns "This reads rows of production (prod on plant) with the login production binds. The rows are
+shown here and kept nowhere." and the rows appear. A strategy's **Try** in `prod` runs its SQL on production the same way. The Runner asks for its
+operator role, as for any run; nothing else stops it.
+
+- Option A (as built): a preview and a trial run in every channel, with the warning in `prod`, for a person who may read the project and is an
+  operator on the Runner.
+- Option B: in `prod` they need the Runner's admin role, or a setting of the Runner that allows them there.
+- Option C: never in `prod`; production's rows are seen with the database's own tools.
+
+Recommendation: A, as for a read of a database's shape in `prod` ("Who reads" in `docs/authoring-metadata.md`); B if production's values should need
+more than the role that runs production's tasks.
+
+### AUTHORING-P54: in a group of Runners, an answer is held by the instance that ran the task (default, awaiting the owner)
+
+Scenario: the Runner group `plant` has two instances behind one address. Ana presses **Preview rows**; the instance `plant-a` takes her request and
+queues the run, and `plant-b` claims it and runs it. The answer is in `plant-b`'s memory. When the console's call to take it reaches `plant-a`, the
+answer is `gone` ("another instance of the group ran it") and Ana presses **Preview rows** again.
+
+- Option A (as built): the answer stays in the memory of the instance that ran it; a call to another instance answers `gone`.
+- Option B: the instance that takes the call queues the run for itself only (a run pinned to an instance), and the console's call that waits for the
+  answer reaches the same instance.
+- Option C: the answer is kept in the group's state for the minutes it waits, encrypted with a key only the instances hold, and removed when taken.
+  This stores the rows, for minutes.
+- Option D: an instance that does not hold the answer asks the instance that ran the task for it.
+
+Recommendation: B, so rows never leave the instance's memory and every group answers on the first ask; until then A.
+
+### AUTHORING-P55: Preview rows reads the published mapping, not the draft's unsaved edit (default, awaiting the owner)
+
+Scenario: Ana adds `region = 2` to the filter of `dbo.orders` and presses **Preview rows** before she saves. The rows come from the version the draft
+last published, so they include every region; the card says which version it read. To see her filter at work she saves, builds and publishes to
+`dev`, then previews again. **Try** of a strategy sends the strategy as she is editing it, but reads the mapping from the published version too.
+
+- Option A (as built): the preview reads the mapping the deployed version has; the card names the version.
+- Option B: the screen sends the mapping's file as it is in the draft (unsaved edits included), and the task reads that mapping with the published
+  version's connections and drivers. The run record then keeps the mapping's text as an input.
+
+Recommendation: B, as the old Sync server previewed what the author was editing; A until then.
 
 ## Open designs
 

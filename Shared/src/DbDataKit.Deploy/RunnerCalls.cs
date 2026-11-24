@@ -82,6 +82,16 @@ public sealed class RunnerCalls
     }
 
     /// <summary>
+    /// The answer of a run started for <paramref name="actor"/> (the rows of a preview, a strategy's candidates), taken once from the Runner's memory: the Runner's status and body (<c>state</c> <c>done</c> with <c>answer</c>,
+    /// <c>running</c>, <c>failed</c> with <c>error</c>, or <c>gone</c>). The Runner hands it only to the person the run was started for, through the same console. Nothing of it is kept on the way.
+    /// </summary>
+    public async Task<(int Status, JsonObject Body)> AnswerOfAsync(Guid runId, string actor, CancellationToken ct = default)
+    {
+        try { return await client.RunAnswerAsync(target.Name, null, runId, actor, null, ct); }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+    }
+
+    /// <summary>
     /// The newest run of <paramref name="task"/> of the package in the channel, whatever version it ran, with the steps named <paramref name="stepName"/> it recorded (as <see cref="RunOfAsync"/> answers it); null when the task never ran there.
     /// </summary>
     public async Task<JsonObject?> NewestRunAsync(string package, string channel, string task, string? stepName, CancellationToken ct = default)

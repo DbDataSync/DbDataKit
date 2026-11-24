@@ -82,7 +82,7 @@ internal sealed class PairedRunner : IAsyncDisposable
 /// A task of a package run in this process, the way the runner's executor records one: the run begins with the version it is of, the steps <paramref name="steps"/> gives for the request are recorded (a step's name and its result as
 /// JSON; none for a task it does not know), and the run succeeds. <see cref="Requests"/> keeps each request, so a test can say who asked, with which inputs and of which version.
 /// </summary>
-internal sealed class InProcessTasks(StateDatabase state, Func<TaskRunRequest, IReadOnlyList<(string Step, string Result)>> steps) : ITaskRunner
+internal sealed class InProcessTasks(StateDatabase state, Func<TaskRunRequest, IReadOnlyList<(string Step, string Result)>> steps, Action<TaskRunRequest, Guid>? answer = null) : ITaskRunner
 {
     public System.Collections.Concurrent.ConcurrentQueue<TaskRunRequest> Requests { get; } = new();
 
@@ -100,6 +100,7 @@ internal sealed class InProcessTasks(StateDatabase state, Func<TaskRunRequest, I
             store.Begin(request.Chain, step, key, request.Attempt);
             store.CompleteValue(request.Chain, step, key, request.Attempt, result);
         }
+        answer?.Invoke(request, runId);
         var end = new TaskEnd(TaskEndState.Succeeded, Processed: 1);
         var finish = end.ToRunFinish();
         runs.Finish(runId, finish.Outcome, finish.Rows, finish.FailedItem, finish.Failure);

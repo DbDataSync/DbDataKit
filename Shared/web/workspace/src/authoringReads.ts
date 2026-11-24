@@ -37,6 +37,36 @@ export interface DescribeAnswer {
 /** The newest run of a task in a deploy's channel (`GET /api/deploys/{id}/runs?task=&step=`), with the steps it recorded; `run` is null when the task never ran there. */
 export interface NewestRun { package: string; channel: string; task: string; runner: string; runner_name: string; link: string | null; run: StagedRun | null }
 
+/**
+ * Where the answer of a run a person waits for stands (`POST /api/deploys/{id}/runs` with `answer`, then `GET .../runs/{run}/answer`): still going (with the run's
+ * link), done with the answer, or failed with the reason. The answer is passed on by the console and kept nowhere: not by the console, the Runner or the Workspace server.
+ * Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept
+ */
+export interface RunAnswer<T> {
+  state: 'done' | 'running' | 'failed' | 'gone'; run_id: string; runner: string; runner_name: string; channel: string; production: boolean; link: string
+  answer?: T; error?: string
+}
+
+/** One value of a previewed row: text, a number, true or false, or null (a long text is cut, a binary value is shown by its length). */
+export type PreviewValue = string | number | boolean | null
+
+/** The first rows of a mapping's source, as the set's task `preview` read them with the run login of the source's slot. */
+export interface MappingPreviewAnswer {
+  replication: string; mapping: string; connection: string; source: string; columns: string[]; rows: PreviewValue[][]; more: boolean; limit: number
+}
+
+/** One candidate of a segmenting strategy: its label, the column and half-open bounds of a range (null for another kind of segment), the segment in words, and whether it is selected. */
+export interface StrategyCandidate { label: string; column: string | null; start: string | null; end: string | null; segment: string; selected: boolean }
+
+/** What the set's task `try-strategy` answered: the strategy, its kind, the column it ran over, whether it read a database, and every candidate. */
+export interface StrategyTrialAnswer {
+  replication: string; mapping: string; strategy: string; kind: string; column: string | null; readsADatabase: boolean; candidates: StrategyCandidate[]
+}
+
+/** The set's tasks a person waits for on a screen. */
+export const PREVIEW_TASK = 'preview'
+export const TRY_STRATEGY_TASK = 'try-strategy'
+
 const enc = encodeURIComponent
 const base = (workspace: string, project: string) => `/api/workspace-catalog/${enc(workspace)}/${enc(project)}`
 
@@ -48,6 +78,11 @@ export const authoringReadApi = {
     request<DescribeAnswer>(`${base(workspace, project)}/describe`, { method: 'POST', body: JSON.stringify(body) }),
   followDescribe: (workspace: string, project: string, run: string, body: Omit<DescribeRequest, 'sql'>) =>
     request<DescribeAnswer>(`${base(workspace, project)}/describe/${enc(run)}?runner=${enc(body.runner)}&channel=${enc(body.channel)}&connection=${enc(body.connection)}`),
+  /** Starts a manual task of the version a deploy put on a Runner and waits up to 10 seconds for its answer. */
+  answer: <T>(deploy: string, task: string, inputs: Record<string, string>) =>
+    request<RunAnswer<T>>(`/api/deploys/${enc(deploy)}/runs`, { method: 'POST', body: JSON.stringify({ task, inputs, answer: true }) }),
+  /** Takes the answer of a run started earlier, once it is there. */
+  followAnswer: <T>(deploy: string, run: string) => request<RunAnswer<T>>(`/api/deploys/${enc(deploy)}/runs/${enc(run)}/answer`),
   newest: (deploy: string, task: string, step?: string) =>
     request<NewestRun>(`/api/deploys/${enc(deploy)}/runs?task=${enc(task)}${step ? `&step=${enc(step)}` : ''}`),
 }
@@ -71,6 +106,24 @@ export function describedLine(columns: readonly DescribedColumn[]): string {
   if (columns.length === 0) return 'The query has no column.'
   return `${columns.length} ${columns.length === 1 ? 'column' : 'columns'}: ${columns.map((c) => `${c.name} ${c.type}${c.nullable ? ' null' : ''}`).join(', ')}`
 }
+
+/** A preview in one line: `2 rows of crm.dbo.orders on crm, more follow`. */
+export function previewLine(answer: MappingPreviewAnswer): string {
+  const count = `${answer.rows.length} ${answer.rows.length === 1 ? 'row' : 'rows'}`
+  const of = answer.source === 'query' ? 'the query' : answer.source
+  return answer.rows.length === 0 ? `No row of ${of} on ${answer.connection}${answer.more ? '' : ' matches the mapping'}.` : `${count} of ${of} on ${answer.connection}${answer.more ? ', more follow' : ''}.`
+}
+
+/** A trial in one line: `12 candidates of by-month over created_at, 3 selected`. */
+export function trialLine(answer: StrategyTrialAnswer): string {
+  const n = answer.candidates.length
+  const selected = answer.candidates.filter((c) => c.selected).length
+  if (n === 0) return `The strategy ${answer.strategy} proposed no candidate.`
+  return `${n} ${n === 1 ? 'candidate' : 'candidates'} of ${answer.strategy}${answer.column ? ` over ${answer.column}` : ''}, ${selected} selected.`
+}
+
+/** What a value of a previewed row is shown as: null as `NULL`, the rest as text. */
+export const previewValue = (v: PreviewValue): string => (v === null ? 'NULL' : String(v))
 
 /**
  * Whether the picker offers **Set up for development**: a channel other than production the Runner lists does not bind the slot, or no channel binds it at

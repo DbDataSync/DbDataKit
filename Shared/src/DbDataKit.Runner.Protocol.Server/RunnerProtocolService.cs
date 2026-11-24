@@ -12,7 +12,7 @@ namespace DbDataKit.Runner.Protocol.Server;
 /// stores), for the one run the call's token names (<see cref="RunTokenInterceptor"/>). A call can only reach that run's progress, steps, units, payloads, inbox items and log; an id it names that the run was not
 /// handed (a payload, an inbox item, a step it did not begin) is refused. Exceptions of the stores become gRPC statuses the client turns back into the exceptions the kit's logic expects.
 /// </summary>
-internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.RunnerApiBase
+internal sealed class RunnerProtocolService(RunSessions sessions, RunAnswers answers) : RunnerApi.RunnerApiBase
 {
     private const int MaxDeadLetterBytes = 16 * 1024 * 1024;
 
@@ -524,6 +524,15 @@ internal sealed class RunnerProtocolService(RunSessions sessions) : RunnerApi.Ru
         foreach (var line in request.Logs) session.Backend.Log(line.Level.Length == 0 ? "Information" : line.Level, line.Message, line.Item.Length == 0 ? null : line.Item);
         session.Add(request);
         return Task.FromResult(new ReportReply());
+    });
+
+    // ---- the answer of a run a person waits for: held in memory, never written to the state or the log
+
+    public override Task<AnswerReply> Answer(AnswerRequest request, ServerCallContext context) => Guard(() =>
+    {
+        var session = Started(context);
+        answers.Put(session.Identity.RunId, request.Json);
+        return Task.FromResult(new AnswerReply());
     });
 
     // ---- liveness and cancellation

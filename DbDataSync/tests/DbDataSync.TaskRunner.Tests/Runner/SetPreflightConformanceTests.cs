@@ -349,6 +349,73 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         Assert.Equal(before, await SnapshotAsync());
     }
 
+    /// <summary>
+    /// The set's <c>preview</c> and <c>try-strategy</c> on PostgreSQL (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept): the preview reads the mapped columns with the mapping's filter
+    /// through the source's run login, and a strategy's SQL on the target runs as the target's run login, a role that may only read.
+    /// </summary>
+    [Fact]
+    public async Task OnPostgres_APreviewReadsTheFilteredRowsWithTheSourcesLogin_AndAStrategysSqlRunsAsTheTargetsLogin()
+    {
+        var builder = new NpgsqlConnectionStringBuilder(Postgres);
+        var database = $"pv_{_suffix}";
+        var role = $"pv_limited_{_suffix}";
+        await using (var server = new NpgsqlConnection(Postgres))
+        {
+            await server.OpenAsync();
+            await ExecAsync(server, $"CREATE DATABASE {database}");
+            await ExecAsync(server, $"CREATE ROLE {role} LOGIN PASSWORD '{LimitedPassword}'");
+        }
+        _cleanups.Add(async () =>
+        {
+            NpgsqlConnection.ClearAllPools();
+            await using var server = new NpgsqlConnection(Postgres);
+            await server.OpenAsync();
+            await ExecAsync(server, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+            await ExecAsync(server, $"DROP ROLE IF EXISTS {role}");
+        });
+
+        var admin = new NpgsqlConnectionStringBuilder(Postgres) { Database = database }.ConnectionString;
+        await using (var db = new NpgsqlConnection(admin))
+        {
+            await db.OpenAsync();
+            await ExecAsync(db, """
+                CREATE TABLE public.orders (id integer PRIMARY KEY, name text NOT NULL, region integer NOT NULL);
+                INSERT INTO public.orders VALUES (1, 'a', 1), (2, 'b', 2), (3, 'c', 2);
+                CREATE TABLE public.orders_copy (id integer PRIMARY KEY, name text NOT NULL, region integer NOT NULL);
+                """);
+            await ExecAsync(db, $"GRANT CONNECT ON DATABASE {database} TO {role}; GRANT USAGE ON SCHEMA public TO {role}; GRANT SELECT ON public.orders, public.orders_copy TO {role};");
+        }
+
+        Connection("pg", "postgres", builder.Host!, builder.Port, database, builder.Username!);
+        Connection("pg_limited", "postgres", builder.Host!, builder.Port, database, role);
+        Replication("west", "BatchReload", "DeleteInsert", "StagingTable", "pg", database, "public", "orders", "pg_limited", database, "public", "orders_copy", filter: "region = 2");
+        var connections = new Logins(new Dictionary<string, (string, IDriver)>
+        {
+            ["pg"] = (admin, new PostgresDriver()),
+            ["pg_limited"] = (new NpgsqlConnectionStringBuilder(admin) { Username = role, Password = LimitedPassword }.ConnectionString, new PostgresDriver()),
+        });
+        var config = ConfigRepository.ReadOnly(Path.Combine(_root, "config"), SecretStore.ForProviders());
+
+        var preview = await new MappingPreview(config, connections).ReadAsync("west", "main", 1, CancellationToken.None);
+        Assert.Equal(["id", "name", "region"], preview.Columns);
+        var row = Assert.Single(preview.Rows);
+        Assert.Equal(2L, (long)row[2]!);                   // the filter holds: only region 2
+        Assert.True(preview.More);                         // two rows match, one was read
+        Assert.Equal("pg", preview.Connection);
+
+        var trial = new StrategyTrial(config, connections, new DbDataSync.Scripting.CustomSegmentExpansion(new DbDataSync.Scripting.SegmentingStrategyRunner(null!)));   // no script runs: the SQL kinds need no script host
+        var strategy = System.Text.Json.JsonSerializer.Serialize(new { name = "by-region", kind = "TargetSql", sql = "SELECT current_user AS label, '1' AS range_start, '3' AS range_end, true AS selected" });
+        var answer = await trial.TryAsync("west", "main", strategy, "", "region", CancellationToken.None);
+        var candidate = Assert.Single(answer.Candidates);
+        Assert.Equal((role, "region", "1", "3", true), (candidate.Label, candidate.Column, candidate.Start, candidate.End, candidate.Selected));
+
+        // the target's login may not write: a strategy's SQL that writes is refused by the database, and the reason is the person's
+        var writes = System.Text.Json.JsonSerializer.Serialize(new { name = "writes", kind = "TargetSql", sql = "INSERT INTO public.orders_copy VALUES (9, 'z', 9) RETURNING 'x' AS label, '1' AS range_start, '2' AS range_end" });
+        var refused = await Assert.ThrowsAsync<PreviewException>(() => trial.TryAsync("west", "main", writes, "", "region", CancellationToken.None));
+        Assert.Contains("permission denied", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("permission denied", refused.Kept, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Each connection with the connection string given for it, as a runner opens it with its slot's run login.</summary>
     private sealed class Logins(IReadOnlyDictionary<string, (string ConnectionString, IDriver Driver)> logins) : IConnectionFactory
     {
