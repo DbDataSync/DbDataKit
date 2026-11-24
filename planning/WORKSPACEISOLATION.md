@@ -47,7 +47,6 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
-| WORKSPACEISOLATION-17 | The console's deploy and its calls on a deployed build (runs, run reads, binding tests, contracts, activation) check only that the person may read the project on the Workspace service; the target's own roles decide the rest (publisher to deploy, operator to run, administrator to test a login). `docs/publishing.md` (step 2 of a deploy and the route table) follows | none | S | a test: Ben, a viewer of the project and a publisher and operator on the Runner, deploys a build and runs its task from the Runs tab; a person who may not read the project is refused by the Workspace service |
 
 ## Where each part goes (the list of WORKSPACEISOLATION-1)
 
@@ -251,6 +250,20 @@ Scenario: Ana sends `{"user": "ana_dev", "password": "..."}` for `crm` in `dev`.
 - Option B: the console refuses a `user` until AUTHORING-19 writes the copy, so a user sent today is never dropped quietly.
 
 Recommendation: A: the screen sends the login once, and AUTHORING-19 writes the user into the copy from the same request.
+
+### WORKSPACEISOLATION-P30: who may list the deploys of a Workspace server's builds (question, awaiting the owner)
+
+Scenario: Pat may read the project `sales` on the Workspace server and not `orders`. The console refuses Pat a deploy of `orders` and every call on a
+deploy of it, in the Workspace server's words. `GET /api/deploys?workspace_server=Workspace&project=orders` still answers Pat with each deploy of
+`orders`: the build record (the commit, the workspace, what the validators found), the Runner, the channel and the version. The console checks only
+that Pat is signed in.
+
+- Option A (as built): the list stays open to anyone signed in to the console; a deploy record says where a build went, which the Runner's own screens
+  show a viewer there too.
+- Option B: the list asks the Workspace server for the project as the person, as the calls on a deploy do; a list that names no project shows only the
+  deploys of projects the person may read (one question to the Workspace server per project in the list).
+
+Recommendation: B, so a person who may not read a project does not read its build records through the console.
 
 ## Shared areas touched
 
