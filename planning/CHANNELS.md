@@ -26,6 +26,7 @@ abandoned; a release is proven in a browser. How channels work is `docs/publishi
 | CHANNELS-4 | The table of a channel override as a lineage node of its own, marked with the channel | CHANNELS-2 | S | the console's graph shows `dw_test.orders` beside `dw.orders` with `channel: test` |
 | CHANNELS-5 | A preview and its draft are removed when the Workspace merges or abandons the branch | none | S | a Workspace test merges a branch and the Gateway reports the preview and its draft gone |
 | CHANNELS-6 | A Playwright story of the Releases screen | none | S | the story makes a release of two items, approves it, runs it and resumes after a failure |
+| CHANNELS-7 | A channel carries a `production` setting that an administrator sets on the Runner and on the Gateway; more than one channel may have it. Every rule that treats a channel as production reads the setting instead of the name `prod`: the preflight before a version is activated, the rule that keeps a non-production channel off production's connections, the catalog read's warning and the channel picker's default, the contract check. `prod` is only the name of the channel a new group starts with, and it starts with the setting on | none | M | a group with channels `live-eu` and `live-us` marked production holds a served deploy to either for its preflight; a channel named `prod` with the setting off does not hold it; a test lists no rule that compares a channel's name to `prod` |
 
 ## Needs from other subjects
 

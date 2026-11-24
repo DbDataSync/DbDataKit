@@ -64,16 +64,6 @@ refuses it and a catalog read answers 409 naming the missing signature. The dire
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
 
-### AUTHORING-P11: following a read the console stopped waiting for (default, awaiting the owner)
-
-Built as the default: `GET api/workspace-catalog/{workspace}/{project}/read/{run}` checks that the person may read the project named in the address and
-that the run is a `discover` of the built-in package in the channel given, but not that the run was started for that project, because the Runner keeps
-no inputs on a run's record. Scenario: Bob may read the project `orders` and learns the run id of Ana's read of `crm-to-dw` in `dev`. Option A (built):
-Bob follows it under `orders` and sees `crm-to-dw`'s shape; as a viewer of that Runner he could already read the same step through the relay. Option B:
-the console remembers which runs it started for which person and project, and refuses any other (a follow that lands on another console instance of a
-scaled-out console is refused too). Option C: the Runner keeps the package and slot of a metadata run on its record, and the console checks them.
-Recommendation: C.
-
 ### AUTHORING-P12: a read of one table that no longer finds it (default, awaiting the owner)
 
 Built as the default: a Refresh of one table whose read no longer finds the table (it was dropped or renamed) shows "1 table removed", and Accept takes
@@ -97,14 +87,6 @@ Built as the default: such a channel is listed as "not bound", cannot be picked,
 to bind it. Option B: `test` can be picked, and Refresh answers the Runner's own refusal ("has no binding in channel 'test'"). Option C: such a channel
 is not listed at all. Recommendation: A until Set up for development (AUTHORING-19) is built; then picking it offers Set up for development, as
 AUTHORING-6 says.
-
-### AUTHORING-P15: which deploys wait for a preflight (default, awaiting the owner)
-
-Built as the default: only a deploy to the channel named `prod` with **serve** on waits for the package's `preflight`; a deploy that stages, or one to
-any other channel, runs none. Scenario: Ana publishes `sales` to `test` served, and to `prod` staged. Option A (built): neither runs a preflight; the
-staged `prod` version activates by itself when the Runners are ready, as before. Option B: every served deploy waits for its preflight, in any
-channel. Option C: a channel the Runner marks as production (a setting of the channel, not its name) waits, and a stage to it is held for its
-preflight too. Recommendation: C once channels carry such a setting (CHANNELS); A until then.
 
 ### AUTHORING-P16: how long the deploy waits for the preflight (default, awaiting the owner)
 
