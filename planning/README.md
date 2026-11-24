@@ -35,6 +35,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 25 | [COMMANDLINES](COMMANDLINES.md) | The suite's programs only run and configure the four services; Build, Sync and the Store are called as libraries | needs review | unassigned |
 | 26 | [DOCSREVIEW](DOCSREVIEW.md) | Reference docs the owner approves, and every doc and plan checked against them | queued | unassigned |
 | 27 | [WORKSPACEISOLATION](WORKSPACEISOLATION.md) | The Workspace service calls no other service and never handles a secret; the control service deploys what it builds | queued | unassigned |
+| 28 | [ERRORDETAILS](ERRORDETAILS.md) | An administrator can investigate every failure: its full detail is kept and shown to administrators; everyone else sees the classified words and an id | queued | unassigned |
 
 ## Parked
 

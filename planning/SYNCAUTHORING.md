@@ -410,17 +410,6 @@ set's `provision` task, createTargetTable) before the first pass", and she appli
 Option B, a missing target table is always a warning, since `provision` creates it after the version is served. Option C, always an error.
 Recommendation: A, since a pass refuses a missing table and a confirmed error says so in the Runner's record.
 
-### SYNCAUTHORING-P52: what the preflight's read of the source compiles, and what a refused read says (default, awaiting the owner)
-
-The read that returns no row is `SELECT <the mapped columns that exist> FROM <table> WHERE (<filter>) AND 1 = 0`: a column's `transform`, a
-relationship's joined table and a query source's filter are not part of it (a query source is read as `SELECT * FROM (<query>) preflight_query WHERE
-1 = 0`). When the database refuses it, the finding gives the suite's classified words for a driver failure (`The statement was not accepted by the
-server. [db 42703]`), the statement and, for a filter, the table's columns; the database's own message is left out, as every driver failure leaves it
-out unless the host shows details. Scenario: Ana's filter `regoin > 0` fails with "The source filter of the mapping 'main' on crm.dbo.orders fails on
-the database: The statement was not accepted by the server. [db 42703] The statement, which reads no row: SELECT ... WHERE (regoin > 0) AND 1 = 0.
-The columns of crm.dbo.orders are id, name, region." Option A, as built. Option B, also compile each `transform` in the select list. Option C, show
-the database's own message for this read, which names the column and holds no row's value. Recommendation: A with C.
-
 ### SYNCAUTHORING-P53: the preflight's parts and its input (default, awaiting the owner)
 
 Each mapping records one `preflight-findings` step keyed `<replication>/<mapping>`; a replication that keeps its state on the target records one
