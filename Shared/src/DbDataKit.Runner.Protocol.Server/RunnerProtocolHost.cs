@@ -39,13 +39,17 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
     private readonly RunSessions _sessions;
     private readonly string? _ownedDirectory;
 
-    private RunnerProtocolHost(WebApplication app, RunSessions sessions, RunnerEndpoint endpoint, string? ownedDirectory)
+    private RunnerProtocolHost(WebApplication app, RunSessions sessions, RunAnswers answers, RunnerEndpoint endpoint, string? ownedDirectory)
     {
         _app = app;
         _sessions = sessions;
+        Answers = answers;
         Endpoint = endpoint;
         _ownedDirectory = ownedDirectory;
     }
+
+    /// <summary>The answers runs handed over with <c>Answer</c>, held in memory for the console that started each run.</summary>
+    public RunAnswers Answers { get; }
 
     /// <summary>Where tasks connect.</summary>
     public RunnerEndpoint Endpoint { get; }
@@ -59,6 +63,7 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
         options ??= new RunnerProtocolHostOptions();
         var time = options.Time ?? TimeProvider.System;
         var sessions = new RunSessions(time, options.DefaultTokenLifetime);
+        var answers = new RunAnswers(time);
         string? owned = null;
         RunnerEndpoint endpoint;
         string? socketPath = null;
@@ -85,6 +90,7 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
             else kestrel.ListenNamedPipe(endpoint.Address, listen => listen.Protocols = HttpProtocols.Http2);
         });
         builder.Services.AddSingleton(sessions);
+        builder.Services.AddSingleton(answers);
         builder.Services.AddGrpc(grpc =>
         {
             grpc.Interceptors.Add<RunTokenInterceptor>();
@@ -105,7 +111,7 @@ public sealed class RunnerProtocolHost : IAsyncDisposable
             throw;
         }
 
-        return new RunnerProtocolHost(app, sessions, endpoint, owned);
+        return new RunnerProtocolHost(app, sessions, answers, endpoint, owned);
     }
 
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
