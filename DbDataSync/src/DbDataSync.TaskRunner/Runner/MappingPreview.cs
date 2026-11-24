@@ -91,7 +91,7 @@ public sealed class MappingPreview(ConfigRepository config, IConnectionFactory c
             }
             catch (DbException ex)
             {
-                throw new PreviewException($"The read of {label} for the mapping '{mapping.Name}' fails on '{source.ConnectionName}': {DriverFailures.Describe(ex, driver.DriverType)}",
+                throw new PreviewException($"The read of {label} for the mapping '{mapping.Name}' fails on '{source.ConnectionName}': {DriverFailures.DescribeForThePerson(ex, driver.DriverType)}",
                     $"The read of {label} for the mapping '{mapping.Name}' fails on '{source.ConnectionName}'. The database's reason went to the person who asked and is not kept.");
             }
 

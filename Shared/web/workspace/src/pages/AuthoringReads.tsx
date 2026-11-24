@@ -4,11 +4,11 @@ import { Link as ConsoleLink } from 'react-router-dom'
 import { ErrorBanner, useModule } from '@dbdatakit/shell'
 import {
   authoringReadApi, bindingLeftLine, describedLine, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
-  type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NewestRun,
+  type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NewestRun, type RunAnswer,
 } from '../authoringReads'
 import { workspaceServerOf, type ChannelList } from '../catalogRefresh'
 import { developmentLoginApi, developmentLoginLine, developmentLoginWarning, type DevelopmentLoginAnswer, type DevelopmentLoginRequest } from '../developmentLogin'
-import { deployApi, useHostedServer, type RunnerVersion } from '../deploys'
+import { deployApi, useHostedServer, useRunnerVersion, type RunnerVersion } from '../deploys'
 import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
 // The Designer's shared pieces of authoring-time reads besides the channel picker and Refresh: Set up for development, Test, Describe and the newest-check
@@ -210,5 +210,62 @@ export function NewestChecks({ project, id, task = PREFLIGHT_TASK, step = PREFLI
       {deploys.isSuccess && channels.length === 0 && <div className="hint" data-testid="wsp-newest-checks-none">No channel of a Runner has a version of this draft with a {task}.</div>}
       {channels.map((v) => <NewestCheck key={`${v.target}/${v.channel}`} version={v} task={task} step={step} />)}
     </div>
+  )
+}
+
+/** What a screen asks of a run whose answer it waits for: the task and its inputs. */
+export interface AnswerAsk { task: string; inputs: Record<string, string> }
+
+/**
+ * A run of a manual task a person waits for (the set's `preview`, `try-strategy`), on the version the newest deploy of this draft put on a Runner, started through
+ * the console as the signed-in person; its answer comes back in the call, or, when the run takes longer than the console waits, from following the run. The answer
+ * is kept in this screen's memory only: the console passes it on and neither it, the Runner nor the Workspace server keeps it.
+ * Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept
+ */
+export function useRunAnswer<T>(project: string, id: string) {
+  const published = useRunnerVersion(project, id)
+  const version = published.data ?? null
+  const start = useMutation<RunAnswer<T>, Error, AnswerAsk>({
+    mutationFn: ({ task, inputs }) => {
+      if (!version) throw new Error('No build of this draft is published to a Runner yet: build it and publish it on the Builds tab; the preview reads what that version has.')
+      return authoringReadApi.answer<T>(version.deploy, task, inputs)
+    },
+  })
+  const running = start.data?.state === 'running' && version ? start.data : undefined
+  const follow = useQuery<RunAnswer<T>, Error>({
+    queryKey: ['console', 'run-answer', version?.deploy, running?.run_id], queryFn: () => authoringReadApi.followAnswer<T>(version!.deploy, running!.run_id),
+    enabled: running !== undefined, refetchInterval: (q) => (q.state.data?.state === 'running' || q.state.data === undefined ? FOLLOW_MS : false), retry: false,
+  })
+  const done = start.data?.state === 'done' ? start.data : follow.data?.state === 'done' ? follow.data : undefined
+  return {
+    /** The version the run reads: the newest deploy of this draft to a Runner; null when none. */
+    version, loading: published.isLoading,
+    ask: (asked: AnswerAsk) => start.mutate(asked),
+    reset: () => start.reset(),
+    pending: start.isPending,
+    /** Still going after the console stopped waiting: the run and its link. */
+    running: running !== undefined && follow.data?.state !== 'done' && !follow.isError ? running : undefined,
+    answer: done?.answer, run: done,
+    error: start.error ?? follow.error ?? null,
+  }
+}
+
+/** Where a run a person waits for stands, in words: what it reads, the production warning, waiting, still going (with the run's link) or the reason it failed. */
+export function RunAnswerStatus({ version, pending, running, error, testId }: {
+  version: RunnerVersion | null; pending: boolean; running: RunAnswer<unknown> | undefined; error: Error | null; testId: string
+}) {
+  return (
+    <>
+      {version && version.channel === 'prod' && (
+        <div className="hint warn" data-testid={`${testId}-production`}>This reads rows of production ({version.channel} on {version.targetName}) with the login production binds. The rows are shown here and kept nowhere.</div>
+      )}
+      {pending && <span className="hint" data-testid={`${testId}-waiting`}> Reading on {version?.targetName ?? 'the Runner'}...</span>}
+      {running && (
+        <div className="hint" data-testid={`${testId}-running`}>
+          It takes longer than 10 seconds. It goes on as <ConsoleLink to={running.link} data-testid={`${testId}-run-link`}>a run on {running.runner_name}</ConsoleLink>, and its answer is shown here when it ends.
+        </div>
+      )}
+      {error && <div data-testid={`${testId}-failed`}><ErrorBanner error={error} /></div>}
+    </>
   )
 }

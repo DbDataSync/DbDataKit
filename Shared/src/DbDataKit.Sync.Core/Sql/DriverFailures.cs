@@ -70,6 +70,16 @@ public static class DriverFailures
         return IncludeDetails ? failure.PublicMessage + " " + Redaction.Redact(Innermost(exception).Message) : failure.PublicMessage;
     }
 
+    /// <summary>
+    /// <see cref="Describe"/> with the database's own words after it, masked as every detail is: for an answer only the person who asked reads and nothing keeps (a run's record and log withhold them unless
+    /// details are on, because they can quote a value of a table).
+    /// </summary>
+    public static string DescribeForThePerson(Exception exception, string? driverType = null)
+    {
+        var described = Describe(exception, driverType);
+        return !CameFromADriver(exception) || IncludeDetails ? described : described + " " + Redaction.Redact(Innermost(exception).Message);
+    }
+
     /// <summary>The stack-trace-bearing detail stored with a failed run: complete for Sync's own errors, withheld for a driver's unless details are on.</summary>
     public static string? Detail(Exception exception)
     {

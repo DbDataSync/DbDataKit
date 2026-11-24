@@ -23,6 +23,7 @@ import { pendingSteps, ProvisioningCard } from './ProvisioningCard'
 import { RelationshipsCard } from './RelationshipsCard'
 import { SourceFilterCard } from './SourceFilterCard'
 import { nextMappings, suggestColumnMappings } from './suggestMappings'
+import { MappingRowsPreview } from './MappingRowsPreview'
 
 const emptySource: SourceTableSpec = { connectionName: null, database: null, schema: '', table: '', filter: null, query: null }
 const emptyTarget: TableSpec = { connectionName: null, database: null, schema: '', table: '' }
@@ -174,6 +175,9 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
       />
 
       <SourceFilterCard filter={source.filter} onChange={(filter) => setSource({ ...source, filter })} editable={draft.canEdit} />
+
+      {/* a mapping that was never saved is in no published version, so there is nothing of it to read yet */}
+      {!view.isNew && <MappingRowsPreview replication={model.replication} mapping={name} />}
 
       <SubTabs base={base} tabs={mappingTabs(base, pendingSteps(planned))} testId="mapping-subtabs" />
 

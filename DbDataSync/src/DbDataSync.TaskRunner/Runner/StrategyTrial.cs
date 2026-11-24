@@ -74,7 +74,7 @@ public sealed class StrategyTrial(ConfigRepository config, IConnectionFactory co
         catch (Exception ex) when (ex is InvalidOperationException or DbException or ArgumentException)
         {
             // a query that does not compile, returns the wrong columns or cannot reach its side is the strategy being wrong: said in the form, not as a crash
-            throw new PreviewException($"The strategy '{strategy.Name}' failed: {DriverFailures.Describe(ex)}",
+            throw new PreviewException($"The strategy '{strategy.Name}' failed: {DriverFailures.DescribeForThePerson(ex)}",
                 $"The strategy '{strategy.Name}' failed. The reason went to the person who asked and is not kept: a database's reason can quote a value.");
         }
 
