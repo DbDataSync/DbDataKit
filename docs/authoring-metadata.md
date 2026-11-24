@@ -197,7 +197,7 @@ The screen shows the difference and replaces the entry on **Accept**, as for a R
 ## Before anything is published: Set up for development
 
 A read needs a binding in some channel, not a published version. A person who works on a draft can give the project's Runner a development login for
-a connection, so the connection can be read in a channel other than production before anything is published.
+a connection, so the connection can be read in the channel the person picks before anything is published.
 
 ### How a screen sends a development login
 
@@ -208,11 +208,17 @@ relay, as it does for the reads above.
 
 What the console does with it:
 
-1. It checks the request. `prod` is refused (409): production's logins are bound by an administrator on the Runner's Packages page (Bindings).
+1. It checks the request: the channel, the connection, the password, and the user when one is sent.
 2. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. That request carries no part of
    the login. The answer says whether the person may read the project and which package it becomes on a Runner.
-3. It stores each part of the login in the Runner's secret store (`PUT /api/v1/secrets/{name}` on the Runner) as the signed-in person. The Runner asks
-   for its admin role, as it does for every secret it stores, and records the person in its audit with the name and length of the value.
+3. It stores the password in the Runner's secret store (`PUT /api/v1/secrets/{name}` on the Runner) as the signed-in person. The Runner asks for its
+   admin role, as it does for every secret it stores, and records the person in its audit with the name and length of the value.
+
+The password is the only secret stored. The user is not a secret: the console gives it back in its answer as plain text. The user belongs in the
+text of the connection's copy on the Runner, beside the reference to the password's secret.
+
+The console accepts any channel, `prod` included. A person who holds a production login and the Runner's admin role can store it for `prod` the same
+way. The password of each channel is stored under its own name, so a login stored for `dev` is never used by `prod`.
 
 The login never reaches the Workspace server, so it is in none of its state, audit or log. A refusal of the Workspace server or of the Runner is passed
 on with its own words.
@@ -224,10 +230,11 @@ POST /api/workspace-dev-logins/ws-1/crm-to-dw
 {"runner": "runners-eu", "channel": "dev", "connection": "crm", "user": "ana_dev", "password": "..."}
 
 200 {"package": "crm-to-dw", "connection": "crm", "slot": "crm", "channel": "dev", "production": false,
-     "runner": "runners-eu", "runner_name": "runners-eu", "secrets": {"user": "dbdatakit:runner:...", "password": "dbdatakit:runner:..."}}
+     "runner": "runners-eu", "runner_name": "runners-eu", "user": "ana_dev",
+     "secrets": {"password": "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password"}}
 ```
 
-The answer names the secrets the Runner now holds, never a value.
+The answer names the secret the Runner now holds, never its value. `production` is `true` when the channel is `prod`.
 
 **Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel other than `prod` does not
 bind the connection's slot, or when no channel binds it (also when the Runner holds no version of the package yet and lists no channel). The person picks
@@ -236,8 +243,8 @@ to `<Runner>`**. The screen sends them with the route above and keeps nothing of
 for dev." While the channel does not bind the slot yet, the line also says what an administrator binds, and **Ask runners-eu again** reads the channels
 again once it is bound.
 
-**Planned.** The console also puts the connection's copy on the Runner with its password naming the stored secret, and binds the slot in the channel the
-person picked, so no administrator has to. The console's posture page lists the non-production bindings made this way.
+**Planned.** The console also puts the connection's copy on the Runner with the user as plain text and the password naming the stored secret, and
+binds the slot in the channel the person picked, so no administrator has to. The console's posture page lists the bindings made this way.
 
 **Until then, an administrator binds the slot by hand.** The project's package must be on the Runner, and the Runner's own bindings screen (its Packages
 page, Bindings) binds the slots of a version it holds:
@@ -245,8 +252,8 @@ page, Bindings) binds the slots of a version it holds:
 1. Publish a build of the draft to the Runner's `dev` channel, staged rather than served (the Workspace's Builds tab, whose publish can also bind each
    slot to a connection).
 2. Store the development login on the Runner: with the route above, or on the Runner's Packages page, which sets a run login.
-3. An administrator binds the connection's slot in `dev` on the Runner's bindings screen. The console sends the connection's copy with its secret
-   references, and the copy's password names the secret the Runner holds.
+3. An administrator binds the connection's slot in `dev` on the Runner's bindings screen. The console sends the connection's copy with the user as
+   plain text and the password naming the secret the Runner holds.
 
 Refresh then reads in `dev`. When no channel binds the slot, the channel picker names the channel and this way to bind one.
 

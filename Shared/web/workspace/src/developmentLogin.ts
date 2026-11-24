@@ -1,22 +1,24 @@
 import { request } from '@dbdatakit/shell'
 
-// A development login, as a Workspace screen sends it: to the console's own route, which puts it in a Runner's secret store for the project's package,
-// the channel and the connection's slot. The Workspace server never receives it (the route is the host's, whatever server the module talks to).
-// Design: docs/authoring-metadata.md#before-anything-is-published-set-up-for-development
+// A development login, as a Workspace screen sends it: to the console's own route, which puts its password in a Runner's secret store for the project's
+// package, the channel and the connection's slot. The user is not a secret and comes back as plain text. The Workspace server never receives the login
+// (the route is the host's, whatever server the module talks to).
+// Design: docs/authoring-metadata.md#how-a-screen-sends-a-development-login
 
-/** What a screen sends: the Runner (its id in the console), a channel other than production, the project's connection, and the login the person typed. */
+/** What a screen sends: the Runner (its id in the console), the channel the person picked, the project's connection, and the login the person typed. */
 export interface DevelopmentLoginRequest { runner: string; channel: string; connection: string; user?: string; password: string }
 
-/** What the console answers: where the login went and the names of the secrets that hold it on the Runner, never a value. */
+/** What the console answers: where the login went, the name of the secret that holds its password on the Runner (never its value), and the user as sent. */
 export interface DevelopmentLoginAnswer {
   package: string
   connection: string
   slot: string
   channel: string
-  production: false
+  production: boolean
   runner: string
   runner_name: string
-  secrets: { user?: string; password: string }
+  user?: string
+  secrets: { password: string }
 }
 
 const enc = encodeURIComponent

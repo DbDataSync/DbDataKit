@@ -29,7 +29,7 @@ async function mockConsoleReads(page: Page) {
   await page.route('**/api/workspace-dev-logins/**', (route) => {
     sent.push({ path: new URL(route.request().url()).pathname, body: route.request().postData() ?? '' })
     const body = route.request().postDataJSON() as { channel: string; user?: string }
-    return json(route, { ...base, channel: body.channel, production: false, secrets: { user: `dbdatakit:runner:dev-login:sales-dw.${body.channel}.warehouse:user`, password: `dbdatakit:runner:dev-login:sales-dw.${body.channel}.warehouse:password` } })
+    return json(route, { ...base, channel: body.channel, production: false, ...(body.user ? { user: body.user } : {}), secrets: { password: `dbdatakit:runner:dev-login:sales-dw.${body.channel}.warehouse:password` } })
   })
   await page.route('**/api/workspace-catalog/**', (route) => {
     const url = new URL(route.request().url())

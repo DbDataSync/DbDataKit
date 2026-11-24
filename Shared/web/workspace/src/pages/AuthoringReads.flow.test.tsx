@@ -40,7 +40,7 @@ function fakeConsole() {
       const body = JSON.parse(String(init!.body)) as { channel: string; user?: string }
       return reply({
         package: 'crm-to-dw', connection: 'crm', slot: 'crm', channel: body.channel, production: false, runner: 'r-1', runner_name: 'runners-eu',
-        secrets: { ...(body.user ? { user: `dbdatakit:runner:dev-login:crm-to-dw.${body.channel}.crm:user` } : {}), password: `dbdatakit:runner:dev-login:crm-to-dw.${body.channel}.crm:password` },
+        ...(body.user ? { user: body.user } : {}), secrets: { password: `dbdatakit:runner:dev-login:crm-to-dw.${body.channel}.crm:password` },
       })
     }
     if (path === `${project}/binding-test`) {
