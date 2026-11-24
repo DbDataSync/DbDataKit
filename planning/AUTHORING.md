@@ -105,16 +105,6 @@ and serves the new package in `prod` before `apply_plan` has run. Option A (buil
 she confirms, and the refresh would have been refused anyway. Option B: pending steps are a warning, the version is activated, and the next refresh
 fails naming the structure. Recommendation: A.
 
-### AUTHORING-P18: who may activate a version held for its preflight (default, awaiting the owner)
-
-Built as the default: the console activates as the person, and the Runner's `activate` is its administrator call, so a person with the approver
-role on the Workspace server and the publisher role on the Runner can stage the version and see its preflight but cannot activate it. Scenario: Bob
-is a publisher on the Runner `jobs`, not its administrator, and serves `sales` in `prod`; the preflight finds nothing. Option A (built): the
-activation is refused in the Runner's words and the version waits for an administrator (on the Runner's Packages screen or the publish panel).
-Option B: the Runner lets the publisher who staged a held version activate it, with the reason kept. Option C: the console activates with its own
-key after checking the person's approver role on the Workspace server. Recommendation: B, so a publisher's deploy to `prod` finishes without an
-administrator when the preflight finds nothing, and an administrator is still needed to confirm an error if the owner wants that (a further choice).
-
 ## Shared areas touched
 
 - `DbDataKit.Authoring`, `DbDataKit.Authoring.Server`, `Shared/web/workspace`, `Shared/web/console` (posture, secrets overview), `DbDataKit.Agents`.
