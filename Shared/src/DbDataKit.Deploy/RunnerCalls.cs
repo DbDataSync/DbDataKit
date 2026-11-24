@@ -82,6 +82,17 @@ public sealed class RunnerCalls
     }
 
     /// <summary>
+    /// The newest run of <paramref name="task"/> of the package in the channel, whatever version it ran, with the steps named <paramref name="stepName"/> it recorded (as <see cref="RunOfAsync"/> answers it); null when the task never ran there.
+    /// </summary>
+    public async Task<JsonObject?> NewestRunAsync(string package, string channel, string task, string? stepName, CancellationToken ct = default)
+    {
+        IReadOnlyList<ClientRun> runs;
+        try { runs = await client.RunsAsync(target.Name, null, package, channel, task, 1, null, null, null, ct); }
+        catch (RunnerClientException ex) { throw Refused(ex); }
+        return runs.Count == 0 ? null : await RunOfAsync(package, channel, runs[0].Id, stepName, ct);
+    }
+
+    /// <summary>
     /// The Runner's own test of a slot's binding: the slot is bound in the channel, the Runner has the connection it names, the login resolves and the connection opens, tried on the Runner the way a run would, so the login never leaves the
     /// Runner. The Runner asks for its administrator role and refuses a caller without it in its words. The answer is the Runner's (<c>slot, ok, step, message, connected</c>) with where it was tried; no value is in it.
     /// </summary>
