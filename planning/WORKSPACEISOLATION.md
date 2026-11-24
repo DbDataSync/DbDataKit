@@ -47,6 +47,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
+| WORKSPACEISOLATION-16 | A login sent from the Workspace screens (`POST /api/workspace-dev-logins/...`, `ConsoleDevelopmentLogins`): only its password is stored in the Runner's secret store; the user is not a secret, and goes as plain text into the connection's copy that names the password's secret. The refusal of `prod` goes: the person stores a login for the channel they pick. The docs (`docs/authoring-metadata.md`, "How a screen sends a development login") follow | none | S | a test sends a login for `dev` and one for `prod`: both are stored, each as one secret, the password; no secret holds the user |
 
 ## Where each part goes (the list of WORKSPACEISOLATION-1)
 
@@ -226,58 +227,6 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
   Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
-
-## Proposed decisions
-
-### WORKSPACEISOLATION-P24: who may store a development login on a Runner (default, awaiting the owner)
-
-Scenario: Ana is an author of the project `crm-to-dw` and holds the operator role on the Runner `runners-eu`. She sends a development login for `crm`
-in `dev` (`POST /api/workspace-dev-logins/...`). The console stores it on the Runner as Ana, and the Runner refuses: "This needs the admin role."
-
-- Option A (built): the Runner decides, with the admin role it asks for every secret it stores (`RunnerSecretsApi`). Only a Runner administrator can
-  set up a development login today.
-- Option B: a person who may author the project stores a development login in a non-production channel, after a warning that names the Runner and the
-  channel; the console checks the project role and stores the login with its own identity (CHANNELS-1's client, built with AUTHORING-19).
-- Option C: the Runner lets its operator role store a secret whose name is a development login (`dbdatakit:runner:dev-login:...`), and keeps the admin
-  role for every other secret.
-
-Recommendation: A until AUTHORING-19 is built, then B: a person with access to the project can do it, with a clear warning, and production stays the
-administrator's.
-
-### WORKSPACEISOLATION-P25: the names a development login is stored under (default, awaiting the owner)
-
-Scenario: Ana sets up `crm` of `crm-to-dw` for `dev`, typing the user `ana_dev` and a password. The Runner then holds
-`dbdatakit:runner:dev-login:crm-to-dw.dev.crm:user` and `dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password`. Setting up `test` later stores two
-other names, so a login of one channel never serves another.
-
-- Option A (built): one name per package, channel and slot, of the kind `dev-login`, with the parts `user` and `password`; the user is kept as a secret
-  too, so the connection's copy can be written from it later without asking Ana again.
-- Option B: the names of the connection's copy (`dbdatakit:runner:connection:<copy>:password`), the user written into the copy's text when it is sent,
-  and nothing stored for the user.
-
-Recommendation: A: the name says where the login is used, and a person reading the Runner's secrets overview sees which are development logins.
-
-### WORKSPACEISOLATION-P26: a development login for production (default, awaiting the owner)
-
-Scenario: Ana sends a development login for `crm` in `prod`. The console refuses (409): "A development login is set up in a channel other than prod.
-Production's logins are bound by an administrator on the Runner's Packages page (Bindings)." Nothing is sent to the Workspace server or the Runner.
-
-- Option A (built): `prod` is refused before anything is sent, for everyone.
-- Option B: a Runner administrator may store a login for `prod` this way, after a warning that it is production's login.
-
-Recommendation: A: production's logins are bound on the Runner, where its confirmations are, and a development login stays a development login.
-
-### WORKSPACEISOLATION-P27: what the Workspace server learns about a development login (default, awaiting the owner)
-
-Scenario: Ana sets up `crm` for `dev`. The console asks the Workspace server only which package `crm-to-dw` is (`GET /api/v1/projects/crm-to-dw`). Once the
-slot is bound in `dev`, the channel picker shows `dev` as bound, read from the Runner through the console.
-
-- Option A (built): the Workspace server is not told; it learns that the binding exists the way every screen does, through the console's read of the
-  Runner's channels.
-- Option B: the console also tells the Workspace server which binding it made (`{runner, channel, connection}`, no value), and the Workspace server records
-  it in its audit as something done on the project.
-
-Recommendation: A: the binding is the Runner's, and a second record could disagree with it.
 
 ## Shared areas touched
 
