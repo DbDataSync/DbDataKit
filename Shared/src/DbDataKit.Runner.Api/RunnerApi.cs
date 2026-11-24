@@ -289,17 +289,20 @@ public static class RunnerApi
             var person = Text(context.Request.Query["on_behalf_of"])?.Trim();
             if (person is null) return Results.BadRequest(new { error = "Name the person the run was started for: ?on_behalf_of=." });
             if (person.Length > RunnerControl.MaxOnBehalfOf) return Results.BadRequest(new { error = $"on_behalf_of is the name of a person, text of at most {RunnerControl.MaxOnBehalfOf} characters." });
-            if (new RunStore(state, RunnerNames.EngineService).Get(id) is not { } run || run.Service != RunnerNames.EngineService)
-                return Results.NotFound(new { error = $"There is no run {id}." });
+            // a run that is queued has its work item and no record yet
+            var run = new RunStore(state, RunnerNames.EngineService).Get(id) is { } stored && stored.Service == RunnerNames.EngineService ? stored : null;
+            var item = new DbDataKit.Scheduling.ModuleWorkQueueStore(state, RunnerNames.EngineService).FindByRun(id);
+            if (run is null && item is null) return Results.NotFound(new { error = $"There is no run {id}." });
 
             // only the person the run was started for, through the same console, takes its answer: it can hold rows of a table
-            var asked = new DbDataKit.Scheduling.ModuleWorkQueueStore(state, RunnerNames.EngineService).FindByRun(id) is { } item ? WorkPayload.TryParse(item.PayloadJson, out _)?.RequestedBy : null;
+            var asked = item is null ? null : WorkPayload.TryParse(item.PayloadJson, out _)?.RequestedBy;
             if (asked != RunnerControl.RequestedBy(held.Actor, person))
                 return Results.Json(new { error = $"The run {id} was not started by this console for {person}; its answer goes only to the person who asked." }, statusCode: StatusCodes.Status403Forbidden);
 
+            JsonNode? Described() => run is null ? new JsonObject { ["id"] = id.ToString(), ["outcome"] = "queued" } : Run(run);
             if (engine().Answers is { } answers && answers.TryTake(id, out var json))
-                return Results.Json(new JsonObject { ["state"] = "done", ["run"] = Run(run), ["answer"] = JsonNode.Parse(json) });
-            if (run.Run.Finished is null) return Results.Json(new JsonObject { ["state"] = "running", ["run"] = Run(run) }, statusCode: StatusCodes.Status202Accepted);
+                return Results.Json(new JsonObject { ["state"] = "done", ["run"] = Described(), ["answer"] = JsonNode.Parse(json) });
+            if (run?.Run.Finished is null) return Results.Json(new JsonObject { ["state"] = "running", ["run"] = Described() }, statusCode: StatusCodes.Status202Accepted);
             if (run.Run.Outcome is not (RunOutcome.Succeeded or RunOutcome.CompletedWithFailures))
                 return Results.Json(new JsonObject { ["state"] = "failed", ["run"] = Run(run), ["error"] = run.Run.Failure?.Message ?? $"The run ended {run.Run.Outcome.ToString().ToLowerInvariant()} without an answer." }, statusCode: StatusCodes.Status422UnprocessableEntity);
             return Results.Json(new JsonObject
