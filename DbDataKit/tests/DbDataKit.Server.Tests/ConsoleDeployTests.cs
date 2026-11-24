@@ -32,7 +32,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
 
     /// <summary>
     /// The stand-in of <c>dbdatasync</c> and <c>dbdatabuild</c> for the verbs the Workspace runs to check and package a project: a draft with a file named <c>broken</c> is refused in the program's way (the file, on the error output, exit
-    /// 1); otherwise the package is a <c>package/1</c> manifest whose manual tasks <c>load</c> and <c>provision</c> read the connection slot <c>source</c>, with the project's files under <c>files/</c>. A draft with a file named
+    /// 1); otherwise the package is a <c>package/1</c> manifest whose manual tasks <c>load</c>, <c>provision</c> and <c>preview</c> read the connection slot <c>source</c>, with the project's files under <c>files/</c>. A draft with a file named
 /// <c>preflight</c> also has the manual task <c>preflight</c>.
     /// </summary>
     private const string Tool = """
@@ -44,7 +44,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         if [ "$verb" = "project show" ]; then echo '{"diagnostics":[]}'; exit 0; fi
         if [ -n "$out" ]; then
           mkdir -p "$out/files/repo" "$out/files/bin"; printf 'a stand-in assembly' > "$out/files/bin/Orders.dll"; for f in "$root"/*; do case "$(basename "$f")" in .git) ;; *) cp -r "$f" "$out/files/repo/";; esac; done
-          printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n  - name: provision\n    entry: { type: Orders.Provision }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
+          printf 'schema: package/1\nname: %s\nlaunch: { kind: assembly, assembly: bin/Orders.dll }\nbuilt_against: { dotnet: "10.0", kit: "1", protocol: dbdatakit.runner.v1 }\ntasks:\n  - name: load\n    entry: { type: Orders.Load }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n  - name: provision\n    entry: { type: Orders.Provision }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n  - name: preview\n    entry: { type: Orders.Preview }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' "$pkg" > "$out/package.yaml"
           if [ -e "$root/preflight" ]; then printf '  - name: preflight\n    entry: { type: Orders.Preflight }\n    triggers:\n      - manual: true\n    connections:\n      - { name: source, kind: sqlserver }\n' >> "$out/package.yaml"; fi
         fi
         if [ "$verb" = "project publish" ]; then echo "{\"data\":{\"package\":\"$pkg\",\"files\":1,\"tasks\":[{\"name\":\"load\",\"plan\":\"refresh\"}]}}"; exit 0; fi
@@ -65,7 +65,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
             }
         }
 
-        runner = await PairedRunner.StartAsync(tasks: state => tasks = new InProcessTasks(state, StepsOf));
+        runner = await PairedRunner.StartAsync(tasks: state => tasks = new InProcessTasks(state, StepsOf, Answer));
         var workspaceDirectory = Path.Combine(directory, "workspace");
         Directory.CreateDirectory(workspaceDirectory);
         workspace = WorkspaceServer.Build(new WorkspaceSettings(workspaceDirectory, new Uri("https://127.0.0.1:0"))
@@ -386,6 +386,16 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         _ => [],
     };
 
+    /// <summary>A value of a row the task preview answers: the console passes it on and keeps it nowhere.</summary>
+    private const string RowValue = "row-value-6620";
+
+    /// <summary>What a task answers to the runner's memory, as the Sync set's preview does: its first rows.</summary>
+    private void Answer(DbDataKit.Runner.Execution.TaskRunRequest request, Guid run)
+    {
+        if (request.Task.Task == "preview")
+            runner.Host.Answers!.Put(run, new JsonObject { ["columns"] = new JsonArray("id", "note"), ["rows"] = new JsonArray(new JsonArray(1, RowValue)), ["more"] = false }.ToJsonString());
+    }
+
     /// <summary>The run <paramref name="runId"/> read back through the console until it ended, with the steps named <paramref name="step"/>. A run still queued is not on the runner's record yet, and is read again, as the screens do.</summary>
     private async Task<JsonNode> RunThroughConsoleAsync(string deploy, string runId, string step)
     {
@@ -412,7 +422,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var listed = (await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=orders&workspace={draft}")).Body!["deploys"]!.AsArray();
         var record = Assert.Single(listed)!;
         var deploy = (string)record["id"]!;
-        Assert.Equal(["load", "provision"], record["tasks"]!.AsArray().Select(t => (string?)t).Order());
+        Assert.Equal(["load", "preview", "provision"], record["tasks"]!.AsArray().Select(t => (string?)t).Order());
 
         // Apply on the Provisioning tab: the manual task provision of the staged version, run for the person, its report read back through the console
         var applied = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "provision", ["inputs"] = new JsonObject { ["replication"] = "orders", ["mapping"] = "orders", ["action"] = "create" } });
@@ -452,6 +462,34 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var own = await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" });
         Assert.Equal(HttpStatusCode.Conflict, own.Status);
         Assert.Contains("has not been staged on a Runner", (string?)own.Body!["error"]);
+    }
+
+    [Fact]
+    public async Task A_preview_started_through_the_console_answers_its_rows_in_the_call_once_and_nothing_of_them_is_kept()
+    {
+        // the Designer's Preview rows (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept): the console starts the task for the person, waits for its answer and passes it on
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["bind"] = new JsonObject { ["source"] = "erp" } });
+        Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
+        var deploy = (string)(await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=orders&workspace={draft}")).Body!["deploys"]![0]!["id"]!;
+
+        var previewed = await As(HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "preview", ["answer"] = true, ["inputs"] = new JsonObject { ["replication"] = "orders", ["mapping"] = "orders" } });
+        Assert.True(previewed.Status == HttpStatusCode.OK, previewed.Body?.ToJsonString());
+        Assert.Equal(("done", "dev", false), ((string?)previewed.Body!["state"], (string?)previewed.Body["channel"], (bool)previewed.Body["production"]!));
+        Assert.Equal(RowValue, (string?)previewed.Body["answer"]!["rows"]![0]![1]);
+        var run = (string)previewed.Body["run_id"]!;
+        Assert.Equal($"/servers/{runnerId}/runs?run={run}", (string?)previewed.Body["link"]);
+        Assert.Contains("Ada Admin", tasks.Requests.Single(r => r.Task.Task == "preview").RequestedBy);
+
+        // handed out once: asked again, the runner says it is gone
+        var again = await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs/{run}/answer");
+        Assert.Equal(HttpStatusCode.Gone, again.Status);
+        Assert.Equal("gone", (string?)again.Body!["state"]);
+
+        // kept nowhere the console keeps anything: its audit names the run only, and the deploy's record is as it was
+        Assert.DoesNotContain(console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Limit: 1000)), a => (a.Entry.Detail ?? "").Contains(RowValue, StringComparison.Ordinal));
+        Assert.DoesNotContain(RowValue, (await As(HttpMethod.Get, $"/api/deploys?workspace_server={workspaceId}&project=orders&workspace={draft}")).Body!.ToJsonString(), StringComparison.Ordinal);
     }
 
     // ---- the preflight before a version is served in production (Design: docs/publishing.md#preflight-before-activation) ----
