@@ -12,7 +12,8 @@ cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning
 test, of a published version or of a draft by its package, channel and slot ([below](#testing-a-connection)); a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
-or a Gateway's data source ([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
+the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** and the newest-check card. **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -96,14 +97,17 @@ A connection whose driver the built-in package cannot run is read by the project
 A Workspace screen asks the console, and the console asks the Runner or the Gateway. The Workspace server only tells the console which package the
 project becomes and whether the person may read it. It never calls the Runner or the Gateway and never sees the login.
 
-The console has four routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
+The console has these routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
 
 | Route | What the console does |
 | --- | --- |
 | `GET .../channels?runner=&connection=` | lists the channels of the project's package on that Runner, whether each binds the connection's slot, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
 | `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
 | `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
+| `POST .../describe` with `{"runner", "channel", "connection", "sql"}` | starts `describe` of the query for the person and waits up to 10 seconds for it ([below](#how-a-screen-asks-for-a-querys-columns)) |
+| `GET .../describe/{run}?runner=&channel=&connection=` | answers how the description started earlier stands |
 | `POST .../gateway-read` with `{"gateway", "connection", "data_source"?, "adopt"?}` | asks a Gateway for the tables and columns of one of its data sources, as the person ([below](#a-read-from-a-gateway)) |
+| `POST .../binding-test` with `{"runner", "channel", "connection", "role"?}` | asks the Runner's test of the connection's slot in the channel, as the person ([Testing a connection](#how-a-screen-asks-for-a-test)) |
 
 For each call, the console first asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person. The answer says
 whether the person may read the project and which package the project becomes on a Runner. The Workspace server's refusal is passed on with its own
@@ -137,6 +141,29 @@ POST /api/workspace-catalog/ws-1/crm-to-dw/read
 
 The screen compares the new entry with the cache it holds and shows the difference before it replaces the entry
 ([Refresh on request](#the-catalog-cache)).
+
+#### How a screen asks for a query's columns
+
+`POST .../describe` starts the built-in task `describe` on the Runner, for the person, in the channel given, with the login that channel binds to the
+connection's slot. The query is described and never run. The console waits up to 10 seconds, as for a read:
+
+- The description finished: 200, `"state": "done"`, the engine, the strategy the engine used, and `columns`, each with its `name`, its `type` as the
+  engine names it and `nullable`. Nothing else of the Runner's answer is passed on.
+- It is still going: 202, `"state": "running"`, the run's id and `link`. The screen asks `GET .../describe/{run}` until the state changes.
+- It failed: 422, `"state": "failed"`, and the Runner's reason in `error`. A query that writes fails here, with the read-only policy's reason.
+
+A query is at most 100,000 characters. The screen decides where the columns go: the kind's own file ([below](#the-catalog-cache)).
+
+Example: Ana describes a query over `crm` in `dev`.
+
+```
+POST /api/workspace-catalog/ws-1/crm-to-dw/describe
+{"runner": "runners-eu", "channel": "dev", "connection": "crm", "sql": "SELECT id, segment FROM dbo.accounts"}
+
+200 {"state": "done", "run_id": "01a3...", "link": "/servers/runners-eu/runs?run=01a3...", "channel": "dev", "production": false, "connection": "crm",
+     "engine": "sqlserver", "strategy": "SqlServerDescribeFirstResultSet",
+     "columns": [{"name": "id", "type": "int", "nullable": false}, {"name": "segment", "type": "nvarchar(20)", "nullable": true}]}
+```
 
 #### A read from a Gateway
 
@@ -202,9 +229,15 @@ POST /api/workspace-dev-logins/ws-1/crm-to-dw
 
 The answer names the secrets the Runner now holds, never a value.
 
-**Planned.** The Designer offers **Set up `crm` for development** when the project's Runner has no binding of the connection's slot in the channel the
-person picked. The person types the development login once. The console then stores it as above, puts the connection's copy on the Runner with its
-password naming the stored secret, and binds the slot in that channel. The console's posture page lists the non-production bindings made this way.
+**Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel other than `prod` does not
+bind the connection's slot, or when no channel binds it (also when the Runner holds no version of the package yet and lists no channel). The person picks
+the channel (the unbound ones other than `prod`; `dev` when the Runner lists none), types the user and the password once, and presses **Send the login
+to `<Runner>`**. The screen sends them with the route above and keeps nothing of the password. The answer is shown as "runners-eu holds the login of crm
+for dev." While the channel does not bind the slot yet, the line also says what an administrator binds, and **Ask runners-eu again** reads the channels
+again once it is bound.
+
+**Planned.** The console also puts the connection's copy on the Runner with its password naming the stored secret, and binds the slot in the channel the
+person picked, so no administrator has to. The console's posture page lists the non-production bindings made this way.
 
 **Until then, an administrator binds the slot by hand.** The project's package must be on the Runner, and the Runner's own bindings screen (its Packages
 page, Bindings) binds the slots of a version it holds:
@@ -291,10 +324,12 @@ Example: on the tab **Catalog** of the draft of `crm-to-dw`, Ana picks `crm` and
 was read last week. She presses **Refresh**; the tab says "1 column added" and lists `crm.dbo.accounts.segment`. She presses **Accept**: the cache is an
 unsaved edit recorded as read from `dev` today, and the chrome counts one unsaved file until she saves.
 
-The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`) are what a kind's Designer offers on its screens.
+The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`) are what a kind's Designer offers on its screens. Under **Refresh**,
+the tab also offers **Test `<connection>` in `<channel>`** when the picked channel binds the slot ([Testing a connection](#testing-a-connection)).
 
-**A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
-model's descriptor.
+**A query's columns** (**Describe columns**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a
+Build model's descriptor. The shared piece shows the columns with their types and hands them to the kind's screen on **Use these columns**; the kind
+writes them into its file as an unsaved edit.
 
 **A Gateway data source is a second way to fill the cache.** A connection that is already a data source of a Gateway the console manages can be read
 through the Gateway's schema call, with the Gateway's own read login ([A read from a Gateway](#a-read-from-a-gateway)). It is the natural source of a
@@ -325,7 +360,7 @@ Live, as a Runner run in a channel: discovery, a query's columns, the connection
 | --- | --- |
 | the shape of a connection | `catalog-cache.yaml`, committed in the draft |
 | a query's columns | the kind's own file |
-| check findings, test steps | the Runner's run record (step outputs, under its retention); a Designer card shows the newest run per channel with its time and link. Not committed: they describe a login at a moment, not the project |
+| check findings, test steps | the Runner's run record (step outputs, under its retention); the newest-check card shows the newest run per channel with its time and link ([below](#every-kind-uses-the-same-pieces)). Not committed: they describe a login at a moment, not the project |
 | a row or a value of a table, a sample, a statistic of values (minimum, maximum, distinct values, segment bounds), a login, a connection string, an address | nowhere; the cache's strict reader refuses them by key and by look |
 
 ## Testing a connection
@@ -398,7 +433,24 @@ task on the version the channel serves. [Preflight before activation](publishing
 ## Every kind uses the same pieces
 
 The built-in package, the cache, the channel picker, **Refresh**, **Describe**, **Test** and the newest-check card are one implementation
-(`DbDataKit.Authoring`, `Shared/web/workspace`) that each kind's Designer and Files area use.
+(`DbDataKit.Authoring`, `Shared/web/workspace`) that each kind's Designer and Files area use. The screens' pieces are exported by `@dbdatakit/workspace`:
+
+| Piece | What it does | Where it shows today |
+| --- | --- | --- |
+| `useChannelChoice`, `ChannelPicker` | the Runner and the channel to read in; offers **Set up for development** where a channel does not bind the slot | every piece below |
+| `CatalogRefresh` | **Refresh** of a connection or one table, the difference shown before **Accept** | the tab **Catalog**; the Sync Designer's Refresh buttons |
+| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog** |
+| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | placed by a kind's Designer |
+| `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
+
+The newest-check card reads the console's deploys of the draft (`GET /api/deploys?workspace_server=&project=&workspace=`), takes the newest one of each
+Runner and channel, and asks the console for the newest run of `preflight` there (`GET /api/deploys/{id}/runs?task=preflight&step=preflight-findings`,
+[Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). The run may be of an older version than the deploy's: the preflight a deploy ran
+before activation, or a later **Re-check**. A Re-check on the Runs tab replaces the card's run.
+
+Example: Ana published `crm-to-dw` to `dev` and `prod` of `runners-eu`. The Runs tab shows two cards. The card of `prod` says "preflight of version 3,
+succeeded, finished 2026-11-23T08:00:05Z", links the run, and lists "error crm: Change tracking is off on dbo.orders.". The card of `dev` says "No
+preflight has run in dev yet."
 
 - **Build**: discovery of source tables into the cache, then import of models from it; its target's state is its `preflight`.
 - **Store**: browses nothing; a model's storage connection is tested and checked by its `preflight`.
