@@ -125,6 +125,9 @@ internal interface IRunBackend
 
     Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct);
 
+    // ---- the answer a person waits for (Answer): held by the runner in memory for the console that started the run, never stored
+    Task AnswerAsync(string json, CancellationToken ct);
+
     // ---- one-way (the protocol batches them): counts, the status line, lineage
     void Count(string name, long n);
 

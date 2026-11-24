@@ -88,3 +88,14 @@ public sealed class QueueWorker : RunnerJob<NoInput, NoProgress, NoSlots>
         }
     }
 }
+
+/// <summary>Answers rows a person waits for, and records nothing else.</summary>
+[RunnerTask("answers")]
+public sealed class Answers : RunnerJob<NoInput, NoProgress, NoSlots>
+{
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        await AnswerAsync(new { rows = new[] { new object[] { 1, "first-row-value" } } }, ct);
+        await AnswerAsync(new { rows = new[] { new object[] { 2, "second-row-value" } } }, ct);   // a second answer replaces the first
+    }
+}

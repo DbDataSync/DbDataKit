@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setApiBase } from '@dbdatakit/shell'
-import { authoringReadApi, bindingLeftLine, describedLine, newestPerChannel, setUpChannels, setUpOffered, testLine, type DraftTestAnswer } from './authoringReads'
+import { authoringReadApi, bindingLeftLine, describedLine, newestPerChannel, previewLine, previewValue, setUpChannels, setUpOffered, testLine, trialLine, type DraftTestAnswer, type MappingPreviewAnswer, type StrategyTrialAnswer } from './authoringReads'
 import type { ChannelList } from './catalogRefresh'
 import type { DeployRecord } from './deploys'
 
@@ -85,5 +85,33 @@ describe('the console routes', () => {
       'GET /api/workspace-catalog/ws-1/crm-to-dw/describe/run-1?runner=r-1&channel=dev&connection=crm',
       'GET /api/deploys/d-1/runs?task=preflight&step=preflight-findings',
     ])
+  })
+})
+
+describe('the words of a preview and a trial', () => {
+  const preview = (rows: MappingPreviewAnswer['rows'], more: boolean, source = 'sales.dbo.orders'): MappingPreviewAnswer =>
+    ({ replication: 'orders', mapping: 'main', connection: 'erp', source, columns: ['id'], rows, more, limit: 20 })
+  it('says how many rows of which source were read and whether more follow', () => {
+    expect(previewLine(preview([[1], [2]], true))).toBe('2 rows of sales.dbo.orders on erp, more follow.')
+    expect(previewLine(preview([[1]], false, 'query'))).toBe('1 row of the query on erp.')
+    expect(previewLine(preview([], false))).toBe('No row of sales.dbo.orders on erp matches the mapping.')
+    expect([previewValue(null), previewValue(7), previewValue(false)]).toEqual(['NULL', '7', 'false'])
+  })
+
+  it('says how many candidates a strategy proposed and how many it selected', () => {
+    const trial = (selected: boolean[]): StrategyTrialAnswer => ({
+      replication: 'orders', mapping: 'main', strategy: 'by-month', kind: 'DuckDb', column: 'placed_at', readsADatabase: false,
+      candidates: selected.map((s, i) => ({ label: `m${i}`, column: 'placed_at', start: '1', end: '2', segment: `m${i}`, selected: s })),
+    })
+    expect(trialLine(trial([true, false, true]))).toBe('3 candidates of by-month over placed_at, 2 selected.')
+    expect(trialLine(trial([]))).toBe('The strategy by-month proposed no candidate.')
+  })
+
+  it('asks the console to wait for the answer of the run it starts', async () => {
+    const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ state: 'running', run_id: 'r' }), { status: 202, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetcher)
+    await authoringReadApi.answer('d-1', 'preview', { replication: 'orders' })
+    expect(fetcher).toHaveBeenCalledWith('/api/deploys/d-1/runs', expect.objectContaining({ method: 'POST', body: JSON.stringify({ task: 'preview', inputs: { replication: 'orders' }, answer: true }) }))
+    vi.unstubAllGlobals()
   })
 })

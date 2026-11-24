@@ -427,6 +427,57 @@ public sealed class ProtocolTests
         Assert.Equal("no good", Assert.Single(h.ProgressOf("customers").DeadLetters()).Error);
     }
 
+    // ---- the answer of a run: held in the runner's memory, never in the state
+
+    [Theory]
+    [MemberData(nameof(KitEngines.Engines), MemberType = typeof(KitEngines))]
+    public async Task An_answer_reaches_the_runners_memory_once_and_nothing_of_it_is_in_the_state(string engine)
+    {
+        using var h = new Harness(engine, remote: true);
+
+        var result = await h.Run<Samples.Answers>();
+
+        Assert.Equal(RunOutcome.Succeeded, result.Outcome);
+        Assert.True(h.Host.Answers.TryTake(result.RunId, out var json));
+        Assert.Equal("{\"rows\":[[2,\"second-row-value\"]]}", json);   // the second answer replaced the first
+        Assert.False(h.Host.Answers.TryTake(result.RunId, out _));                       // handed out once
+        Assert.Empty(result.Steps);
+        Assert.DoesNotContain(h.Runs.Logs(result.RunId), l => l.Message.Contains("row-value", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_answer_not_taken_is_forgotten_after_ten_minutes_and_one_over_the_limit_is_refused()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-11-24T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        var answers = new RunAnswers(time);
+        var first = Guid.NewGuid();
+        answers.Put(first, "{\"rows\":[]}");
+        time.Advance(TimeSpan.FromMinutes(9));
+        Assert.True(answers.Holds(first));
+        time.Advance(TimeSpan.FromMinutes(2));
+        Assert.False(answers.TryTake(first, out _));
+
+        var big = new string('x', RunAnswers.MaxAnswerChars + 1);
+        Assert.Contains("at most", Assert.Throws<ArgumentException>(() => answers.Put(Guid.NewGuid(), big)).Message);
+    }
+
+    [Fact]
+    public void The_oldest_answers_are_forgotten_first_when_more_than_the_total_is_held()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-11-24T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        var answers = new RunAnswers(time);
+        var runs = Enumerable.Range(0, (int)(RunAnswers.MaxTotalChars / RunAnswers.MaxAnswerChars) + 1).Select(_ => Guid.NewGuid()).ToList();
+        var answer = new string('x', RunAnswers.MaxAnswerChars);
+        foreach (var run in runs)
+        {
+            answers.Put(run, answer);
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.False(answers.Holds(runs[0]));
+        Assert.True(answers.Holds(runs[^1]));
+    }
+
     // ---- cancellation
 
     [Theory]

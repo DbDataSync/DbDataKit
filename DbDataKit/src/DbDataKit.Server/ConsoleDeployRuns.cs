@@ -66,7 +66,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
     /// Starts <paramref name="task"/> with <paramref name="inputs"/>: of the version the deploy staged (a manual-only task, such as a Sync set's <c>provision</c> or a Store model's <c>deploy</c>), or with <paramref name="served"/> of the
     /// version the deploy's channel serves now (a replication's drain, a refresh). An approved <c>contract</c> goes through <see cref="ContractAsync"/>, which asks the Gateways first.
     /// </summary>
-    public async Task<DeployRunOutcome> StartAsync(string deployId, string task, IReadOnlyDictionary<string, string> inputs, bool served, RelayPerson person, CancellationToken ct)
+    public async Task<DeployRunOutcome> StartAsync(string deployId, string task, IReadOnlyDictionary<string, string> inputs, bool served, RelayPerson person, CancellationToken ct, bool answer = false)
     {
         if (task == ContractPlans.Task && inputs.TryGetValue("approve", out var approval) && approval.Trim().Length > 0)
             return DeployRunOutcome.Error(409, "An approved contract is run through .../contract, which checks with the Gateways the console manages that no published consumer reads what it drops. Run contract here without \"approve\" to read its plan.");
@@ -80,12 +80,61 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
                 ? await calls.RunServedTaskAsync(deployed.Package, deployed.Channel, task, inputs, Actor(person), steps.Add, ct)
                 : await calls.RunStagedTaskAsync(deployed.Package, deployed.Channel, deployed.Version.ToString(System.Globalization.CultureInfo.InvariantCulture), task, inputs, Actor(person), steps.Add, ct);
             Audit(person, RunVerb, deployed, task, served, AuditEvent.Ok, new { run = (string?)run["run_id"] });
+            if (answer && Guid.TryParse((string?)run["run_id"], out var started))
+                return await WaitForAnswerAsync(deployed, calls, started, person, AnswerWait, ct);
             return new(202, new JsonObject { ["steps"] = Steps(steps), ["run"] = run, ["deploy"] = ConsoleDeploys.Describe(deployed.Record) });
         }
         catch (Exception ex) when (ex is Refusal or DeployException)
         {
             if (deployed is not null) Audit(person, RunVerb, deployed, task, served, AuditEvent.Refused, new { error = ex.Message });
             return new(StatusOf(ex), new JsonObject { ["error"] = ex.Message, ["steps"] = Steps(steps) });
+        }
+    }
+
+    /// <summary>How long a run started for its answer is waited for before the call answers that it is still going.</summary>
+    public static readonly TimeSpan AnswerWait = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The answer of the run <paramref name="runId"/> the person started on the deploy's Runner (the rows of a preview, a strategy's candidates), taken once from the Runner's memory and passed on, never kept by the console: not in its
+    /// audit, its log or the deploy's record (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept).
+    /// </summary>
+    public async Task<DeployRunOutcome> AnswerAsync(string deployId, Guid runId, RelayPerson person, CancellationToken ct)
+    {
+        try
+        {
+            var deployed = await FindAsync(deployId, person, ct);
+            return await WaitForAnswerAsync(deployed, CallsOf(deployed, person), runId, person, TimeSpan.Zero, ct);
+        }
+        catch (Exception ex) when (ex is Refusal or DeployException) { return DeployRunOutcome.Error(StatusOf(ex), ex.Message); }
+    }
+
+    /// <summary>
+    /// Asks the Runner for the run's answer until it is there or <paramref name="wait"/> is over: 200 <c>done</c> with <c>answer</c>; 202 <c>running</c>; 422 <c>failed</c> with <c>error</c> (the run failed, or its answer is an
+    /// error, which says why in words only the person sees); 410 <c>gone</c> (taken already, or not taken in time).
+    /// </summary>
+    private async Task<DeployRunOutcome> WaitForAnswerAsync(Deployed deployed, RunnerCalls calls, Guid runId, RelayPerson person, TimeSpan wait, CancellationToken ct)
+    {
+        var until = DateTimeOffset.UtcNow + wait;
+        while (true)
+        {
+            var (status, body) = await calls.AnswerOfAsync(runId, Actor(person), ct);
+            var state = (string?)body["state"];
+            if (state != "running" || DateTimeOffset.UtcNow >= until)
+            {
+                var given = body["answer"]?.DeepClone();
+                var error = given is JsonObject failed && failed["error"] is JsonValue reason ? (string?)reason : (string?)body["error"];
+                var failedAnswer = given is JsonObject o && o["error"] is JsonValue;
+                var outcome = new JsonObject
+                {
+                    ["state"] = failedAnswer ? "failed" : state, ["run_id"] = runId.ToString("D"), ["runner"] = deployed.Runner.InstanceId, ["runner_name"] = deployed.Runner.Name, ["channel"] = deployed.Channel,
+                    ["production"] = deployed.Channel == ConsoleCatalogRead.Production, ["link"] = $"/servers/{Uri.EscapeDataString(deployed.Runner.InstanceId)}/runs?run={runId:D}",
+                };
+                if (state == "done" && !failedAnswer) outcome["answer"] = given;
+                else if (error is not null) outcome["error"] = error;
+                return new(failedAnswer ? 422 : status, outcome);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(400), ct);
         }
     }
 

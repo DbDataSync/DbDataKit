@@ -230,6 +230,15 @@ internal sealed class InProcessRun : IRunBackend
 
     public Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct) => Task.FromResult(Quality().Blocks());
 
+    /// <summary>The run's answer, kept in this object only: an in-process run has no console to hand it to, so it is read back by whoever ran the job.</summary>
+    public string? Answer { get; private set; }
+
+    public Task AnswerAsync(string json, CancellationToken ct)
+    {
+        Answer = json;
+        return Task.CompletedTask;
+    }
+
     // counts, the status line and lineage have no place in the state database yet (the lineage slice gives them one); the protocol server keeps them in memory for the runner
     public void Count(string name, long n)
     {

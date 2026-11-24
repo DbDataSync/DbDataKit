@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner;
+using DbDataKit.Runner.Protocol.Server;
 using DbDataKit.Runner.Scheduler;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
@@ -275,6 +276,40 @@ public static class RunnerApi
                     ["id"] = l.Id, ["at"] = l.At.UtcDateTime.ToString("O"), ["level"] = l.Level, ["item"] = l.Item, ["message"] = l.Message,
                 }).ToArray()),
             });
+        });
+
+        // the answer of a run a person waits for (rows of a preview, a strategy's candidates): handed once to the console that started the run, for the same person, from this process's memory; never kept
+        // in the state, a step, the log or the audit. Operator, as starting the run is. Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept
+        app.MapGet($"{root}/runs/{{id:guid}}/answer", (Guid id, HttpContext context) =>
+        {
+            if (Deny(context, ServerRole.Operator) is { } denied) return denied;
+            var held = caller(context);
+            if (held.Token is not { Client.Kind: ClientKind.Console, IsConsole: false })
+                return Results.Json(new { error = "The answer of a run is taken by the console that started it, for the person it signed in." }, statusCode: StatusCodes.Status403Forbidden);
+            var person = Text(context.Request.Query["on_behalf_of"])?.Trim();
+            if (person is null) return Results.BadRequest(new { error = "Name the person the run was started for: ?on_behalf_of=." });
+            if (person.Length > RunnerControl.MaxOnBehalfOf) return Results.BadRequest(new { error = $"on_behalf_of is the name of a person, text of at most {RunnerControl.MaxOnBehalfOf} characters." });
+            // a run that is queued has its work item and no record yet
+            var run = new RunStore(state, RunnerNames.EngineService).Get(id) is { } stored && stored.Service == RunnerNames.EngineService ? stored : null;
+            var item = new DbDataKit.Scheduling.ModuleWorkQueueStore(state, RunnerNames.EngineService).FindByRun(id);
+            if (run is null && item is null) return Results.NotFound(new { error = $"There is no run {id}." });
+
+            // only the person the run was started for, through the same console, takes its answer: it can hold rows of a table
+            var asked = item is null ? null : WorkPayload.TryParse(item.PayloadJson, out _)?.RequestedBy;
+            if (asked != RunnerControl.RequestedBy(held.Actor, person))
+                return Results.Json(new { error = $"The run {id} was not started by this console for {person}; its answer goes only to the person who asked." }, statusCode: StatusCodes.Status403Forbidden);
+
+            JsonNode? Described() => run is null ? new JsonObject { ["id"] = id.ToString(), ["outcome"] = "queued" } : Run(run);
+            if (engine().Answers is { } answers && answers.TryTake(id, out var json))
+                return Results.Json(new JsonObject { ["state"] = "done", ["run"] = Described(), ["answer"] = JsonNode.Parse(json) });
+            if (run?.Run.Finished is null) return Results.Json(new JsonObject { ["state"] = "running", ["run"] = Described() }, statusCode: StatusCodes.Status202Accepted);
+            if (run.Run.Outcome is not (RunOutcome.Succeeded or RunOutcome.CompletedWithFailures))
+                return Results.Json(new JsonObject { ["state"] = "failed", ["run"] = Run(run), ["error"] = run.Run.Failure?.Message ?? $"The run ended {run.Run.Outcome.ToString().ToLowerInvariant()} without an answer." }, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return Results.Json(new JsonObject
+            {
+                ["state"] = "gone", ["run"] = Run(run),
+                ["error"] = $"This runner holds no answer of the run {id}: it was taken already, it was not taken within {RunAnswers.Keep.TotalMinutes:0} minutes, or another instance of the group ran it. Ask again.",
+            }, statusCode: StatusCodes.Status410Gone);
         });
 
         // what the runs of a task recorded as steps, newest first (plan 28c E13): the outputs a product keeps with its runs (Sync's pass records and polling checks). Viewer.

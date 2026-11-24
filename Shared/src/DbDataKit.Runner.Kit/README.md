@@ -43,7 +43,7 @@ public sealed class DailyDrop : RunnerJob<DailyDropInput, NoProgress, DailyDropS
 ## The surface
 
 * **Declared once, as static values:** `Step.Value<TIn,TOut>(name, key)` and `Step.Stream<TIn>(name, key)`, `Unit.Of<T>(name, key)`, `Counter`, `Slot<TConnection>`, a `Progress` class with `[Checkpoint]` and `[State]` members and `Keyed<T>` for per-key sets.
-* **Members of the job:** `Step(...)`, `ForEachAsync(unit, items, parallelism, body, ct, options?)` (over `IEnumerable` and `IAsyncEnumerable`), `Inbox<T>()`, `Files`, `RejectAsync`, `Count`, `Status`, `SaveProgressAsync`, `Run` (`IRun`: id, attempt, channel, package, task, `Log` with secrets redacted, lineage).
+* **Members of the job:** `Step(...)`, `ForEachAsync(unit, items, parallelism, body, ct, options?)` (over `IEnumerable` and `IAsyncEnumerable`), `Inbox<T>()`, `Files`, `RejectAsync`, `Count`, `Status`, `AnswerAsync` (what a person waits for on a screen, such as the rows of a preview: the runner keeps it in memory for the console that started the run and never stores it), `SaveProgressAsync`, `Run` (`IRun`: id, attempt, channel, package, task, `Log` with secrets redacted, lineage).
 * **Typed by:** input by a record whose properties are the manifest's `inputs`; progress by the `Progress` class (a change between versions is planned by the progress migration, `DbDataKit.State` README); connections by `Slot<T>` members (binding a slot to a connection of another kind fails at staging); recovery by the call's type state; inbox items by `Inbox<T>()` (a body that does not parse as `T` is a dead letter, not a crash).
 * **An analyzer** (`DbDataKit.Runner.Kit.Analyzers`) adds what the type system cannot: `DBKR001` two steps with one name in a job, `DBKR002` a step used inside another step.
 
