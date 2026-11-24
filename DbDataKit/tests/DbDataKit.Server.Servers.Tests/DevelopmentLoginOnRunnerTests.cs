@@ -26,7 +26,7 @@ public sealed class DevelopmentLoginOnRunnerTests
     private const string User = "ana_dev_real_2291";
 
     [Fact]
-    public async Task A_login_set_up_for_dev_is_held_by_the_runner_and_reaches_no_workspace_request_file_or_log()
+    public async Task A_login_set_up_for_dev_or_prod_is_held_by_the_runner_as_its_password_only_and_reaches_no_workspace_request_file_or_log()
     {
         var root = Path.Combine(Path.GetTempPath(), "ddk-e2e-devlogin-" + Guid.NewGuid().ToString("N")[..8]);
         RealProcess? runnerProcess = null;

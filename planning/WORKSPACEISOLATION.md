@@ -47,7 +47,6 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | WORKSPACEISOLATION-3 | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
-| WORKSPACEISOLATION-16 | A login sent from the Workspace screens (`POST /api/workspace-dev-logins/...`, `ConsoleDevelopmentLogins`): only its password is stored in the Runner's secret store; the user is not a secret, and goes as plain text into the connection's copy that names the password's secret. The refusal of `prod` goes: the person stores a login for the channel they pick. The docs (`docs/authoring-metadata.md`, "How a screen sends a development login") follow | none | S | a test sends a login for `dev` and one for `prod`: both are stored, each as one secret, the password; no secret holds the user |
 | WORKSPACEISOLATION-17 | The console's deploy and its calls on a deployed build (runs, run reads, binding tests, contracts, activation) check only that the person may read the project on the Workspace service; the target's own roles decide the rest (publisher to deploy, operator to run, administrator to test a login). `docs/publishing.md` (step 2 of a deploy and the route table) follows | none | S | a test: Ben, a viewer of the project and a publisher and operator on the Runner, deploys a build and runs its task from the Runs tab; a person who may not read the project is refused by the Workspace service |
 
 ## Where each part goes (the list of WORKSPACEISOLATION-1)
@@ -228,6 +227,30 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
   Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
+
+## Proposed decisions
+
+### WORKSPACEISOLATION-P28: the name a development login's password is stored under (default, awaiting the owner)
+
+Scenario: Ana sets up `crm` of `crm-to-dw` for `dev` from a Workspace screen. The Runner holds one secret,
+`dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password`. Later the slot is bound in `dev` and the connection's copy names that secret as its password.
+
+- Option A (built): the name of the kind `dev-login`, by package, channel and slot, as before; a person reading the Runner's secrets overview sees
+  which secrets came from a Workspace screen.
+- Option B: the name of the connection's copy (`dbdatakit:runner:connection:<copy>:password`), with nothing stored under a development login's own
+  name; the console would have to know the copy's name when it stores the password, which AUTHORING-19 decides when it writes the copy.
+
+Recommendation: A until AUTHORING-19 writes the copy; that task then keeps A or moves to B.
+
+### WORKSPACEISOLATION-P29: what the console does with the user of a development login (default, awaiting the owner)
+
+Scenario: Ana sends `{"user": "ana_dev", "password": "..."}` for `crm` in `dev`. The console stores the password only.
+
+- Option A (built): the console checks the user (1 to 256 characters, no space around it, no control character) and gives it back in its answer as
+  plain text (`"user": "ana_dev"`), so the screen and the connection's copy (AUTHORING-19) can use it; it is stored nowhere yet.
+- Option B: the console refuses a `user` until AUTHORING-19 writes the copy, so a user sent today is never dropped quietly.
+
+Recommendation: A: the screen sends the login once, and AUTHORING-19 writes the user into the copy from the same request.
 
 ## Shared areas touched
 
