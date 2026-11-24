@@ -17,8 +17,8 @@ describe('a development login, as a Workspace screen sends it', () => {
   it('sends the login once, to the console, and never to a Workspace server\'s relay', async () => {
     setApiBase('/relay/ws-1')
     const answer: DevelopmentLoginAnswer = {
-      package: 'crm-to-dw', connection: 'crm', slot: 'crm', channel: 'dev', production: false, runner: 'r-1', runner_name: 'runners-eu',
-      secrets: { user: 'dbdatakit:runner:dev-login:crm-to-dw.dev.crm:user', password: 'dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password' },
+      package: 'crm-to-dw', connection: 'crm', slot: 'crm', channel: 'dev', production: false, runner: 'r-1', runner_name: 'runners-eu', user: 'ana_dev',
+      secrets: { password: 'dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password' },
     }
     const calls: { url: string; body: string }[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
@@ -34,6 +34,8 @@ describe('a development login, as a Workspace screen sends it', () => {
     expect(calls.some((c) => c.url.startsWith('/relay/'))).toBe(false)
     expect(developmentLoginLine(got)).toBe('runners-eu holds the login of crm for dev.')
     expect(JSON.stringify(got)).not.toContain('pw-7731')
+    expect(got.user).toBe('ana_dev')
+    expect(Object.keys(got.secrets)).toEqual(['password'])
   })
 
   it('warns where the login goes before it is typed', () => {
