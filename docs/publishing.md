@@ -36,7 +36,10 @@ and serves what the build holds; it never calls the Runner or the Gateway.
 1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
    kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
    Store build; a `note`).
-2. The console checks that the person holds the approver role on the Workspace server, and that the target is a registered Runner or Gateway.
+2. The console asks the Workspace server for the project as the person (`GET /api/v1/projects/{project}`). The Workspace server answers a person who
+   may read the project: one with the viewer role, or a role above it, on the project or on the whole server. Otherwise the deploy is refused in the
+   Workspace server's words: "Workspace does not let you read the project 'orders': This needs the viewer role." The console also checks that the
+   target is a registered Runner or Gateway. The console asks for no other role. The target decides what the person may do there (step 6).
 3. The console reads `GET /api/v1/projects/{project}/workspaces/{workspace}/builds/{build}/contents` from the Workspace server, as the person. The
    answer has the build record and the items the build holds to send. A build that did not succeed is refused: "This build is failed, so there is
    nothing to publish. Only a build that succeeded is published."
@@ -45,9 +48,10 @@ and serves what the build holds; it never calls the Runner or the Gateway.
 5. The console reads each file of the item by its SHA-256 (`GET .../builds/{build}/files/{sha256}`), lays the files out under their paths, and refuses a
    file whose bytes do not have the hash or the size the build listed.
 6. The console sends the item to the target over the target's publish API, through the relay as the person. The target decides what the person may
-   do there and records them as the publisher. Each version is signed with the console's publisher key over its manifest, its files and the build
-   record, when the target trusts that key (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the
-   deploy before anything is sent, and the message names the key.
+   do there: a Runner or a Gateway takes a version from a person who holds its publisher or administrator role, and records them as the publisher.
+   Each version is signed with the console's publisher key over its manifest, its files and the build record, when the target trusts that key
+   (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the deploy before anything is sent, and the
+   message names the key.
 7. The console keeps the deploy (the `deploys` state module) and audits it as `build.deploy`. `GET /api/deploys?workspace_server=&project=&workspace=&build=`
    lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words.
 
@@ -74,6 +78,10 @@ POST /api/deploys
 
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
+
+Example: Ben may read the project `orders` on the Workspace server and nothing else there. On the Runner `jobs` he holds the publisher and operator
+roles. He serves a build of `orders` in `dev`, and the Runner records him as the publisher. On the Runs tab he runs the task `load` of the version
+`dev` serves. **Test** of a connection's login is refused, in the Runner's words, because it needs the administrator role on `jobs`.
 
 ### Preflight before activation
 
@@ -167,15 +175,17 @@ and the version, so the Workspace server is never asked where a build went and n
 Each tab takes the newest deploy of a build of the draft that the Runner took (`GET /api/deploys?workspace_server=&project=&workspace=`). A refused
 deploy and a deploy to a Gateway are skipped. When no deploy put a version on a Runner, the tab says to publish the build first.
 
-The calls name the deploy by its id. The console calls the Runner as the signed-in person, so the Runner checks that person's roles there too:
+The calls name the deploy by its id. For each call the console first asks the Workspace server for the deploy's project as the person, as a deploy
+does (step 2): a person who may not read the project is refused in the Workspace server's words. The console then calls the Runner as the signed-in
+person, and the Runner checks that person's roles there:
 
 | Call | Role on the Workspace server | Role on the Runner | What it does |
 | --- | --- | --- | --- |
-| `POST /api/deploys/{id}/runs` | approver | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
-| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
-| `POST /api/deploys/{id}/binding-test` | approver | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
-| `POST /api/deploys/{id}/contract` | approver | operator | Runs a Store model's approved contract plan (below). |
-| `POST /api/deploys/{id}/activate` | approver | admin | Activates the version the deploy staged in `prod` for its preflight, once the run has ended; `"confirm": true` when the preflight found an error ([Preflight before activation](#preflight-before-activation)). |
+| `POST /api/deploys/{id}/runs` | viewer of the project | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
+| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer of the project | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
+| `POST /api/deploys/{id}/binding-test` | viewer of the project | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
+| `POST /api/deploys/{id}/contract` | viewer of the project | operator | Runs a Store model's approved contract plan (below). |
+| `POST /api/deploys/{id}/activate` | viewer of the project | admin | Activates the version the deploy staged in `prod` for its preflight, once the run has ended; `"confirm": true` when the preflight found an error ([Preflight before activation](#preflight-before-activation)). |
 
 A Store model's contract step removes what the model no longer has. It runs in two steps:
 

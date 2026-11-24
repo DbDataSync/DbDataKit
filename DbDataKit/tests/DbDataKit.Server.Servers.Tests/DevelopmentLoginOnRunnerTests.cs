@@ -16,8 +16,8 @@ namespace DbDataKit.Server.Servers.Tests;
 
 /// <summary>
 /// A development login set up from a Workspace screen, with the real programs: a runner process, a Workspace server and a console in this process. The screen's call goes to the console, which asks the Workspace server for the
-/// project's package and puts the login in the runner's secret store as the signed-in person, for <c>dev</c> and the connection's slot. The runner holds the value; the Workspace server fails any request that carries it, and
-/// no file of its directory and no line of its log holds it.
+/// project's package and puts the login's password in the runner's secret store as the signed-in person, for the channel and the connection's slot (<c>dev</c>, then <c>prod</c>); the user is not stored as a secret. The runner
+/// holds the value; the Workspace server fails any request that carries it, and no file of its directory and no line of its log holds it.
 /// </summary>
 public sealed class DevelopmentLoginOnRunnerTests
 {
@@ -26,7 +26,7 @@ public sealed class DevelopmentLoginOnRunnerTests
     private const string User = "ana_dev_real_2291";
 
     [Fact]
-    public async Task A_login_set_up_for_dev_is_held_by_the_runner_and_reaches_no_workspace_request_file_or_log()
+    public async Task A_login_set_up_for_dev_or_prod_is_held_by_the_runner_as_its_password_only_and_reaches_no_workspace_request_file_or_log()
     {
         var root = Path.Combine(Path.GetTempPath(), "ddk-e2e-devlogin-" + Guid.NewGuid().ToString("N")[..8]);
         RealProcess? runnerProcess = null;
@@ -108,7 +108,9 @@ public sealed class DevelopmentLoginOnRunnerTests
             using (var held = await store.TryResolveAsync(new SecretRef(SecretRefKind.Secret, passwordName)))
                 Assert.Equal(Password, held!.RevealString());
             using (var held = await store.TryResolveAsync(new SecretRef(SecretRefKind.Secret, "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:user")))
-                Assert.Equal(User, held!.RevealString());
+                Assert.Null(held);
+            Assert.DoesNotContain("dev-login:crm-to-dw.dev.crm:user", names.ToJsonString());
+            Assert.Equal(User, (string?)answer["user"]);
 
             // the Workspace server never received it: no request carried it, and no file of its directory or line of its log holds it
             Assert.Empty(carried);
@@ -126,11 +128,13 @@ public sealed class DevelopmentLoginOnRunnerTests
                 }
             }
 
-            // production is refused before anything is sent
-            var (prod, why) = await As(HttpMethod.Post, $"/api/workspace-dev-logins/{workspaceId}/{Package}", new { runner = runnerId, channel = "prod", connection = "crm", password = Password });
-            Assert.Equal(HttpStatusCode.Conflict, prod);
-            Assert.Contains("channel other than prod", (string?)why["error"]);
-            using (var none = await store.TryResolveAsync(new SecretRef(SecretRefKind.Secret, "dbdatakit:runner:dev-login:crm-to-dw.prod.crm:password")))
+            // a login for prod is stored the same way, its password only, under the name of prod
+            var (prod, prodAnswer) = await As(HttpMethod.Post, $"/api/workspace-dev-logins/{workspaceId}/{Package}", new { runner = runnerId, channel = "prod", connection = "crm", user = User, password = Password });
+            Assert.True(prod == HttpStatusCode.OK, $"{prod} {prodAnswer}");
+            Assert.True((bool?)prodAnswer["production"]);
+            using (var stored = await store.TryResolveAsync(new SecretRef(SecretRefKind.Secret, "dbdatakit:runner:dev-login:crm-to-dw.prod.crm:password")))
+                Assert.Equal(Password, stored!.RevealString());
+            using (var none = await store.TryResolveAsync(new SecretRef(SecretRefKind.Secret, "dbdatakit:runner:dev-login:crm-to-dw.prod.crm:user")))
                 Assert.Null(none);
         }
         finally

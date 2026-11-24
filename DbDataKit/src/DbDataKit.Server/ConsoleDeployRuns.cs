@@ -17,8 +17,8 @@ public sealed record DeployRunOutcome(int Status, JsonObject Body)
 /// The runs of what the console deployed from a build (Design: docs/publishing.md#runs-of-a-deployed-build): a run of a manual task of the version a deploy staged, or of any task of the version the channel serves; a run and the steps it
 /// recorded; the Runner's test of a slot's binding; and a Store model's approved contract, after the Gateways the console manages were asked who reads what it drops. Each call names a deploy the console keeps (<see cref="DeployStore"/>):
 /// the deploy says the Runner, the package, the channel and the version, so the screens of a Workspace project never ask the Workspace server where a build went, and the Workspace server never calls the Runner. The calls go to the
-/// Runner as the signed-in person (<see cref="ConsolePromotions.LinkFor"/>), who must hold the role the Runner asks for there; on the Workspace server the person needs the approver role to start a run, test a binding or contract, and
-/// the viewer role to read a run, as the Workspace's own routes asked.
+/// Runner as the signed-in person (<see cref="ConsolePromotions.LinkFor"/>), who must hold the role the Runner asks for there (operator to run, administrator to test a login or activate); of the Workspace server the console asks only
+/// that the person may read the project the deploy came from (<see cref="ConsoleDeploys.ProjectRefusalAsync"/>).
 /// </summary>
 public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances instances, ConsoleRelay relay, ConsolePromotions promotions, AuditLog audit)
 {
@@ -40,17 +40,14 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
     }
 
     /// <summary>
-    /// The deploy <paramref name="deployId"/>, when it put a version of a package on a channel of a Runner the console still manages, and the person holds <paramref name="role"/> on the Workspace server it came from; a refusal in words
+    /// The deploy <paramref name="deployId"/>, when it put a version of a package on a channel of a Runner the console still manages, and the Workspace server it came from lets the person read its project; a refusal in words
     /// otherwise.
     /// </summary>
-    private async Task<Deployed> FindAsync(string deployId, RelayPerson person, ServerRole role, CancellationToken ct)
+    private async Task<Deployed> FindAsync(string deployId, RelayPerson person, CancellationToken ct)
     {
         var record = deploys.Store.Get(deployId) ?? throw new Refusal(404, $"The console has no deploy '{deployId}'.");
         var workspaceServer = instances.Registry.Find(record.WorkspaceServer) ?? throw new Refusal(404, $"The Workspace server {record.WorkspaceServer} of this deploy is not registered any more.");
-        if (!ServerRoles.Allows(relay.RolesHeldOn(workspaceServer, person.Id, person.Role), role))
-            throw new Refusal(403, role == ServerRole.Approver
-                ? $"Running what a build deployed needs the approver role on {workspaceServer.Name}."
-                : $"Reading a run of what a build deployed needs the viewer role on {workspaceServer.Name}.");
+        if (await deploys.ProjectRefusalAsync(workspaceServer, record.Project, person, ct) is { } unreadable) throw new Refusal(unreadable.Status, unreadable.Error);
         if (record.Outcome != AuditEvent.Ok)
             throw new Refusal(409, $"This deploy was refused ({record.Error}), so nothing of it is on {record.TargetName}. Publish the build again.");
         if (record.Product != DeployProducts.Runner || record.DefinitionName is not { Length: > 0 } package || record.Channel is not { Length: > 0 } channel || record.Version is not { } version)
@@ -77,7 +74,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         var steps = new List<string>();
         try
         {
-            deployed = await FindAsync(deployId, person, ServerRole.Approver, ct);
+            deployed = await FindAsync(deployId, person, ct);
             var calls = CallsOf(deployed, person);
             var run = served
                 ? await calls.RunServedTaskAsync(deployed.Package, deployed.Channel, task, inputs, Actor(person), steps.Add, ct)
@@ -97,7 +94,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
     {
         try
         {
-            var deployed = await FindAsync(deployId, person, ServerRole.Viewer, ct);
+            var deployed = await FindAsync(deployId, person, ct);
             return await CallsOf(deployed, person).RunOfAsync(deployed.Package, deployed.Channel, runId, string.IsNullOrWhiteSpace(step) ? null : step, ct) is { } found
                 ? new(200, new JsonObject { ["run"] = found })
                 : DeployRunOutcome.Error(404, $"{deployed.Runner.Name} has no run {runId}.");
@@ -111,7 +108,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         Deployed? deployed = null;
         try
         {
-            deployed = await FindAsync(deployId, person, ServerRole.Approver, ct);
+            deployed = await FindAsync(deployId, person, ct);
             var answer = await CallsOf(deployed, person).TestBindingAsync(deployed.Package, deployed.Channel, slot, role, ct);
             Audit(person, BindingTestVerb, deployed, slot, false, (bool)answer["ok"]! ? AuditEvent.Ok : AuditEvent.Failed, new { step = (string?)answer["step"] });
             return new(200, new JsonObject { ["test"] = answer });
@@ -120,7 +117,8 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         {
             if (deployed is not null) Audit(person, BindingTestVerb, deployed, slot, false, AuditEvent.Refused, new { error = ex.Message });
             return DeployRunOutcome.Error(StatusOf(ex), ex.Message);
-        }    }
+        }
+    }
 
     /// <summary>
     /// Activates the version a deploy staged in production for its preflight (<see cref="ConsoleDeployPreflight"/>), once the preflight has ended: with no error, or with <paramref name="confirm"/> when it found errors. The Runner keeps the
@@ -131,7 +129,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         Deployed? deployed = null;
         try
         {
-            deployed = await FindAsync(deployId, person, ServerRole.Approver, ct);
+            deployed = await FindAsync(deployId, person, ct);
             JsonObject answer;
             try { answer = JsonNode.Parse(deployed.Record.Answer ?? "{}") as JsonObject ?? []; }
             catch (JsonException) { answer = []; }
@@ -175,7 +173,7 @@ public sealed class ConsoleDeployRuns(ConsoleDeploys deploys, ConsoleInstances i
         var steps = new List<string>();
         try
         {
-            deployed = await FindAsync(deployId, person, ServerRole.Approver, ct);
+            deployed = await FindAsync(deployId, person, ct);
             var calls = CallsOf(deployed, person);
             if (await calls.RunOfAsync(deployed.Package, deployed.Channel, planRun, ContractPlans.ReportStep, ct) is not { } read || (string?)read["task"] != ContractPlans.Task)
                 throw new Refusal(409, $"{deployed.Runner.Name} has no run {planRun} of contract of {deployed.Package}. Read the plan again.");
