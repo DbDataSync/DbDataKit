@@ -169,6 +169,8 @@ and the version, so the Workspace server is never asked where a build went and n
 - The **Provisioning** tab of a Sync project: **Apply on the Runner** runs the set's task `provision` of the deployed version.
 - The **Runs** tab of a Sync or Build project: **Run now** runs a task of the version the channel serves, and **Test** tries the login bound to a
   connection's slot.
+- The Sync Designer: **Preview rows** of a mapping and **Try** of a segmenting strategy run the set's tasks `preview` and `try-strategy` and show
+  their answer.
 - The **Deploy** tab of a Store project: **Dry run** builds the draft, has the console stage the model's package (`POST /api/deploys` with the
   `model` and the slot `storage` bound), then runs its task `deploy`; **Deploy** and the contract step run on that same deploy.
 
@@ -181,7 +183,8 @@ person, and the Runner checks that person's roles there:
 
 | Call | Role on the Workspace server | Role on the Runner | What it does |
 | --- | --- | --- | --- |
-| `POST /api/deploys/{id}/runs` | viewer of the project | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
+| `POST /api/deploys/{id}/runs` | viewer of the project | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. With `"answer": true`, it waits up to 10 seconds for the run's answer and passes it on ([Rows and trials are answered, never kept](authoring-metadata.md#rows-and-trials-are-answered-never-kept)). |
+| `GET /api/deploys/{id}/runs/{run}/answer` | viewer of the project | operator | Takes the answer of a run the person started, once: `done` with the answer, `running`, `failed` with the reason, or `gone`. The console keeps nothing of it. |
 | `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer of the project | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
 | `GET /api/deploys/{id}/runs?task=<name>&step=<name>` | viewer of the project | viewer | Reads the newest run of `task` in the deploy's channel, of whatever version ran it, with the results of the steps named `step` it recorded; `run` is null when the task never ran there. The Runs tab's newest-check card reads the newest `preflight` this way ([Every kind uses the same pieces](authoring-metadata.md#every-kind-uses-the-same-pieces)). |
 | `POST /api/deploys/{id}/binding-test` | viewer of the project | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |

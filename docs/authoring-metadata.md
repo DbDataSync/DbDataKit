@@ -13,7 +13,8 @@ test, of a published version or of a draft by its package, channel and slot ([be
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
 or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
-the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** and the newest-check card. **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
+segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -368,6 +369,7 @@ Live, as a Runner run in a channel: discovery, a query's columns, the connection
 | the shape of a connection | `catalog-cache.yaml`, committed in the draft |
 | a query's columns | the kind's own file |
 | check findings, test steps | the Runner's run record (step outputs, under its retention); the newest-check card shows the newest run per channel with its time and link ([below](#every-kind-uses-the-same-pieces)). Not committed: they describe a login at a moment, not the project |
+| the rows of a Sync mapping's **Preview rows** and the candidates of a strategy's **Try** | on the screen that asked, after the console took them from the Runner's memory ([below](#rows-and-trials-are-answered-never-kept)); never in the draft, a run record, a log or an audit |
 | a row or a value of a table, a sample, a statistic of values (minimum, maximum, distinct values, segment bounds), a login, a connection string, an address | nowhere; the cache's strict reader refuses them by key and by look |
 
 ## Testing a connection
@@ -426,6 +428,66 @@ In `prod`, where nothing binds the slot yet, the same call answers `"ok": false`
 A test of a version the console deployed goes through the deploy instead (`POST /api/deploys/{id}/binding-test`,
 [Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). Both ask the same test of the Runner.
 
+## Rows and trials are answered, never kept
+
+Two reads of a Sync project show values of a table: **Preview rows** of a mapping and **Try** of a segmenting strategy. Each is a manual task of the
+replication set's package, run on the Runner. The console starts it as the signed-in person, and the result is the run's answer: the Runner holds it in
+memory, the console takes it once and passes it to the screen, and nothing keeps it.
+
+| Task | What it reads | What it answers |
+| --- | --- | --- |
+| `preview` | the mapped source columns of the mapping's source table, with the mapping's filter (every column of a query source), with the run login the channel binds to the source's slot; 20 rows, or up to 100 when asked | the columns, the rows, and whether more rows follow |
+| `try-strategy` | a segmenting strategy run over a mapping and a column as a reload runs it: its SQL on the source or the target with the run login the channel binds, a DuckDB strategy in memory, a script with both connections | every candidate, selected or not: its label, the column, the bounds and whether it is selected |
+
+The strategy is either one the replication has (the input `name`) or the one the person is editing, sent as JSON (the input `strategy`), so it can be
+tried before it is saved. Both tasks read the mapping as the deployed version has it: an edit that is not saved, built and published is not in the
+rows. A strategy's SQL is the author's own and runs with the login a reload uses, so it can do what that login may do.
+
+### How a screen asks for rows
+
+The screen takes the newest deploy of the draft to a Runner and asks the console to run the task and wait for its answer:
+
+```
+POST /api/deploys/01a2.../runs
+{"task": "preview", "answer": true, "inputs": {"replication": "orders", "mapping": "dbo.orders", "rows": "20"}}
+
+200 {"state": "done", "run_id": "01a3...", "runner": "r-1", "runner_name": "runners-eu", "channel": "dev", "production": false,
+     "link": "/servers/r-1/runs?run=01a3...",
+     "answer": {"replication": "orders", "mapping": "dbo.orders", "connection": "crm", "source": "crm.dbo.orders",
+                "columns": ["id", "name"], "rows": [[1, "Ana"], [2, "Ben"]], "more": true, "limit": 20}}
+```
+
+What the console answers:
+
+- The run answered within 10 seconds: 200, `"state": "done"`, and `answer`.
+- The run is still going: 202, `"state": "running"`, the run's id and `link`. The screen asks `GET /api/deploys/{id}/runs/{run}/answer` until the
+  state changes.
+- The run failed: 422, `"state": "failed"`, and the reason in `error`. When the database refused the read or the strategy's SQL, the reason has the
+  database's own words, which can quote a value of the table. Those words are in the answer only; the run's record says that the read failed and that
+  the reason went to the person who asked.
+- The answer was taken already, or it waited more than 10 minutes: 410, `"state": "gone"`. Ask again.
+
+The person needs what every run call needs ([Runs of a deployed build](publishing.md#runs-of-a-deployed-build)): to read the project on the Workspace
+server, and the operator role on the Runner. The console's audit names the run, never a value.
+
+### What the Runner does with an answer
+
+The task hands its answer to the Runner over its socket (the protocol's `Answer`). The Runner keeps it in the memory of the process that ran the task:
+
+- It gives it once, to the console that started the run, for the same person: `GET /api/v1/runs/{id}/answer?on_behalf_of=<person>`. Ben cannot take
+  the rows of a preview Ana started.
+- It forgets an answer nobody took after 10 minutes. One answer is at most 2 MiB of JSON, and a Runner holds at most 64 MiB of answers, forgetting the
+  oldest first.
+- It never writes an answer to its state, a step, the run's log or the audit. The run record keeps the inputs (the mapping, the strategy's SQL) and
+  the outcome.
+
+In a group of Runners, the answer is held by the instance that ran the task. A call that reaches another instance answers `gone`.
+
+Example: Ana edits the strategy `by-month` of the replication `orders` on the Bulk Load sub-tab. She picks the mapping `dbo.orders`, types the column
+`placed_at` and presses **Try**. The Runner `runners-eu` runs her SQL on `crm` with the login `dev` binds, and the screen shows "12 candidates of by-month
+over placed_at, 3 selected." with each candidate's bounds. She changes the query, presses **Try** again, and then **Update** and **Save settings**.
+Nothing of the candidates is in the draft or on the Runner.
+
 ## Checking before production: `preflight`
 
 A package's read-only manual task `preflight` reads its databases with the logins its channel binds and reports findings. Build's runs `connection status`
@@ -449,6 +511,7 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 | `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog** |
 | `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | placed by a kind's Designer |
 | `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
+| `useRunAnswer`, `RunAnswerStatus` | a manual task of the version the draft's newest deploy put on a Runner, run for the person through the console, and its answer ([above](#rows-and-trials-are-answered-never-kept)); a run longer than 10 seconds is followed by its link | the Sync Designer's **Preview rows** and **Try** |
 
 The newest-check card reads the console's deploys of the draft (`GET /api/deploys?workspace_server=&project=&workspace=`), takes the newest one of each
 Runner and channel, and asks the console for the newest run of `preflight` there (`GET /api/deploys/{id}/runs?task=preflight&step=preflight-findings`,
@@ -595,7 +658,9 @@ primary key. The check warns on the mapping: "The writer 'ChangeApply' would ref
 has no primary key". Add the key to the target and refresh the cache, or read the whole table each pass with `BatchReload` and write with
 `DeleteInsert`, which needs no key.
 
-**The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
+**The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored. A
+mapping's rows are shown by **Preview rows** under the source filter of the mapping's editor, and a segmenting strategy's candidates by **Try** in its
+editor ([Rows and trials are answered, never kept](#rows-and-trials-are-answered-never-kept)).
 
 **Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
 the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation. Nothing live is
