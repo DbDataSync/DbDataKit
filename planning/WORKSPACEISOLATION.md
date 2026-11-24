@@ -48,7 +48,6 @@ it. Only the parts that make the Workspace service call another service are remo
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 | WORKSPACEISOLATION-16 | A login sent from the Workspace screens (`POST /api/workspace-dev-logins/...`, `ConsoleDevelopmentLogins`): only its password is stored in the Runner's secret store; the user is not a secret, and goes as plain text into the connection's copy that names the password's secret. The refusal of `prod` goes: the person stores a login for the channel they pick. The docs (`docs/authoring-metadata.md`, "How a screen sends a development login") follow | none | S | a test sends a login for `dev` and one for `prod`: both are stored, each as one secret, the password; no secret holds the user |
-| WORKSPACEISOLATION-17 | The console's deploy and its calls on a deployed build (runs, run reads, binding tests, contracts, activation) check only that the person may read the project on the Workspace service; the target's own roles decide the rest (publisher to deploy, operator to run, administrator to test a login). `docs/publishing.md` (step 2 of a deploy and the route table) follows | none | S | a test: Ben, a viewer of the project and a publisher and operator on the Runner, deploys a build and runs its task from the Runs tab; a person who may not read the project is refused by the Workspace service |
 
 ## Where each part goes (the list of WORKSPACEISOLATION-1)
 
@@ -228,6 +227,22 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
   Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
+
+## Proposed decisions
+
+### WORKSPACEISOLATION-P30: who may list the deploys of a Workspace server's builds (question, awaiting the owner)
+
+Scenario: Pat may read the project `sales` on the Workspace server and not `orders`. The console refuses Pat a deploy of `orders` and every call on a
+deploy of it, in the Workspace server's words. `GET /api/deploys?workspace_server=Workspace&project=orders` still answers Pat with each deploy of
+`orders`: the build record (the commit, the workspace, what the validators found), the Runner, the channel and the version. The console checks only
+that Pat is signed in.
+
+- Option A (as built): the list stays open to anyone signed in to the console; a deploy record says where a build went, which the Runner's own screens
+  show a viewer there too.
+- Option B: the list asks the Workspace server for the project as the person, as the calls on a deploy do; a list that names no project shows only the
+  deploys of projects the person may read (one question to the Workspace server per project in the list).
+
+Recommendation: B, so a person who may not read a project does not read its build records through the console.
 
 ## Shared areas touched
 

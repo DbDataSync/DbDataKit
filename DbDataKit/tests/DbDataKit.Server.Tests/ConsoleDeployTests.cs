@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using DbDataKit.Deploy;
+using DbDataKit.Identity;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using DbDataWorkspace.Server;
@@ -75,7 +76,9 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         await workspace.StartAsync();
 
         var consoleDirectory = Path.Combine(directory, "console");
-        console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"));
+        // people who sign in through an identity home hold the roles it gives them on each server and project, which is how a person reads one project of a Workspace server and publishes on a Runner
+        console = ConsoleHost.Build(new ConsoleSettings(consoleDirectory, new Uri("https://localhost:0")), ConsoleHost.Certificate(consoleDirectory), _ => { }, webRoot: Path.Combine(consoleDirectory, "none"),
+            services => services.AddSingleton(sp => new FederatedUsers(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<IUserAccounts>(), sp.GetRequiredService<ISessionStore>(), HomeApp, FederationPolicy.With(t => t, t => t))));
         await console.StartAsync();
         http = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true, UseCookies = false }) { BaseAddress = new Uri(console.Urls.First()), Timeout = TimeSpan.FromMinutes(3) };
         personId = console.Services.GetRequiredService<IUserAccounts>().CreateUser("Ada Admin", null, UserRole.Admin).Id;
@@ -103,10 +106,22 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         try { Directory.Delete(directory, true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
-    private async Task<(HttpStatusCode Status, JsonNode? Body)> As(HttpMethod method, string path, JsonNode? body = null)
+    private const string HomeApp = "console";
+
+    /// <summary>A session of a person who signed in through the identity home with <paramref name="roles"/> (keys <c>server:&lt;id&gt;</c> and <c>server:&lt;id&gt;/&lt;project&gt;</c>): a viewer of this console, and what the home says elsewhere.</summary>
+    private string SignedInThroughHome(string id, string name, Dictionary<string, IReadOnlyList<string>> roles)
+    {
+        roles[$"app:{HomeApp}"] = ["viewer"];
+        var user = console.Services.GetRequiredService<FederatedUsers>().SignIn(new HomeIdentity(id, name, null, [], roles))!;
+        return console.Services.GetRequiredService<ISessionStore>().Create(user.Id).Id;
+    }
+
+    private Task<(HttpStatusCode Status, JsonNode? Body)> As(HttpMethod method, string path, JsonNode? body = null) => As(session, method, path, body);
+
+    private async Task<(HttpStatusCode Status, JsonNode? Body)> As(string signedIn, HttpMethod method, string path, JsonNode? body = null)
     {
         using var request = new HttpRequestMessage(method, path);
-        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={session}");
+        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={signedIn}");
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await http.SendAsync(request);
         var text = await response.Content.ReadAsStringAsync();
@@ -143,11 +158,11 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         throw new TimeoutException("the build did not finish");
     }
 
-    private Task<(HttpStatusCode Status, JsonNode? Body)> DeployAsync(string project, string draft, string build, JsonObject? extra = null)
+    private Task<(HttpStatusCode Status, JsonNode? Body)> DeployAsync(string project, string draft, string build, JsonObject? extra = null, string? signedIn = null)
     {
         var body = new JsonObject { ["workspaceServer"] = workspaceId, ["project"] = project, ["workspace"] = draft, ["build"] = build, ["target"] = runnerId };
         foreach (var (key, value) in extra ?? []) body[key] = value?.DeepClone();
-        return As(HttpMethod.Post, "/api/deploys", body);
+        return As(signedIn ?? session, HttpMethod.Post, "/api/deploys", body);
     }
 
     private DefinitionVersion Stored(string package, int version) => new DefinitionStore(runner.State).Versions("integration", package).Single(v => v.Version == version);
@@ -237,17 +252,68 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Only_a_person_who_may_approve_on_the_workspace_server_deploys_from_it()
+    public async Task A_viewer_of_the_project_who_publishes_and_operates_on_the_runner_deploys_a_build_and_runs_its_task_from_the_runs_tab()
     {
-        var viewer = console.Services.GetRequiredService<ISessionStore>().Create(console.Services.GetRequiredService<IUserAccounts>().CreateUser("Vic Viewer", null, UserRole.Viewer).Id).Id;
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/deploys")
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        // Ben reads the project orders and nothing else of the Workspace server; on the runner he publishes and operates, and administers nothing
+        var ben = SignedInThroughHome("ben", "Ben", new() { [$"server:{workspaceId}/orders"] = ["viewer"], [$"server:{runnerId}"] = ["publisher", "operator"] });
+
+        var served = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["serve"] = true, ["bind"] = new JsonObject { ["source"] = "erp" } }, ben);
+        Assert.True(served.Status == HttpStatusCode.OK, served.Body?.ToJsonString());
+        Assert.Equal(("serve", 1), ((string?)served.Body!["deployed"]!["mode"], (int)served.Body["deployed"]!["version"]!));
+        Assert.Equal("ben", Stored("orders", 1).PublishedBy);
+        var deploy = (string)served.Body["deploy"]!["id"]!;
+
+        // Run now on the Runs tab: the task of the version the channel serves, read back through the console as Ben
+        var ran = await As(ben, HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "load", ["served"] = true });
+        Assert.True(ran.Status == HttpStatusCode.Accepted, ran.Body?.ToJsonString());
+        var runId = (string)ran.Body!["run"]!["run_id"]!;
+        for (var i = 0; ; i++)
         {
-            Content = new StringContent(new JsonObject { ["workspaceServer"] = workspaceId, ["project"] = "orders", ["workspace"] = "w", ["build"] = Guid.NewGuid().ToString(), ["target"] = runnerId }.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={viewer}");
-        using var response = await http.SendAsync(request);
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Contains("needs the approver role on Workspace", await response.Content.ReadAsStringAsync());
+            var read = await As(ben, HttpMethod.Get, $"/api/deploys/{deploy}/runs/{runId}?step=pass-record");
+            if (read.Status == HttpStatusCode.NotFound && i < 100) { await Task.Delay(100); continue; }
+            Assert.True(read.Status == HttpStatusCode.OK, read.Body?.ToJsonString());
+            if (read.Body!["run"]!["finished"] is null && i < 300) { await Task.Delay(100); continue; }
+            Assert.Equal("succeeded", (string?)read.Body["run"]!["outcome"]);
+            break;
+        }
+        Assert.Contains("Ben", tasks.Requests.Single(r => r.Task.Task == "load").RequestedBy);
+
+        // testing a login is the runner administrator's: the runner's roles decide, and Ben holds none of it there
+        var tested = await As(ben, HttpMethod.Post, $"/api/deploys/{deploy}/binding-test", new JsonObject { ["slot"] = "source" });
+        Assert.Equal(HttpStatusCode.Forbidden, tested.Status);
+        Assert.Contains("Runner one", (string?)tested.Body!["error"]);
+    }
+
+    [Fact]
+    public async Task A_person_who_may_not_read_the_project_is_refused_by_the_workspace_server_whatever_they_hold_on_the_runner()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+        var deploy = (string)(await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["serve"] = true, ["bind"] = new JsonObject { ["source"] = "erp" } })).Body!["deploy"]!["id"]!;
+        // Pat reads another project of the Workspace server, and administers the runner
+        var pat = SignedInThroughHome("pat", "Pat", new() { [$"server:{workspaceId}/sales"] = ["viewer"], [$"server:{runnerId}"] = ["admin", "publisher"] });
+
+        var deployed = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev" }, pat);
+        Assert.Equal(HttpStatusCode.Forbidden, deployed.Status);
+        Assert.Equal("Workspace does not let you read the project 'orders': This needs the viewer role.", (string?)deployed.Body!["error"]);
+        Assert.Single(new DefinitionStore(runner.State).Versions("integration", "orders"));
+
+        foreach (var (method, path, body) in new (HttpMethod, string, JsonNode?)[]
+        {
+            (HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "load", ["served"] = true }),
+            (HttpMethod.Get, $"/api/deploys/{deploy}/runs/{Guid.NewGuid()}", null),
+            (HttpMethod.Post, $"/api/deploys/{deploy}/binding-test", new JsonObject { ["slot"] = "source" }),
+            (HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = Guid.NewGuid().ToString(), ["approve"] = "c0ffee11" }),
+            (HttpMethod.Post, $"/api/deploys/{deploy}/activate", new JsonObject()),
+        })
+        {
+            var refused = await As(pat, method, path, body);
+            Assert.True(refused.Status == HttpStatusCode.Forbidden, $"{method} {path}: {refused.Status} {refused.Body?.ToJsonString()}");
+            Assert.Equal("Workspace does not let you read the project 'orders': This needs the viewer role.", (string?)refused.Body!["error"]);
+        }
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Package == "orders");
     }
 
     // ---- the runs of what a deploy put on the runner (Design: docs/publishing.md#runs-of-a-deployed-build) ----
@@ -431,7 +497,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_run_is_refused_in_words_for_a_deploy_that_put_nothing_on_a_runner_and_for_a_person_who_may_not_approve()
+    public async Task A_run_is_refused_in_words_for_a_deploy_that_put_nothing_on_a_runner_and_by_the_runner_for_a_person_who_may_not_operate_there()
     {
         if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
         var (draft, build) = await BuildAsync("orders", "sync");
@@ -444,14 +510,16 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.StartsWith("This deploy was refused", (string?)run.Body!["error"]);
         Assert.Equal(HttpStatusCode.NotFound, (await As(HttpMethod.Post, "/api/deploys/no-such-deploy/runs", new JsonObject { ["task"] = "provision" })).Status);
 
-        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev" });
+        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["bind"] = new JsonObject { ["source"] = "erp" } });
+        Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
         var id = (string)staged.Body!["deploy"]!["id"]!;
         var viewer = console.Services.GetRequiredService<ISessionStore>().Create(console.Services.GetRequiredService<IUserAccounts>().CreateUser("Vic Viewer", null, UserRole.Viewer).Id).Id;
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/deploys/{id}/runs") { Content = new StringContent(new JsonObject { ["task"] = "provision" }.ToJsonString(), Encoding.UTF8, "application/json") };
         request.Headers.Add("Cookie", $"{ConsoleHost.Auth.SessionCookie}={viewer}");
         using var response = await http.SendAsync(request);
+        // Vic may read the project (a viewer of this console reads every server), so the Workspace server lets the call through; the runner asks for its operator role, which Vic does not hold
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Contains("needs the approver role on Workspace", await response.Content.ReadAsStringAsync());
+        Assert.Contains("needs the operator role on Runner one", await response.Content.ReadAsStringAsync());
         Assert.DoesNotContain(tasks.Requests, r => r.Task.Package == "orders");
     }
 

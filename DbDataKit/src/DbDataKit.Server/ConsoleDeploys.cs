@@ -25,7 +25,8 @@ public sealed record DeployBuildOutcome(int Status, JsonObject Body);
 /// <see cref="ConsolePromotions.LinkFor"/> makes: the target decides what the person may do and records them. Each version is signed with the console's publisher key (<see cref="ConsolePublisherKeyStore"/>) over its manifest, files and
 /// the build record (<see cref="BuildRecord"/>), when the target trusts that key. Every deploy, taken or refused, is kept (<see cref="DeployStore"/>, by Workspace server, project, workspace and build) and audited (<c>build.deploy</c>).
 /// <para>
-/// Only a person who may approve on the Workspace server deploys from it (its approver role, as the Workspace's own publish asked), and only a build that succeeded, which is one the kind's validators passed.
+/// The console asks only that the person may read the project on the Workspace server: it reads the project, and then the build, as the person, and the Workspace server decides (<see cref="ProjectRefusalAsync"/>). What the person may
+/// do on the target is the target's to decide: a Runner or a Gateway asks for its publisher role to take a version, and refuses in its own words. Only a build that succeeded is deployed, which is one the kind's validators passed.
 /// </para>
 /// <para>
 /// A Runner package served in <c>prod</c> whose package declares a preflight is staged held, checked by its preflight on the staged version and activated only when the preflight found no error, or the person confirmed what it found
@@ -63,8 +64,7 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             workspaceServer = instances.Registry.Find(request.WorkspaceServer) ?? throw new Refusal(404, $"No server '{request.WorkspaceServer}' is registered.");
             if (await relay.ProductOfAsync(workspaceServer, ct) is var wsProduct && wsProduct != ServerProducts.Workspace)
                 throw new Refusal(400, $"{workspaceServer.Name} is {(wsProduct is null ? "not answering" : "a " + wsProduct + " server")}; a build is deployed from a Workspace server.");
-            if (!ServerRoles.Allows(relay.RolesHeldOn(workspaceServer, person.Id, person.Role), ServerRole.Approver))
-                throw new Refusal(403, $"Deploying a build needs the approver role on {workspaceServer.Name}.");
+            if (await ProjectRefusalAsync(workspaceServer, request.Project, person, ct) is { } unreadable) throw new Refusal(unreadable.Status, unreadable.Error);
             target = instances.Registry.Find(request.Target) ?? throw new Refusal(404, $"No server '{request.Target}' is registered.");
             var product = await relay.ProductOfAsync(target, ct);
             var deployProduct = DeployProducts.OfServer(product) ?? throw new Refusal(400, $"{target.Name} is {(product is null ? "not answering" : "a " + product + " server")}; a build is deployed to a Runner or a Gateway.");
@@ -190,6 +190,24 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
         var detail = JsonSerializer.Serialize(new { deploy = kept.Id, package = kept.DefinitionName, channel = kept.Channel, version = kept.Version, preflight = (string?)report["run"], errors = (int?)report["errors"], activation = activation.State });
         audit.Record(new AuditEvent("user", person.Id, ConsoleDeployPreflight.ActivateVerb, outcome, TargetKind: "server", TargetId: runner.InstanceId, Detail: detail));
         if (confirming) audit.Record(new AuditEvent("user", person.Id, ConsoleDeployPreflight.ConfirmVerb, AuditEvent.Ok, TargetKind: "server", TargetId: runner.InstanceId, Detail: detail));
+    }
+
+    /// <summary>
+    /// Whether the person may read <paramref name="project"/> on <paramref name="workspaceServer"/>, asked of the Workspace server itself as the person (<c>GET /api/v1/projects/{project}</c>): null when it answers with the project,
+    /// otherwise the status and the words to refuse with. The Workspace server decides from the person's roles there and on the project; the console adds no role of its own, since the target of a deploy or a run checks the person's
+    /// roles again (Design: docs/security.md#when-a-safety-rule-is-worth-adding).
+    /// </summary>
+    internal async Task<(int Status, string Error)?> ProjectRefusalAsync(RegisteredInstance workspaceServer, string project, RelayPerson person, CancellationToken ct)
+    {
+        var (status, body) = await relay.CallAsAsync(workspaceServer, person.Id, person.Name, person.Role, HttpMethod.Get, $"/api/v1/projects/{Uri.EscapeDataString(project)}", null, ct);
+        if (status == 200) return null;
+        var words = (body as JsonObject)?["error"] is JsonValue error && error.TryGetValue<string>(out var text) ? text : null;
+        return status switch
+        {
+            404 => (404, $"{workspaceServer.Name} has no project '{project}'."),
+            401 or 403 => (403, $"{workspaceServer.Name} does not let you read the project '{project}': {words ?? "it refused."}"),
+            _ => (502, $"{workspaceServer.Name} answered {status} when asked for the project '{project}'{(words is null ? "." : ": " + words)}"),
+        };
     }
 
     /// <summary>The item of the build that goes by <paramref name="route"/>: the only one, or for a Store build's model packages the model the person named (the only one when the build has one).</summary>

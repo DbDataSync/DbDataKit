@@ -2,19 +2,19 @@
 
 ## Built so far
 
-- Nothing yet. Plan: `ConsoleDeploys.DeployAsync` and `ConsoleDeployRuns.FindAsync` drop the console's own check of the approver (or viewer) role on
-  the Workspace server and ask the Workspace server, as the person, for the project (`GET /api/v1/projects/{project}`); its refusal is passed on in
-  its words. The target's roles decide the rest (the Runner asks for publisher, operator or administrator).
+- `ConsoleDeploys.DeployAsync` and `ConsoleDeployRuns.FindAsync` ask the Workspace server for the project as the person
+  (`ConsoleDeploys.ProjectRefusalAsync`, `GET /api/v1/projects/{project}`); the approver check is gone. Tests in `ConsoleDeployTests` (Ben; Pat).
+- `docs/publishing.md` (step 2, step 6, an example, the role table), `docs/apps.md` (Publish), a release note.
 
 ## Not built yet
 
-- The test of the "Done when" (Ben, a viewer of the project and a publisher and operator on the Runner).
-- `docs/publishing.md`: step 2 of a deploy and the role table of "Runs of a deployed build".
+- The subject file: remove the row; the open question below as a proposal.
 
 ## Open questions
 
-None yet.
+- Who may list the deploys (`GET /api/deploys`)? Example: Pat may not read `orders`, yet the list answers Pat with each deploy of `orders` and its
+  build record. Becomes WORKSPACEISOLATION-P30.
 
 ## Defaults taken
 
-None yet.
+None.
