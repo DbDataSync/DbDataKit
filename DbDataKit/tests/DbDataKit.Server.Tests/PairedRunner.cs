@@ -32,6 +32,9 @@ internal sealed class PairedRunner : IAsyncDisposable
 
     public RunnerPublishing Publishing { get; }
 
+    /// <summary>The runner's own directory of connection files (<c>connection/1</c>), the first place its slot resolver looks for the connection a binding names.</summary>
+    public string ConnectionsDirectory => Path.Combine(_directory, "runner", "connections");
+
     /// <summary>
     /// Starts a runner whose instance id is <paramref name="id"/>, serving the channels <c>dev</c> and <c>prod</c>. <paramref name="tasks"/>, when given, runs every task in this process over the runner's state (<see cref="InProcessTasks"/>);
     /// otherwise a run fails with "nothing is scheduled in this test".

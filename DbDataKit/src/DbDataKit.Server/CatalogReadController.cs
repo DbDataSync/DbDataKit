@@ -13,14 +13,16 @@ namespace DbDataKit.Server;
 /// <item><c>GET api/workspace-catalog/{workspace}/{project}/read/{run}?runner=&amp;channel=&amp;connection=</c>: the read after the console stopped waiting.</item>
 /// <item><c>POST api/workspace-catalog/{workspace}/{project}/gateway-read</c> with <c>{"gateway", "connection", "data_source"?, "adopt"?}</c>: the shape of a Gateway's data source, read by the Gateway with its own login, asked as the
 /// signed-in person (<see cref="ConsoleCatalogRead.GatewayAsync"/>).</item>
+/// <item><c>POST api/workspace-catalog/{workspace}/{project}/binding-test</c> with <c>{"runner", "channel", "connection", "role"?}</c>: the Runner's test of the connection's slot in the channel, with no version needed, asked as the
+/// signed-in person (<see cref="ConsoleDraftBindingTest"/>).</item>
 /// </list>
-/// Any signed-in person may ask: the Workspace server decides whether they may read the project, and the Runner or the Gateway whether they may read there (the token the console sends carries what they hold on each). A read in
+/// Any signed-in person may ask: the Workspace server decides whether they may read the project, and the Runner or the Gateway whether they may read or test there (the token the console sends carries what they hold on each). A read in
 /// production goes ahead; the screen warns before it asks.
 /// </summary>
 [ApiController]
 [Route("api/workspace-catalog/{workspace}/{project}")]
 [Authorize(Policies.Viewer)]
-public sealed class CatalogReadController(ConsoleCatalogRead reads, CurrentUser current) : ControllerBase
+public sealed class CatalogReadController(ConsoleCatalogRead reads, ConsoleDraftBindingTest tests, CurrentUser current) : ControllerBase
 {
     [HttpGet("channels")]
     public async Task<IActionResult> Channels(string workspace, string project, [FromQuery] string? runner, [FromQuery] string? connection, CancellationToken ct) =>
@@ -42,6 +44,13 @@ public sealed class CatalogReadController(ConsoleCatalogRead reads, CurrentUser 
     {
         if (current.Id is not { } id) return Unauthorized(new { error = "Sign in first." });
         return Answer(await reads.GatewayAsync(workspace, project, body, new RelayPerson(id, current.Name, current.Role ?? UserRole.Viewer), ct));
+    }
+
+    [HttpPost("binding-test")]
+    public async Task<IActionResult> BindingTest(string workspace, string project, [FromBody] DraftBindingTestBody body, CancellationToken ct)
+    {
+        if (current.Id is not { } id) return Unauthorized(new { error = "Sign in first." });
+        return Answer(await tests.TestAsync(workspace, project, body, id, ct));
     }
 
     private ObjectResult Answer(CatalogReadAnswer answer) => StatusCode(answer.Status, answer.Body);

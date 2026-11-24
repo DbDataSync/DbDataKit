@@ -9,7 +9,7 @@ connection at all. It applies to every kind of project; what a sync project chec
 **Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a Gateway's data source through the console
 (**Refresh from a Gateway** on the same tab); the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the offline checks of a Sync draft against the cache ([The offline findings](#a-sync-project)); the Runner's slot binding
-test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
+test, of a published version or of a draft by its package, channel and slot ([below](#testing-a-connection)); a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
 or a Gateway's data source ([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
@@ -345,6 +345,52 @@ neither shown nor kept.
 A test runs through the Runner in every case. It needs a binding in the channel, not a version: before anything is published it runs in a development
 channel once the slot is bound there (Set up for development, above), and after publish in any channel that binds the slot. The binding test reads the
 binding, never a staged or served version.
+
+### How a screen asks for a test
+
+A Workspace screen asks the console: `POST /api/workspace-catalog/<workspace server>/<project>/binding-test` with the Runner, the channel, the project's
+connection and optionally `role` (`default`, `read` or `write`; `default` when none is given). The draft needs no build.
+
+What the console does:
+
+1. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. The answer says whether the
+   person may read the project and which package it becomes on a Runner.
+2. It asks the Runner's binding test for that package, the channel and the connection's slot
+   (`POST /api/v1/bindings/{channel}/integration/{package}/test`) as the signed-in person. The Runner asks for its admin role and records the person in
+   its audit.
+3. It records the test in its own audit as `build.binding_test`, under the person, with the project, the package, the channel and the slot.
+
+The Workspace server is asked only about the project, and it never calls the Runner. A refusal of the Workspace server or of the Runner is passed on in
+its own words: a person who may not read the project gets the Workspace server's refusal, and a person who is not an administrator of the Runner gets
+"This needs the admin role."
+
+The answer is 200 when the Runner tried the binding, whether the binding passed or failed. `ok` says whether it passed, `step` is the step the Runner
+stopped at, and `message` says why in words. `steps` lists the four steps in order, each `passed`, `failed` or `skipped` (not tried):
+
+- `binding`: the slot is bound in the channel.
+- `connection`: the Runner has the connection the binding names, and its document loads.
+- `login`: every secret the login names resolves on the Runner.
+- `connect`: the connection opens.
+
+Example: Ana tests the connection `crm` of the project `crm-to-dw` in `dev`, where an administrator bound the slot `crm` to the Runner's
+connection `crm_dev`. Nothing of the project is published yet.
+
+```
+POST /api/workspace-catalog/ws-1/crm-to-dw/binding-test
+{"runner": "runners-eu", "channel": "dev", "connection": "crm"}
+
+200 {"package": "crm-to-dw", "connection": "crm", "slot": "crm", "channel": "dev", "production": false, "role": "default",
+     "runner": "runners-eu", "runner_name": "runners-eu", "ok": true, "step": "connect", "connected": true, "bound_to": "crm_dev",
+     "message": "The slot 'crm' opened a connection through 'crm_dev'.",
+     "steps": [{"step": "binding", "state": "passed"}, {"step": "connection", "state": "passed"},
+               {"step": "login", "state": "passed"}, {"step": "connect", "state": "passed"}]}
+```
+
+In `prod`, where nothing binds the slot yet, the same call answers `"ok": false`, `"step": "binding"` and "The slot 'crm' is not bound in channel
+'prod'.", with the other three steps `skipped`. The answer never holds a row, an address or a login.
+
+A test of a version the console deployed goes through the deploy instead (`POST /api/deploys/{id}/binding-test`,
+[Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). Both ask the same test of the Runner.
 
 ## Checking before production: `preflight`
 
