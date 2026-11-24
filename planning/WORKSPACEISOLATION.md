@@ -405,16 +405,6 @@ the form took any name typed.
 
 Recommendation: A: a cache entry for a connection the draft does not have is reported by the draft's check, and both forms then pick the same way.
 
-### WORKSPACEISOLATION-P22: the console keeps no audit line of its own for a read from a Gateway (default, awaiting the owner)
-
-Scenario: Ana reads the data source `dwh` through the console. The Gateway's audit records `data-source schema` (or the adoption) with Ana's name
-beside the console's client. Before, the Workspace server also audited `catalog.refresh`; the console's read from a Runner keeps no line either (the
-Runner records the run).
-
-- Option A (built): the Gateway's audit is the record.
-- Option B: the console also audits `workspace.catalog.read` with the Gateway, the data source and the outcome.
-
-Recommendation: A, the same as a read from a Runner; B if the owner wants every read listed in the console's audit, for both reads.
 ### WORKSPACEISOLATION-P23: which Gateways the Rows tab offers when one does not say what it serves (default, awaiting the owner)
 
 Scenario: Ana opens the Rows tab of the Store project `regions`. The console manages three Gateways: `edge` serves `regions`; `plain` has no store
