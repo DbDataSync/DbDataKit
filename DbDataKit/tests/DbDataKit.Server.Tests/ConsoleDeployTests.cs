@@ -316,6 +316,54 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.DoesNotContain(tasks.Requests, r => r.Task.Package == "orders");
     }
 
+    // ---- the test of a draft's connection before anything is published (Design: docs/authoring-metadata.md#testing-a-connection) ----
+
+    [Fact]
+    public async Task A_draft_with_no_build_tests_its_connection_in_a_channel_that_binds_the_slot_and_a_channel_that_does_not_says_so()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        Assert.Equal(HttpStatusCode.Created, (await Workspace(HttpMethod.Post, "/projects", new JsonObject { ["id"] = "orders", ["kind"] = "sync" })).Status);
+        Assert.Equal(HttpStatusCode.Created, (await Workspace(HttpMethod.Post, "/projects/orders/workspaces", new JsonObject { ["name"] = "draft" })).Status);
+        // an administrator bound the slot in dev to a connection the runner has; the runner holds no version of the package anywhere
+        Directory.CreateDirectory(runner.ConnectionsDirectory);
+        File.WriteAllText(Path.Combine(runner.ConnectionsDirectory, "erp.yaml"), "schema: connection/1\nname: erp\nengine: sqlserver\nconnection_string: 'Server=erp-dev;Database=erp'\nauth: { mode: integrated }\n");
+        runner.Publishing.Bind("orders", "dev", new Dictionary<string, string> { ["source"] = "erp" }, null, DbDataKit.Runner.RunnerActor.Local());
+        Assert.Empty(new DefinitionStore(runner.State).Versions("integration", "orders"));
+        var path = $"/api/workspace-catalog/{workspaceId}/orders/binding-test";
+
+        var dev = await As(HttpMethod.Post, path, new JsonObject { ["runner"] = runnerId, ["channel"] = "dev", ["connection"] = "source" });
+        Assert.True(dev.Status == HttpStatusCode.OK, dev.Body?.ToJsonString());
+        var tested = dev.Body!.AsObject();
+        Assert.Equal(("orders", "source", "dev", "erp", true), ((string?)tested["package"], (string?)tested["slot"], (string?)tested["channel"], (string?)tested["bound_to"], (bool)tested["ok"]!));
+        // the binding, the connection and the login passed; this runner opens no connection, so connect was not tried
+        Assert.Equal(["binding:passed", "connection:passed", "login:passed", "connect:skipped"], tested["steps"]!.AsArray().Select(s => $"{s!["step"]}:{s["state"]}"));
+        Assert.False((bool)tested["connected"]!);
+        // the steps come back and nothing else: no row, no address, no login
+        Assert.Equal(["bound_to", "channel", "connected", "connection", "message", "ok", "package", "production", "role", "runner", "runner_name", "slot", "step", "steps"], tested.Select(p => p.Key).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("erp-dev", dev.Body.ToJsonString());
+
+        var prod = await As(HttpMethod.Post, path, new JsonObject { ["runner"] = runnerId, ["channel"] = "prod", ["connection"] = "source" });
+        Assert.True(prod.Status == HttpStatusCode.OK, prod.Body?.ToJsonString());
+        Assert.Equal(("binding", false, "The slot 'source' is not bound in channel 'prod'."), ((string?)prod.Body!["step"], (bool)prod.Body["ok"]!, (string?)prod.Body["message"]));
+        Assert.Equal(["binding:failed", "connection:skipped", "login:skipped", "connect:skipped"], prod.Body["steps"]!.AsArray().Select(s => $"{s!["step"]}:{s["state"]}"));
+
+        // the runner's roles decide: Ben reads the project and operates the runner, and administers nothing there
+        var ben = SignedInThroughHome("ben", "Ben", new() { [$"server:{workspaceId}/orders"] = ["viewer"], [$"server:{runnerId}"] = ["publisher", "operator"] });
+        var notAdmin = await As(ben, HttpMethod.Post, path, new JsonObject { ["runner"] = runnerId, ["channel"] = "dev", ["connection"] = "source" });
+        Assert.Equal(HttpStatusCode.Forbidden, notAdmin.Status);
+        Assert.Equal("This needs the admin role.", (string?)notAdmin.Body!["error"]);
+        // the Workspace server decides who reads the project: Pat administers the runner and reads another project only
+        var pat = SignedInThroughHome("pat", "Pat", new() { [$"server:{workspaceId}/sales"] = ["viewer"], [$"server:{runnerId}"] = ["admin"] });
+        var unreadable = await As(pat, HttpMethod.Post, path, new JsonObject { ["runner"] = runnerId, ["channel"] = "dev", ["connection"] = "source" });
+        Assert.Equal(HttpStatusCode.Forbidden, unreadable.Status);
+        Assert.Contains("This needs the viewer role", (string?)unreadable.Body!["error"]);
+
+        // each test the runner answered is audited under the person, on the runner
+        var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.BindingTestVerb));
+        Assert.Equal([AuditEvent.Ok, AuditEvent.Failed], audited.Where(a => a.Entry.ActorId == personId).OrderBy(a => a.Entry.Outcome == AuditEvent.Ok ? 0 : 1).Select(a => a.Entry.Outcome));
+        Assert.Contains(audited, a => a.Entry.ActorId != personId && a.Entry.Outcome == AuditEvent.Refused && a.Entry.TargetId == runnerId);
+    }
+
     // ---- the runs of what a deploy put on the runner (Design: docs/publishing.md#runs-of-a-deployed-build) ----
 
     /// <summary>What each task records while it runs on the runner, as the real ones do: provision its report of statements, load a pass of a mapping, contract its plan (dropping one column) or, approved, what it ran.</summary>
