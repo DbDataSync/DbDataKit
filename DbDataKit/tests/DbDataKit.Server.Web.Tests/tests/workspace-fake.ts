@@ -9,7 +9,7 @@ import YAML from 'yaml'
  *
  * A build is published by the console, not by the Workspace server: the console's `/api/instances` also lists a Runner `plant` and a Gateway `edge`, and its `/api/deploys` is answered here too (a deploy and the list of
  * deploys, in the shapes `DeploysController` answers; the real route is `ConsoleDeployTests`). A call to the Workspace server's own publish route is kept apart (`workspacePublishes`), so a story can say that none was made.
- * The runs of what a deploy put on the Runner go through the console too (`/api/deploys/{id}/runs`, `/runs/{run}`, `/binding-test`): a run is queued at first (the read answers 404, as a Runner that has not started it yet), then it has
+ * The runs of what a deploy put on the Runner go through the console too (`/api/deploys/{id}/runs`, `/runs/{run}`, `/runs?task=` for the newest, `/binding-test`): a run is queued at first (the read answers 404, as a Runner that has not started it yet), then it has
  * succeeded with the steps its task records; a call to the Workspace server's own run routes is kept apart (`workspaceRuns`).
  */
 export const SERVER = 'ws-1'
@@ -322,6 +322,19 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       runs.push({ deploy: deployId!, task: body.task, inputs: body.inputs ?? {}, served: body.served === true })
       const id = `6f1c0f1e-0000-4000-8000-${String(runs.length).padStart(12, '0')}`
       return json(route, { steps: [`Started ${body.task} of ${String(deploy.name)}: run ${id}.`], run: { run_id: id, task: body.task, package: deploy.name, channel: deploy.channel, version: body.served ? 'served' : String(deploy.version), target: deploy.target_name, runner: 'https://runner.invalid', instance: deploy.target, on_behalf_of: 'tester' } }, 202)
+    }
+    // the newest run of a task in the deploy's channel: the newest started through any deploy to the same Runner and channel
+    if (what === 'runs' && !runId && request.method() === 'GET') {
+      const task = url.searchParams.get('task') ?? ''
+      const index = runs.map((r, i) => ({ r, i })).filter(({ r }) => {
+        const by = deploys.find((d) => d.id === r.deploy)
+        return r.task === task && by?.target === deploy.target && by?.channel === deploy.channel
+      }).at(-1)?.i
+      const answer = { package: deploy.name, channel: deploy.channel, task, runner: deploy.target, runner_name: deploy.target_name }
+      if (index === undefined) return json(route, { ...answer, link: null, run: null })
+      const id = `6f1c0f1e-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+      return json(route, { ...answer, link: `/servers/${String(deploy.target)}/runs?run=${id}`,
+        run: { id, task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(task, runs[index]!.inputs, url.searchParams.get('step')) } })
     }
     if (what === 'runs' && runId && request.method() === 'GET') {
       const index = Number(runId.slice(-12)) - 1

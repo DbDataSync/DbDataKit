@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link as ConsoleLink } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import type { BindingTestAnswer, StagedRun, StagedRunStarted } from '../api'
 import { deployApi, useRunnerVersion } from '../deploys'
@@ -254,6 +254,7 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
   const published = useRunnerVersion(project, id)
   const at = published.data ?? null
   const instance = at?.target ?? null
+  const queries = useQueryClient()
   const start = useMutation({
     mutationFn: async ({ task, inputs }: { task: string; inputs: Record<string, string> }): Promise<Started> => {
       if (!at) throw new Error('No build of this draft is published to a Runner. Build it and publish it to a Runner (Builds tab); then its tasks run from here.')
@@ -261,6 +262,8 @@ export function ProjectRunsPanel({ project, id, kind, paths }: { project: string
       const step = task === PREFLIGHT_TASK ? PREFLIGHT_STEP : kind === 'sync' ? 'pass-record' : isBuildView(task) ? 'view-result' : task === CHECK_TASK ? CHECK_STEP : undefined
       return { started, run: await followStagedRun(() => deployApi.runOf(at.deploy, started.run_id, step)) }
     },
+    // a Re-check is the newest check of its channel now
+    onSuccess: (_, { task }) => { if (task === PREFLIGHT_TASK) void queries.invalidateQueries({ queryKey: ['console', 'newest-run'] }) },
   })
   const screens = at && instance ? runnerScreens(instance, at.package) : null
   const [tests, setTests] = useState<Record<string, { answer?: BindingTestAnswer; error?: string }>>({})

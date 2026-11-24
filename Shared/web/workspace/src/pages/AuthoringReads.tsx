@@ -20,8 +20,10 @@ import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, pre
  * console, which stores it in the Runner's secret store for the project's package, the channel and the slot. The login never goes to the Workspace server.
  * Until the channel binds the slot, the form says what is left; `onStored` lets the picker ask the Runner again.
  */
-export function DevelopmentSetUp({ project, runner, runnerName, list, connection, onStored, canEdit }: {
-  project: string; runner: string; runnerName: string; list: ChannelList | undefined; connection: string; onStored?: (answer: DevelopmentLoginAnswer) => void; canEdit: boolean
+export function DevelopmentSetUp({ project, runner, runnerName, list, connection, onStored, onRecheck, canEdit }: {
+  project: string; runner: string; runnerName: string; list: ChannelList | undefined; connection: string; onStored?: (answer: DevelopmentLoginAnswer) => void
+  /** Asks the Runner again which channels bind the slot (after an administrator bound it). */
+  onRecheck?: () => void; canEdit: boolean
 }) {
   const workspace = workspaceServerOf(useModule().apiBase)
   const choices = setUpChannels(list)
@@ -71,6 +73,7 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
         <div className="hint" data-testid="wsp-setup-stored" data-channel={stored.channel}>
           {developmentLoginLine(stored)}
           {stillUnbound && <> <span data-testid="wsp-setup-left">{bindingLeftLine(stored.slot, stored.channel, stored.runner_name, stored.secrets.password)}</span></>}
+          {stillUnbound && onRecheck && <> <button type="button" className="btn-link" onClick={onRecheck} data-testid="wsp-setup-recheck">Ask {stored.runner_name} again</button></>}
         </div>
       )}
     </div>
