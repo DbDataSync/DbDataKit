@@ -304,6 +304,7 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         {
             (HttpMethod.Post, $"/api/deploys/{deploy}/runs", new JsonObject { ["task"] = "load", ["served"] = true }),
             (HttpMethod.Get, $"/api/deploys/{deploy}/runs/{Guid.NewGuid()}", null),
+            (HttpMethod.Get, $"/api/deploys/{deploy}/runs?task=load", null),
             (HttpMethod.Post, $"/api/deploys/{deploy}/binding-test", new JsonObject { ["slot"] = "source" }),
             (HttpMethod.Post, $"/api/deploys/{deploy}/contract", new JsonObject { ["planRun"] = Guid.NewGuid().ToString(), ["approve"] = "c0ffee11" }),
             (HttpMethod.Post, $"/api/deploys/{deploy}/activate", new JsonObject()),
@@ -515,6 +516,17 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.True(recheck.Status == HttpStatusCode.Accepted, recheck.Body?.ToJsonString());
         var read = await RunThroughConsoleAsync(deploy, (string)recheck.Body!["run"]!["run_id"]!, DbDataKit.Runner.Preflight.StepName);
         Assert.Equal("error", (string?)DbDataKit.Runner.Preflight.Findings(read["steps"]!.AsArray().Select(step => step!["result"])).Single().Severity);
+
+        // the newest check of the channel, as a Designer's card reads it: the Re-check, newer than the preflight before activation, with its findings and link
+        var newest = await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs?task={DbDataKit.Runner.Preflight.TaskName}&step={DbDataKit.Runner.Preflight.StepName}");
+        Assert.True(newest.Status == HttpStatusCode.OK, newest.Body?.ToJsonString());
+        Assert.Equal(((string?)recheck.Body["run"]!["run_id"], "prod", "risky"), ((string?)newest.Body!["run"]!["id"], (string?)newest.Body["channel"], (string?)newest.Body["package"]));
+        Assert.Equal($"/servers/{runnerId}/runs?run={(string?)recheck.Body["run"]!["run_id"]}", (string?)newest.Body["link"]);
+        Assert.Equal("error", (string?)DbDataKit.Runner.Preflight.Findings(newest.Body["run"]!["steps"]!.AsArray().Select(step => step!["result"])).Single().Severity);
+        var never = await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs?task=status");
+        Assert.True(never.Status == HttpStatusCode.OK, never.Body?.ToJsonString());
+        Assert.Null(never.Body!["run"]);
+        Assert.Equal(HttpStatusCode.BadRequest, (await As(HttpMethod.Get, $"/api/deploys/{deploy}/runs")).Status);
     }
 
     [Fact]

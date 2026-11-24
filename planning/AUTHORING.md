@@ -23,6 +23,9 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - Resync and reconcile-deletes buttons of a sync project's Runs tab are paused (owner, 2026-11-16).
 - A package's read-only manual task `preflight` runs before the console serves a version in `prod` and from **Re-check** on the Runs tab
   (`docs/publishing.md`, "Preflight before activation"). Build's refresh package, a Store model's package and a Sync set declare it.
+- The Designer's shared reads (`@dbdatakit/workspace`): the channel picker offers **Set up for development** where a channel does not bind the slot
+  (the login is stored on the Runner; the binding is still an administrator's), **Test** on the tab **Catalog**, **Describe columns** for a kind to
+  place, and the newest `preflight` per channel on the Runs tab (`docs/authoring-metadata.md`, "Every kind uses the same pieces").
 
 ## Tasks
 
@@ -34,7 +37,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-5 | A form editor for a model's `queries:` in a build project (name, description, `sql` or `request`, parameters), checked as you type | none | M | vitest on the form and its YAML; Playwright: add a query with a list parameter, see a translation error at its line, fix it, publish |
 | AUTHORING-17 | Adds to the Runner's built-in package `dbdatakit-metadata` (its tasks `discover` and `describe` exist: `DbDataKit.Runner.Metadata`, the route `POST /api/v1/metadata/{channel}/{task}`, `docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
 | AUTHORING-19 | **Set up for development**: from a draft on a Workspace screen, the person types a login once; the screen sends it to the console, which stores it in the project's Runner's secret store for the channel and the slot (built: `POST /api/workspace-dev-logins/...`, `ConsoleDevelopmentLogins`, `developmentLoginApi` of `@dbdatakit/workspace`; `docs/authoring-metadata.md`, "How a screen sends a development login"); the control service puts the connection's copy on the Runner, with the user as plain text and its password naming the stored secret, and binds the slot in the channel the person picked (CHANNELS-1's client); the Runner checks the person's role; the Workspace service only learns which binding exists | CHANNELS-1 | M | a test: set up `crm` for `dev`, the Runner's Bindings show it with the user; the login reaches no Workspace service |
-| AUTHORING-6 | The channel picker and Refresh exist (`ChannelPicker`, `CatalogRefresh` of `@dbdatakit/workspace`; the tab **Catalog**'s **Refresh from a Runner**). The rest of the Designer's shared pieces of authoring-time reads (`DbDataKit.Authoring`, `Shared/web/workspace`), used by every kind's Designer and Files area: **Describe** (a query's columns into the kind's file, read through the console as Refresh is), **Test** (the Runner's binding test of the connection's slot in the picked channel, built: the console's `POST /api/workspace-catalog/{workspace}/{project}/binding-test`, `docs/authoring-metadata.md`, "Testing a connection"; the screen shows its steps), **Set up for development** offered by the channel picker when the channel does not bind the slot (AUTHORING-19), and the newest-check card (the newest `preflight` or test run per channel, read through the control service (the console's run calls, `/api/deploys/{id}/runs`): time, run link, findings); the console's posture page lists the non-production bindings made from the Workspace. The Gateway refresh stays as a second way to fill the cache for a connection that is already a Gateway data source; nothing new is built on it | AUTHORING-19 | M | vitest of each piece; Playwright: a build draft with no binding offers Set up for development, then Refresh fills the Catalog tab; Test shows its steps; the posture page lists the binding |
+| AUTHORING-6 | The Designer's shared pieces of authoring-time reads are built (`docs/authoring-metadata.md`, "Every kind uses the same pieces"): the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** (`QueryDescribe`, the console's `POST .../describe`) and the newest-check card (`NewestChecks`, the console's `GET /api/deploys/{id}/runs?task=`). What is left: the console's posture page lists the non-production bindings made from the Workspace (AUTHORING-19 makes them); **Describe columns** writes a query's columns into a Build model's file (Sync's is SYNCAUTHORING-12) | AUTHORING-19 | S | vitest of the posture list and of Build's use of the columns; Playwright: after Set up for development binds the slot, the posture page lists the binding |
 | AUTHORING-7 | Retire the offline verb `project publish --to gateway --out` and the per-publish adopt confirmation (adapter first: the slot bindings' tests have run) | PUBLISHING-2 | S | the verb and `adopt` answer their sentence; `gateway-publish/1` leaves `docs/formats.json` and `docs/ui-editors.md`; the Workspace's publish tests pass unchanged |
 | AUTHORING-9 | Browser stories for the Workspace screens never opened in a browser: column lineage, model files from cached tables, the provisioning plan, scripts, the slot bindings screen, the Sync forms, the catalog refresh form; and the stories written and never run in CI: `workspace-authoring.spec.ts` (the kind picker on a new project with what each kind publishes to, check, fix, and the publish panel by product for a build, a sync and a store project), `workspace-publish.spec.ts` (create, edit, build, preview, commit, merge, publish an app) and the preview with live data; each listed in `docs/ui-coverage.md` | none | M | the Playwright specs run in CI; `scripts/check_ui_coverage.py` passes with the stories named |
 | AUTHORING-10 | The secrets overview of a Workspace project's connections (decided 2026-11-12, not built): every secret reference of the project, where it is bound, whether the target holds it (read by the control service from the Runner, never by the Workspace service); the Sync parameter form picks a `Secret` parameter's reference from it (today the person types `secret:<name>`) | none | S | vitest and a Playwright story: a project with three references shows each with its binding and state |
@@ -54,6 +57,49 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - CHANNELS-1: the client that puts a connection copy on a Runner, sends its login and binds it for a channel, before AUTHORING-19.
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1 and AUTHORING-2 (the target Runner's platform).
 - The Gateway catalog refresh is the console's `POST api/workspace-catalog/{workspace}/{project}/gateway-read` (`ConsoleCatalogRead.GatewayAsync`; `docs/authoring-metadata.md`, "A read from a Gateway").
+
+## Proposed decisions
+
+### AUTHORING-P50: reading a draft whose package the Runner does not hold yet (question, awaiting the owner)
+
+Scenario: Ana makes the build project `sales-dw` and adds the connection `warehouse`. Nothing of it is on the Runner `plant` yet. On the tab **Catalog**
+the channel picker lists no channel (the console lists only the channels of a package the Runner holds) and offers **Set up warehouse for development**
+with `dev`. Ana sends the login; `plant` stores it. Even once an administrator (or, later, the console) binds the slot, **Refresh** in `dev` is refused:
+the Runner's `discover` reads only a slot that a version served or staged in that channel declares, so Ana must first publish a build staged in `dev`.
+
+- Option A (as built): keep it. The picker offers `dev` when the Runner lists no channel, the login is stored, and the line says what is left; the doc
+  says to publish a build staged in `dev` first (`docs/authoring-metadata.md`, "Until then, an administrator binds the slot by hand").
+- Option B: the console lists the channels the Runner serves (with none bound) when the Runner holds no version of the package, and the Runner lets
+  a binding name a slot of a package it holds no version of yet, so `discover`, `describe` and the binding test read a draft that was never published.
+  This changes the Runner's rule for its built-in package and its bindings.
+- Option C: **Set up for development** also builds the draft and stages it in the channel through the console's deploy, before the binding.
+
+Recommendation: B, so a draft is read before it is ever built, as the Designer's example on `docs/authoring-metadata.md` describes; until then A.
+
+### AUTHORING-P51: the newest-check card shows the preflight, not the newest Test (default, awaiting the owner)
+
+Scenario: Ana pressed **Test** on `crm` in `prod` yesterday and it failed at `login`. Today the Runs tab's newest-check card of `prod` shows the newest
+`preflight` run, with its findings and link, and nothing about yesterday's test. The binding test is a call the Runner answers at once and records in
+its audit, not a run, so the console finds no run of it to show.
+
+- Option A (as built): the card shows the newest `preflight` run per channel; a test's steps are shown where **Test** is pressed.
+- Option B: the Runner keeps the newest binding test per package, channel and slot (who, when, the step it stopped at) and the card shows it beside
+  the preflight.
+
+Recommendation: A; the preflight already reads every connection with the bound logins, and a failed login shows there as an error.
+
+### AUTHORING-P52: Set up for development is not offered for `prod` (default, awaiting the owner)
+
+Scenario: Ben designs a sync between two systems that have no development copy, so only `prod` exists on the Runner `plant`, and it does not bind the
+slot `erp`. The console accepts a login for `prod` from a person who holds the Runner's admin role. The channel picker offers **Set up erp for
+development** with `dev` only (the channel list it offers leaves `prod` out), so Ben's production login is bound by an administrator on the Runner's
+Packages page, as before.
+
+- Option A (as built): the picker never offers `prod`; production's logins are bound on the Runner.
+- Option B: the picker also offers `prod` when it does not bind the slot, with the production warning the read shows, and the console stores it as it
+  does for `dev` (the Runner still asks for its admin role).
+
+Recommendation: A, so a login typed on an authoring screen never becomes production's; B only if the owner wants production set up from the Designer.
 
 ## Open designs
 

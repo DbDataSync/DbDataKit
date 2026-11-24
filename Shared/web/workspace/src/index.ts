@@ -17,6 +17,11 @@ export type { ColumnChoices } from './mappingColumns'
 export { CatalogRefresh, ChannelPicker, RefreshDifference } from './pages/CatalogRefresh'
 export { catalogReadApi, differenceLine, isUnchanged, productionWarning, refreshDifference, refreshOutcome, withRefresh, workspaceServerOf } from './catalogRefresh'
 export type { CatalogDifference, CatalogReadAnswer, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'
+// the Designer's other shared reads, through the console: Set up for development, Test, Describe and the newest-check card
+export { BindingTest, DevelopmentSetUp, NewestCheck, NewestChecks, QueryDescribe } from './pages/AuthoringReads'
+export { useChannelChoice } from './pages/CatalogRefresh'
+export { authoringReadApi, describedLine, newestPerChannel, setUpChannels, setUpOffered, testLine, TEST_STEP_WORDS } from './authoringReads'
+export type { DescribeAnswer, DescribedColumn, DescribeRequest, DraftTestAnswer, DraftTestRequest, NewestRun, TestStep, TestStepName } from './authoringReads'
 // a development login, sent to the console, which puts it on a Runner; the Workspace server never receives it
 export { developmentLoginApi, developmentLoginLine, developmentLoginWarning } from './developmentLogin'
 export type { DevelopmentLoginAnswer, DevelopmentLoginRequest } from './developmentLogin'
