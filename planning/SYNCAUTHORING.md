@@ -139,7 +139,7 @@ the slice built and names the slice task it follows. Where a slice task uses som
   client's mapping writer with the cache's columns and key and no `targetType`; the Designer now asks the Workspace's `sync/bulk-create` for the files
   and `sync/inferred-columns` for the types and key it shows (`DbDataWorkspace/README.md`, "A project's two areas"). The cache stays read in the browser
   with those routes too: the Workspace has no metadata route (`docs/authoring-metadata.md`, "A sync project").
-- **No Set up for development** (AUTHORING-19, which needs CHANNELS-1): a read needs the project's package on the Runner with the connection's slot
+- **No Set up for development** (AUTHORING-19): a read needs the project's package on the Runner with the connection's slot
   bound in the channel, done by hand as `docs/authoring-metadata.md` says; the channel picker names a channel that binds no slot and says how.
   AUTHORING-6 adds the button.
 - **No `facts`** (AUTHORING-17) and no live checks in the Designer (SYNCAUTHORING-11, SYNCAUTHORING-12). The set's `preflight` is built: the
