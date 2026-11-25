@@ -540,9 +540,10 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 | --- | --- | --- |
 | `useChannelChoice`, `ChannelPicker` | the Runner and the channel to read in; offers **Set up for development** where a channel does not bind the slot | every piece below |
 | `CatalogRefresh` | **Refresh** of a connection or one table, the difference shown before **Accept** | the tab **Catalog**; the Sync Designer's Refresh buttons |
-| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog** |
-| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | placed by a kind's Designer |
+| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog**; **Test** on each endpoint card of the Sync Designer |
+| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | the Sync Designer's card **Query columns** of a mapping whose source is a query |
 | `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
+| `usePublishedChannels`, `useNewestRun` | the channels the draft was published to, and the newest run of a task in one of them | the newest-check card; the Sync Designer's **Newest preflight** on the Provisioning sub-tabs |
 | `useRunAnswer`, `RunAnswerStatus` | a manual task of the version the draft's newest deploy put on a Runner, run for the person through the console, and its answer ([above](#rows-and-trials-are-answered-never-kept)); a run longer than 10 seconds is followed by its link | the Sync Designer's **Preview rows** and **Try** |
 
 The newest-check card reads the console's deploys of the draft (`GET /api/deploys?workspace_server=&project=&workspace=`), takes the newest one of each
@@ -568,7 +569,8 @@ preflight has run in dev yet."
 **Refresh catalog** with the channel picker, which runs `discover`. The Table Mappings overview lists the source's cached tables; **Create mappings**
 writes a mapping file per ticked table from the cache (columns, types, key; the target's types inferred by Sync's mapping column reader over the cache).
 **Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
-query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
+query, not a table**, then **Describe columns** on the card **Query columns** of Column Mapping, writes the query's columns into the mapping's column
+cache (`sourceColumns`: each column's name, type and whether it may be null; a query reports no key).
 
 The pickers, the overview and Column Mapping read the databases, tables and columns from the draft's `catalog-cache.yaml` in the browser
 (`catalogCache.ts`), fetched through the Workspace's existing route that reads a draft's file; a refresh not yet saved is held in the browser as an
@@ -595,7 +597,7 @@ for dev**.
 | Check | Offline | Live |
 | --- | --- | --- |
 | the table exists, or provisioning can create it | the provisioning plan from the cache, its create or alter statements shown | the plan again from the live catalog, as `provision` plans before it applies |
-| the login can insert, update and delete; for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
+| the login can make the changes the mapping's writers make (insert, update, delete); for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
 | types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
@@ -608,12 +610,29 @@ The preflight writes nothing. It reads the catalogs. It asks the engine whether 
 PostgreSQL `has_table_privilege`, `has_schema_privilege` and the table's owner). It runs the read `SELECT <mapped columns> FROM <table> WHERE
 (<filter>) AND 1 = 0`. It makes the provisioning plans as `provision` makes them, and never applies them.
 
+Which privileges the preflight asks for on the target: each writer says which changes it makes to the target table, and the preflight asks only for
+those. It asks for each writer a pass of the mapping runs: the change processing's, the bulk load's, and the reconcile's when reconcile is on.
+
+| Writer | Asks for |
+| --- | --- |
+| `ChangeApply`, `MsSqlMerge`, `MsSqlMergeReconcile` | INSERT, UPDATE and DELETE |
+| `DeleteInsert`, `MsSqlDeleteInsert`, `MsSqlBulkInsert` | INSERT and DELETE |
+| `Scd2` | INSERT and UPDATE |
+| `Snapshot` | INSERT |
+| `KeyReconcileDelete` | DELETE |
+| `KeyReconcileScd2Close` | UPDATE |
+| a writer of a driver the project carries | INSERT, UPDATE and DELETE |
+
+Example: the mapping `orders` writes `dw.dbo.orders` with `DeleteInsert`, and the run login of `dw` holds SELECT, INSERT and DELETE on it. The
+preflight finds nothing about the login's privileges, because `DeleteInsert` empties the scope and refills it and never updates a row. If the mapping
+is changed to `ChangeApply`, the preflight records "The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does."
+
 How much a live finding weighs:
 
 - Errors, because the first pass would fail on them:
   - a source or target table, or a mapped column, that is not there;
   - a filter or a read of the source that the database refuses;
-  - a run login that may not read the source, or may not insert, update or delete on the target;
+  - a run login that may not read the source, or may not make a change on the target that one of the mapping's writers makes;
   - change tracking, CDC, a trigger's shadow table or a logical slot that the reader needs and that is off. The finding carries the statements that
     turn it on, the source side of the provisioning plan;
   - a reader or writer that the connection's driver does not have;
@@ -622,16 +641,17 @@ How much a live finding weighs:
   that is not the target's primary key, and a reader or writer that matches rows on a key the tables do not give it.
 - Information: what is in order, and what was not checked on this engine.
 
-Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking`. In `prod` change tracking is on for the database and off on the
-table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the staged version records:
+Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking` and writes `dw.dbo.orders` with `ChangeApply`. In `prod`
+change tracking is on for the database and off on the table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the
+staged version records:
 
 ```
 error  crm: The reader 'MsSqlChangeTracking' needs the source crm.dbo.orders to be set up first: Enable Change Tracking on [dbo].[orders].
             The statements that do it (the source side's provisioning, which the set's `provision` task applies):
             ALTER TABLE [dbo].[orders] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF);
-error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders.
-error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders.
-error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders.
+error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders, which the writer 'ChangeApply' does.
 ```
 
 The console keeps the version staged and held. A DBA enables change tracking and grants the login its rights, and Ana runs **Re-check** before she
@@ -699,7 +719,7 @@ mapping's rows are shown by **Preview rows** under the source filter of the mapp
 editor ([Rows and trials are answered, never kept](#rows-and-trials-are-answered-never-kept)).
 
 **Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
-the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation. Nothing live is
+the chosen channel (time, run link, findings per mapping, the card **Newest preflight**); the publish panel runs `preflight` on the staged version before activation. Nothing live is
 committed into the draft; the cache and a query's column cache are.
 
 Example: Ana maps `crm.dbo.orders` with the change-tracking reader, against `dev`, where change tracking is on, and publishes to `prod`, where it is off on

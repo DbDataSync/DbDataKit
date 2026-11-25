@@ -26,6 +26,9 @@ public sealed class MsSqlDeleteInsertWriter : IChangeWriter, IStatementPreview
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>Empties the scope, then refills it: a DELETE and an INSERT, never an UPDATE.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Insert | WritePrivileges.Delete;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,

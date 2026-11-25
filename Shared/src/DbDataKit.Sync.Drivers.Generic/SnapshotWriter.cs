@@ -32,6 +32,9 @@ public sealed class SnapshotWriter(SqlDialect dialect, ITableCatalog catalog) : 
 
     public bool SupportsReconciliation => false;
 
+    /// <summary>Appends every row: an INSERT only.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Insert;
+
     public async Task<WriteResult> ApplyAsync(
         DbConnection targetConnection,
         TableRef target,

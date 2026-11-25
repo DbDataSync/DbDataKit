@@ -18,7 +18,9 @@ export { CatalogRefresh, ChannelPicker, RefreshDifference } from './pages/Catalo
 export { catalogReadApi, differenceLine, isUnchanged, productionWarning, refreshDifference, refreshOutcome, withRefresh, workspaceServerOf } from './catalogRefresh'
 export type { CatalogDifference, CatalogReadAnswer, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'
 // the Designer's other shared reads, through the console: Set up for development, Test, Describe and the newest-check card
-export { BindingTest, DevelopmentSetUp, NewestCheck, NewestChecks, QueryDescribe, RunAnswerStatus, useRunAnswer } from './pages/AuthoringReads'
+export { BindingTest, DevelopmentSetUp, NewestCheck, NewestChecks, QueryDescribe, RunAnswerStatus, useNewestRun, usePublishedChannels, useRunAnswer } from './pages/AuthoringReads'
+export { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightPartsOf } from './pages/PreflightCard'
+export type { PreflightFinding, PreflightPart, PreflightSeverity } from './pages/PreflightCard'
 export type { AnswerAsk } from './pages/AuthoringReads'
 export { useChannelChoice } from './pages/CatalogRefresh'
 export { authoringReadApi, describedLine, newestPerChannel, PREVIEW_TASK, previewLine, previewValue, setUpChannels, setUpOffered, testLine, TEST_STEP_WORDS, trialLine, TRY_STRATEGY_TASK } from './authoringReads'

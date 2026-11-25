@@ -16,7 +16,7 @@ namespace DbDataSync.TaskRunner.Tests.Runner;
 
 /// <summary>
 /// The replication set's preflight on SQL Server and PostgreSQL (Design: docs/authoring-metadata.md#a-sync-project): the checks of each mapping with the login a run uses, read only. A source whose
-/// change tracking is off is an error with the statement that enables it, and satisfied once it is on; a target login without INSERT is an error; a filter naming a column the table does not have
+/// change tracking is off is an error with the statement that enables it, and satisfied once it is on; a target login without INSERT is an error, and one without UPDATE is not for a writer that never updates (DeleteInsert); a filter naming a column the table does not have
 /// is an error; and every table of both databases, with its row count, is the same after the preflight as before it. Needs the engines of <c>testenv.sh env dbdatakit</c> (SQL Server and the plain
 /// PostgreSQL: <c>DBDATAKIT_TEST_SQLSERVER</c>, <c>DBDATAKIT_TEST_POSTGRES</c>), or <c>DBDATAKIT_TEST_MSSQL</c> and the PostgreSQL of <c>testenv.sh env dbdatasync</c>.
 /// </summary>
@@ -168,11 +168,13 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         var source = $"PfSrc_{_suffix}";
         var target = $"PfTgt_{_suffix}";
         var login = $"pf_limited_{_suffix}";
+        var writer = $"pf_writer_{_suffix}";
         await using (var server = new SqlConnection(SqlServer))
         {
             await server.OpenAsync();
             await ExecAsync(server, $"CREATE DATABASE [{source}]; ALTER DATABASE [{source}] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = OFF); CREATE DATABASE [{target}];");
             await ExecAsync(server, $"CREATE LOGIN [{login}] WITH PASSWORD = '{LimitedPassword}', CHECK_POLICY = OFF;");
+            await ExecAsync(server, $"CREATE LOGIN [{writer}] WITH PASSWORD = '{LimitedPassword}', CHECK_POLICY = OFF;");
         }
         _cleanups.Add(async () =>
         {
@@ -182,6 +184,7 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
             await MsSqlScratch.DropDatabaseAsync(server, source);
             await MsSqlScratch.DropDatabaseAsync(server, target);
             await ExecAsync(server, $"IF SUSER_ID('{login}') IS NOT NULL DROP LOGIN [{login}];");
+            await ExecAsync(server, $"IF SUSER_ID('{writer}') IS NOT NULL DROP LOGIN [{writer}];");
         });
 
         var sourceAdmin = new SqlConnectionStringBuilder(SqlServer) { InitialCatalog = source }.ConnectionString;
@@ -196,19 +199,24 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
             await db.OpenAsync();
             await ExecAsync(db, "CREATE TABLE dbo.orders (id INT NOT NULL PRIMARY KEY, name NVARCHAR(50) NOT NULL, region INT NOT NULL); INSERT INTO dbo.orders VALUES (1, N'a', 1);");
             await ExecAsync(db, $"CREATE USER [{login}] FOR LOGIN [{login}]; GRANT SELECT ON dbo.orders TO [{login}];");
+            await ExecAsync(db, $"CREATE USER [{writer}] FOR LOGIN [{writer}]; GRANT SELECT, INSERT, DELETE ON dbo.orders TO [{writer}];");
         }
 
         Connection("src", "sqlserver", host, port, source, builder.UserID);
         Connection("tgt", "sqlserver", host, port, target, builder.UserID);
         Connection("tgt_limited", "sqlserver", host, port, target, login);
+        Connection("tgt_writer", "sqlserver", host, port, target, writer);
         Replication("ct", MsSqlDriverKinds.ChangeTracking, MsSqlDriverKinds.Merge, MsSqlDriverKinds.StagingTable, "src", source, "dbo", "orders", "tgt", target, "dbo", "orders", filter: "region > 0");
         Replication("limited", "BatchReload", "DeleteInsert", "StagingTable", "src", source, "dbo", "orders", "tgt_limited", target, "dbo", "orders");
         Replication("filtered", "BatchReload", "DeleteInsert", "StagingTable", "src", source, "dbo", "orders", "tgt", target, "dbo", "orders", filter: "regoin > 0");
+        Replication("refill", "BatchReload", MsSqlDriverKinds.DeleteInsert, "StagingTable", "src", source, "dbo", "orders", "tgt_writer", target, "dbo", "orders");
+        Replication("merge", "BatchReload", MsSqlDriverKinds.Merge, "StagingTable", "src", source, "dbo", "orders", "tgt_writer", target, "dbo", "orders");
         var logins = new Dictionary<string, (string, IDriver)>
         {
             ["src"] = (sourceAdmin, new MsSqlDriver()),
             ["tgt"] = (targetAdmin, new MsSqlDriver()),
             ["tgt_limited"] = (new SqlConnectionStringBuilder(targetAdmin) { UserID = login, Password = LimitedPassword }.ConnectionString, new MsSqlDriver()),
+            ["tgt_writer"] = (new SqlConnectionStringBuilder(targetAdmin) { UserID = writer, Password = LimitedPassword }.ConnectionString, new MsSqlDriver()),
         };
 
         const string List = "SELECT QUOTENAME(s.name) + '.' + QUOTENAME(t.name) FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id";
@@ -234,10 +242,20 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         Assert.Equal("src", tracking.About);
         Assert.DoesNotContain(ct, f => f.Message.Contains("may not", StringComparison.Ordinal));   // sa may read and write
 
-        // the run login of the target holds SELECT only: INSERT, UPDATE and DELETE are each an error, and nothing was tried
+        // the run login of the target holds SELECT only: INSERT and DELETE, what DeleteInsert does, are each an error naming the writer, and nothing was tried;
+        // UPDATE, which DeleteInsert never does, is not asked
         var limited = Findings(parts, "limited/main");
-        Assert.Contains(limited, f => f.Severity == Preflight.Error && f.About == "tgt_limited" && f.Message.Contains("may not INSERT into", StringComparison.Ordinal));
+        Assert.Contains(limited, f => f.Severity == Preflight.Error && f.About == "tgt_limited" && f.Message.Contains("may not INSERT into", StringComparison.Ordinal)
+            && f.Message.Contains("the writer 'DeleteInsert' does", StringComparison.Ordinal));
         Assert.Contains(limited, f => f.Severity == Preflight.Error && f.Message.Contains("may not DELETE from", StringComparison.Ordinal));
+        Assert.DoesNotContain(limited, f => f.Message.Contains("may not UPDATE", StringComparison.Ordinal));
+
+        // a login with INSERT and DELETE and no UPDATE: nothing about privileges for MsSqlDeleteInsert, and UPDATE is an error for a MERGE, which updates
+        Assert.DoesNotContain(Findings(parts, "refill/main"), f => f.Message.Contains("may not", StringComparison.Ordinal));
+        var merge = Assert.Single(Findings(parts, "merge/main"), f => f.Message.Contains("may not", StringComparison.Ordinal));
+        Assert.Equal(Preflight.Error, merge.Severity);
+        Assert.Contains("may not UPDATE", merge.Message, StringComparison.Ordinal);
+        Assert.Contains("the writer 'MsSqlMerge' does", merge.Message, StringComparison.Ordinal);
 
         // a filter that names a column the table does not have fails its zero-row read, naming the column
         var filtered = Findings(parts, "filtered/main");
@@ -273,11 +291,13 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         var builder = new NpgsqlConnectionStringBuilder(Postgres);
         var database = $"pf_{_suffix}";
         var role = $"pf_limited_{_suffix}";
+        var writer = $"pf_writer_{_suffix}";
         await using (var server = new NpgsqlConnection(Postgres))
         {
             await server.OpenAsync();
             await ExecAsync(server, $"CREATE DATABASE {database}");
             await ExecAsync(server, $"CREATE ROLE {role} LOGIN PASSWORD '{LimitedPassword}'");
+            await ExecAsync(server, $"CREATE ROLE {writer} LOGIN PASSWORD '{LimitedPassword}'");
         }
         _cleanups.Add(async () =>
         {
@@ -286,6 +306,7 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
             await server.OpenAsync();
             await ExecAsync(server, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
             await ExecAsync(server, $"DROP ROLE IF EXISTS {role}");
+            await ExecAsync(server, $"DROP ROLE IF EXISTS {writer}");
         });
 
         var admin = new NpgsqlConnectionStringBuilder(Postgres) { Database = database }.ConnectionString;
@@ -300,10 +321,15 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
                 """);
             await ExecAsync(db, $"REVOKE CREATE ON SCHEMA public FROM PUBLIC; REVOKE CREATE ON DATABASE {database} FROM PUBLIC; GRANT CONNECT ON DATABASE {database} TO {role}; "
                 + $"GRANT USAGE ON SCHEMA public TO {role}; GRANT SELECT ON public.orders, public.orders_copy TO {role};");
+            await ExecAsync(db, $"GRANT CONNECT ON DATABASE {database} TO {writer}; GRANT USAGE ON SCHEMA public TO {writer}; "
+                + $"GRANT SELECT ON public.orders TO {writer}; GRANT SELECT, INSERT, DELETE ON public.orders_copy TO {writer};");
         }
 
         Connection("pg", "postgres", builder.Host!, builder.Port, database, builder.Username!);
         Connection("pg_limited", "postgres", builder.Host!, builder.Port, database, role);
+        Connection("pg_writer", "postgres", builder.Host!, builder.Port, database, writer);
+        Replication("refill", "BatchReload", "DeleteInsert", "StagingTable", "pg", database, "public", "orders", "pg_writer", database, "public", "orders_copy");
+        Replication("apply", "BatchReload", "ChangeApply", "StagingTable", "pg", database, "public", "orders", "pg_writer", database, "public", "orders_copy");
         Replication("limited", "BatchReload", "DeleteInsert", "StagingTable", "pg", database, "public", "orders", "pg_limited", database, "public", "orders_copy",
             tracking: "tracking:\n  mode: target\n");
         Replication("filtered", "BatchReload", "DeleteInsert", "StagingTable", "pg", database, "public", "orders", "pg", database, "public", "orders_copy", filter: "regoin > 0");
@@ -312,6 +338,7 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         {
             ["pg"] = (admin, new PostgresDriver()),
             ["pg_limited"] = (new NpgsqlConnectionStringBuilder(admin) { Username = role, Password = LimitedPassword }.ConnectionString, new PostgresDriver()),
+            ["pg_writer"] = (new NpgsqlConnectionStringBuilder(admin) { Username = writer, Password = LimitedPassword }.ConnectionString, new PostgresDriver()),
         };
 
         const string List = "SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')";
@@ -333,7 +360,17 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
 
         var limited = Findings(parts, "limited/main");
         Assert.Contains(limited, f => f.Severity == Preflight.Error && f.About == "pg_limited" && f.Message.Contains("may not INSERT into", StringComparison.Ordinal));
-        Assert.Contains(limited, f => f.Severity == Preflight.Error && f.Message.Contains("may not UPDATE", StringComparison.Ordinal));
+        Assert.Contains(limited, f => f.Severity == Preflight.Error && f.Message.Contains("may not DELETE from", StringComparison.Ordinal));
+        Assert.DoesNotContain(limited, f => f.Message.Contains("may not UPDATE", StringComparison.Ordinal));   // DeleteInsert never updates
+
+        // a login with INSERT and DELETE and no UPDATE: nothing about privileges for DeleteInsert, and UPDATE is an error for ChangeApply, which updates
+        var refill = Findings(parts, "refill/main");
+        Assert.DoesNotContain(refill, f => f.Message.Contains("may not", StringComparison.Ordinal));
+        Assert.True(refill.All(f => f.Severity == Preflight.Info), shown);
+        var apply = Assert.Single(Findings(parts, "apply/main"), f => f.Message.Contains("may not", StringComparison.Ordinal));
+        Assert.Equal(Preflight.Error, apply.Severity);
+        Assert.Contains("may not UPDATE", apply.Message, StringComparison.Ordinal);
+        Assert.Contains("the writer 'ChangeApply' does", apply.Message, StringComparison.Ordinal);
 
         // the state on the target: the schema dbdatasync is not there, and the run login may not create it
         var state = Findings(parts, "limited tracking");

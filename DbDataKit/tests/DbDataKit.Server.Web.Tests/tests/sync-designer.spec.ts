@@ -518,6 +518,164 @@ test('the Designer\'s Refresh buttons read through the console: an endpoint\'s c
   expect(cache.connections['source-db'].tables.find((t: { name: string }) => t.name === 'Invoices').columns.map((c: { name: string }) => c.name)).toContain('segment')
 })
 
+const DEV_PASSWORD = 'dev-login-5521-long'
+
+/**
+ * The console's live reads of a draft's connection, faked in the page (the real routes are tested with real servers, `CatalogReadFromRunnerTests` and the
+ * console's tests of `describe`, `binding-test` and `workspace-dev-logins`): on the Runner `plant`, dev binds the slot of `source-db` and not that of
+ * `target-db`; the binding test passes each step; the description of a query answers its columns and no row; a development login sent with the draft
+ * is stored and binds the slot in its channel.
+ */
+async function mockLiveReads(page: Page) {
+  const asked: { path: string; body: Record<string, unknown> | null }[] = []
+  const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+  const base = { package: 'plant', runner: RUNNER, runner_name: RUNNER }
+  const setUp = new Set<string>()
+  await page.route('**/api/workspace-dev-logins/**', (route) => {
+    const body = route.request().postDataJSON() as { channel: string; connection: string; user?: string; draft?: string }
+    asked.push({ path: new URL(route.request().url()).pathname, body })
+    const slot = body.connection.replace(/[^a-z0-9_]/g, '_')
+    // with the draft, the console copies its connection to the Runner and binds the slot in the channel
+    if (body.draft) setUp.add(body.connection)
+    return json(route, { ...base, connection: body.connection, slot, channel: body.channel, production: false, ...(body.user ? { user: body.user } : {}),
+      secrets: { password: `dbdatakit:runner:dev-login:plant.${body.channel}.${slot}:password` }, bound: !!body.draft, copy: `plant-${slot}-${body.channel}`, steps: [] })
+  })
+  await page.route('**/api/workspace-catalog/**', async (route) => {
+    const url = new URL(route.request().url())
+    const body = route.request().method() === 'POST' ? route.request().postDataJSON() as Record<string, unknown> : null
+    asked.push({ path: url.pathname, body })
+    if (url.pathname.endsWith('/channels')) {
+      const connection = url.searchParams.get('connection')!
+      const slot = connection.replace(/[^a-z0-9_]/g, '_')
+      const devBound = connection === 'source-db' || setUp.has(connection)
+      return json(route, { ...base, connection, slot, default: devBound ? 'dev' : null,
+        channels: [{ channel: 'dev', production: false, bound: devBound, bound_to: devBound ? (setUp.has(connection) ? `plant-${slot}-dev` : `${connection}-dev`) : null }, { channel: 'prod', production: true, bound: true, bound_to: connection }] })
+    }
+    if (url.pathname.endsWith('/binding-test')) {
+      const connection = String(body!.connection)
+      return json(route, { ...base, connection, slot: connection.replace(/[^a-z0-9_]/g, '_'), channel: body!.channel, production: false, role: 'default', ok: true, step: 'connect',
+        connected: true, bound_to: `${connection}-dev`, message: `The slot '${connection.replace(/[^a-z0-9_]/g, '_')}' opened a connection through '${connection}-dev'.`,
+        steps: ['binding', 'connection', 'login', 'connect'].map((step) => ({ step, state: 'passed' })) })
+    }
+    if (url.pathname.endsWith('/describe')) {
+      return json(route, { ...base, state: 'done', run_id: 'run-describe-1', link: `/servers/${RUNNER}/runs?run=run-describe-1`, channel: body!.channel, production: false, connection: body!.connection,
+        engine: 'sqlserver', strategy: 'SqlServerDescribeFirstResultSet', columns: [{ name: 'id', type: 'int', nullable: false }, { name: 'total', type: 'decimal(12,2)', nullable: true }] })
+    }
+    return json(route, { error: 'There is no such call.' }, 404)
+  })
+  return { asked }
+}
+
+test('the live pieces of a replication: Test on an endpoint card, Set up for development where dev does not bind the slot, which binds it, Describe columns of a query, the newest preflight on the Provisioning sub-tabs', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Live', `sync-live-${Date.now()}@example.com`)
+  const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE }, syncTasks: ['orders', 'provision', 'preflight'] })
+  const live = await mockLiveReads(page)
+  await makeDraft(page, 'plant', 'sync', 'live-edit')
+  await expect(page).toHaveURL(/\/designer\/replications\/orders$/)
+
+  // Test on the source's card: dev binds its slot, and the Runner's binding test shows each step and no row
+  await page.getByTestId('task-source-connection-select').selectOption('source-db')
+  await page.getByTestId('task-source-test-button').click()
+  const sourceTest = page.getByTestId('task-source-test')
+  await expect(sourceTest.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  await sourceTest.getByTestId('wsp-test-go').click()
+  await expect(sourceTest.getByTestId('wsp-test-result')).toHaveAttribute('data-ok', 'true')
+  await expect(sourceTest.getByTestId('wsp-test-message')).toHaveText("The slot 'source_db' opened a connection through 'source-db-dev'.")
+  await expect(sourceTest.locator('[data-testid="wsp-test-step"][data-state="passed"]')).toHaveCount(4)
+  await expect(sourceTest.locator('table')).toHaveCount(0)
+  expect(live.asked.find((a) => a.path.endsWith('/binding-test'))?.body).toEqual({ runner: RUNNER, channel: 'dev', connection: 'source-db', role: 'default' })
+  await shot(page, '40-endpoint-test')
+
+  // Test on the target's card: dev does not bind its slot, so the picker offers Set up for development and no test; the login goes to the console only
+  await page.getByTestId('task-target-connection-select').selectOption('target-db')
+  await page.getByTestId('task-target-test-button').click()
+  const targetTest = page.getByTestId('task-target-test')
+  await expect(targetTest.getByTestId('wsp-test-go')).toHaveCount(0)
+  await expect(targetTest.getByTestId('task-target-test-pick')).toBeVisible()
+  await targetTest.getByTestId('wsp-setup-open').click()
+  await targetTest.getByTestId('wsp-setup-user').fill('dw_dev')
+  await targetTest.getByTestId('wsp-setup-password').fill(DEV_PASSWORD)
+  await targetTest.getByTestId('wsp-setup-save').click()
+  // the console bound the slot in dev: the picker offers dev, Set up is no longer offered, and Test can run there
+  await expect(targetTest.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  await expect(targetTest.getByTestId('wsp-setup')).toHaveCount(0)
+  await expect(targetTest.getByTestId('wsp-test-go')).toBeVisible()
+  const logins = live.asked.filter((a) => JSON.stringify(a.body ?? {}).includes(DEV_PASSWORD))
+  expect(logins.map((a) => a.path)).toEqual([`/api/workspace-dev-logins/${SERVER}/plant`])
+  expect(logins[0]!.body!.draft).toMatch(/live-edit$/)
+  expect(await page.content()).not.toContain(DEV_PASSWORD)
+  await shot(page, '41-set-up-for-development')
+  await page.getByTestId('save-settings-button').click()
+
+  // Describe columns of a query source: the columns are written into the mapping's column cache as an unsaved edit, saved with the mapping
+  await page.getByTestId('tab-mappings').click()
+  await page.getByTestId('mapping-item-orders').click()
+  await page.getByTestId('source-query-source-toggle').click()
+  await page.getByTestId('source-query-open-button').click()
+  await page.getByTestId('source-query-editor').locator('.monaco-editor').click()
+  await page.keyboard.insertText('SELECT id, total FROM dbo.Orders')
+  await page.getByTestId('source-query-close-button').click()
+  await expect(page.getByTestId('query-columns-card')).toHaveAttribute('data-count', '0')
+  await page.getByTestId('query-columns-describe-button').click()
+  const describe = page.getByTestId('query-columns-describe')
+  await expect(describe.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  await describe.getByTestId('wsp-describe-go').click()
+  await expect(describe.getByTestId('wsp-describe-summary')).toHaveText('2 columns: id int, total decimal(12,2) null')
+  await describe.getByTestId('wsp-describe-use').click()
+  await expect(page.getByTestId('query-columns-card')).toHaveAttribute('data-count', '2')
+  await expect(page.getByTestId('query-columns-line')).toHaveText('2 columns recorded: id, total')
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  expect(live.asked.find((a) => a.path.endsWith('/describe'))?.body).toEqual({ runner: RUNNER, channel: 'dev', connection: 'source-db', sql: 'SELECT id, total FROM dbo.Orders' })
+  await shot(page, '42-describe-columns')
+  await page.getByTestId('save-mapping-button').click()
+  await expect(page.getByTestId('mapping-dirty')).toHaveCount(0)
+  const mapping = saved(workspace, 'live-edit', 'config/replications/orders/table-mappings/orders.yaml')
+  expect(mapping.sources[0].query).toBe('SELECT id, total FROM dbo.Orders')
+  expect(mapping.sourceColumns).toEqual([
+    { name: 'id', nativeType: 'int', isNullable: false, isPrimaryKey: false, isIdentity: false },
+    { name: 'total', nativeType: 'decimal(12,2)', isNullable: true, isPrimaryKey: false, isIdentity: false },
+  ])
+
+  // before anything is published, the Provisioning sub-tab says no channel has a preflight
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await page.getByTestId('overview-tab-provisioning').click()
+  await expect(page.getByTestId('newest-preflight-unpublished')).toBeVisible()
+
+  // built and staged on dev, then Re-check on the Runs tab runs the set's preflight there
+  await page.getByTestId('sd-rail').getByTestId('sd-build-and-publish').click()
+  await page.getByTestId('wsp-build').click()
+  const built = page.locator('[data-testid="wsp-build-detail"][data-status="succeeded"]')
+  await expect(built).toBeVisible({ timeout: 15_000 })
+  await built.getByTestId('wsp-publish-target').selectOption(RUNNER)
+  await built.getByTestId('wsp-publish-channel').fill('dev')
+  await built.getByTestId('wsp-publish').click()
+  await expect(built.getByTestId('wsp-published')).toHaveAttribute('data-version', '1')
+  await page.getByTestId('wsp-tab-runs').click()
+  await page.getByTestId('wsp-runs-preflight-recheck').click()
+  await expect(page.getByTestId('wsp-runs-result')).toHaveAttribute('data-outcome', 'succeeded')
+  expect(workspace.runs.at(-1)).toMatchObject({ task: 'preflight', inputs: {} })
+
+  // the replication's Provisioning sub-tab shows the newest preflight of dev: its time, its run's link, and what it found by mapping
+  await page.locator('[data-testid="sd-nav-replication"][data-name="orders"]').click()
+  await page.getByTestId('overview-tab-provisioning').click()
+  const newest = page.getByTestId('newest-preflight')
+  await expect(newest).toHaveAttribute('data-channel', 'dev')
+  await expect(newest).toHaveAttribute('data-errors', '1')
+  await expect(newest.getByTestId('newest-preflight-when')).toContainText('preflight of version 1, succeeded, finished 2026-11-11T11:00:05Z')
+  await expect(newest.getByTestId('newest-preflight-link')).toHaveAttribute('href', new RegExp(`^/servers/${RUNNER}/runs\\?run=`))
+  await expect(newest.locator('[data-testid="newest-preflight-part"]')).toHaveCount(2)
+  await expect(newest.locator('[data-testid="newest-preflight-part"][data-part="orders/orders"] [data-testid="wsp-preflight-finding"]').first()).toHaveAttribute('data-severity', 'error')
+  await shot(page, '43-newest-preflight')
+
+  // the mapping's Provisioning tab shows its own part only
+  await page.getByTestId('tab-mappings').click()
+  await page.getByTestId('mapping-item-orders').click()
+  await page.getByTestId('mapping-tab-provisioning').click()
+  await expect(page.getByTestId('newest-preflight').locator('[data-testid="newest-preflight-part"]')).toHaveCount(1)
+  await expect(page.getByTestId('newest-preflight-summary')).toHaveText('The preflight found 1 error and 0 warnings.')
+  expect(workspace.workspaceRuns).toEqual([])
+})
+
 test('Build and publish… on a replication opens the draft\'s Builds tab, a build is staged on a Runner\'s dev through the console with its slot bound, and Back returns to the replication', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Sync Publish', `sync-publish-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE } })

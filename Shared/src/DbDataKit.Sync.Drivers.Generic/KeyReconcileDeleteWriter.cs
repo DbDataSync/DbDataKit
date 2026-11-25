@@ -25,6 +25,9 @@ public sealed class KeyReconcileDeleteWriter(SqlDialect dialect, ITableCatalog c
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>Deletes the keys the source no longer has, and nothing else.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Delete;
+
     /// <summary>The sweep anti-joins the staged keys against the target's primary key.</summary>
     public KeyNeed NeedsKey => KeyNeed.TargetKey;
 

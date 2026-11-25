@@ -166,7 +166,7 @@ export function QueryDescribe({ project, connection, runner, channel, sql, onCol
 
 /** The newest run of a check in one channel: its time and outcome, what it found, and the run's link. */
 export function NewestCheck({ version, task = PREFLIGHT_TASK, step = PREFLIGHT_STEP }: { version: RunnerVersion; task?: string; step?: string }) {
-  const newest = useQuery<NewestRun, Error>({ queryKey: ['console', 'newest-run', version.deploy, task, step], queryFn: () => authoringReadApi.newest(version.deploy, task, step), retry: false })
+  const newest = useNewestRun(version, task, step)
   const run = newest.data?.run ?? null
   const findings = run ? preflightFindingsOf(run) : null
   const errors = findings?.filter((f) => f.severity === 'error').length ?? 0
@@ -192,16 +192,33 @@ export function NewestCheck({ version, task = PREFLIGHT_TASK, step = PREFLIGHT_S
 }
 
 /**
- * The newest-check card: per channel this draft was published to on a Runner, the newest run of its check (the package's `preflight`), read through the
- * console. Nothing of it is committed: a check describes a login at a moment, not the project.
+ * The channels of Runners this draft was published to, each with the newest deploy there, read from the console's records of the draft's deploys; with a
+ * task, only those whose version declares it (a version that lists no task is kept). What a newest-check card, or a kind's screen showing one channel's
+ * newest check, chooses from. `server` is null when the screens are not hosted by a console.
  */
-export function NewestChecks({ project, id, task = PREFLIGHT_TASK, step = PREFLIGHT_STEP }: { project: string; id: string; task?: string; step?: string }) {
+export function usePublishedChannels(project: string, id: string, task?: string) {
   const server = useHostedServer()
   const deploys = useQuery({
     queryKey: ['console', 'deploys', server, project, id, 'per-channel'],
     queryFn: async () => newestPerChannel(await deployApi.deploys({ workspaceServer: server!, project, workspace: id })), enabled: server !== null, retry: false,
   })
-  const channels = (deploys.data ?? []).filter((v) => v.tasks.length === 0 || v.tasks.includes(task))
+  const channels = (deploys.data ?? []).filter((v) => !task || v.tasks.length === 0 || v.tasks.includes(task))
+  return { server, deploys, channels }
+}
+
+/** The newest run of a task in the channel a deploy put a version in, read through the console; the newest-check card and a kind's screen share it. */
+export function useNewestRun(version: RunnerVersion | null | undefined, task = PREFLIGHT_TASK, step = PREFLIGHT_STEP) {
+  return useQuery<NewestRun, Error>({
+    queryKey: ['console', 'newest-run', version?.deploy, task, step], queryFn: () => authoringReadApi.newest(version!.deploy, task, step), enabled: !!version, retry: false,
+  })
+}
+
+/**
+ * The newest-check card: per channel this draft was published to on a Runner, the newest run of its check (the package's `preflight`), read through the
+ * console. Nothing of it is committed: a check describes a login at a moment, not the project.
+ */
+export function NewestChecks({ project, id, task = PREFLIGHT_TASK, step = PREFLIGHT_STEP }: { project: string; id: string; task?: string; step?: string }) {
+  const { server, deploys, channels } = usePublishedChannels(project, id, task)
   if (server === null) return null
   return (
     <div style={{ marginTop: 8 }} data-testid="wsp-newest-checks" data-task={task}>

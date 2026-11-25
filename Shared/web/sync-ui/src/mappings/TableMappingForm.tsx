@@ -24,6 +24,8 @@ import { RelationshipsCard } from './RelationshipsCard'
 import { SourceFilterCard } from './SourceFilterCard'
 import { nextMappings, suggestColumnMappings } from './suggestMappings'
 import { MappingRowsPreview } from './MappingRowsPreview'
+import { NewestPreflight } from '../replication/NewestPreflight'
+import { QueryColumnsCard } from './QueryColumnsCard'
 
 const emptySource: SourceTableSpec = { connectionName: null, database: null, schema: '', table: '', filter: null, query: null }
 const emptyTarget: TableSpec = { connectionName: null, database: null, schema: '', table: '' }
@@ -70,7 +72,9 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
   const targetCache = useCacheConnection(resolvedTarget.connectionName || undefined).data
   const targetTables = useTables(resolvedTarget.connectionName || undefined, resolvedTarget.database || undefined).data
   const targetExists = tableExists(targetTables, resolvedTarget.schema, resolvedTarget.table)
-  const sourceColumns = useColumns(resolvedSource.connectionName || undefined, resolvedSource.database || undefined, resolvedSource.schema, querySource ? undefined : resolvedSource.table || undefined).data
+  const catalogSourceColumns = useColumns(resolvedSource.connectionName || undefined, resolvedSource.database || undefined, resolvedSource.schema, querySource ? undefined : resolvedSource.table || undefined).data
+  // a query's columns are not in the catalog cache: the mapping records them itself, from a description of the query
+  const sourceColumns = querySource ? (mapping?.sourceColumns?.length ? mapping.sourceColumns : undefined) : catalogSourceColumns
   const catalogTargetColumns = useColumns(resolvedTarget.connectionName || undefined, resolvedTarget.database || undefined, resolvedTarget.schema, targetExists === true ? resolvedTarget.table : undefined).data
   const inferred = useInferredColumns(model.replication, mapping ? name : undefined, !!mapping && !querySource && !!source.table)
   const plan = useProvisioningPlan(draft.project, draft.id, model.replication)
@@ -110,6 +114,17 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
     set(next)
   }
 
+  /** A query's columns were described: the mapping records them, and its column mappings follow them while nobody has edited them. */
+  const setQueryColumns = (cols: ColumnMetadata[]) => {
+    const next: TableMappingConfig = { ...mapping, sourceColumns: cols }
+    const offered = catalogTargetColumns ?? (targetExists === false && resolvedTarget.table ? cols : undefined)
+    if (offered) {
+      const suggested = nextMappings(mapping.columnMappings, lastSuggested.current, suggestColumnMappings(cols, offered))
+      if (suggested) { lastSuggested.current = suggested; next.columnMappings = suggested }
+    }
+    set(next)
+  }
+
   const setSourceTable = (spec: TableSpec) => {
     const nextSource = { ...source, ...spec } as SourceTableSpec
     // an empty target table takes the source's table; a target someone typed is left as it is
@@ -125,7 +140,7 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
     try { await what() } catch (e) { setError(e) }
   }
   const sourceStated = querySource ? !!source.query?.trim() : !!source.table
-  // a query's columns are not in the cache, so its column mappings are written in Files and may not be there yet
+  // a query's columns come from describing it, so a query may be saved before any of them is mapped
   const canSave = !!resolvedSource.connectionName && sourceStated && !!resolvedTarget.connectionName && !!target.table && (querySource || mapping.columnMappings.length > 0)
   const shownTab = tabOrDefault(tab)
   const planned = plan.data?.data?.mappings.find((m) => m.mapping === name)
@@ -187,6 +202,9 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
         )}
         {shownTab === 'columns' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {querySource && (
+              <QueryColumnsCard connection={resolvedSource.connectionName} query={source.query ?? ''} columns={mapping.sourceColumns} onColumns={setQueryColumns} editable={draft.canEdit} />
+            )}
             <ColumnMappingEditor
               resolvedSource={resolvedSource}
               target={resolvedTarget}
@@ -201,7 +219,7 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
             />
             <PrimaryKeyCard columnMappings={mapping.columnMappings} sourceColumns={sourceColumns} value={mapping.primaryKey} onChange={(primaryKey) => set({ ...mapping, primaryKey })} />
             <RelationshipsCard resolvedSource={resolvedSource} sourceColumns={sourceColumns} relationships={mapping.relationships} onChange={(relationships) => set({ ...mapping, relationships })} />
-            <CachedMetadataCard mapping={mapping} source={resolvedSource} target={resolvedTarget} sourceNow={sourceColumns} targetNow={catalogTargetColumns} />
+            <CachedMetadataCard mapping={mapping} source={resolvedSource} target={resolvedTarget} sourceNow={sourceColumns} targetNow={catalogTargetColumns} querySource={querySource} />
           </div>
         )}
         {shownTab === 'transforms' && (
@@ -230,6 +248,7 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
             <ErrorBanner error={plan.error} />
             <ProvisioningCard provisioning={mapping.provisioning ?? { createTargetTableIfMissing: null, alterTargetTableColumnsIfMissingOrChanged: null }}
               inherited={task?.provisioning} onChangeProvisioning={(provisioning) => set({ ...mapping, provisioning })} plan={planned} editable={draft.canEdit} />
+            {!view.isNew && <NewestPreflight project={draft.project} id={draft.id} replication={model.replication} mapping={name} />}
           </div>
         )}
         {shownTab === 'pipeline' && task && (
