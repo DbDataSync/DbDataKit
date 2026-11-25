@@ -13,7 +13,7 @@ import type { ConnectionView, EndpointRef, TaskEndpoints } from '../types'
  * catalog cache lists for the connection, with where and when it was read. A connection of the draft that the cache has nothing for offers
  * **Refresh catalog**: its shape read from a Runner channel, the difference shown, and accepted into the cache as an unsaved edit, which fills the
  * database picker. **Test** on each card runs the Runner's binding test of the connection in a channel picked there, through the console, with no build
- * and no row; the picker offers **Set up for development** where a channel other than production does not bind the connection's slot.
+ * and no row; the picker offers **Set up for development** where a channel does not bind the connection's slot, production as any other.
  */
 export function EndpointsCard({ endpoints, connections, mappingCount, onChange }: {
   endpoints: TaskEndpoints

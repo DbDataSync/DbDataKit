@@ -43,7 +43,10 @@ async function mockConsoleReads(page: Page) {
       return json(route, {
         ...base, default: state.bound ? 'dev' : null,
         channels: [{ channel: 'dev', production: false, bound: state.bound, bound_to: state.bound ? 'warehouse_dev' : null }, { channel: 'prod', production: true, bound: false, bound_to: null }],
-        ...(state.bound ? {} : { note: "No channel of sales-dw on plant binds the slot 'warehouse'. An administrator binds it on the Runner's Packages page (Bindings), to a connection the Runner has, in the channel to read from." }),
+        // the Runner holds no version of sales-dw: the console lists every channel it serves
+        note: state.bound
+          ? "plant holds no version of sales-dw yet; a channel that binds the slot 'warehouse' reads the draft's connection."
+          : "plant holds no version of sales-dw yet. Set up for development binds the slot 'warehouse' in the channel you pick, and the draft's connection is read there.",
       })
     }
     if (url.pathname.endsWith('/read')) {
@@ -90,17 +93,23 @@ test('a build draft with no binding offers Set up for development, which binds d
   await expect(page.getByTestId('wsp-refresh-go')).toBeDisabled()
   await page.getByTestId('wsp-setup-open').click()
   await expect(page.getByTestId('wsp-setup-warning')).toContainText('It is not saved in the project, its history or the Workspace.')
+  // every channel that does not bind the slot is offered, production too, the others first
+  await expect(page.getByTestId('wsp-setup-channel').locator('option')).toHaveText(['dev', 'prod'])
+  await expect(page.getByTestId('wsp-setup-production')).toHaveCount(0)
   await page.getByTestId('wsp-setup-user').fill('dw_dev')
   await page.getByTestId('wsp-setup-password').fill(PASSWORD)
   await page.getByTestId('wsp-setup-save').click()
-  // the console bound the slot in dev: asked again, the picker offers dev and Set up is no longer offered
+  // the console bound the slot in dev: asked again, the picker offers dev, and Set up is offered for prod only, with the production warning
   await expect(page.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
   // the login went to the console's own route only, with the draft, and is not on the page
   const logins = reads.sent.filter((s) => s.body.includes(PASSWORD))
   expect(logins.map((s) => s.path)).toEqual(['/api/workspace-dev-logins/ws-1/sales-dw'])
   expect(JSON.parse(logins[0]!.body).draft).toMatch(/-reads$/)
   expect(await page.content()).not.toContain(PASSWORD)
-  await expect(page.getByTestId('wsp-setup')).toHaveCount(0)
+  await page.getByTestId('wsp-setup-open').click()
+  await expect(page.getByTestId('wsp-setup-channel').locator('option')).toHaveText(['prod'])
+  await expect(page.getByTestId('wsp-setup-production')).toContainText('This reads production: the shape of warehouse as the prod channel of plant binds it')
+  await page.getByTestId('wsp-setup-cancel').click()
 
   // Refresh fills the Catalog tab
   await page.getByTestId('wsp-refresh-go').click()

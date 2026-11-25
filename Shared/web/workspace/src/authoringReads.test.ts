@@ -9,18 +9,21 @@ const dev = (bound: boolean) => ({ channel: 'dev', production: false, bound, bou
 const prod = (bound: boolean) => ({ channel: 'prod', production: true, bound, bound_to: bound ? 'crm' : null })
 
 describe('Set up for development in the channel picker', () => {
-  it('is offered where a channel other than production does not bind the slot, or where nothing binds it', () => {
+  it('is offered where a channel does not bind the slot, production as any other, or where the Runner lists no channel', () => {
     expect(setUpOffered(undefined)).toBe(false)
     expect(setUpOffered(list([dev(true), prod(true)]))).toBe(false)
     expect(setUpOffered(list([dev(false), prod(true)]))).toBe(true)
+    expect(setUpOffered(list([dev(true), prod(false)]))).toBe(true)
     expect(setUpOffered(list([prod(false)]))).toBe(true)
-    // the Runner holds no version of the package yet: it lists no channel
+    // an older Runner lists no channel of a package it holds no version of
     expect(setUpOffered(list([]))).toBe(true)
   })
 
-  it('offers the unbound channels that are not production, and dev when the Runner lists none', () => {
-    expect(setUpChannels(list([dev(false), { channel: 'test', production: false, bound: true, bound_to: 'x' }, prod(false)]))).toEqual(['dev'])
-    expect(setUpChannels(list([prod(true)]))).toEqual(['dev'])
+  it('offers the unbound channels, the ones that are not production first, and dev when the Runner lists none', () => {
+    expect(setUpChannels(list([dev(false), { channel: 'test', production: false, bound: true, bound_to: 'x' }, prod(false)]))).toEqual(['dev', 'prod'])
+    expect(setUpChannels(list([prod(false), dev(false)]))).toEqual(['dev', 'prod'])
+    expect(setUpChannels(list([prod(false)]))).toEqual(['prod'])
+    expect(setUpChannels(list([prod(true)]))).toEqual([])
     expect(setUpChannels(list([]))).toEqual(['dev'])
     expect(setUpChannels(list([dev(true)]))).toEqual([])
   })

@@ -9,6 +9,7 @@ import { DraftProvider } from '../draft'
 import type { DescribedColumn } from '../authoringReads'
 import { CatalogPanel } from './CatalogPanel'
 import { NewestChecks, QueryDescribe } from './AuthoringReads'
+import { ChannelPicker } from './CatalogRefresh'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -154,7 +155,7 @@ describe('the Designer\'s shared reads', () => {
     expect(q('[data-testid="wsp-channel-note"]')?.textContent).toContain('holds no version of crm-to-dw')
     expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(true)
     await click('[data-testid="wsp-setup-open"]')
-    expect(all('[data-testid="wsp-setup-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['dev'])
+    expect(all('[data-testid="wsp-setup-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['dev', 'prod'])
     await type('[data-testid="wsp-setup-password"]', PASSWORD)
     await click('[data-testid="wsp-setup-save"]')
 
@@ -163,6 +164,19 @@ describe('the Designer\'s shared reads', () => {
     expect(q('[data-testid="wsp-channel-picker"]')?.getAttribute('data-channel')).toBe('dev')
     expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(false)
     expect(q('[data-testid="wsp-test-go"]')).not.toBeNull()
+  })
+
+  it('on a Runner whose only channel prod does not bind erp, offers Set up erp for development with prod and the production warning', async () => {
+    const list = { package: 'crm-to-dw', connection: 'erp', slot: 'erp', runner: 'r-1', runner_name: 'runners-eu', default: null, channels: [{ channel: 'prod', production: true, bound: false, bound_to: null }] }
+    await mount(<ChannelPicker runners={[{ id: 'r-1', name: 'runners-eu' }]} runner="r-1" onRunner={() => {}} list={list} channel="" onChannel={() => {}} connection="erp" project="crm-to-dw" canEdit />)
+    expect(q('[data-testid="wsp-channel-unbound"]')?.textContent).toContain('prod does not bind the slot erp. Set up for development binds it')
+    expect(q('[data-testid="wsp-setup-open"]')?.textContent).toBe('Set up erp for development')
+    await click('[data-testid="wsp-setup-open"]')
+    expect(all('[data-testid="wsp-setup-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['prod'])
+    expect(q('[data-testid="wsp-setup-production"]')?.textContent).toContain('This reads production: the shape of erp as the prod channel of runners-eu binds it')
+    await type('[data-testid="wsp-setup-password"]', PASSWORD)
+    await click('[data-testid="wsp-setup-save"]')
+    expect(server.asked.find((a) => a.path === 'POST /api/workspace-dev-logins/ws-1/crm-to-dw')?.body).toEqual({ runner: 'r-1', channel: 'prod', connection: 'erp', password: PASSWORD, draft: 'ws' })
   })
 
   it('once dev binds the slot, Test shows each step of the binding test and its reason, and no row', async () => {

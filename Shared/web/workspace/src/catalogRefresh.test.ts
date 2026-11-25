@@ -101,10 +101,10 @@ describe('where a refresh reads by default', () => {
 })
 
 describe('a channel that does not bind the slot', () => {
-  it('names Set up for development where it is offered, and only the administrator for production', () => {
+  it('names Set up for development for every channel, production as any other', () => {
     expect(unboundLine({ channel: 'dev', production: false, bound: false, bound_to: null }, 'crm')).toBe(
       'dev does not bind the slot crm. Set up for development binds it with a login you type, or an administrator binds it on the Runner\'s Packages page (Bindings), then the read can be asked.')
     expect(unboundLine({ channel: 'prod', production: true, bound: false, bound_to: null }, 'crm')).toBe(
-      'prod does not bind the slot crm. An administrator binds it on the Runner\'s Packages page (Bindings), then the read can be asked.')
+      'prod does not bind the slot crm. Set up for development binds it with a login you type, or an administrator binds it on the Runner\'s Packages page (Bindings), then the read can be asked.')
   })
 })

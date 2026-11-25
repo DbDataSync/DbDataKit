@@ -88,11 +88,9 @@ export function lastRunnerRead(current: string | undefined, connection: string):
 export const productionWarning = (connection: string, channel: string, runner: string) =>
   `This reads production: the shape of ${connection} as the ${channel} channel of ${runner} binds it, with production's login. Only names and types are read, never a row.`
 
-/** What a channel without a binding of the slot needs, in the picker: Set up for development binds a channel other than production. */
+/** What a channel without a binding of the slot needs, in the picker: Set up for development binds it, production as any other channel. */
 export const unboundLine = (choice: ChannelChoice, slot: string) =>
-  choice.production
-    ? `${choice.channel} does not bind the slot ${slot}. An administrator binds it on the Runner's Packages page (Bindings), then the read can be asked.`
-    : `${choice.channel} does not bind the slot ${slot}. Set up for development binds it with a login you type, or an administrator binds it on the Runner's Packages page (Bindings), then the read can be asked.`
+  `${choice.channel} does not bind the slot ${slot}. Set up for development binds it with a login you type, or an administrator binds it on the Runner's Packages page (Bindings), then the read can be asked.`
 
 // ---- the difference a refresh makes
 
