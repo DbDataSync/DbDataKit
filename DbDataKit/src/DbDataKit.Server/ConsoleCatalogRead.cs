@@ -74,7 +74,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         {
             answer["channels"] = new JsonArray();
             answer["default"] = null;
-            answer["note"] = $"{target.Name} has no package {package} yet. Publish a build of the draft to a channel of {target.Name} (staged is enough), then an administrator binds the slot '{slot}' in that channel on the Runner's Packages page (Bindings).";
+            answer["note"] = $"{target.Name} has no package {package} yet. Set up for development binds the slot '{slot}' in a channel of {target.Name}; a read there needs a build of the draft published to that channel (staged is enough).";
             return new(200, answer);
         }
         if (status != 200 || body is not JsonObject described) return Passed(status, body, $"{target.Name} did not say which channels hold {package}.");
@@ -88,7 +88,7 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         })]);
         answer["default"] = channels.FirstOrDefault(c => c != Production && bound.ContainsKey(c));
         if (!channels.Any(bound.ContainsKey))
-            answer["note"] = $"No channel of {package} on {target.Name} binds the slot '{slot}'. An administrator binds it on the Runner's Packages page (Bindings), to a connection the Runner has, in the channel to read from.";
+            answer["note"] = $"No channel of {package} on {target.Name} binds the slot '{slot}'. Set up for development binds it in the channel you pick, or an administrator binds it on the Runner's Packages page (Bindings), to a connection the Runner has.";
         return new(200, answer);
     }
 

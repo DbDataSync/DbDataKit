@@ -101,10 +101,32 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
                 _ => Results.NotFound(),
             };
         });
+        // the draft d1 of crm-to-dw: a Sync set with the connection crm (its own user and secret) and the connection web (an HTTP API)
+        server.MapGet("/api/v1/projects/{project}/workspaces/{id}/files", (string project, string id) =>
+        {
+            workspaceCalls.Enqueue($"GET /api/v1/projects/{project}/workspaces/{id}/files");
+            return id == "d1" ? Results.Json(new { files = DraftFiles.Keys.Select(p => new { path = p, size = DraftFiles[p].Length }) }) : Results.NotFound();
+        });
+        server.MapGet("/api/v1/projects/{project}/workspaces/{id}/files/{**path}", (string project, string id, string path) =>
+        {
+            workspaceCalls.Enqueue($"GET /api/v1/projects/{project}/workspaces/{id}/files/{path}");
+            return id == "d1" && DraftFiles.TryGetValue(path, out var text) ? Results.Json(new { path, content = text }) : Results.NotFound();
+        });
     }
 
-    /// <summary>A Runner's secret store as its management API takes it: the admin role, a value of the body, kept under the name (the test reads what it holds).</summary>
-    private void MapRunner(WebApplication server, PairingCodes codes, PairedClientsFile clients) =>
+    private static readonly Dictionary<string, string> DraftFiles = new(StringComparer.Ordinal)
+    {
+        ["config/connections/crm.yaml"] = "# the CRM database\nschema: connection/1\nname: crm\nengine: sqlserver\naddress:\n  host: crm.example\n  database: crm\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:crm\n",
+        ["config/connections/web.yaml"] = "schema: connection/2\nname: web\nkind: http\nendpoint: https://api.example\n",
+        ["config/replications/orders/task.yaml"] = "name: orders\n",
+    };
+
+    /// <summary>
+    /// A Runner's secret store, its connection copies and its bindings as its management API takes them: the admin role, kept under the name (the test reads what it holds). A bind in <c>shared</c> is held for an administrator's
+    /// confirmation, as a channel that would use production's connection is.
+    /// </summary>
+    private void MapRunner(WebApplication server, PairingCodes codes, PairedClientsFile clients)
+    {
         server.MapPut("/api/v1/secrets/{name}", async (string name, HttpContext context) =>
         {
             var token = context.ManagementToken();
@@ -113,6 +135,26 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
             held[name] = ((string)body["value"]!, token.SubjectName);
             return Results.Json(new { name });
         });
+        server.MapPut("/api/v1/connection-copies/{name}", async (string name, HttpContext context) =>
+        {
+            if (!ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin).Allowed) return Results.Json(new { error = "This needs the admin role." }, statusCode: 403);
+            var definition = (string)(await JsonNode.ParseAsync(context.Request.Body))!["definition"]!;
+            copies[name] = definition;
+            return Results.Json(new { name, version = "v1", kind = "database", secrets = new[] { new { path = "auth.password_secret", reference = "secret:x", resolves = true } } });
+        });
+        server.MapPut("/api/v1/bindings/{channel}/integration/{package}", async (string channel, string package, HttpContext context) =>
+        {
+            var body = (await JsonNode.ParseAsync(context.Request.Body))!.AsObject();
+            var (slot, to) = body["slots"]!.AsObject().Select(p => (p.Key, (string)p.Value!)).Single();
+            if (channel == "shared" && body["confirm"] is null)
+                return Results.Json(new { error = "Binding this needs an administrator's confirmation.", needsConfirmation = new[] { new { scope = "shared/x", slot, release = channel, connection = to, effect = "shares prod's connection" } } }, statusCode: 409);
+            bound[$"{package}/{channel}/{slot}"] = to;
+            return Results.Json(new { bindings = new[] { new { channel, slot, bound_to = to } } });
+        });
+    }
+
+    private readonly ConcurrentDictionary<string, string> copies = new();
+    private readonly ConcurrentDictionary<string, string> bound = new();
 
     private async Task<(HttpStatusCode Status, JsonObject Body)> SetUpAsync(string session, string project, object body)
     {
@@ -231,6 +273,70 @@ public sealed class ConsoleDevelopmentLoginsTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, status);
         Assert.Contains("is not a Runner", (string?)body["error"]);
+        Assert.Empty(carried);
+    }
+
+    [Fact]
+    public async Task With_the_draft_the_console_puts_the_copy_with_the_user_and_the_secret_and_binds_the_slot_and_the_workspace_server_is_asked_only_for_the_draft_s_file()
+    {
+        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "dev", connection = "crm", user = User, password = Password, draft = "d1" });
+
+        Assert.True(status == HttpStatusCode.OK, $"{status} {body}");
+        Assert.True((bool?)body["bound"]);
+        Assert.Equal("crm-to-dw-crm-dev", (string?)body["copy"]);
+        Assert.Equal("config/connections/crm.yaml", (string?)body["file"]);
+        Assert.Equal(User, (string?)body["user"]);
+        const string secret = "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password";
+        Assert.Equal(secret, (string?)body["secrets"]!["password"]);
+        Assert.Equal(Password, held[secret].Value);
+        Assert.Equal("crm-to-dw-crm-dev", bound["crm-to-dw/dev/crm"]);
+        var copy = copies["crm-to-dw-crm-dev"];
+        Assert.Contains($"user: '{User}'", copy);
+        Assert.Contains($"password_secret: 'secret:{secret}'", copy);
+        Assert.Contains("host: crm.example", copy);
+        Assert.Contains("name: 'crm-to-dw-crm-dev'", copy);
+        Assert.DoesNotContain("dbdatakit:sync:connection:crm", copy);
+        Assert.DoesNotContain(Password, copy);
+        Assert.DoesNotContain(Password, body.ToJsonString());
+        Assert.Empty(carried);
+        Assert.Equal(["GET /api/v1/projects/crm-to-dw", "GET /api/v1/projects/crm-to-dw/workspaces/d1/files", "GET /api/v1/projects/crm-to-dw/workspaces/d1/files/config/connections/crm.yaml"], workspaceCalls.ToArray());
+    }
+
+    [Fact]
+    public async Task With_the_draft_and_no_user_typed_the_copy_takes_the_user_the_draft_names()
+    {
+        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "dev", connection = "crm", password = Password, draft = "d1" });
+
+        Assert.True(status == HttpStatusCode.OK, $"{status} {body}");
+        Assert.Equal("sync", (string?)body["user"]);
+        Assert.Contains("user: 'sync'", copies["crm-to-dw-crm-dev"]);
+    }
+
+    [Fact]
+    public async Task A_bind_the_runner_holds_for_confirmation_answers_409_with_what_to_confirm_and_the_login_and_copy_are_kept()
+    {
+        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "shared", connection = "crm", user = User, password = Password, draft = "d1" });
+
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.False((bool?)body["bound"]);
+        Assert.Equal("shared/x", (string?)body["needsConfirmation"]![0]!["scope"]);
+        Assert.True(held.ContainsKey("dbdatakit:runner:dev-login:crm-to-dw.shared.crm:password"));
+        Assert.True(copies.ContainsKey("crm-to-dw-crm-shared"));
+        Assert.Empty(bound);
+    }
+
+    [Theory]
+    [InlineData("d2", "crm", 404, "has no draft 'd2'")]
+    [InlineData("d1", "erp", 404, "The draft has no file of the connection 'erp'")]
+    [InlineData("d1", "web", 422, "is a connection of the kind http")]
+    public async Task A_draft_or_connection_file_that_cannot_make_a_copy_is_refused_before_the_runner_is_called(string draft, string connection, int expected, string words)
+    {
+        var (status, body) = await SetUpAsync(admin, "crm-to-dw", new { runner = RunnerId, channel = "dev", connection, user = User, password = Password, draft });
+
+        Assert.Equal(expected, (int)status);
+        Assert.Contains(words, (string?)body["error"]);
+        Assert.Empty(held);
+        Assert.Empty(copies);
         Assert.Empty(carried);
     }
 }

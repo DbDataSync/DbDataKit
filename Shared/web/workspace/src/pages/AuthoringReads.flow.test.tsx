@@ -17,7 +17,7 @@ const PASSWORD = 'pw-7731'
 /** The Workspace server through the relay (`/relay/ws-1`) and the console's own routes, in memory. `bound` is whether dev binds the slot of `crm`. */
 function fakeConsole() {
   const asked: { path: string; body: unknown }[] = []
-  const state = { bound: false, describeLooks: 0 }
+  const state = { bound: false, describeLooks: 0, noPackage: false }
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -30,6 +30,7 @@ function fakeConsole() {
     if (path === '/api/instances') return reply([{ id: 'r-1', name: 'runners-eu', product: 'dbdatarunner' }, { id: 'ws-1', name: 'Workspace', product: 'dbdataworkspace' }])
     const project = '/api/workspace-catalog/ws-1/crm-to-dw'
     if (path === `${project}/channels`) {
+      if (state.noPackage) return reply({ package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: null, channels: [], note: 'runners-eu has no package crm-to-dw yet.' })
       return reply({
         package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: state.bound ? 'dev' : null,
         channels: [{ channel: 'dev', production: false, bound: state.bound, bound_to: state.bound ? 'crm_dev' : null }, { channel: 'prod', production: true, bound: true, bound_to: 'crm' }],
@@ -37,10 +38,13 @@ function fakeConsole() {
       })
     }
     if (path === '/api/workspace-dev-logins/ws-1/crm-to-dw') {
+      // the console binds the slot in the channel: the picker, asked again, lists dev as bound
       const body = JSON.parse(String(init!.body)) as { channel: string; user?: string }
+      state.bound = true
       return reply({
         package: 'crm-to-dw', connection: 'crm', slot: 'crm', channel: body.channel, production: false, runner: 'r-1', runner_name: 'runners-eu',
         ...(body.user ? { user: body.user } : {}), secrets: { password: `dbdatakit:runner:dev-login:crm-to-dw.${body.channel}.crm:password` },
+        bound: true, copy: `crm-to-dw-crm-${body.channel}`, steps: [`Bound the slot 'crm' of crm-to-dw in ${body.channel} to 'crm-to-dw-crm-${body.channel}'.`],
       })
     }
     if (path === `${project}/binding-test`) {
@@ -114,7 +118,7 @@ describe('the Designer\'s shared reads', () => {
   beforeEach(() => { server = fakeConsole(); vi.stubGlobal('fetch', server.fetcher) })
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals() })
 
-  it('offers Set up for development where dev does not bind the slot, sends the login to the console only, and says what is left', async () => {
+  it('offers Set up for development where dev does not bind the slot, sends the login and the draft to the console only, and the picker then reads in dev', async () => {
     await mount(<CatalogPanel project="crm-to-dw" id="ws" onOpen={() => {}} kind="sync" />)
     expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(true)
     expect(q('[data-testid="wsp-test-go"]')).toBeNull()
@@ -127,12 +131,25 @@ describe('the Designer\'s shared reads', () => {
 
     const sent = server.asked.filter((a) => JSON.stringify(a.body ?? '').includes(PASSWORD))
     expect(sent.map((a) => a.path)).toEqual(['POST /api/workspace-dev-logins/ws-1/crm-to-dw'])
-    expect(sent[0]!.body).toEqual({ runner: 'r-1', channel: 'dev', connection: 'crm', user: 'ana_dev', password: PASSWORD })
-    expect(q('[data-testid="wsp-setup-stored"]')?.textContent).toContain('runners-eu holds the login of crm for dev.')
-    expect(q('[data-testid="wsp-setup-left"]')?.textContent).toContain('The slot crm is not bound in dev yet')
+    expect(sent[0]!.body).toEqual({ runner: 'r-1', channel: 'dev', connection: 'crm', user: 'ana_dev', password: PASSWORD, draft: 'ws' })
     expect(host.innerHTML).not.toContain(PASSWORD)
-    // the picker asked the Runner again once the login was stored
+    // the picker asked the Runner again once the slot was bound: dev is picked, Refresh can read, and Set up is no longer offered
     expect(server.asked.filter((a) => a.path.startsWith('GET /api/workspace-catalog/ws-1/crm-to-dw/channels')).length).toBeGreaterThanOrEqual(2)
+    expect(q('[data-testid="wsp-channel-picker"]')?.getAttribute('data-channel')).toBe('dev')
+    expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(false)
+    expect(q('[data-testid="wsp-setup"]')).toBeNull()
+  })
+
+  it('on a Runner that holds no version of the package yet, the set-up says dev reads the connection through the copy', async () => {
+    server.state.noPackage = true
+    await mount(<CatalogPanel project="crm-to-dw" id="ws" onOpen={() => {}} kind="sync" />)
+    await click('[data-testid="wsp-setup-open"]')
+    await type('[data-testid="wsp-setup-password"]', PASSWORD)
+    await click('[data-testid="wsp-setup-save"]')
+
+    expect(q('[data-testid="wsp-setup-stored"]')?.textContent).toBe('runners-eu holds the login of crm for dev, and dev reads crm through crm-to-dw-crm-dev.')
+    expect(q('[data-testid="wsp-setup-stored"]')?.getAttribute('data-bound')).toBe('true')
+    expect(host.innerHTML).not.toContain(PASSWORD)
   })
 
   it('once dev binds the slot, Test shows each step of the binding test and its reason, and no row', async () => {

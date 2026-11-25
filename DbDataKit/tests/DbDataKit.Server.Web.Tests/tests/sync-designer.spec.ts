@@ -523,18 +523,22 @@ const DEV_PASSWORD = 'dev-login-5521-long'
 /**
  * The console's live reads of a draft's connection, faked in the page (the real routes are tested with real servers, `CatalogReadFromRunnerTests` and the
  * console's tests of `describe`, `binding-test` and `workspace-dev-logins`): on the Runner `plant`, dev binds the slot of `source-db` and not that of
- * `target-db`; the binding test passes each step; the description of a query answers its columns and no row; a development login is stored.
+ * `target-db`; the binding test passes each step; the description of a query answers its columns and no row; a development login sent with the draft
+ * is stored and binds the slot in its channel.
  */
 async function mockLiveReads(page: Page) {
   const asked: { path: string; body: Record<string, unknown> | null }[] = []
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
   const base = { package: 'plant', runner: RUNNER, runner_name: RUNNER }
+  const setUp = new Set<string>()
   await page.route('**/api/workspace-dev-logins/**', (route) => {
-    const body = route.request().postDataJSON() as { channel: string; connection: string; user?: string }
+    const body = route.request().postDataJSON() as { channel: string; connection: string; user?: string; draft?: string }
     asked.push({ path: new URL(route.request().url()).pathname, body })
     const slot = body.connection.replace(/[^a-z0-9_]/g, '_')
+    // with the draft, the console copies its connection to the Runner and binds the slot in the channel
+    if (body.draft) setUp.add(body.connection)
     return json(route, { ...base, connection: body.connection, slot, channel: body.channel, production: false, ...(body.user ? { user: body.user } : {}),
-      secrets: { password: `dbdatakit:runner:dev-login:plant.${body.channel}.${slot}:password` } })
+      secrets: { password: `dbdatakit:runner:dev-login:plant.${body.channel}.${slot}:password` }, bound: !!body.draft, copy: `plant-${slot}-${body.channel}`, steps: [] })
   })
   await page.route('**/api/workspace-catalog/**', async (route) => {
     const url = new URL(route.request().url())
@@ -543,9 +547,9 @@ async function mockLiveReads(page: Page) {
     if (url.pathname.endsWith('/channels')) {
       const connection = url.searchParams.get('connection')!
       const slot = connection.replace(/[^a-z0-9_]/g, '_')
-      const devBound = connection === 'source-db'
+      const devBound = connection === 'source-db' || setUp.has(connection)
       return json(route, { ...base, connection, slot, default: devBound ? 'dev' : null,
-        channels: [{ channel: 'dev', production: false, bound: devBound, bound_to: devBound ? `${connection}-dev` : null }, { channel: 'prod', production: true, bound: true, bound_to: connection }] })
+        channels: [{ channel: 'dev', production: false, bound: devBound, bound_to: devBound ? (setUp.has(connection) ? `plant-${slot}-dev` : `${connection}-dev`) : null }, { channel: 'prod', production: true, bound: true, bound_to: connection }] })
     }
     if (url.pathname.endsWith('/binding-test')) {
       const connection = String(body!.connection)
@@ -562,7 +566,7 @@ async function mockLiveReads(page: Page) {
   return { asked }
 }
 
-test('the live pieces of a replication: Test on an endpoint card, Set up for development where dev does not bind the slot, Describe columns of a query, the newest preflight on the Provisioning sub-tabs', async ({ page, context, baseURL }) => {
+test('the live pieces of a replication: Test on an endpoint card, Set up for development where dev does not bind the slot, which binds it, Describe columns of a query, the newest preflight on the Provisioning sub-tabs', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Sync Live', `sync-live-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE }, syncTasks: ['orders', 'provision', 'preflight'] })
   const live = await mockLiveReads(page)
@@ -592,9 +596,13 @@ test('the live pieces of a replication: Test on an endpoint card, Set up for dev
   await targetTest.getByTestId('wsp-setup-user').fill('dw_dev')
   await targetTest.getByTestId('wsp-setup-password').fill(DEV_PASSWORD)
   await targetTest.getByTestId('wsp-setup-save').click()
-  await expect(targetTest.getByTestId('wsp-setup-stored')).toContainText('holds the login of target-db for dev.')
-  await expect(targetTest.getByTestId('wsp-setup-left')).toContainText('The slot target_db is not bound in dev yet')
-  expect(live.asked.filter((a) => JSON.stringify(a.body ?? {}).includes(DEV_PASSWORD)).map((a) => a.path)).toEqual([`/api/workspace-dev-logins/${SERVER}/plant`])
+  // the console bound the slot in dev: the picker offers dev, Set up is no longer offered, and Test can run there
+  await expect(targetTest.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  await expect(targetTest.getByTestId('wsp-setup')).toHaveCount(0)
+  await expect(targetTest.getByTestId('wsp-test-go')).toBeVisible()
+  const logins = live.asked.filter((a) => JSON.stringify(a.body ?? {}).includes(DEV_PASSWORD))
+  expect(logins.map((a) => a.path)).toEqual([`/api/workspace-dev-logins/${SERVER}/plant`])
+  expect(logins[0]!.body!.draft).toMatch(/live-edit$/)
   expect(await page.content()).not.toContain(DEV_PASSWORD)
   await shot(page, '41-set-up-for-development')
   await page.getByTestId('save-settings-button').click()

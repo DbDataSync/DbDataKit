@@ -3,7 +3,7 @@ import { signInNewAdmin } from './people'
 import { RUNNER, SERVER, mockWorkspace } from './workspace-fake'
 
 // The Designer's shared reads on the Catalog tab of a build draft, through the console: Set up for development where no channel binds the connection's
-// slot, then Refresh once an administrator bound it, and Test with each step. The Workspace server is mocked in the page (`workspace-fake.ts`), and the
+// slot, which binds it, then Refresh in that channel, and Test with each step. The Workspace server is mocked in the page (`workspace-fake.ts`), and the
 // console's routes are faked here (`/api/workspace-catalog/...`, `/api/workspace-dev-logins/...`): the real routes are tested with real servers in
 // `DbDataKit.Server.Servers.Tests` and against fakes in `DbDataKit.Server.Tests`. It signs in a new administrator, so its name sorts after `first-run` and
 // `identity-home` (ci-lessons).
@@ -20,7 +20,7 @@ const shape = (at: string) => [
   "          - {name: 'id', type: 'integer', nullable: false, key: true}", "          - {name: 'total', type: 'numeric(12,2)', nullable: true}", '',
 ].join('\n')
 
-/** The console's reads, faked in the page: dev binds the slot once the story says an administrator bound it. */
+/** The console's reads, faked in the page: dev binds the slot once Set up for development sent the login with the draft. */
 async function mockConsoleReads(page: Page) {
   const state = { bound: false }
   const sent: { path: string; body: string }[] = []
@@ -28,8 +28,13 @@ async function mockConsoleReads(page: Page) {
   const base = { package: 'sales-dw', connection: 'warehouse', slot: 'warehouse', runner: RUNNER, runner_name: 'plant' }
   await page.route('**/api/workspace-dev-logins/**', (route) => {
     sent.push({ path: new URL(route.request().url()).pathname, body: route.request().postData() ?? '' })
-    const body = route.request().postDataJSON() as { channel: string; user?: string }
-    return json(route, { ...base, channel: body.channel, production: false, ...(body.user ? { user: body.user } : {}), secrets: { password: `dbdatakit:runner:dev-login:sales-dw.${body.channel}.warehouse:password` } })
+    const body = route.request().postDataJSON() as { channel: string; user?: string; draft?: string }
+    // the console binds the slot only when it can copy the draft's connection file
+    state.bound = body.draft !== undefined
+    return json(route, {
+      ...base, channel: body.channel, production: false, ...(body.user ? { user: body.user } : {}), secrets: { password: `dbdatakit:runner:dev-login:sales-dw.${body.channel}.warehouse:password` },
+      bound: state.bound, copy: `sales-dw-warehouse-${body.channel}`, steps: [],
+    })
   })
   await page.route('**/api/workspace-catalog/**', (route) => {
     const url = new URL(route.request().url())
@@ -56,7 +61,7 @@ async function mockConsoleReads(page: Page) {
   return { state, sent }
 }
 
-test('a build draft with no binding offers Set up for development; once bound, Refresh fills the Catalog tab and Test shows its steps', async ({ page, context, baseURL }) => {
+test('a build draft with no binding offers Set up for development, which binds dev; Refresh then fills the Catalog tab and Test shows its steps', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Authoring Reads', `authoring-reads-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page)
   const reads = await mockConsoleReads(page)
@@ -88,16 +93,13 @@ test('a build draft with no binding offers Set up for development; once bound, R
   await page.getByTestId('wsp-setup-user').fill('dw_dev')
   await page.getByTestId('wsp-setup-password').fill(PASSWORD)
   await page.getByTestId('wsp-setup-save').click()
-  await expect(page.getByTestId('wsp-setup-stored')).toContainText('plant holds the login of warehouse for dev.')
-  await expect(page.getByTestId('wsp-setup-left')).toContainText('The slot warehouse is not bound in dev yet')
-  // the login went to the console's own route only, and is not on the page
-  expect(reads.sent.filter((s) => s.body.includes(PASSWORD)).map((s) => s.path)).toEqual(['/api/workspace-dev-logins/ws-1/sales-dw'])
-  expect(await page.content()).not.toContain(PASSWORD)
-
-  // an administrator binds the slot in dev on the Runner; asked again, the picker offers dev
-  reads.state.bound = true
-  await page.getByTestId('wsp-setup-recheck').click()
+  // the console bound the slot in dev: asked again, the picker offers dev and Set up is no longer offered
   await expect(page.getByTestId('wsp-channel-picker')).toHaveAttribute('data-channel', 'dev')
+  // the login went to the console's own route only, with the draft, and is not on the page
+  const logins = reads.sent.filter((s) => s.body.includes(PASSWORD))
+  expect(logins.map((s) => s.path)).toEqual(['/api/workspace-dev-logins/ws-1/sales-dw'])
+  expect(JSON.parse(logins[0]!.body).draft).toMatch(/-reads$/)
+  expect(await page.content()).not.toContain(PASSWORD)
   await expect(page.getByTestId('wsp-setup')).toHaveCount(0)
 
   // Refresh fills the Catalog tab
