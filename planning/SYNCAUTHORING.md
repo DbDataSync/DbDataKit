@@ -162,7 +162,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-20 | The three rules the offline check copies from Sync's engine become public methods both call: the Flight SQL driver's reading of a type (`FlightSqlTypes` in `DbDataKit.Sync.Core`), `Scd2Writer.RequireNaturalKey` and `KeyReconcileDeleteWriter.RequireKey` | none | S | `SyncOfflineCheck` holds no copied rule, and its tests and the writers' tests pass |
 | SYNCAUTHORING-21 | `sync/capabilities` says whether a target's driver keeps a state table; the Tracking card disables `target` and `both` from it, with the reason | none | S | a story picks a MySQL target and the two modes are disabled with the reason |
 | SYNCAUTHORING-22 | `provisioning-plan` takes the `unsaved` files as the `sync/` routes do; the Provisioning sub-tab and a mapping's Provisioning badge follow unsaved edits | none | S | a story turns on Create target table if missing without saving, and the plan and the badge show the statement |
-| SYNCAUTHORING-23 | Each writer declares the privileges it needs on the target (as it declares the key it needs); the set's preflight asks only for those | none | S | a `DeleteInsert` mapping whose login lacks UPDATE has no privilege error in the preflight |
 
 ## Needs from other subjects
 
