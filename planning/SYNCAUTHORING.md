@@ -163,6 +163,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-21 | `sync/capabilities` says whether a target's driver keeps a state table; the Tracking card disables `target` and `both` from it, with the reason | none | S | a story picks a MySQL target and the two modes are disabled with the reason |
 | SYNCAUTHORING-22 | `provisioning-plan` takes the `unsaved` files as the `sync/` routes do; the Provisioning sub-tab and a mapping's Provisioning badge follow unsaved edits | none | S | a story turns on Create target table if missing without saving, and the plan and the badge show the statement |
 | SYNCAUTHORING-23 | Each writer declares the privileges it needs on the target (as it declares the key it needs); the set's preflight asks only for those | none | S | a `DeleteInsert` mapping whose login lacks UPDATE has no privilege error in the preflight |
+| SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
 
 ## Needs from other subjects
 
