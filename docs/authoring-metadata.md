@@ -13,7 +13,7 @@ test, of a published version or of a draft by its package, channel and slot ([be
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
 or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
-the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
+the channel picker with **Set up for development** (the login stored, the draft's connection copied and the slot bound on the Runner), **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
 segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
@@ -197,71 +197,94 @@ The screen shows the difference and replaces the entry on **Accept**, as for a R
 
 ## Before anything is published: Set up for development
 
-A read needs a binding in some channel, not a published version. A person who works on a draft can give the project's Runner a development login for
-a connection, so the connection can be read in the channel the person picks before anything is published.
+A read in a channel needs the connection's slot bound there. A person who works on a draft can give the project's Runner a development login for a
+connection. The console puts the draft's connection on the Runner with that login and binds the slot in the channel the person picks, so reads,
+**Test** and runs in that channel use it. The person needs the Runner's admin role for this; nobody binds the slot by hand afterwards.
+
+The bind works before the Runner holds any version of the package. The Runner's reads (`discover`, `describe`) also need a version of the package in
+the channel, staged or served: until a build of the draft is published there, the channel picker lists no channel of the package and **Refresh** waits.
 
 ### How a screen sends a development login
 
 A Workspace screen sends the login to the console, never to the Workspace server:
-`POST /api/workspace-dev-logins/<workspace server>/<project>` with the Runner, the channel, the project's connection, and the login the person typed
-(`user` is optional, `password` is required). The shell sends this route to the console even when the screen talks to its Workspace server through the
-relay, as it does for the reads above.
+`POST /api/workspace-dev-logins/<workspace server>/<project>` with the Runner, the channel, the project's connection, the draft, and the login the
+person typed (`user` is optional, `password` is required). The shell sends this route to the console even when the screen talks to its Workspace server
+through the relay, as it does for the reads above.
 
 What the console does with it:
 
-1. It checks the request: the channel, the connection, the password, and the user when one is sent. A user has 1 to 256 characters, no space at
-   either end and no control character.
+1. It checks the request: the channel, the connection, the password, the draft, and the user when one is sent. A user has 1 to 256 characters, no space
+   at either end and no control character.
 2. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. That request carries no part of
    the login. The answer says whether the person may read the project and which package it becomes on a Runner.
-3. It stores the password in the Runner's secret store (`PUT /api/v1/secrets/{name}` on the Runner) as the signed-in person. The Runner asks for its
-   admin role, as it does for every secret it stores, and records the person in its audit with the name and length of the value.
+3. It reads the draft's file of the connection from the Workspace server as the person: `connections/<connection>.yaml` of a build or store project,
+   `config/connections/<connection>.yaml` of a sync project (`.yml` too). These requests carry no part of the login either. The console reads the file as
+   it is saved in the draft, so an edit the person has not saved is not in the copy.
+4. It writes the connection's copy from that file. The copy keeps the draft's file (the engine, the address, the extensions) and changes three things:
+   its name becomes `<package>-<slot>-<channel>`, its `read_login` and `write_login` are left out, and its `auth` names the user as plain text and the
+   password as a reference to the secret the Runner holds. When the person typed no user, the copy takes the user of the draft's `auth`. A file that
+   names neither is refused with 400, and a file that does not load, or a connection that is not a database, is refused with 422, before the Runner is
+   called.
+5. As the signed-in person, it stores the password in the Runner's secret store (`PUT /api/v1/secrets/{name}`), puts the copy
+   (`PUT /api/v1/connection-copies/{copy}`) and binds the connection's slot of the package in the channel to the copy
+   (`PUT /api/v1/bindings/{channel}/integration/{package}`). The Runner asks for its admin role to store a secret and keep a copy, and records the
+   person in its audit. The bind works before the Runner holds any version of the package.
 
 The password is the only secret stored. The user is not a secret: the console gives it back in its answer as plain text, so the screen can show it,
-and stores it nowhere. The user belongs in the text of the connection's copy on the Runner, beside the reference to the password's secret.
+and it is written in the copy's text. The copy holds references only, never a value.
 
 The Runner holds the password under a name of the kind `dev-login`, made of the package, the channel and the slot:
-`dbdatakit:runner:dev-login:<package>.<channel>.<slot>:password`. A person reading the Runner's secrets overview can tell from the name that the
-secret came from a Workspace screen, and for which package, channel and slot.
+`dbdatakit:runner:dev-login:<package>.<channel>.<slot>:password`. The copy names that secret. A person reading the Runner's secrets overview can tell
+from the name that the secret came from a Workspace screen, and for which package, channel and slot.
 
 The console accepts any channel, `prod` included. A person who holds a production login and the Runner's admin role can store it for `prod` the same
-way. The password of each channel is stored under its own name, so a login stored for `dev` is never used by `prod`.
+way. The password of each channel is stored under its own name and each channel gets its own copy, so a login stored for `dev` is never used by `prod`.
 
 The login never reaches the Workspace server, so it is in none of its state, audit or log. A refusal of the Workspace server or of the Runner is passed
-on with its own words.
+on with its own words. A Runner that holds the bind for an administrator's confirmation (a channel that would use production's connection,
+[Channel bindings](channel-bindings.md)) answers 409 with `needsConfirmation`; the login and the copy are on the Runner already, and an administrator
+confirms the bind on the Runner's bindings screen. Sending the same set-up again changes nothing that is already there and finishes what was left.
 
-Example: Ana sets up the connection `crm` of the project `crm-to-dw` for `dev` on the Runner `runners-eu`.
+Example: Ana sets up the connection `crm` of the project `crm-to-dw` for `dev` on the Runner `runners-eu`, from her draft `ana-crm`.
 
 ```
 POST /api/workspace-dev-logins/ws-1/crm-to-dw
-{"runner": "runners-eu", "channel": "dev", "connection": "crm", "user": "ana_dev", "password": "..."}
+{"runner": "runners-eu", "channel": "dev", "connection": "crm", "draft": "ana-crm", "user": "ana_dev", "password": "..."}
 
 200 {"package": "crm-to-dw", "connection": "crm", "slot": "crm", "channel": "dev", "production": false,
      "runner": "runners-eu", "runner_name": "runners-eu", "user": "ana_dev",
-     "secrets": {"password": "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password"}}
+     "secrets": {"password": "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password"},
+     "file": "config/connections/crm.yaml", "copy": "crm-to-dw-crm-dev", "version": "...", "kind": "database", "bound": true,
+     "unresolved": [], "steps": ["Stored the login in runners-eu's secret store as dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password.", "..."]}
 ```
 
-The answer names the secret the Runner now holds, never its value. `production` is `true` when the channel is `prod`.
+The copy `crm-to-dw-crm-dev` on `runners-eu`:
+
+```yaml
+schema: connection/1
+name: 'crm-to-dw-crm-dev'
+engine: sqlserver
+address:
+  host: crm.example
+  database: crm
+auth:
+  mode: sql
+  user: 'ana_dev'
+  password_secret: 'secret:dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password'
+```
+
+The answer names the secret the Runner now holds, never its value. `production` is `true` when the channel is `prod`. `steps` says what the console
+did, one sentence each, with a line starting `Warning:` when the copy names a reference the Runner cannot resolve or the draft's file names no address
+(a build project's connection file often names none; the run then cannot open the connection until the file names one and the set-up is sent again).
+
+A request without `draft` stores the password only, and the answer has the first lines above without the copy and the bind.
 
 **Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel other than `prod` does not
 bind the connection's slot, or when no channel binds it (also when the Runner holds no version of the package yet and lists no channel). The person picks
 the channel (the unbound ones other than `prod`; `dev` when the Runner lists none), types the user and the password once, and presses **Send the login
-to `<Runner>`**. The screen sends them with the route above and keeps nothing of the password. The answer is shown as "runners-eu holds the login of crm
-for dev." While the channel does not bind the slot yet, the line also says what an administrator binds, and **Ask runners-eu again** reads the channels
-again once it is bound.
-
-**Planned.** The console also puts the connection's copy on the Runner with the user as plain text and the password naming the stored secret, and
-binds the slot in the channel the person picked, so no administrator has to. The console's posture page lists the bindings made this way.
-
-**Until then, an administrator binds the slot by hand.** The project's package must be on the Runner, and the Runner's own bindings screen (its Packages
-page, Bindings) binds the slots of a version it holds:
-
-1. Publish a build of the draft to the Runner's `dev` channel, staged rather than served (the Workspace's Builds tab, whose publish can also bind each
-   slot to a connection).
-2. Store the development login on the Runner: with the route above, or on the Runner's Packages page, which sets a run login.
-3. An administrator binds the connection's slot in `dev` on the Runner's bindings screen. The console sends the connection's copy with the user as
-   plain text and the password naming the secret the Runner holds.
-
-Refresh then reads in `dev`. When no channel binds the slot, the channel picker names the channel and this way to bind one.
+to `<Runner>`**. The screen sends them with the draft it shows, by the route above, and keeps nothing of the password. The picker then asks the Runner
+again and offers the channel, now bound, so **Refresh** and **Test** read there. While the Runner lists no channel of the package, the screen shows the
+answer as "runners-eu holds the login of crm for dev, and dev reads crm through crm-to-dw-crm-dev.", with each warning under it.
 
 ## The catalog cache
 

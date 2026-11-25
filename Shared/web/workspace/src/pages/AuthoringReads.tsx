@@ -3,11 +3,12 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link as ConsoleLink } from 'react-router-dom'
 import { ErrorBanner, useModule } from '@dbdatakit/shell'
 import {
-  authoringReadApi, bindingLeftLine, describedLine, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
+  authoringReadApi, describedLine, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
   type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NewestRun, type RunAnswer,
 } from '../authoringReads'
 import { workspaceServerOf, type ChannelList } from '../catalogRefresh'
-import { developmentLoginApi, developmentLoginLine, developmentLoginWarning, type DevelopmentLoginAnswer, type DevelopmentLoginRequest } from '../developmentLogin'
+import { developmentLoginApi, developmentLoginLine, developmentLoginWarning, developmentLoginWarnings, type DevelopmentLoginAnswer, type DevelopmentLoginRequest } from '../developmentLogin'
+import { useDraftOrNull } from '../draft'
 import { deployApi, useHostedServer, useRunnerVersion, type RunnerVersion } from '../deploys'
 import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
@@ -17,15 +18,15 @@ import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, pre
 
 /**
  * **Set up for development**: the person types a development login for the connection once, for a channel other than production; the screen sends it to the
- * console, which stores it in the Runner's secret store for the project's package, the channel and the slot. The login never goes to the Workspace server.
- * Until the channel binds the slot, the form says what is left; `onStored` lets the picker ask the Runner again.
+ * console with the draft, and the console stores the login in the Runner's secret store, puts the draft's connection on the Runner as a copy that names it,
+ * and binds the slot in the channel. The login never goes to the Workspace server. `onStored` lets the picker ask the Runner again, which then offers the
+ * channel. Outside a draft there is no connection file to copy, so nothing is offered.
  */
-export function DevelopmentSetUp({ project, runner, runnerName, list, connection, onStored, onRecheck, canEdit }: {
-  project: string; runner: string; runnerName: string; list: ChannelList | undefined; connection: string; onStored?: (answer: DevelopmentLoginAnswer) => void
-  /** Asks the Runner again which channels bind the slot (after an administrator bound it). */
-  onRecheck?: () => void; canEdit: boolean
+export function DevelopmentSetUp({ project, runner, runnerName, list, connection, onStored, canEdit }: {
+  project: string; runner: string; runnerName: string; list: ChannelList | undefined; connection: string; onStored?: (answer: DevelopmentLoginAnswer) => void; canEdit: boolean
 }) {
   const workspace = workspaceServerOf(useModule().apiBase)
+  const draft = useDraftOrNull()
   const choices = setUpChannels(list)
   const [open, setOpen] = useState(false)
   const [channel, setChannel] = useState('')
@@ -37,9 +38,9 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
     // the password leaves the form as soon as it is sent: it is kept nowhere on the screen
     onSuccess: (answer) => { setPassword(''); setOpen(false); onStored?.(answer) },
   })
-  if (workspace === null || choices.length === 0) return null
+  if (workspace === null || draft === null || choices.length === 0) return null
   const stored = store.data
-  const stillUnbound = stored && !(list?.channels.some((c) => c.channel === stored.channel && c.bound) ?? false)
+  const warnings = stored ? developmentLoginWarnings(stored) : []
   return (
     <div style={{ marginTop: 6 }} data-testid="wsp-setup" data-connection={connection}>
       {!open && (
@@ -48,7 +49,7 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
         </button>
       )}
       {open && (
-        <form className="card" style={{ marginTop: 6 }} data-testid="wsp-setup-form" onSubmit={(e) => { e.preventDefault(); store.mutate({ runner, channel: chosen, connection, ...(user.trim() ? { user: user.trim() } : {}), password }) }}>
+        <form className="card" style={{ marginTop: 6 }} data-testid="wsp-setup-form" onSubmit={(e) => { e.preventDefault(); store.mutate({ runner, channel: chosen, connection, ...(user.trim() ? { user: user.trim() } : {}), password, draft: draft.id }) }}>
           <div className="card-body">
             <div className="hint" data-testid="wsp-setup-warning">{developmentLoginWarning(connection, chosen, runnerName)}</div>
             <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
@@ -70,10 +71,9 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
         </form>
       )}
       {stored && !open && (
-        <div className="hint" data-testid="wsp-setup-stored" data-channel={stored.channel}>
+        <div className="hint" data-testid="wsp-setup-stored" data-channel={stored.channel} data-bound={stored.bound === true}>
           {developmentLoginLine(stored)}
-          {stillUnbound && <> <span data-testid="wsp-setup-left">{bindingLeftLine(stored.slot, stored.channel, stored.runner_name, stored.secrets.password)}</span></>}
-          {stillUnbound && onRecheck && <> <button type="button" className="btn-link" onClick={onRecheck} data-testid="wsp-setup-recheck">Ask {stored.runner_name} again</button></>}
+          {warnings.map((w) => <div key={w} className="warn" data-testid="wsp-setup-warning-step">{w}</div>)}
         </div>
       )}
     </div>

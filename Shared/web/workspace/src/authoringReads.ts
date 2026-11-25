@@ -140,10 +140,6 @@ export function setUpChannels(list: ChannelList | undefined): string[] {
   return others.length === 0 ? ['dev'] : others.filter((c) => !c.bound).map((c) => c.channel)
 }
 
-/** What is left once the login is stored and the channel does not bind the slot yet: the binding, by an administrator on the Runner. */
-export const bindingLeftLine = (slot: string, channel: string, runner: string, secret: string) =>
-  `The slot ${slot} is not bound in ${channel} yet. An administrator binds it on the Packages page of ${runner} (Bindings), to a connection whose password names the secret ${secret}; the picker offers ${channel} once it binds the slot.`
-
 /** The newest deploy to a Runner of each channel (by Runner and channel), from the console's records, newest first: what a newest-check card reads per channel. */
 export function newestPerChannel(deploys: readonly DeployRecord[], pkg?: string): RunnerVersion[] {
   const seen = new Set<string>()
