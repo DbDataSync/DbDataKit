@@ -74,19 +74,6 @@ refuses it and a catalog read answers 409 naming the missing signature. The dire
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
 
-## Proposed decisions
-
-### AUTHORING-P56: a development login sent without a draft (default, awaiting the owner)
-
-Scenario: a script, or a screen outside a draft, sends `POST /api/workspace-dev-logins/ws-1/crm-to-dw` with the Runner, `dev`, `crm` and a password,
-and no `draft`. The console has no connection file to copy.
-
-- Option A (built): the console stores the password on the Runner, as it did before Set up for development bound the slot, and answers without `copy`
-  and `bound`; nothing is bound, and the person or an administrator binds the slot on the Runner.
-- Option B: the console refuses the request (400, "Name the draft whose connection is set up: `draft`"), so every set-up both stores and binds.
-
-Recommendation: A. It keeps the route's earlier callers and tests working, and the screen always sends the draft.
-
 ## Shared areas touched
 
 - `DbDataKit.Authoring`, `DbDataKit.Authoring.Server`, `Shared/web/workspace`, `Shared/web/console` (posture, secrets overview), `DbDataKit.Agents`.
