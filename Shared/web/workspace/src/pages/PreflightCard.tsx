@@ -38,6 +38,20 @@ export function preflightFindingsOf(run: StagedRun): PreflightFinding[] | null {
   return parts.flatMap((p) => (p.findings as Record<string, unknown>[]).map((f) => ({ severity: severityOf(f.severity), message: String(f.message ?? ''), about: typeof f.about === 'string' ? f.about : null })))
 }
 
+/** One part of a preflight run (a package names its parts: a Sync set's are `<replication>/<mapping>`, `<replication> tracking`) and what it found. */
+export interface PreflightPart { part: string; findings: PreflightFinding[] }
+
+/** The parts of a preflight run in the order they were recorded, each with its findings; null when the run recorded none (it failed, or is not a preflight). */
+export function preflightPartsOf(run: StagedRun): PreflightPart[] | null {
+  const parts = (run.steps ?? []).map((s) => ({ key: s.key, result: s.result as { part?: unknown; findings?: unknown } | null }))
+    .filter((s) => !!s.result && typeof s.result === 'object' && Array.isArray(s.result.findings))
+  if (parts.length === 0) return null
+  return parts.map(({ key, result }) => ({
+    part: typeof result!.part === 'string' ? result!.part : key,
+    findings: (result!.findings as Record<string, unknown>[]).map((f) => ({ severity: severityOf(f.severity), message: String(f.message ?? ''), about: typeof f.about === 'string' ? f.about : null })),
+  }))
+}
+
 /** The line that counts the findings. */
 export function findingsSummary(findings: readonly PreflightFinding[]): string {
   const errors = findings.filter((f) => f.severity === 'error').length

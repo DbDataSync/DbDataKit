@@ -26,6 +26,9 @@ public sealed class MsSqlMergeWriter : IChangeWriter, IStatementPreview
 
     public bool SupportsReconciliation => false;
 
+    /// <summary>A MERGE with an insert, an update and a delete branch, and SQL Server checks the privilege of every branch.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.All;
+
     /// <summary>Through one transaction for the whole staged set, when the replication keeps its state on the target (plan 28c E17); see <see cref="ApplyAsync"/>.</summary>
     public bool SupportsPositionLog => true;
 

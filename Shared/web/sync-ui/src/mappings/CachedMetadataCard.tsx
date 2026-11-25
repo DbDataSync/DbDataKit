@@ -9,15 +9,17 @@ import type { ColumnMetadata, ResolvedRef, TableMappingConfig } from '../types'
  * says of the same tables: the columns are named where the two differ, so a person sees which columns moved rather than a count to go and check.
  * The mapping's picture changes only when its columns are written (a table picked, Create mappings), never by a look. **Refresh** on a side reads
  * that one table again from a Runner channel and shows what changed before the cache is replaced; accepted, the comparison here is against the new
- * cache, and the mapping's own columns stay as they were.
+ * cache, and the mapping's own columns stay as they were. A query source has no table in the cache: its columns are those its description recorded.
  */
-export function CachedMetadataCard({ mapping, source, target, sourceNow, targetNow }: {
+export function CachedMetadataCard({ mapping, source, target, sourceNow, targetNow, querySource = false }: {
   mapping: TableMappingConfig
   source: ResolvedRef
   target: ResolvedRef
   /** The catalog cache's columns of the source table, undefined when it does not have the table. */
   sourceNow: ColumnMetadata[] | undefined
   targetNow: ColumnMetadata[] | undefined
+  /** The source is a query: its recorded columns are its description's, with nothing in the cache to compare them with. */
+  querySource?: boolean
 }) {
   const sourceRead = useReadLine(source.connectionName || undefined)
   const targetRead = useReadLine(target.connectionName || undefined)
@@ -28,7 +30,8 @@ export function CachedMetadataCard({ mapping, source, target, sourceNow, targetN
         <span className="card-note">the columns this mapping records of its tables, against the draft's catalog cache</span>
       </div>
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <SideRow label="Source" cached={mapping.sourceColumns} now={sourceNow} read={sourceRead} side={source} />
+        <SideRow label="Source" cached={mapping.sourceColumns} now={sourceNow} read={sourceRead} side={source}
+          note={querySource ? 'described from the source query (Query columns, above)' : undefined} />
         <SideRow label="Target" cached={mapping.targetColumns} now={targetNow} read={targetRead} side={target} />
       </div>
     </div>
@@ -50,7 +53,7 @@ export function columnDifference(cached: ColumnMetadata[], now: ColumnMetadata[]
   return parts.length === 0 ? 'the same as the catalog cache' : `the catalog cache has ${parts.join(', ')}`
 }
 
-function SideRow({ label, cached, now, read, side }: { label: string; cached: ColumnMetadata[] | undefined; now: ColumnMetadata[] | undefined; read: string | null; side: ResolvedRef }) {
+function SideRow({ label, cached, now, read, side, note }: { label: string; cached: ColumnMetadata[] | undefined; now: ColumnMetadata[] | undefined; read: string | null; side: ResolvedRef; note?: string }) {
   const draft = useDraft()
   const [refreshing, setRefreshing] = useState(false)
   const count = cached?.length ?? 0
@@ -62,7 +65,7 @@ function SideRow({ label, cached, now, read, side }: { label: string; cached: Co
         <span style={{ font: '500 11.5px var(--ui)', color: 'var(--ink-4)', minWidth: 54 }}>{label}</span>
         <span className="mono">{count} {count === 1 ? 'column' : 'columns'}</span>
         <span className="faint" data-testid={`cached-metadata-${id}-outcome`}>
-          {now === undefined ? 'the catalog cache does not have this table' : count === 0 ? 'none recorded yet' : columnDifference(cached ?? [], now)}
+          {note ?? (now === undefined ? 'the catalog cache does not have this table' : count === 0 ? 'none recorded yet' : columnDifference(cached ?? [], now))}
         </span>
         {read && <span className="hint">catalog {read}</span>}
         {side.connectionName && table && draft.canEdit && (

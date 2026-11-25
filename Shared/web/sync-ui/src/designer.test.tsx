@@ -256,7 +256,10 @@ describe('the sync Designer in the Workspace frame', () => {
     await click('[data-testid="source-query-source-toggle"]')
     expect(q('[data-testid="source-table-select"]')).toBeNull()
     expect(q('[data-testid="source-query-line"]')?.textContent).toBe('No query written yet')
-    expect(q('[data-testid="column-mappings-waiting"]')?.textContent).toContain('edited in Files')
+    expect(q('[data-testid="column-mappings-waiting"]')?.textContent).toContain('describe the query')
+    // a query starts with no recorded column, and is described once it is written
+    expect(q('[data-testid="query-columns-line"]')?.textContent).toBe('No column of the query is recorded yet: describe it to map its columns here.')
+    expect(q('[data-testid="query-columns-not-ready"]')).not.toBeNull()
     await click('[data-testid="source-query-source-toggle"]')
     expect(q('[data-testid="source-table-select"]')).not.toBeNull()
   })
