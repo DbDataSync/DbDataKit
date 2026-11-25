@@ -227,22 +227,6 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
 
-## Proposed decisions
-
-### WORKSPACEISOLATION-P30: who may list the deploys of a Workspace server's builds (question, awaiting the owner)
-
-Scenario: Pat may read the project `sales` on the Workspace server and not `orders`. The console refuses Pat a deploy of `orders` and every call on a
-deploy of it, in the Workspace server's words. `GET /api/deploys?workspace_server=Workspace&project=orders` still answers Pat with each deploy of
-`orders`: the build record (the commit, the workspace, what the validators found), the Runner, the channel and the version. The console checks only
-that Pat is signed in.
-
-- Option A (as built): the list stays open to anyone signed in to the console; a deploy record says where a build went, which the Runner's own screens
-  show a viewer there too.
-- Option B: the list asks the Workspace server for the project as the person, as the calls on a deploy do; a list that names no project shows only the
-  deploys of projects the person may read (one question to the Workspace server per project in the list).
-
-Recommendation: B, so a person who may not read a project does not read its build records through the console.
-
 ## Shared areas touched
 
 `DbDataKit.Authoring.Server`, the control service's host, the Workspace screens (`Shared/web/workspace`), `DbDataKit.State.Api` (the publish client

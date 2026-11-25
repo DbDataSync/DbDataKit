@@ -53,7 +53,9 @@ and serves what the build holds; it never calls the Runner or the Gateway.
    (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the deploy before anything is sent, and the
    message names the key.
 7. The console keeps the deploy (the `deploys` state module) and audits it as `build.deploy`. `GET /api/deploys?workspace_server=&project=&workspace=&build=`
-   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words.
+   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words. Anyone signed in to the
+   console can read this list, for every project: each deploy shows its build record (the commit, the workspace, what the validators found), the
+   Runner, the channel and the version. The calls on one deploy are checked against the project ([Runs of a deployed build](#runs-of-a-deployed-build)).
 
 What a build holds to send, by the routes of its kind:
 
