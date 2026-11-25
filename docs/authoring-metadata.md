@@ -517,9 +517,10 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 | --- | --- | --- |
 | `useChannelChoice`, `ChannelPicker` | the Runner and the channel to read in; offers **Set up for development** where a channel does not bind the slot | every piece below |
 | `CatalogRefresh` | **Refresh** of a connection or one table, the difference shown before **Accept** | the tab **Catalog**; the Sync Designer's Refresh buttons |
-| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog** |
-| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | placed by a kind's Designer |
+| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog**; **Test** on each endpoint card of the Sync Designer |
+| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | the Sync Designer's card **Query columns** of a mapping whose source is a query |
 | `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
+| `usePublishedChannels`, `useNewestRun` | the channels the draft was published to, and the newest run of a task in one of them | the newest-check card; the Sync Designer's **Newest preflight** on the Provisioning sub-tabs |
 | `useRunAnswer`, `RunAnswerStatus` | a manual task of the version the draft's newest deploy put on a Runner, run for the person through the console, and its answer ([above](#rows-and-trials-are-answered-never-kept)); a run longer than 10 seconds is followed by its link | the Sync Designer's **Preview rows** and **Try** |
 
 The newest-check card reads the console's deploys of the draft (`GET /api/deploys?workspace_server=&project=&workspace=`), takes the newest one of each
@@ -545,7 +546,8 @@ preflight has run in dev yet."
 **Refresh catalog** with the channel picker, which runs `discover`. The Table Mappings overview lists the source's cached tables; **Create mappings**
 writes a mapping file per ticked table from the cache (columns, types, key; the target's types inferred by Sync's mapping column reader over the cache).
 **Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
-query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
+query, not a table**, then **Describe columns** on the card **Query columns** of Column Mapping, writes the query's columns into the mapping's column
+cache (`sourceColumns`: each column's name, type and whether it may be null; a query reports no key).
 
 The pickers, the overview and Column Mapping read the databases, tables and columns from the draft's `catalog-cache.yaml` in the browser
 (`catalogCache.ts`), fetched through the Workspace's existing route that reads a draft's file; a refresh not yet saved is held in the browser as an
@@ -694,7 +696,7 @@ mapping's rows are shown by **Preview rows** under the source filter of the mapp
 editor ([Rows and trials are answered, never kept](#rows-and-trials-are-answered-never-kept)).
 
 **Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
-the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation. Nothing live is
+the chosen channel (time, run link, findings per mapping, the card **Newest preflight**); the publish panel runs `preflight` on the staged version before activation. Nothing live is
 committed into the draft; the cache and a query's column cache are.
 
 Example: Ana maps `crm.dbo.orders` with the change-tracking reader, against `dev`, where change tracking is on, and publishes to `prod`, where it is off on

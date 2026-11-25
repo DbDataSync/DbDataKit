@@ -42,8 +42,10 @@ export interface FakeWorkspace {
 }
 
 /** What a task records while it runs, as the real ones do: a replication's pass, or the statements provision ran. */
-function stepsOf(task: string, inputs: Record<string, string>, step: string | null) {
+function stepsOf(task: string, inputs: Record<string, string>, step: string | null, kind?: string) {
   const at = '2026-11-11T11:00:00Z'
+  // the preflight of a Sync set: a part per mapping and one for where a replication keeps its state
+  if (step === 'preflight-findings' && task === 'preflight' && kind === 'sync') return SYNC_PREFLIGHT_PARTS.map((p) => ({ key: p.part, started: at, completed: at, result: p }))
   if (step === 'pass-record') return [{ key: 'orders', started: at, completed: at, result: { mapping: 'orders', kind: 'Primary', status: 'Succeeded', rowsRead: 3, rowsWritten: 3 } }]
   // the preflight of a Build package: the status of its connection, with an error (the structure is behind the project) and a warning
   if (step === 'preflight-findings' && task === 'preflight') return [{ key: 'status warehouse', started: at, completed: at, result: { part: 'status warehouse', findings: PREFLIGHT_FINDINGS } }]
@@ -55,6 +57,12 @@ function stepsOf(task: string, inputs: Record<string, string>, step: string | nu
 const PREFLIGHT_FINDINGS = [
   { severity: 'error', message: 'The deployed structure is behind the project: 2 deploy step(s) are pending (0 risky, 0 destructive), and a refresh is refused until they are applied (apply_plan).', about: 'warehouse' },
   { severity: 'warning', message: 'marts.dim_store was changed outside dbdatabuild since it was deployed.', about: 'warehouse' },
+]
+
+/** What the preflight of the template's Sync set finds: the run login of the target may not update its table; where `orders` keeps its state is in order. */
+const SYNC_PREFLIGHT_PARTS = [
+  { part: 'orders/orders', findings: [{ severity: 'error', message: "The run login of 'target-db' may not UPDATE dw.public.orders.", about: 'target-db' }, { severity: 'info', message: 'The source table dbo.Orders is readable.', about: 'source-db' }] },
+  { part: 'orders tracking', findings: [] },
 ]
 
 const lineOf = (text: string, needle: string) => { const i = text.split('\n').findIndex((l) => l.includes(needle)); return i < 0 ? null : i + 1 }
@@ -244,7 +252,11 @@ function savedPlans(files: Map<string, string>, replication: string) {
 }
 
 /** What a story adds to the fake: `syncFiles` are put in every new sync draft beside the template's (a `catalog-cache.yaml`, for the Designer's pickers). */
-export interface FakeOptions { syncFiles?: Record<string, string> }
+export interface FakeOptions {
+  syncFiles?: Record<string, string>
+  /** The tasks a Sync build's package lists once deployed; `orders` and `provision` when not given (a story of the set's preflight adds `preflight`). */
+  syncTasks?: string[]
+}
 
 export async function mockWorkspace(page: Page, options: FakeOptions = {}): Promise<FakeWorkspace> {
   const projects: Project[] = []
@@ -297,7 +309,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     const answer = gateway
       ? { target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.dataSource ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] }
       : { target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'serve' : 'stage', version: 1, changed: true, signature: 'verified',
-          tasks: project.kind === 'sync' ? ['orders', 'provision'] : project.kind === 'build' ? [`${project.id}-nightly`, 'preflight'] : [] } as Record<string, unknown>
+          tasks: project.kind === 'sync' ? options.syncTasks ?? ['orders', 'provision'] : project.kind === 'build' ? [`${project.id}-nightly`, 'preflight'] : [] } as Record<string, unknown>
     // a Build package served in prod waits for its preflight, which finds an error: the version stays staged and the deploy answers 409 with what was found
     if (!gateway && project.kind === 'build' && sent.channel === 'prod' && sent.serve) {
       answer.mode = 'stage'
@@ -334,7 +346,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       if (index === undefined) return json(route, { ...answer, link: null, run: null })
       const id = `6f1c0f1e-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
       return json(route, { ...answer, link: `/servers/${String(deploy.target)}/runs?run=${id}`,
-        run: { id, task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(task, runs[index]!.inputs, url.searchParams.get('step')) } })
+        run: { id, task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(task, runs[index]!.inputs, url.searchParams.get('step'), String(deploy.kind)) } })
     }
     if (what === 'runs' && runId && request.method() === 'GET') {
       const index = Number(runId.slice(-12)) - 1
@@ -343,7 +355,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       const n = (reads.get(runId) ?? 0) + 1
       reads.set(runId, n)
       if (n === 1) return json(route, { error: `${String(deploy.target_name)} has no run ${runId}.` }, 404)   // queued: not on the Runner's record yet
-      return json(route, { run: { id: runId, task: started.task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(started.task, started.inputs, url.searchParams.get('step')) } })
+      return json(route, { run: { id: runId, task: started.task, outcome: 'succeeded', started: '2026-11-11T11:00:00Z', finished: '2026-11-11T11:00:05Z', version: String(deploy.version), failure: null, steps: stepsOf(started.task, started.inputs, url.searchParams.get('step'), String(deploy.kind)) } })
     }
     // the activation of a version staged for its preflight: refused while its error is not confirmed, the confirmation kept with it
     if (what === 'activate' && request.method() === 'POST') {
