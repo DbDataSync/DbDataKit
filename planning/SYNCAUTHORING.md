@@ -70,7 +70,7 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
   its form), the Connections list and page (`ConnectionsPage.tsx`, `ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`,
   `connection-edit/ConnectionTestCard.tsx`), the Scripts list and page (`ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`).
   Connections and scripts are edited in Files (the generated forms, the Scripts tab) meanwhile.
-- **Row previews**: `PreviewGrid.tsx`, a query source's rows (`query-preview`).
+- **Row previews**: `PreviewGrid.tsx` is not restored; **Preview rows** on a mapping (`MappingRowsPreview.tsx`) shows a mapping's or a query source's first rows, read by a Runner task and never kept.
 - **Version Control** (`HistoryPanel.tsx`, `components/DiffViewer.tsx` as used there): the Files area's History, Changes and a file's earlier texts.
 - **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; an open design below.
 - The product frame and admin pages (`App.tsx`, `SyncModule.tsx`, `adminHost.tsx`, `components/AppShell.tsx`, Drivers, Libraries, Files, Docs, Admin):
@@ -218,8 +218,6 @@ person, or the console's Runner screens with a link from the Designer) before it
   the Runner's own screens.
 - **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is TASKENGINE's).
 - **Live updates**: the old screens followed runs over SignalR; the Runner's screens poll.
-- **Row previews**: a query source's rows and a mapping's preview, wherever authoring-time reads of a database are settled (AUTHORING's proposals on
-  where rows may be kept and where read logins live).
 
 ### Outside a replication, later
 
