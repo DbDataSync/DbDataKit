@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setApiBase } from '@dbdatakit/shell'
-import { authoringReadApi, bindingLeftLine, describedLine, newestPerChannel, previewLine, previewValue, setUpChannels, setUpOffered, testLine, trialLine, type DraftTestAnswer, type MappingPreviewAnswer, type StrategyTrialAnswer } from './authoringReads'
+import { authoringReadApi, describedLine, newestPerChannel, previewLine, previewValue, setUpChannels, setUpOffered, testLine, trialLine, type DraftTestAnswer, type MappingPreviewAnswer, type StrategyTrialAnswer } from './authoringReads'
 import type { ChannelList } from './catalogRefresh'
 import type { DeployRecord } from './deploys'
 
@@ -23,11 +23,6 @@ describe('Set up for development in the channel picker', () => {
     expect(setUpChannels(list([prod(true)]))).toEqual(['dev'])
     expect(setUpChannels(list([]))).toEqual(['dev'])
     expect(setUpChannels(list([dev(true)]))).toEqual([])
-  })
-
-  it('says what is left once the login is stored and the channel does not bind the slot yet', () => {
-    expect(bindingLeftLine('crm', 'dev', 'runners-eu', 'dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password')).toBe(
-      'The slot crm is not bound in dev yet. An administrator binds it on the Packages page of runners-eu (Bindings), to a connection whose password names the secret dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password; the picker offers dev once it binds the slot.')
   })
 })
 

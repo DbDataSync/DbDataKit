@@ -26,7 +26,7 @@ export type {
   DescribeAnswer, DescribedColumn, DescribeRequest, DraftTestAnswer, DraftTestRequest, MappingPreviewAnswer, NewestRun, PreviewValue, RunAnswer, StrategyCandidate, StrategyTrialAnswer, TestStep, TestStepName,
 } from './authoringReads'
 // a development login, sent to the console, which puts it on a Runner; the Workspace server never receives it
-export { developmentLoginApi, developmentLoginLine, developmentLoginWarning } from './developmentLogin'
+export { developmentLoginApi, developmentLoginLine, developmentLoginWarning, developmentLoginWarnings } from './developmentLogin'
 export type { DevelopmentLoginAnswer, DevelopmentLoginRequest } from './developmentLogin'
 // what a kind's Designer reads through the frame: the draft's check, where it stands against its newest deploy to a Runner, a replication's provisioning plan and its apply
 export { commitsAfter, errorsUnder, provisioningPlanKey, useDraftCheck, useDraftPublication, useProvisioningApply, useProvisioningPlan } from './designerData'

@@ -43,7 +43,7 @@ export function ChannelPicker({ runners, runner, onRunner, list, channel, onChan
       {list?.note && <div className="hint" data-testid="wsp-channel-note">{list.note}</div>}
       {(list?.channels ?? []).filter((c) => !c.bound).map((c) => <div key={c.channel} className="hint" data-testid="wsp-channel-unbound" data-channel={c.channel}>{unboundLine(c, list!.slot)}</div>)}
       {project !== undefined && setUpOffered(list) && (
-        <DevelopmentSetUp project={project} runner={runner} runnerName={runnerName} list={list} connection={connection} canEdit={canEdit} onStored={onStored} onRecheck={onStored} />
+        <DevelopmentSetUp project={project} runner={runner} runnerName={runnerName} list={list} connection={connection} canEdit={canEdit} onStored={onStored} />
       )}
       {chosen?.production && (
         <div className="banner" role="alert" style={{ marginTop: 6 }} data-testid="wsp-channel-production"><span className="mark">!</span><span>{productionWarning(connection, chosen.channel, runnerName)}</span></div>
