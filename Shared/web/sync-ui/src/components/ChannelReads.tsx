@@ -15,8 +15,8 @@ const unhosted = (testId: string) => (
 )
 
 /**
- * **Test** of an endpoint's connection: the channel picker (which offers **Set up for development** where a channel other than production does not bind
- * the connection's slot), then the Runner's binding test in the channel picked, asked through the console as the signed-in person. The steps are shown
+ * **Test** of an endpoint's connection: the channel picker (which offers **Set up for development** where a channel does not bind the connection's slot,
+ * production as any other), then the Runner's binding test in the channel picked, asked through the console as the signed-in person. The steps are shown
  * with the Runner's reason; no row comes back. The draft needs no build: the test reads the binding, not a version.
  * Design: docs/authoring-metadata.md#testing-a-connection
  */

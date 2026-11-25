@@ -9,6 +9,7 @@ import { DraftProvider } from '../draft'
 import type { DescribedColumn } from '../authoringReads'
 import { CatalogPanel } from './CatalogPanel'
 import { NewestChecks, QueryDescribe } from './AuthoringReads'
+import { ChannelPicker } from './CatalogRefresh'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -30,7 +31,14 @@ function fakeConsole() {
     if (path === '/api/instances') return reply([{ id: 'r-1', name: 'runners-eu', product: 'dbdatarunner' }, { id: 'ws-1', name: 'Workspace', product: 'dbdataworkspace' }])
     const project = '/api/workspace-catalog/ws-1/crm-to-dw'
     if (path === `${project}/channels`) {
-      if (state.noPackage) return reply({ package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: null, channels: [], note: 'runners-eu has no package crm-to-dw yet.' })
+      // a Runner that holds no version of the package lists every channel it serves, with the bindings it holds for the package
+      if (state.noPackage) {
+        return reply({
+          package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: state.bound ? 'dev' : null,
+          channels: [{ channel: 'dev', production: false, bound: state.bound, bound_to: state.bound ? 'crm-to-dw-crm-dev' : null }, { channel: 'prod', production: true, bound: false, bound_to: null }],
+          note: 'runners-eu holds no version of crm-to-dw yet.',
+        })
+      }
       return reply({
         package: 'crm-to-dw', connection: 'crm', slot: 'crm', runner: 'r-1', runner_name: 'runners-eu', default: state.bound ? 'dev' : null,
         channels: [{ channel: 'dev', production: false, bound: state.bound, bound_to: state.bound ? 'crm_dev' : null }, { channel: 'prod', production: true, bound: true, bound_to: 'crm' }],
@@ -140,16 +148,35 @@ describe('the Designer\'s shared reads', () => {
     expect(q('[data-testid="wsp-setup"]')).toBeNull()
   })
 
-  it('on a Runner that holds no version of the package yet, the set-up says dev reads the connection through the copy', async () => {
+  it('on a Runner that holds no version of the package yet, the picker lists its channels, and after Set up for dev Refresh and Test read in dev', async () => {
     server.state.noPackage = true
     await mount(<CatalogPanel project="crm-to-dw" id="ws" onOpen={() => {}} kind="sync" />)
+    expect(all('[data-testid="wsp-channel-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['', 'dev', 'prod'])
+    expect(q('[data-testid="wsp-channel-note"]')?.textContent).toContain('holds no version of crm-to-dw')
+    expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(true)
     await click('[data-testid="wsp-setup-open"]')
+    expect(all('[data-testid="wsp-setup-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['dev', 'prod'])
     await type('[data-testid="wsp-setup-password"]', PASSWORD)
     await click('[data-testid="wsp-setup-save"]')
 
-    expect(q('[data-testid="wsp-setup-stored"]')?.textContent).toBe('runners-eu holds the login of crm for dev, and dev reads crm through crm-to-dw-crm-dev.')
-    expect(q('[data-testid="wsp-setup-stored"]')?.getAttribute('data-bound')).toBe('true')
+    expect(server.asked.find((a) => a.path === 'POST /api/workspace-dev-logins/ws-1/crm-to-dw')?.body).toEqual({ runner: 'r-1', channel: 'dev', connection: 'crm', password: PASSWORD, draft: 'ws' })
     expect(host.innerHTML).not.toContain(PASSWORD)
+    expect(q('[data-testid="wsp-channel-picker"]')?.getAttribute('data-channel')).toBe('dev')
+    expect((q('[data-testid="wsp-refresh-go"]') as HTMLButtonElement).disabled).toBe(false)
+    expect(q('[data-testid="wsp-test-go"]')).not.toBeNull()
+  })
+
+  it('on a Runner whose only channel prod does not bind erp, offers Set up erp for development with prod and the production warning', async () => {
+    const list = { package: 'crm-to-dw', connection: 'erp', slot: 'erp', runner: 'r-1', runner_name: 'runners-eu', default: null, channels: [{ channel: 'prod', production: true, bound: false, bound_to: null }] }
+    await mount(<ChannelPicker runners={[{ id: 'r-1', name: 'runners-eu' }]} runner="r-1" onRunner={() => {}} list={list} channel="" onChannel={() => {}} connection="erp" project="crm-to-dw" canEdit />)
+    expect(q('[data-testid="wsp-channel-unbound"]')?.textContent).toContain('prod does not bind the slot erp. Set up for development binds it')
+    expect(q('[data-testid="wsp-setup-open"]')?.textContent).toBe('Set up erp for development')
+    await click('[data-testid="wsp-setup-open"]')
+    expect(all('[data-testid="wsp-setup-channel"] option').map((o) => o.getAttribute('value'))).toEqual(['prod'])
+    expect(q('[data-testid="wsp-setup-production"]')?.textContent).toContain('This reads production: the shape of erp as the prod channel of runners-eu binds it')
+    await type('[data-testid="wsp-setup-password"]', PASSWORD)
+    await click('[data-testid="wsp-setup-save"]')
+    expect(server.asked.find((a) => a.path === 'POST /api/workspace-dev-logins/ws-1/crm-to-dw')?.body).toEqual({ runner: 'r-1', channel: 'prod', connection: 'erp', password: PASSWORD, draft: 'ws' })
   })
 
   it('once dev binds the slot, Test shows each step of the binding test and its reason, and no row', async () => {

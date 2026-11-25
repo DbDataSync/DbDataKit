@@ -6,7 +6,7 @@ import {
   authoringReadApi, describedLine, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
   type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NewestRun, type RunAnswer,
 } from '../authoringReads'
-import { workspaceServerOf, type ChannelList } from '../catalogRefresh'
+import { productionWarning, workspaceServerOf, type ChannelList } from '../catalogRefresh'
 import { developmentLoginApi, developmentLoginLine, developmentLoginWarning, developmentLoginWarnings, type DevelopmentLoginAnswer, type DevelopmentLoginRequest } from '../developmentLogin'
 import { useDraftOrNull } from '../draft'
 import { deployApi, useHostedServer, useRunnerVersion, type RunnerVersion } from '../deploys'
@@ -17,7 +17,8 @@ import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, pre
 // Design: docs/authoring-metadata.md#every-kind-uses-the-same-pieces
 
 /**
- * **Set up for development**: the person types a development login for the connection once, for a channel other than production; the screen sends it to the
+ * **Set up for development**: the person types a development login for the connection once, for a channel that does not bind its slot (production as any
+ * other, with the warning a read there shows); the screen sends it to the
  * console with the draft, and the console stores the login in the Runner's secret store, puts the draft's connection on the Runner as a copy that names it,
  * and binds the slot in the channel. The login never goes to the Workspace server. `onStored` lets the picker ask the Runner again, which then offers the
  * channel. Outside a draft there is no connection file to copy, so nothing is offered.
@@ -33,6 +34,7 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
   const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
   const chosen = channel || choices[0] || ''
+  const production = list?.channels.find((c) => c.channel === chosen)?.production ?? chosen === 'prod'
   const store = useMutation<DevelopmentLoginAnswer, Error, DevelopmentLoginRequest>({
     mutationFn: (body) => developmentLoginApi.setUp(workspace!, project, body),
     // the password leaves the form as soon as it is sent: it is kept nowhere on the screen
@@ -52,6 +54,9 @@ export function DevelopmentSetUp({ project, runner, runnerName, list, connection
         <form className="card" style={{ marginTop: 6 }} data-testid="wsp-setup-form" onSubmit={(e) => { e.preventDefault(); store.mutate({ runner, channel: chosen, connection, ...(user.trim() ? { user: user.trim() } : {}), password, draft: draft.id }) }}>
           <div className="card-body">
             <div className="hint" data-testid="wsp-setup-warning">{developmentLoginWarning(connection, chosen, runnerName)}</div>
+            {production && (
+              <div className="banner" role="alert" style={{ marginTop: 6 }} data-testid="wsp-setup-production"><span className="mark">!</span><span>{productionWarning(connection, chosen, runnerName)}</span></div>
+            )}
             <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
               <label className="hint" htmlFor="wsp-setup-channel">Channel</label>
               <select id="wsp-setup-channel" className="input" value={chosen} onChange={(e) => setChannel(e.target.value)} data-testid="wsp-setup-channel">

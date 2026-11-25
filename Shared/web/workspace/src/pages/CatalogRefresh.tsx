@@ -17,7 +17,7 @@ import { BindingTest, DevelopmentSetUp } from './AuthoringReads'
 export function ChannelPicker({ runners, runner, onRunner, list, channel, onChannel, connection, project, canEdit = false, onStored }: {
   runners: readonly RunnerChoice[]; runner: string; onRunner: (id: string) => void
   list: ChannelList | undefined; channel: string; onChannel: (channel: string) => void; connection: string
-  /** With the project, the picker offers **Set up for development** where a channel other than production does not bind the slot. */
+  /** With the project, the picker offers **Set up for development** where a channel does not bind the slot, production as any other. */
   project?: string; canEdit?: boolean; onStored?: () => void
 }) {
   const chosen = list?.channels.find((c) => c.channel === channel)
