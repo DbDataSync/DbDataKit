@@ -11,14 +11,14 @@ interface Props {
   onChange: (mappings: ColumnMapping[]) => void
   /** False when the target names a table provisioning has yet to create; undefined while it is not known. */
   targetExists: boolean | undefined
-  /** The source's columns, from the catalog cache; undefined when the cache does not have the table. */
+  /** The source's columns, from the catalog cache (a query's, as its description recorded them in the mapping); undefined when they are not known. */
   sourceColumns: ColumnMetadata[] | undefined
   /** The target's columns, from the catalog cache; undefined when the cache does not have the table. */
   catalogTargetColumns: ColumnMetadata[] | undefined
   relationships: RelationshipConfig[]
   /** The target type each source column gets when nothing is set, by source column (`sync/inferred-columns`); absent while it is not known. */
   inferredTypes?: Record<string, string>
-  /** Whether the source is a query: its columns are not in the catalog cache. */
+  /** Whether the source is a query: its columns are the mapping's own, from a description of the query, never the catalog cache's. */
   querySource?: boolean
 }
 
@@ -49,8 +49,8 @@ export function ColumnMappingEditor({ resolvedSource, target, mappings, onChange
       <div className="card" data-testid="column-mappings-table">
         <div className="card-head tight"><span className="card-title sm">Column mappings</span></div>
         <div className="empty" data-testid="column-mappings-waiting">
-          {querySource
-            ? 'The columns a query returns are not in the catalog cache, so they are not listed here: the column mappings of a query source are edited in Files.'
+          {querySource && !sourceColumns
+            ? 'The columns a query returns are not in the catalog cache: describe the query (Query columns, above) and its columns are listed here.'
             : !target.table || !resolvedSource.table
             ? 'Select a source and target table to map columns.'
             : 'The catalog cache does not have both tables: their columns are listed once their connections\' catalogs are read into the draft.'}
