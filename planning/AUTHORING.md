@@ -90,21 +90,6 @@ Packages page, as before.
 
 Recommendation: A, so a login typed on an authoring screen never becomes production's; B only if the owner wants production set up from the Designer.
 
-### AUTHORING-P53: Preview rows and Try in `prod` show production's values (default, awaiting the owner)
-
-Scenario: Ben designs a sync between two systems that have no development copy, so the draft's newest deploy is to `prod` of the Runner `plant`. On a
-mapping he presses **Preview rows**. The screen warns "This reads rows of production (prod on plant) with the login production binds. The rows are
-shown here and kept nowhere." and the rows appear. A strategy's **Try** in `prod` runs its SQL on production the same way. The Runner asks for its
-operator role, as for any run; nothing else stops it.
-
-- Option A (as built): a preview and a trial run in every channel, with the warning in `prod`, for a person who may read the project and is an
-  operator on the Runner.
-- Option B: in `prod` they need the Runner's admin role, or a setting of the Runner that allows them there.
-- Option C: never in `prod`; production's rows are seen with the database's own tools.
-
-Recommendation: A, as for a read of a database's shape in `prod` ("Who reads" in `docs/authoring-metadata.md`); B if production's values should need
-more than the role that runs production's tasks.
-
 ### AUTHORING-P54: in a group of Runners, an answer is held by the instance that ran the task (default, awaiting the owner)
 
 Scenario: the Runner group `plant` has two instances behind one address. Ana presses **Preview rows**; the instance `plant-a` takes her request and
