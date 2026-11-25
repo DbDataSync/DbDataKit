@@ -49,6 +49,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-25 | On SQL Server, `discover` also lists every database the connection's login can open (`sys.databases`), each with its schemas, and reads the tables of the one asked for (an input `database`); the database pickers offer them. A PostgreSQL connection reads its one database, as today | none | M | a SQL Server conformance test: a login that reads two databases sees both in the cache, and the tables of the second after a read that names it |
 | AUTHORING-26 | A read of a database's shape (`discover`, `describe`) needs the Runner's viewer role, not operator: it changes nothing, and the console has already checked that the person has access to the project | none | S | a person who is a viewer on the project's Runner refreshes the catalog; starting any other task still needs operator |
 | AUTHORING-27 | The person who staged a version held for its preflight activates it: with no error found, the Runner lets that person activate it with the role that staged it (publisher); after an error, the same person confirms the errors, recorded with their name as today. `docs/publishing.md` ("Preflight before activation" and the route table) follows | none | S | a test: Bob, a publisher on the Runner, serves a package in a production channel; its preflight finds nothing and Bob activates it; a second version's preflight finds an error and Bob's activation with `"confirm": true` is recorded with his name |
+| AUTHORING-28 | A draft is read before it is ever published: when the Runner holds no version of the project's package, the console lists the channels the Runner serves (none of them bound) in the channel picker, and the Runner lets a binding name a slot of a package it holds no version of yet, so `discover`, `describe` and the binding test read a draft that was never built. This changes the Runner's rule for its built-in package and its bindings. `docs/authoring-metadata.md` ("Before anything is published", "Until then, an administrator binds the slot by hand") follows. Until it is built, a build staged in the channel comes first | none | M | a test: on a Runner that holds no version of `sales-dw`, the picker lists the channels the Runner serves; `warehouse` is bound in `dev` for the package; **Refresh** in `dev` reads its tables and the binding test succeeds, with no version of `sales-dw` on the Runner |
 
 ## Needs from other subjects
 
@@ -60,22 +61,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - The Gateway catalog refresh is the console's `POST api/workspace-catalog/{workspace}/{project}/gateway-read` (`ConsoleCatalogRead.GatewayAsync`; `docs/authoring-metadata.md`, "A read from a Gateway").
 
 ## Proposed decisions
-
-### AUTHORING-P50: reading a draft whose package the Runner does not hold yet (question, awaiting the owner)
-
-Scenario: Ana makes the build project `sales-dw` and adds the connection `warehouse`. Nothing of it is on the Runner `plant` yet. On the tab **Catalog**
-the channel picker lists no channel (the console lists only the channels of a package the Runner holds) and offers **Set up warehouse for development**
-with `dev`. Ana sends the login; `plant` stores it. Even once an administrator (or, later, the console) binds the slot, **Refresh** in `dev` is refused:
-the Runner's `discover` reads only a slot that a version served or staged in that channel declares, so Ana must first publish a build staged in `dev`.
-
-- Option A (as built): keep it. The picker offers `dev` when the Runner lists no channel, the login is stored, and the line says what is left; the doc
-  says to publish a build staged in `dev` first (`docs/authoring-metadata.md`, "Until then, an administrator binds the slot by hand").
-- Option B: the console lists the channels the Runner serves (with none bound) when the Runner holds no version of the package, and the Runner lets
-  a binding name a slot of a package it holds no version of yet, so `discover`, `describe` and the binding test read a draft that was never published.
-  This changes the Runner's rule for its built-in package and its bindings.
-- Option C: **Set up for development** also builds the draft and stages it in the channel through the console's deploy, before the binding.
-
-Recommendation: B, so a draft is read before it is ever built, as the Designer's example on `docs/authoring-metadata.md` describes; until then A.
 
 ### AUTHORING-P52: Set up for development is not offered for `prod` (default, awaiting the owner)
 
