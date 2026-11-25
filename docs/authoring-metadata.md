@@ -209,14 +209,19 @@ relay, as it does for the reads above.
 
 What the console does with it:
 
-1. It checks the request: the channel, the connection, the password, and the user when one is sent.
+1. It checks the request: the channel, the connection, the password, and the user when one is sent. A user has 1 to 256 characters, no space at
+   either end and no control character.
 2. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. That request carries no part of
    the login. The answer says whether the person may read the project and which package it becomes on a Runner.
 3. It stores the password in the Runner's secret store (`PUT /api/v1/secrets/{name}` on the Runner) as the signed-in person. The Runner asks for its
    admin role, as it does for every secret it stores, and records the person in its audit with the name and length of the value.
 
-The password is the only secret stored. The user is not a secret: the console gives it back in its answer as plain text. The user belongs in the
-text of the connection's copy on the Runner, beside the reference to the password's secret.
+The password is the only secret stored. The user is not a secret: the console gives it back in its answer as plain text, so the screen can show it,
+and stores it nowhere. The user belongs in the text of the connection's copy on the Runner, beside the reference to the password's secret.
+
+The Runner holds the password under a name of the kind `dev-login`, made of the package, the channel and the slot:
+`dbdatakit:runner:dev-login:<package>.<channel>.<slot>:password`. A person reading the Runner's secrets overview can tell from the name that the
+secret came from a Workspace screen, and for which package, channel and slot.
 
 The console accepts any channel, `prod` included. A person who holds a production login and the Runner's admin role can store it for `prod` the same
 way. The password of each channel is stored under its own name, so a login stored for `dev` is never used by `prod`.
