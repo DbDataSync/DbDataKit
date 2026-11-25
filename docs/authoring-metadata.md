@@ -477,8 +477,7 @@ server, and the operator role on the Runner. The console's audit names the run, 
 
 A preview and a trial run in every channel the draft was deployed to, `prod` included, for the same person and role. In `prod` the rows are
 production's, read with the login production binds, so the screen warns above the answer: "This reads rows of production (prod on plant) with the
-login production binds. The rows are shown here and kept nowhere." A strategy's **Try** in `prod` runs its SQL on production the same way. A person
-who must not see production's values must not hold the operator role on that Runner.
+login production binds. The rows are shown here and kept nowhere." A strategy's **Try** in `prod` runs its SQL on production the same way.
 
 ### What the Runner does with an answer
 
