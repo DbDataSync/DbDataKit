@@ -496,8 +496,10 @@ memory, the console takes it once and passes it to the screen, and nothing keeps
 | `try-strategy` | a segmenting strategy run over a mapping and a column as a reload runs it: its SQL on the source or the target with the run login the channel binds, a DuckDB strategy in memory, a script with both connections | every candidate, selected or not: its label, the column, the bounds and whether it is selected |
 
 The strategy is either one the replication has (the input `name`) or the one the person is editing, sent as JSON (the input `strategy`), so it can be
-tried before it is saved. Both tasks read the mapping as the deployed version has it: an edit that is not saved, built and published is not in the
-rows. A strategy's SQL is the author's own and runs with the login a reload uses, so it can do what that login may do.
+tried before it is saved. The screen also sends the mapping's file as the draft has it, unsaved edits included (the input `mapping_text`). Both tasks
+read that mapping with the deployed version's replication, connections and drivers, so a filter typed a moment ago is in the rows. A task started
+without `mapping_text` reads the mapping the version has. A mapping file that does not load fails the run, naming the file and the key. The run's
+record on the Runner keeps the mapping's text as one of its inputs. A strategy's SQL is the author's own and runs with the login a reload uses, so it can do what that login may do.
 
 ### How a screen asks for rows
 
@@ -505,7 +507,8 @@ The screen takes the newest deploy of the draft to a Runner and asks the console
 
 ```
 POST /api/deploys/01a2.../runs
-{"task": "preview", "answer": true, "inputs": {"replication": "orders", "mapping": "dbo.orders", "rows": "20"}}
+{"task": "preview", "answer": true, "inputs": {"replication": "orders", "mapping": "dbo.orders", "rows": "20",
+                                              "mapping_text": "schemaVersion: 1\nname: dbo.orders\nsources:\n- schema: dbo\n  table: orders\n  filter: \"region = 2\"\n..."}}
 
 200 {"state": "done", "run_id": "01a3...", "runner": "r-1", "runner_name": "runners-eu", "channel": "dev", "production": false,
      "link": "/servers/r-1/runs?run=01a3...",
@@ -538,7 +541,7 @@ The task hands its answer to the Runner over its socket (the protocol's `Answer`
   the rows of a preview Ana started.
 - It forgets an answer nobody took after 10 minutes. One answer is at most 2 MiB of JSON, and a Runner holds at most 64 MiB of answers, forgetting the
   oldest first.
-- It never writes an answer to its state, a step, the run's log or the audit. The run record keeps the inputs (the mapping, the strategy's SQL) and
+- It never writes an answer to its state, a step, the run's log or the audit. The run record keeps the inputs (the mapping's text, the strategy's SQL) and
   the outcome.
 
 In a group of Runners, the answer is held by the instance that ran the task. A call that reaches another instance answers `gone`.
@@ -547,6 +550,10 @@ Example: Ana edits the strategy `by-month` of the replication `orders` on the Bu
 `placed_at` and presses **Try**. The Runner `runners-eu` runs her SQL on `crm` with the login `dev` binds, and the screen shows "12 candidates of by-month
 over placed_at, 3 selected." with each candidate's bounds. She changes the query, presses **Try** again, and then **Update** and **Save settings**.
 Nothing of the candidates is in the draft or on the Runner.
+
+Example: version 3 of `crm-to-dw` on `dev` has the mapping `dbo.orders` with no filter. Ana types the filter `region = 2` on the mapping and, before she
+saves it, presses **Preview rows**. The screen sends the mapping's file with her filter, and the rows shown are only those of region 2, read with the
+connection `crm` of version 3 and the login `dev` binds. The run's record on `runners-eu` keeps the mapping's text she sent.
 
 ## Checking before production: `preflight`
 

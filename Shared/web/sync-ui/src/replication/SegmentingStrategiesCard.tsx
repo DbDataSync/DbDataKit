@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor, Field } from '@dbdatakit/shell'
-import { RunAnswerStatus, trialLine, TRY_STRATEGY_TASK, useRunAnswer, type StrategyTrialAnswer } from '@dbdatakit/workspace'
+import { RunAnswerStatus, trialLine, TRY_STRATEGY_TASK, useDraftOrNull, useRunAnswer, type StrategyTrialAnswer } from '@dbdatakit/workspace'
+import { mappingPath } from '../model'
 import { ParameterForm } from '../components/ParameterForm'
 import { useSyncScripts } from '../useSyncDraft'
 import { runsAgainstAConnection, type ScriptView, type SegmentingStrategyConfig, type SegmentingStrategyKind } from '../types'
@@ -175,12 +176,13 @@ function StrategyEditor({ draft, setDraft, scripts, onCancel, onCommit, isNew, t
 
 /**
  * **Try** a strategy as it is being edited, before it is saved: the set's task `try-strategy` on the Runner the draft was last published to runs it over one of the
- * replication's mappings and a column, its SQL with the logins that channel binds (a DuckDB strategy reads no database), started through the console as the
+ * replication's mappings as the draft has it (unsaved edits included, sent as `mapping_text`) and a column, its SQL with the logins that channel binds (a DuckDB strategy reads no database), started through the console as the
  * signed-in person. Every candidate is shown, selected or not. The candidates are values of a table, so they are shown here and kept nowhere.
  * Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept
  */
 function StrategyTry({ strategy, place }: { strategy: SegmentingStrategyConfig; place: StrategyTrialPlace }) {
   const run = useRunAnswer<StrategyTrialAnswer>(place.project, place.id)
+  const draft = useDraftOrNull()
   const [mapping, setMapping] = useState('')
   const [column, setColumn] = useState('')
   const chosen = mapping || place.mappings[0] || ''
@@ -204,13 +206,13 @@ function StrategyTry({ strategy, place }: { strategy: SegmentingStrategyConfig; 
           </>
         )}
         <button type="button" className="btn btn-sm" disabled={!run.version || why !== null || run.pending || run.running !== undefined} title={why ?? undefined}
-          onClick={() => run.ask({ task: TRY_STRATEGY_TASK, inputs: { replication: place.replication, mapping: chosen, strategy: JSON.stringify(strategyAsWritten(strategy)), name: '', column: column.trim(), repo_dir: 'repo' } })}
+          onClick={() => run.ask({ task: TRY_STRATEGY_TASK, inputs: { replication: place.replication, mapping: chosen, strategy: JSON.stringify(strategyAsWritten(strategy)), name: '', column: column.trim(), repo_dir: 'repo', mapping_text: draft?.textOf(mappingPath(place.replication, chosen)) ?? '' } })}
           data-testid="try-strategy-button">Try</button>
       </div>
       <span className="hint" data-testid="try-strategy-note">
         {run.version
-          ? `Runs this strategy as written, over the mapping as version ${run.version.version} on ${run.version.channel} of ${run.version.targetName} has it${runsAgainstAConnection(strategy.kind) ? ', with the logins that channel binds' : ''}. Nothing is saved or kept.`
-          : run.loading ? 'Looking for the version this draft published…' : 'Publish a build of this draft to a Runner first: a strategy is tried there, over the mapping that version has.'}
+          ? `Runs this strategy as written, over the mapping as the draft has it, on ${run.version.channel} of ${run.version.targetName} (version ${run.version.version})${runsAgainstAConnection(strategy.kind) ? ', with the logins that channel binds' : ''}. Nothing is saved or kept.`
+          : run.loading ? 'Looking for the version this draft published…' : 'Publish a build of this draft to a Runner first: a strategy is tried there, with the connections and drivers of that version.'}
       </span>
       <RunAnswerStatus version={run.version} pending={run.pending} running={run.running} error={run.error} testId="try-strategy" />
       {answer && (

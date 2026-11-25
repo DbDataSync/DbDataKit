@@ -453,6 +453,67 @@ public sealed class SetPreflightConformanceTests(Xunit.Abstractions.ITestOutputH
         Assert.DoesNotContain("permission denied", refused.Kept, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The draft's mapping on PostgreSQL (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept): the version's mapping has no filter, and a preview and a trial given the text of the draft's file,
+    /// whose filter is <c>region = 2</c>, read with it: the preview answers only rows of region 2, and the trial runs over the draft's mapping. A text that does not read is refused naming the file.
+    /// </summary>
+    [Fact]
+    public async Task OnPostgres_APreviewGivenTheDraftsMappingReadsWithItsFilter_OverAVersionWithoutIt()
+    {
+        var builder = new NpgsqlConnectionStringBuilder(Postgres);
+        var database = $"pd_{_suffix}";
+        await using (var server = new NpgsqlConnection(Postgres))
+        {
+            await server.OpenAsync();
+            await ExecAsync(server, $"CREATE DATABASE {database}");
+        }
+        _cleanups.Add(async () =>
+        {
+            NpgsqlConnection.ClearAllPools();
+            await using var server = new NpgsqlConnection(Postgres);
+            await server.OpenAsync();
+            await ExecAsync(server, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+        });
+
+        var admin = new NpgsqlConnectionStringBuilder(Postgres) { Database = database }.ConnectionString;
+        await using (var db = new NpgsqlConnection(admin))
+        {
+            await db.OpenAsync();
+            await ExecAsync(db, """
+                CREATE TABLE public.orders (id integer PRIMARY KEY, name text NOT NULL, region integer NOT NULL);
+                INSERT INTO public.orders VALUES (1, 'a', 1), (2, 'b', 2), (3, 'c', 2), (4, 'd', 3);
+                CREATE TABLE public.orders_copy (id integer PRIMARY KEY, name text NOT NULL, region integer NOT NULL);
+                """);
+        }
+
+        Connection("pg", "postgres", builder.Host!, builder.Port, database, builder.Username!);
+        Replication("west", "BatchReload", "DeleteInsert", "StagingTable", "pg", database, "public", "orders", "pg", database, "public", "orders_copy");
+        var connections = new Logins(new Dictionary<string, (string, IDriver)> { ["pg"] = (admin, new PostgresDriver()) });
+        var config = ConfigRepository.ReadOnly(Path.Combine(_root, "config"), SecretStore.ForProviders());
+        var published = File.ReadAllText(Path.Combine(_root, "config", "replications", "west", "table-mappings", "main.yaml"));
+        var draft = published.ReplaceLineEndings("\n").Replace("  table: orders\n", "  table: orders\n  filter: \"region = 2\"\n", StringComparison.Ordinal);
+        Assert.Contains("region = 2", draft);
+
+        // the version's mapping: every row
+        var all = await new MappingPreview(config, connections).ReadAsync("west", "main", 100, CancellationToken.None);
+        Assert.Equal(4, all.Rows.Count);
+
+        // the draft's mapping, unsaved edits included: only region 2
+        var preview = await new MappingPreview(config, connections).ReadAsync("west", "main", 100, CancellationToken.None, draft);
+        Assert.Equal([2L, 2L], preview.Rows.Select(r => (long)r[2]!).ToArray());
+        Assert.False(preview.More);
+
+        // the trial runs over the draft's mapping too
+        var trial = new StrategyTrial(config, connections, new DbDataSync.Scripting.CustomSegmentExpansion(new DbDataSync.Scripting.SegmentingStrategyRunner(null!)));
+        var strategy = System.Text.Json.JsonSerializer.Serialize(new { name = "one", kind = "SourceSql", sql = "SELECT 'all' AS label, '1' AS range_start, '9' AS range_end, true AS selected" });
+        Assert.Single((await trial.TryAsync("west", "main", strategy, "", "region", CancellationToken.None, draft)).Candidates);
+
+        // a text that does not read is refused, naming the mapping's file
+        var bad = await Assert.ThrowsAsync<PreviewException>(() => new MappingPreview(config, connections).ReadAsync("west", "main", 20, CancellationToken.None, draft + "unknownKey: 1\n"));
+        Assert.Contains("main.yaml", bad.Message, StringComparison.Ordinal);
+        Assert.Contains("unknownKey", bad.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Each connection with the connection string given for it, as a runner opens it with its slot's run login.</summary>
     private sealed class Logins(IReadOnlyDictionary<string, (string ConnectionString, IDriver Driver)> logins) : IConnectionFactory
     {
