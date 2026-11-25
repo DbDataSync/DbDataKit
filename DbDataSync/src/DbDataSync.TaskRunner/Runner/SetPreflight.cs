@@ -275,7 +275,7 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
             var may = await PrivilegeAsync(side, privilege, target, ct).ConfigureAwait(false);
             if (may is null) { unknown = true; break; }
             if (may == false)
-                found.Add(new(Preflight.Error, $"The run login of '{target.ConnectionName}' may not {Word(privilege)} {Label(target)}, which the writer {string.Join(" and the writer ", needing.Select(k => $"'{k}'"))} does.", about));
+                found.Add(new(Preflight.Error, $"The run login of '{target.ConnectionName}' may not {Word(privilege)} {Label(target)}, which {(needing.Count == 1 ? $"the writer '{needing[0]}' does" : $"the writers {string.Join(" and ", needing.Select(k => $"'{k}'"))} do")}.", about));
         }
         if (unknown) found.Add(new(Preflight.Info, $"The {side.Driver.DriverType} engine's privileges are not read by the preflight, so whether the run login may write {Label(target)} is not checked.", about));
 

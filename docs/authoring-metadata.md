@@ -572,7 +572,7 @@ for dev**.
 | Check | Offline | Live |
 | --- | --- | --- |
 | the table exists, or provisioning can create it | the provisioning plan from the cache, its create or alter statements shown | the plan again from the live catalog, as `provision` plans before it applies |
-| the login can insert, update and delete; for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
+| the login can make the changes the mapping's writers make (insert, update, delete); for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
 | types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
@@ -585,12 +585,29 @@ The preflight writes nothing. It reads the catalogs. It asks the engine whether 
 PostgreSQL `has_table_privilege`, `has_schema_privilege` and the table's owner). It runs the read `SELECT <mapped columns> FROM <table> WHERE
 (<filter>) AND 1 = 0`. It makes the provisioning plans as `provision` makes them, and never applies them.
 
+Which privileges the preflight asks for on the target: each writer says which changes it makes to the target table, and the preflight asks only for
+those. It asks for each writer a pass of the mapping runs: the change processing's, the bulk load's, and the reconcile's when reconcile is on.
+
+| Writer | Asks for |
+| --- | --- |
+| `ChangeApply`, `MsSqlMerge`, `MsSqlMergeReconcile` | INSERT, UPDATE and DELETE |
+| `DeleteInsert`, `MsSqlDeleteInsert`, `MsSqlBulkInsert` | INSERT and DELETE |
+| `Scd2` | INSERT and UPDATE |
+| `Snapshot` | INSERT |
+| `KeyReconcileDelete` | DELETE |
+| `KeyReconcileScd2Close` | UPDATE |
+| a writer of a driver the project carries | INSERT, UPDATE and DELETE |
+
+Example: the mapping `orders` writes `dw.dbo.orders` with `DeleteInsert`, and the run login of `dw` holds SELECT, INSERT and DELETE on it. The
+preflight finds nothing about the login's privileges, because `DeleteInsert` empties the scope and refills it and never updates a row. If the mapping
+is changed to `ChangeApply`, the preflight records "The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does."
+
 How much a live finding weighs:
 
 - Errors, because the first pass would fail on them:
   - a source or target table, or a mapped column, that is not there;
   - a filter or a read of the source that the database refuses;
-  - a run login that may not read the source, or may not insert, update or delete on the target;
+  - a run login that may not read the source, or may not make a change on the target that one of the mapping's writers makes;
   - change tracking, CDC, a trigger's shadow table or a logical slot that the reader needs and that is off. The finding carries the statements that
     turn it on, the source side of the provisioning plan;
   - a reader or writer that the connection's driver does not have;
@@ -599,16 +616,17 @@ How much a live finding weighs:
   that is not the target's primary key, and a reader or writer that matches rows on a key the tables do not give it.
 - Information: what is in order, and what was not checked on this engine.
 
-Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking`. In `prod` change tracking is on for the database and off on the
-table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the staged version records:
+Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking` and writes `dw.dbo.orders` with `ChangeApply`. In `prod`
+change tracking is on for the database and off on the table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the
+staged version records:
 
 ```
 error  crm: The reader 'MsSqlChangeTracking' needs the source crm.dbo.orders to be set up first: Enable Change Tracking on [dbo].[orders].
             The statements that do it (the source side's provisioning, which the set's `provision` task applies):
             ALTER TABLE [dbo].[orders] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF);
-error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders.
-error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders.
-error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders.
+error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders, which the writer 'ChangeApply' does.
 ```
 
 The console keeps the version staged and held. A DBA enables change tracking and grants the login its rights, and Ana runs **Re-check** before she
