@@ -44,6 +44,9 @@ public sealed class DeleteInsertWriter(SqlDialect dialect, ITableCatalog catalog
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>Empties the scope, then refills it: a DELETE and an INSERT, never an UPDATE.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Insert | WritePrivileges.Delete;
+
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
 
     public async Task<WriteResult> ApplyAsync(

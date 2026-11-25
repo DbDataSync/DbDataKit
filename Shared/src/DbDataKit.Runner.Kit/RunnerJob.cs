@@ -108,6 +108,17 @@ public abstract class RunnerJob<TInput, TProgress, TSlots> : RunnerJobBase
     /// <summary>How much of something was done; counted against the unit or step it is made in, and the run.</summary>
     protected void Count(Counter counter, long n) => Context.Count(counter, n);
 
+    /// <summary>
+    /// Hands the runner the answer a person waits for on a screen (the rows of a preview, a strategy's candidates), as JSON. The runner keeps it in memory for the console that started the run, which takes it
+    /// once; it is never written to the state, a step, the run's log or the audit, so it may hold rows of a table. A second answer replaces the first. A dry run answers too: an answer changes nothing.
+    /// </summary>
+    protected Task AnswerAsync<T>(T answer, CancellationToken ct)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(answer, RunContext.Json);
+        Context.Settings.Hooks?.Answered?.Invoke(json);
+        return Context.Backend.AnswerAsync(json, ct);
+    }
+
     /// <summary>What I am doing now: one line, replacing the last.</summary>
     protected void Status(string text) => Context.SetStatus(text);
 

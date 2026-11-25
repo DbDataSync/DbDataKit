@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ErrorBanner, InheritableToggle } from '@dbdatakit/shell'
 import { ProvisioningRunResult, useDraft, useProvisioningApply, useProvisioningPlan, type RunnerVersion } from '@dbdatakit/workspace'
+import { NewestPreflight } from './NewestPreflight'
 import { ReplicationProvisioningPanel } from './ReplicationProvisioningPanel'
 import type { ProvisioningConfig, ReplicationTaskConfig } from '../types'
 
@@ -18,7 +19,8 @@ export function stagedLine(staged: RunnerVersion | null | undefined, loading: bo
  * The Overview's Provisioning tab: what every table mapping of the replication may do to its target unless the mapping says otherwise, and below it
  * what that amounts to: the replication's plan, made by the Workspace offline from the draft's saved files and catalog cache, in the old tab's
  * layout. **Apply** on a mapping's side runs the set's task `provision` of the version a build of this draft staged on a Runner, through the
- * console as the person, as the Files area's Provisioning tab does.
+ * console as the person, as the Files area's Provisioning tab does. Under the plan, the newest `preflight` of a channel the draft was published to says
+ * what the live check found for each mapping.
  */
 export function ProvisioningTab({ project, id, replication, draft, setDraft, mappingLink, editable = true }: {
   project: string
@@ -89,6 +91,7 @@ export function ProvisioningTab({ project, id, replication, draft, setDraft, map
       {apply.isPending && <div className="hint" data-testid="provisioning-applying">Applying on the Runner…</div>}
       <ErrorBanner error={apply.error} />
       {apply.data && <ProvisioningRunResult run={apply.data} />}
+      <NewestPreflight project={project} id={id} replication={replication} />
     </div>
   )
 }

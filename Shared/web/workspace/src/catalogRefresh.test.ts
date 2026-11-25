@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readCatalogCache } from './catalogCache'
-import { defaultChannel, defaultRunner, differenceLine, lastRunnerRead, refreshOutcome, workspaceServerOf } from './catalogRefresh'
+import { defaultChannel, defaultRunner, differenceLine, lastRunnerRead, refreshOutcome, unboundLine, workspaceServerOf } from './catalogRefresh'
 
 const cache = (connections: string) => ['schema: catalog-cache/2', "generated_at: '2026-11-20T09:00:00Z'", 'connections:', connections, ''].join('\n')
 
@@ -97,5 +97,14 @@ describe('where a refresh reads by default', () => {
     expect(defaultRunner([{ id: 'r-1', name: 'runners-eu' }], 'gone')).toBe('r-1')
     expect(lastRunnerRead(cache(crm(id)), 'crm')).toEqual({ server: 'runners-eu', channel: 'dev' })
     expect(lastRunnerRead(cache(dw), 'dw')).toBeNull()   // read through a Gateway
+  })
+})
+
+describe('a channel that does not bind the slot', () => {
+  it('names Set up for development for every channel, production as any other', () => {
+    expect(unboundLine({ channel: 'dev', production: false, bound: false, bound_to: null }, 'crm')).toBe(
+      'dev does not bind the slot crm. Set up for development binds it with a login you type, or an administrator binds it on the Runner\'s Packages page (Bindings), then the read can be asked.')
+    expect(unboundLine({ channel: 'prod', production: true, bound: false, bound_to: null }, 'crm')).toBe(
+      'prod does not bind the slot crm. Set up for development binds it with a login you type, or an administrator binds it on the Runner\'s Packages page (Bindings), then the read can be asked.')
   })
 })

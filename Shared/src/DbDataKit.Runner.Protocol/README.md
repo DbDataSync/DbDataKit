@@ -23,6 +23,7 @@ The package is `dbdatakit.runner.v1`, a `.proto` in this project, versioned in i
 | Units | `BeginUnit(name, key)` answers `run` or `skip`; `UnitProgress`, `EndUnit(outcome)` |
 | Files, inbox, dead letters | `ClaimFile`, `CompleteFile`; `TakeInbox`, `CompleteInbox`, `ReleaseInbox`; `Reject` |
 | Reporting | `Report` (status, counts, logs and lineage, one-way and batched), `ResolveConnection` (a connection handle resolved by the runner, secrets never written to disk) |
+| Answer | `Answer` (one JSON document a person waits for, such as the rows of a preview: the runner keeps it in memory for the console that started the run, never in its state, a step or the log; a second answer replaces the first) |
 | Work | `EnqueueWork`, `ClaimWork`, `StartWork`, `FinishWork`, `ReleaseWork`, `IsCancelRequested`, `WorkState`: for an engine running as a task that takes work items itself (Sync's drain, Build's refresh; plan 28c) |
 
 The messages are the kit's calls with names and keys as strings on the wire; the typed definitions are the .NET kit's convenience. What each call means (steps, units, recovery) is in the `DbDataKit.Runner.Kit` README, and the sample jobs run unchanged through a real socket (`GrpcRunBackend` against the same stores as the in-process backend).

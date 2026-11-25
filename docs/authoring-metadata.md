@@ -9,10 +9,12 @@ connection at all. It applies to every kind of project; what a sync project chec
 **Catalog**, with the channel picker and the difference shown first, [below](#the-catalog-cache)) or from a Gateway's data source through the console
 (**Refresh from a Gateway** on the same tab); the offline readers of the
 cache (pickers, a Sync mapping's columns, the target side of Sync's provisioning plan, Build's import of models from the cache); the offline checks of a Sync draft against the cache ([The offline findings](#a-sync-project)); the Runner's slot binding
-test of a published version; a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
+test, of a published version or of a draft by its package, channel and slot ([below](#testing-a-connection)); a staged version's manual tasks (Sync's `provision`, Build's `status` and `check`, the Store's `deploy` dry run and `contract`
 plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discover` and `describe`, and the Runner route a console starts them with
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
-or a Gateway's data source ([below](#how-a-screen-asks-for-a-read)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
+the channel picker with **Set up for development** (the login stored, the draft's connection copied and the slot bound on the Runner), **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
+segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -26,7 +28,7 @@ also runs authors' build children and script compiles, the last place a login sh
 says what the run will be able to read, not what someone else's login sees. Ana's own login sees `hr.salaries` and the run's does not; a cache made with
 Ana's login would offer a table no run can read.
 
-A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a non-production channel, sent
+A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a channel the person picks, sent
 to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed or delegated from a browser to a server in any case.
 
 Who may ask: anyone with access to the project, in every channel, `prod` included. A read in `prod` is shown with a clear warning that it reads
@@ -60,8 +62,11 @@ POST /api/v1/metadata/dev/discover
 
 - The call needs the operator role and a console's token for a person. A call without `on_behalf_of` is refused with 400, and a call from a client
   that is not a console is refused with 403.
-- The package must declare the slot in the version the channel serves or in the one staged there; otherwise the answer is 404. The slot must be bound
-  in the channel; otherwise the answer is 409, which says to bind it on the Runner's Packages page (Bindings).
+- Which slots may be read depends on what the channel holds of the package:
+  - The channel holds a version of the package (served or staged): the slot must be declared by that version; otherwise the answer is 404.
+  - The channel holds no version of the package (a draft that was never published there): any slot the channel binds for the package is read, as if
+    nothing were published, whatever other channels hold.
+- The slot must be bound in the channel; otherwise the answer is 409, which says to bind it on the Runner's Packages page (Bindings).
 - The task reads with the connection's read login when the connection has one, else with its default login. The rule that keeps a non-production
   channel off production's connection applies to these reads as it does to the package's own runs.
 - The run is recorded as any run is: the audit line `runner.task.run` names the person (`on_behalf_of`) beside the console. A refused call is audited as
@@ -91,19 +96,33 @@ PostgreSQL, MySQL, MariaDB and Oracle.
 
 A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged in that channel.
 
+**What a screen offers before a read.** `GET /api/v1/metadata/channels?package=sales-dw` answers the channels the Runner serves, the bindings it holds
+for the package in each, and whether it holds a version of the package in any channel. The call needs the viewer role. A console asks it to list the
+channels a draft can be read in:
+
+```
+GET /api/v1/metadata/channels?package=sales-dw
+
+200 {"package": "sales-dw", "holds_version": false, "channels": ["dev", "prod"],
+     "bindings": [{"channel": "dev", "slot": "warehouse", "bound_to": "sales-dw-warehouse-dev"}]}
+```
+
 ### How a screen asks for a read
 
 A Workspace screen asks the console, and the console asks the Runner or the Gateway. The Workspace server only tells the console which package the
 project becomes and whether the person may read it. It never calls the Runner or the Gateway and never sees the login.
 
-The console has four routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
+The console has these routes, each under `api/workspace-catalog/{workspace}/{project}` (`{workspace}` is the Workspace server's id in the console):
 
 | Route | What the console does |
 | --- | --- |
-| `GET .../channels?runner=&connection=` | lists the channels of the project's package on that Runner, whether each binds the connection's slot, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
+| `GET .../channels?runner=&connection=` | lists every channel the Runner serves, whether each binds the connection's slot for the project's package, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
 | `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
 | `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
+| `POST .../describe` with `{"runner", "channel", "connection", "sql"}` | starts `describe` of the query for the person and waits up to 10 seconds for it ([below](#how-a-screen-asks-for-a-querys-columns)) |
+| `GET .../describe/{run}?runner=&channel=&connection=` | answers how the description started earlier stands |
 | `POST .../gateway-read` with `{"gateway", "connection", "data_source"?, "adopt"?}` | asks a Gateway for the tables and columns of one of its data sources, as the person ([below](#a-read-from-a-gateway)) |
+| `POST .../binding-test` with `{"runner", "channel", "connection", "role"?}` | asks the Runner's test of the connection's slot in the channel, as the person ([Testing a connection](#how-a-screen-asks-for-a-test)) |
 
 For each call, the console first asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person. The answer says
 whether the person may read the project and which package the project becomes on a Runner. The Workspace server's refusal is passed on with its own
@@ -138,6 +157,29 @@ POST /api/workspace-catalog/ws-1/crm-to-dw/read
 The screen compares the new entry with the cache it holds and shows the difference before it replaces the entry
 ([Refresh on request](#the-catalog-cache)).
 
+#### How a screen asks for a query's columns
+
+`POST .../describe` starts the built-in task `describe` on the Runner, for the person, in the channel given, with the login that channel binds to the
+connection's slot. The query is described and never run. The console waits up to 10 seconds, as for a read:
+
+- The description finished: 200, `"state": "done"`, the engine, the strategy the engine used, and `columns`, each with its `name`, its `type` as the
+  engine names it and `nullable`. Nothing else of the Runner's answer is passed on.
+- It is still going: 202, `"state": "running"`, the run's id and `link`. The screen asks `GET .../describe/{run}` until the state changes.
+- It failed: 422, `"state": "failed"`, and the Runner's reason in `error`. A query that writes fails here, with the read-only policy's reason.
+
+A query is at most 100,000 characters. The screen decides where the columns go: the kind's own file ([below](#the-catalog-cache)).
+
+Example: Ana describes a query over `crm` in `dev`.
+
+```
+POST /api/workspace-catalog/ws-1/crm-to-dw/describe
+{"runner": "runners-eu", "channel": "dev", "connection": "crm", "sql": "SELECT id, segment FROM dbo.accounts"}
+
+200 {"state": "done", "run_id": "01a3...", "link": "/servers/runners-eu/runs?run=01a3...", "channel": "dev", "production": false, "connection": "crm",
+     "engine": "sqlserver", "strategy": "SqlServerDescribeFirstResultSet",
+     "columns": [{"name": "id", "type": "int", "nullable": false}, {"name": "segment", "type": "nvarchar(20)", "nullable": true}]}
+```
+
 #### A read from a Gateway
 
 A connection that is a data source of a Gateway the console manages can be read through the Gateway's schema call
@@ -169,19 +211,111 @@ The screen shows the difference and replaces the entry on **Accept**, as for a R
 
 ## Before anything is published: Set up for development
 
-A read needs a binding in some channel, not a published version. When the project's Runner has no binding of the connection's slot in the channel the
-person picked, the Designer offers **Set up `crm` for development**: the person types the development login once, the Workspace sends the connection's copy
-and that login to the Runner and binds the slot in that channel (the same calls the console's Bindings page makes, as the Workspace's client). The login
-is sealed to the Runner group and kept in its store; it never reaches the Workspace's state, audit or log. Only a non-production channel is set up this
-way: the Workspace refuses `prod`, whose bindings stay the administrator's. The console's posture page lists the non-production bindings made from the
-Workspace.
+A read in a channel needs the connection's slot bound there. A person who works on a draft can give the project's Runner a development login for a
+connection. The console puts the draft's connection on the Runner with that login and binds the slot in the channel the person picks, so reads,
+**Test** and runs in that channel use it. The person needs the Runner's admin role for this; nobody binds the slot by hand afterwards.
 
-**Until Set up for development is built, a development login is bound by hand.** The project's package must be on the Runner, and the Runner's own
-bindings screen (its Packages page, Bindings) binds the slots of a version it holds: publish a build of the draft to the Runner's `dev` channel staged,
-not served (the Workspace's Builds tab, whose publish can also bind each slot to a connection); then an administrator binds the connection's slot in
-`dev` on that screen, the console sending the connection's copy with its secret references, and the development login's secret is put in the Runner's
-own store, never typed into the Workspace. Refresh then reads in `dev`; a channel that binds no slot is named by the channel picker with this way to bind
-one.
+A draft is read before it is ever published. The channel picker lists every channel the Runner serves, each with the binding it holds for the
+connection's slot. The bind works before a channel holds any version of the package, and the Runner's reads (`discover`, `describe`) and its binding
+test then read through the slot the channel binds. A channel that holds no version reads as if nothing were published, whatever other channels hold:
+Ben, who published `sales-dw` straight to `prod`, can still bind `warehouse` in `dev` and read it there.
+
+Example: Ana makes the build project `sales-dw` with the connection `warehouse`. Nothing of it is on the Runner `plant`, which serves `dev` and `prod`.
+On the tab **Catalog** the picker lists `dev` and `prod`, neither bound, and offers **Set up warehouse for development**. Ana sends her development login
+for `dev`; the picker then offers `dev`, bound to `sales-dw-warehouse-dev`. **Refresh** reads the tables of `warehouse` and **Test** connects, while
+`plant` still holds no version of `sales-dw`.
+
+### How a screen sends a development login
+
+A Workspace screen sends the login to the console, never to the Workspace server:
+`POST /api/workspace-dev-logins/<workspace server>/<project>` with the Runner, the channel, the project's connection, the draft, and the login the
+person typed (`user` is optional, `password` is required). The shell sends this route to the console even when the screen talks to its Workspace server
+through the relay, as it does for the reads above.
+
+What the console does with it:
+
+1. It checks the request: the channel, the connection, the password, the draft, and the user when one is sent. A user has 1 to 256 characters, no space
+   at either end and no control character.
+2. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. That request carries no part of
+   the login. The answer says whether the person may read the project and which package it becomes on a Runner.
+3. It reads the draft's file of the connection from the Workspace server as the person: `connections/<connection>.yaml` of a build or store project,
+   `config/connections/<connection>.yaml` of a sync project (`.yml` too). These requests carry no part of the login either. The console reads the file as
+   it is saved in the draft, so an edit the person has not saved is not in the copy.
+4. It writes the connection's copy from that file. The copy keeps the draft's file (the engine, the address, the extensions) and changes three things:
+   its name becomes `<package>-<slot>-<channel>`, its `read_login` and `write_login` are left out, and its `auth` names the user as plain text and the
+   password as a reference to the secret the Runner holds. When the person typed no user, the copy takes the user of the draft's `auth`. A file that
+   names neither is refused with 400, and a file that does not load, or a connection that is not a database, is refused with 422, before the Runner is
+   called.
+5. As the signed-in person, it stores the password in the Runner's secret store (`PUT /api/v1/secrets/{name}`), puts the copy
+   (`PUT /api/v1/connection-copies/{copy}`) and binds the connection's slot of the package in the channel to the copy
+   (`PUT /api/v1/bindings/{channel}/integration/{package}`). The Runner asks for its admin role to store a secret and keep a copy, and records the
+   person in its audit. The bind works before the Runner holds any version of the package.
+
+The password is the only secret stored. The user is not a secret: the console gives it back in its answer as plain text, so the screen can show it,
+and it is written in the copy's text. The copy holds references only, never a value.
+
+The Runner holds the password under a name of the kind `dev-login`, made of the package, the channel and the slot:
+`dbdatakit:runner:dev-login:<package>.<channel>.<slot>:password`. The copy names that secret. A person reading the Runner's secrets overview can tell
+from the name that the secret came from a Workspace screen, and for which package, channel and slot.
+
+The console accepts any channel, `prod` included. A person who holds a production login and the Runner's admin role can store it for `prod` the same
+way. The password of each channel is stored under its own name and each channel gets its own copy, so a login stored for `dev` is never used by `prod`.
+
+The login never reaches the Workspace server, so it is in none of its state, audit or log. A refusal of the Workspace server or of the Runner is passed
+on with its own words. A Runner that holds the bind for an administrator's confirmation (a channel that would use production's connection,
+[Channel bindings](channel-bindings.md)) answers 409 with `needsConfirmation`; the login and the copy are on the Runner already, and an administrator
+confirms the bind on the Runner's bindings screen. Sending the same set-up again changes nothing that is already there and finishes what was left.
+
+Example: Ana sets up the connection `crm` of the project `crm-to-dw` for `dev` on the Runner `runners-eu`, from her draft `ana-crm`.
+
+```
+POST /api/workspace-dev-logins/ws-1/crm-to-dw
+{"runner": "runners-eu", "channel": "dev", "connection": "crm", "draft": "ana-crm", "user": "ana_dev", "password": "..."}
+
+200 {"package": "crm-to-dw", "connection": "crm", "slot": "crm", "channel": "dev", "production": false,
+     "runner": "runners-eu", "runner_name": "runners-eu", "user": "ana_dev",
+     "secrets": {"password": "dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password"},
+     "file": "config/connections/crm.yaml", "copy": "crm-to-dw-crm-dev", "version": "...", "kind": "database", "bound": true,
+     "unresolved": [], "steps": ["Stored the login in runners-eu's secret store as dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password.", "..."]}
+```
+
+The copy `crm-to-dw-crm-dev` on `runners-eu`:
+
+```yaml
+schema: connection/1
+name: 'crm-to-dw-crm-dev'
+engine: sqlserver
+address:
+  host: crm.example
+  database: crm
+auth:
+  mode: sql
+  user: 'ana_dev'
+  password_secret: 'secret:dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password'
+```
+
+The answer names the secret the Runner now holds, never its value. `production` is `true` when the channel is `prod`. `steps` says what the console
+did, one sentence each, with a line starting `Warning:` when the copy names a reference the Runner cannot resolve or the draft's file names no address
+(a build project's connection file often names none; the run then cannot open the connection until the file names one and the set-up is sent again).
+
+A request without `draft` stores the password only, and the answer has the first lines above without the copy and the bind; nothing is bound until
+someone binds the slot on the Runner. Example: a script sends the Runner, `dev`, `crm` and a password with no `draft`, and the Runner holds
+`dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password` with no copy naming it.
+
+**Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel the Runner lists does not
+bind the connection's slot, `prod` as any other, or when the Runner lists no channel. The person picks the channel (the unbound ones, those other than
+`prod` first; `dev` when the Runner lists none), types the user and the password once, and presses **Send the login to `<Runner>`**. When the channel
+picked is `prod`, the form shows the warning a read in `prod` shows: "This reads production: the shape of crm as the prod channel of runners-eu binds it,
+with production's login. Only names and types are read, never a row." The person needs the Runner's admin role for `prod` as for any channel.
+
+The screen sends the login with the draft it shows, by the route above, and keeps nothing of the password. The picker then asks the Runner
+again and offers the channel, now bound, so **Refresh** and **Test** read there. An older Runner that cannot list its channels offers only the channels that hold
+a version of the package, and none for a package it holds no version of; there the screen shows the answer as "runners-eu holds the login of crm for dev, and dev reads crm through
+crm-to-dw-crm-dev.", with each warning under it.
+
+Example: Ben designs a sync from `erp`, a system with no development copy. The Runner `plant` serves only `prod`, which does not bind `erp`. The picker
+offers **Set up erp for development** with `prod` and the warning above; Ben types the production login he holds, and the console stores it under
+`dbdatakit:runner:dev-login:erp-sync.prod.erp:password` and binds the slot in `prod`. **Refresh** then reads the shape of `erp` in `prod`.
 
 ## The catalog cache
 
@@ -257,10 +391,12 @@ Example: on the tab **Catalog** of the draft of `crm-to-dw`, Ana picks `crm` and
 was read last week. She presses **Refresh**; the tab says "1 column added" and lists `crm.dbo.accounts.segment`. She presses **Accept**: the cache is an
 unsaved edit recorded as read from `dev` today, and the chrome counts one unsaved file until she saves.
 
-The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`) are what a kind's Designer offers on its screens.
+The same pieces (`ChannelPicker` and `CatalogRefresh` of `@dbdatakit/workspace`) are what a kind's Designer offers on its screens. Under **Refresh**,
+the tab also offers **Test `<connection>` in `<channel>`** when the picked channel binds the slot ([Testing a connection](#testing-a-connection)).
 
-**A query's columns** (**Describe**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a Build
-model's descriptor.
+**A query's columns** (**Describe columns**, a Build model's query or a Sync query source) go where the kind keeps them: a Sync mapping's column cache, a
+Build model's descriptor. The shared piece shows the columns with their types and hands them to the kind's screen on **Use these columns**; the kind
+writes them into its file as an unsaved edit.
 
 **A Gateway data source is a second way to fill the cache.** A connection that is already a data source of a Gateway the console manages can be read
 through the Gateway's schema call, with the Gateway's own read login ([A read from a Gateway](#a-read-from-a-gateway)). It is the natural source of a
@@ -291,7 +427,8 @@ Live, as a Runner run in a channel: discovery, a query's columns, the connection
 | --- | --- |
 | the shape of a connection | `catalog-cache.yaml`, committed in the draft |
 | a query's columns | the kind's own file |
-| check findings, test steps | the Runner's run record (step outputs, under its retention); a Designer card shows the newest run per channel with its time and link. Not committed: they describe a login at a moment, not the project |
+| check findings, test steps | the Runner's run record (step outputs, under its retention); the newest-check card shows the newest run per channel with its time and link ([below](#every-kind-uses-the-same-pieces)). Not committed: they describe a login at a moment, not the project |
+| the rows of a Sync mapping's **Preview rows** and the candidates of a strategy's **Try** | on the screen that asked, after the console took them from the Runner's memory ([below](#rows-and-trials-are-answered-never-kept)); never in the draft, a run record, a log or an audit |
 | a row or a value of a table, a sample, a statistic of values (minimum, maximum, distinct values, segment bounds), a login, a connection string, an address | nowhere; the cache's strict reader refuses them by key and by look |
 
 ## Testing a connection
@@ -303,6 +440,123 @@ neither shown nor kept.
 A test runs through the Runner in every case. It needs a binding in the channel, not a version: before anything is published it runs in a development
 channel once the slot is bound there (Set up for development, above), and after publish in any channel that binds the slot. The binding test reads the
 binding, never a staged or served version.
+
+### How a screen asks for a test
+
+A Workspace screen asks the console: `POST /api/workspace-catalog/<workspace server>/<project>/binding-test` with the Runner, the channel, the project's
+connection and optionally `role` (`default`, `read` or `write`; `default` when none is given). The draft needs no build.
+
+What the console does:
+
+1. It asks the Workspace server for the project (`GET /api/v1/projects/{project}`) as the signed-in person, as for a read. The answer says whether the
+   person may read the project and which package it becomes on a Runner.
+2. It asks the Runner's binding test for that package, the channel and the connection's slot
+   (`POST /api/v1/bindings/{channel}/integration/{package}/test`) as the signed-in person. The Runner asks for its admin role and records the person in
+   its audit.
+3. It records the test in its own audit as `build.binding_test`, under the person, with the project, the package, the channel and the slot.
+
+The Workspace server is asked only about the project, and it never calls the Runner. A refusal of the Workspace server or of the Runner is passed on in
+its own words: a person who may not read the project gets the Workspace server's refusal, and a person who is not an administrator of the Runner gets
+"This needs the admin role."
+
+The answer is 200 when the Runner tried the binding, whether the binding passed or failed. `ok` says whether it passed, `step` is the step the Runner
+stopped at, and `message` says why in words. `steps` lists the four steps in order, each `passed`, `failed` or `skipped` (not tried):
+
+- `binding`: the slot is bound in the channel.
+- `connection`: the Runner has the connection the binding names, and its document loads.
+- `login`: every secret the login names resolves on the Runner.
+- `connect`: the connection opens.
+
+Example: Ana tests the connection `crm` of the project `crm-to-dw` in `dev`, where an administrator bound the slot `crm` to the Runner's
+connection `crm_dev`. Nothing of the project is published yet.
+
+```
+POST /api/workspace-catalog/ws-1/crm-to-dw/binding-test
+{"runner": "runners-eu", "channel": "dev", "connection": "crm"}
+
+200 {"package": "crm-to-dw", "connection": "crm", "slot": "crm", "channel": "dev", "production": false, "role": "default",
+     "runner": "runners-eu", "runner_name": "runners-eu", "ok": true, "step": "connect", "connected": true, "bound_to": "crm_dev",
+     "message": "The slot 'crm' opened a connection through 'crm_dev'.",
+     "steps": [{"step": "binding", "state": "passed"}, {"step": "connection", "state": "passed"},
+               {"step": "login", "state": "passed"}, {"step": "connect", "state": "passed"}]}
+```
+
+In `prod`, where nothing binds the slot yet, the same call answers `"ok": false`, `"step": "binding"` and "The slot 'crm' is not bound in channel
+'prod'.", with the other three steps `skipped`. The answer never holds a row, an address or a login.
+
+A test of a version the console deployed goes through the deploy instead (`POST /api/deploys/{id}/binding-test`,
+[Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). Both ask the same test of the Runner.
+
+## Rows and trials are answered, never kept
+
+Two reads of a Sync project show values of a table: **Preview rows** of a mapping and **Try** of a segmenting strategy. Each is a manual task of the
+replication set's package, run on the Runner. The console starts it as the signed-in person, and the result is the run's answer: the Runner holds it in
+memory, the console takes it once and passes it to the screen, and nothing keeps it.
+
+| Task | What it reads | What it answers |
+| --- | --- | --- |
+| `preview` | the mapped source columns of the mapping's source table, with the mapping's filter (every column of a query source), with the run login the channel binds to the source's slot; 20 rows, or up to 100 when asked | the columns, the rows, and whether more rows follow |
+| `try-strategy` | a segmenting strategy run over a mapping and a column as a reload runs it: its SQL on the source or the target with the run login the channel binds, a DuckDB strategy in memory, a script with both connections | every candidate, selected or not: its label, the column, the bounds and whether it is selected |
+
+The strategy is either one the replication has (the input `name`) or the one the person is editing, sent as JSON (the input `strategy`), so it can be
+tried before it is saved. The screen also sends the mapping's file as the draft has it, unsaved edits included (the input `mapping_text`). Both tasks
+read that mapping with the deployed version's replication, connections and drivers, so a filter typed a moment ago is in the rows. A task started
+without `mapping_text` reads the mapping the version has. A mapping file that does not load fails the run, naming the file and the key. The run's
+record on the Runner keeps the mapping's text as one of its inputs. A strategy's SQL is the author's own and runs with the login a reload uses, so it can do what that login may do.
+
+### How a screen asks for rows
+
+The screen takes the newest deploy of the draft to a Runner and asks the console to run the task and wait for its answer:
+
+```
+POST /api/deploys/01a2.../runs
+{"task": "preview", "answer": true, "inputs": {"replication": "orders", "mapping": "dbo.orders", "rows": "20",
+                                              "mapping_text": "schemaVersion: 1\nname: dbo.orders\nsources:\n- schema: dbo\n  table: orders\n  filter: \"region = 2\"\n..."}}
+
+200 {"state": "done", "run_id": "01a3...", "runner": "r-1", "runner_name": "runners-eu", "channel": "dev", "production": false,
+     "link": "/servers/r-1/runs?run=01a3...",
+     "answer": {"replication": "orders", "mapping": "dbo.orders", "connection": "crm", "source": "crm.dbo.orders",
+                "columns": ["id", "name"], "rows": [[1, "Ana"], [2, "Ben"]], "more": true, "limit": 20}}
+```
+
+What the console answers:
+
+- The run answered within 10 seconds: 200, `"state": "done"`, and `answer`.
+- The run is still going: 202, `"state": "running"`, the run's id and `link`. The screen asks `GET /api/deploys/{id}/runs/{run}/answer` until the
+  state changes.
+- The run failed: 422, `"state": "failed"`, and the reason in `error`. When the database refused the read or the strategy's SQL, the reason has the
+  database's own words, which can quote a value of the table. Those words are in the answer only; the run's record says that the read failed and that
+  the reason went to the person who asked.
+- The answer was taken already, or it waited more than 10 minutes: 410, `"state": "gone"`. Ask again.
+
+The person needs what every run call needs ([Runs of a deployed build](publishing.md#runs-of-a-deployed-build)): to read the project on the Workspace
+server, and the operator role on the Runner. The console's audit names the run, never a value.
+
+A preview and a trial run in every channel the draft was deployed to, `prod` included, for the same person and role. In `prod` the rows are
+production's, read with the login production binds, so the screen warns above the answer: "This reads rows of production (prod on plant) with the
+login production binds. The rows are shown here and kept nowhere." A strategy's **Try** in `prod` runs its SQL on production the same way.
+
+### What the Runner does with an answer
+
+The task hands its answer to the Runner over its socket (the protocol's `Answer`). The Runner keeps it in the memory of the process that ran the task:
+
+- It gives it once, to the console that started the run, for the same person: `GET /api/v1/runs/{id}/answer?on_behalf_of=<person>`. Ben cannot take
+  the rows of a preview Ana started.
+- It forgets an answer nobody took after 10 minutes. One answer is at most 2 MiB of JSON, and a Runner holds at most 64 MiB of answers, forgetting the
+  oldest first.
+- It never writes an answer to its state, a step, the run's log or the audit. The run record keeps the inputs (the mapping's text, the strategy's SQL) and
+  the outcome.
+
+In a group of Runners, the answer is held by the instance that ran the task. A call that reaches another instance answers `gone`.
+
+Example: Ana edits the strategy `by-month` of the replication `orders` on the Bulk Load sub-tab. She picks the mapping `dbo.orders`, types the column
+`placed_at` and presses **Try**. The Runner `runners-eu` runs her SQL on `crm` with the login `dev` binds, and the screen shows "12 candidates of by-month
+over placed_at, 3 selected." with each candidate's bounds. She changes the query, presses **Try** again, and then **Update** and **Save settings**.
+Nothing of the candidates is in the draft or on the Runner.
+
+Example: version 3 of `crm-to-dw` on `dev` has the mapping `dbo.orders` with no filter. Ana types the filter `region = 2` on the mapping and, before she
+saves it, presses **Preview rows**. The screen sends the mapping's file with her filter, and the rows shown are only those of region 2, read with the
+connection `crm` of version 3 and the login `dev` binds. The run's record on `runners-eu` keeps the mapping's text she sent.
 
 ## Checking before production: `preflight`
 
@@ -318,7 +572,30 @@ task on the version the channel serves. [Preflight before activation](publishing
 ## Every kind uses the same pieces
 
 The built-in package, the cache, the channel picker, **Refresh**, **Describe**, **Test** and the newest-check card are one implementation
-(`DbDataKit.Authoring`, `Shared/web/workspace`) that each kind's Designer and Files area use.
+(`DbDataKit.Authoring`, `Shared/web/workspace`) that each kind's Designer and Files area use. The screens' pieces are exported by `@dbdatakit/workspace`:
+
+| Piece | What it does | Where it shows today |
+| --- | --- | --- |
+| `useChannelChoice`, `ChannelPicker` | the Runner and the channel to read in; offers **Set up for development** where a channel does not bind the slot | every piece below |
+| `CatalogRefresh` | **Refresh** of a connection or one table, the difference shown before **Accept** | the tab **Catalog**; the Sync Designer's Refresh buttons |
+| `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog**; **Test** on each endpoint card of the Sync Designer |
+| `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | the Sync Designer's card **Query columns** of a mapping whose source is a query |
+| `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
+| `usePublishedChannels`, `useNewestRun` | the channels the draft was published to, and the newest run of a task in one of them | the newest-check card; the Sync Designer's **Newest preflight** on the Provisioning sub-tabs |
+| `useRunAnswer`, `RunAnswerStatus` | a manual task of the version the draft's newest deploy put on a Runner, run for the person through the console, and its answer ([above](#rows-and-trials-are-answered-never-kept)); a run longer than 10 seconds is followed by its link | the Sync Designer's **Preview rows** and **Try** |
+
+The newest-check card reads the console's deploys of the draft (`GET /api/deploys?workspace_server=&project=&workspace=`), takes the newest one of each
+Runner and channel, and asks the console for the newest run of `preflight` there (`GET /api/deploys/{id}/runs?task=preflight&step=preflight-findings`,
+[Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). The run may be of an older version than the deploy's: the preflight a deploy ran
+before activation, or a later **Re-check**. A Re-check on the Runs tab replaces the card's run.
+
+The card never shows a **Test** of a connection. The Runner answers a test at once and records it in its audit, so it is not a run the console can
+find. The steps of a test are shown where **Test** is pressed. A login that fails shows on the card as an error of the next `preflight`, which reads
+every connection with the logins the channel binds.
+
+Example: Ana published `crm-to-dw` to `dev` and `prod` of `runners-eu`. The Runs tab shows two cards. The card of `prod` says "preflight of version 3,
+succeeded, finished 2026-11-23T08:00:05Z", links the run, and lists "error crm: Change tracking is off on dbo.orders.". The card of `dev` says "No
+preflight has run in dev yet."
 
 - **Build**: discovery of source tables into the cache, then import of models from it; its target's state is its `preflight`.
 - **Store**: browses nothing; a model's storage connection is tested and checked by its `preflight`.
@@ -330,7 +607,8 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 **Refresh catalog** with the channel picker, which runs `discover`. The Table Mappings overview lists the source's cached tables; **Create mappings**
 writes a mapping file per ticked table from the cache (columns, types, key; the target's types inferred by Sync's mapping column reader over the cache).
 **Refresh** on that overview reads the connection again, on a mapping's cached-metadata card one table, each showing the difference first. **Custom
-query, not a table**, then **Describe columns**, writes the query's columns into the mapping's column cache.
+query, not a table**, then **Describe columns** on the card **Query columns** of Column Mapping, writes the query's columns into the mapping's column
+cache (`sourceColumns`: each column's name, type and whether it may be null; a query reports no key).
 
 The pickers, the overview and Column Mapping read the databases, tables and columns from the draft's `catalog-cache.yaml` in the browser
 (`catalogCache.ts`), fetched through the Workspace's existing route that reads a draft's file; a refresh not yet saved is held in the browser as an
@@ -357,7 +635,7 @@ for dev**.
 | Check | Offline | Live |
 | --- | --- | --- |
 | the table exists, or provisioning can create it | the provisioning plan from the cache, its create or alter statements shown | the plan again from the live catalog, as `provision` plans before it applies |
-| the login can insert, update and delete; for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
+| the login can make the changes the mapping's writers make (insert, update, delete); for provisioning, create in the schema and alter the table | no | the engine's privilege functions on the table and the schema; never a trial write |
 | types are compatible with the mapping | each source column's inferred type against the target column's | the same, read again |
 | the keys agree (the mapping's key against the target's primary or unique key; no key column nullable) | yes | yes |
 | where the replication's state is kept (the `tracking:` schema on the target) | the configured place is named | the schema and tables exist or the login may create them |
@@ -370,12 +648,29 @@ The preflight writes nothing. It reads the catalogs. It asks the engine whether 
 PostgreSQL `has_table_privilege`, `has_schema_privilege` and the table's owner). It runs the read `SELECT <mapped columns> FROM <table> WHERE
 (<filter>) AND 1 = 0`. It makes the provisioning plans as `provision` makes them, and never applies them.
 
+Which privileges the preflight asks for on the target: each writer says which changes it makes to the target table, and the preflight asks only for
+those. It asks for each writer a pass of the mapping runs: the change processing's, the bulk load's, and the reconcile's when reconcile is on.
+
+| Writer | Asks for |
+| --- | --- |
+| `ChangeApply`, `MsSqlMerge`, `MsSqlMergeReconcile` | INSERT, UPDATE and DELETE |
+| `DeleteInsert`, `MsSqlDeleteInsert`, `MsSqlBulkInsert` | INSERT and DELETE |
+| `Scd2` | INSERT and UPDATE |
+| `Snapshot` | INSERT |
+| `KeyReconcileDelete` | DELETE |
+| `KeyReconcileScd2Close` | UPDATE |
+| a writer of a driver the project carries | INSERT, UPDATE and DELETE |
+
+Example: the mapping `orders` writes `dw.dbo.orders` with `DeleteInsert`, and the run login of `dw` holds SELECT, INSERT and DELETE on it. The
+preflight finds nothing about the login's privileges, because `DeleteInsert` empties the scope and refills it and never updates a row. If the mapping
+is changed to `ChangeApply`, the preflight records "The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does."
+
 How much a live finding weighs:
 
 - Errors, because the first pass would fail on them:
   - a source or target table, or a mapped column, that is not there;
   - a filter or a read of the source that the database refuses;
-  - a run login that may not read the source, or may not insert, update or delete on the target;
+  - a run login that may not read the source, or may not make a change on the target that one of the mapping's writers makes;
   - change tracking, CDC, a trigger's shadow table or a logical slot that the reader needs and that is off. The finding carries the statements that
     turn it on, the source side of the provisioning plan;
   - a reader or writer that the connection's driver does not have;
@@ -384,16 +679,17 @@ How much a live finding weighs:
   that is not the target's primary key, and a reader or writer that matches rows on a key the tables do not give it.
 - Information: what is in order, and what was not checked on this engine.
 
-Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking`. In `prod` change tracking is on for the database and off on the
-table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the staged version records:
+Example: the replication `orders` reads `crm.dbo.orders` with `MsSqlChangeTracking` and writes `dw.dbo.orders` with `ChangeApply`. In `prod`
+change tracking is on for the database and off on the table, and the run login of `dw` holds only `SELECT` on `dbo.orders`. The preflight of the
+staged version records:
 
 ```
 error  crm: The reader 'MsSqlChangeTracking' needs the source crm.dbo.orders to be set up first: Enable Change Tracking on [dbo].[orders].
             The statements that do it (the source side's provisioning, which the set's `provision` task applies):
             ALTER TABLE [dbo].[orders] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF);
-error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders.
-error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders.
-error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders.
+error  dw:  The run login of 'dw' may not INSERT into dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not UPDATE dw.dbo.orders, which the writer 'ChangeApply' does.
+error  dw:  The run login of 'dw' may not DELETE from dw.dbo.orders, which the writer 'ChangeApply' does.
 ```
 
 The console keeps the version staged and held. A DBA enables change tracking and grants the login its rights, and Ana runs **Re-check** before she
@@ -456,10 +752,12 @@ primary key. The check warns on the mapping: "The writer 'ChangeApply' would ref
 has no primary key". Add the key to the target and refresh the cache, or read the whole table each pass with `BatchReload` and write with
 `DeleteInsert`, which needs no key.
 
-**The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored.
+**The connection test** is each endpoint card's **Test** (above). The old Sync server's test showed up to 20 sample rows; that is not restored. A
+mapping's rows are shown by **Preview rows** under the source filter of the mapping's editor, and a segmenting strategy's candidates by **Try** in its
+editor ([Rows and trials are answered, never kept](#rows-and-trials-are-answered-never-kept)).
 
 **Where it shows.** The Check tab's count includes the offline findings; the Provisioning sub-tabs show the offline plan and the newest `preflight` run of
-the chosen channel (time, run link, findings per mapping); the publish panel runs `preflight` on the staged version before activation. Nothing live is
+the chosen channel (time, run link, findings per mapping, the card **Newest preflight**); the publish panel runs `preflight` on the staged version before activation. Nothing live is
 committed into the draft; the cache and a query's column cache are.
 
 Example: Ana maps `crm.dbo.orders` with the change-tracking reader, against `dev`, where change tracking is on, and publishes to `prod`, where it is off on

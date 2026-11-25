@@ -84,6 +84,10 @@ service RunnerApi {
   rpc QualityStatus(QualityCheckRef) returns (QualityStatusReply);
   rpc QualityRecord(QualityRecordRequest) returns (QualityStatusReply);
   rpc QualityBlocks(QualityBlocksRequest) returns (QualityBlocksReply);
+
+  // the answer of a run a person waits for on a screen (rows of a preview, a strategy's candidates): kept in the runner's memory for the console that
+  // started the run, never in the state, a step, the log or the audit (additive)
+  rpc Answer(AnswerRequest) returns (AnswerReply);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -752,3 +756,12 @@ message QualityBlocksRequest {
 message QualityBlocksReply {
   repeated QualityStatusMessage blocks = 1;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// the answer of a run
+
+message AnswerRequest {
+  string json = 1;   // one JSON document; a second answer of the same run replaces the first
+}
+
+message AnswerReply {}

@@ -88,6 +88,42 @@ The posture confirmation (above) is the Runner's own: `PUT /api/v1/bindings/<cha
 
 A channel can be **emptied** (`DELETE /api/v1/bindings/<channel>/integration/<package>/<slot>`, `runner.package.unbind`, the posture choice it held taken back), refused (409) while the version the channel serves or has staged declares the slot. Not built: a runner screen of the copies beside the Bindings page, sending a secret **value** from the Bindings page (the command line does it).
 
+### Putting a connection on a Runner for a channel from code
+
+A service of the suite that sets up a connection on a Runner for a channel uses `RunnerChannelConnections` (`DbDataKit.Deploy`). It makes three of
+the Runner's own calls through a link the caller gives. The console gives the link it makes as the signed-in person (`ConsolePromotions.LinkFor`), so
+the Runner checks that person's roles and names the person in its audit and in the copy's `sent_by`.
+
+- `SendLoginAsync` stores a login's value in the Runner's secret store (`PUT /api/v1/secrets/<name>`, the Runner's admin role).
+- `PutCopyAsync` puts a connection's copy under a name (`PUT /api/v1/connection-copies/<name>`, admin role). The answer lists each secret reference of
+  the copy and whether it resolves on the Runner.
+- `BindAsync` binds one slot of a package in a channel to that name (`PUT /api/v1/bindings/<channel>/integration/<package>`). The Runner takes the bind
+  before the package is deployed there, so a slot can be set up before the first deploy. A bind that would make a non-production channel use
+  production's connection comes back unbound, with the scopes to confirm; the same call with those scopes in `confirm` binds it.
+
+`SetUpAsync` does the three in that order. The login is stored before the copy, so the Runner can resolve the copy's reference to it when it checks the
+copy. A copy that names a reference the Runner cannot resolve is kept and bound, and the steps carry a warning that names the reference. A refusal of
+the Runner stops the set-up at that step, with the Runner's words and status. The login and the copy that were already sent stay on the Runner, and
+running the same set-up again finishes it.
+
+In the console, `ConsoleChannelConnections` finds the registered Runner, makes the link as the signed-in person and runs the set-up. It answers 200
+with the copy's version and the steps, or 409 with `needsConfirmation`.
+
+Example: Ana, an administrator of the Runner `runners-eu`, sets up the write slot `target` of the package `crm-to-dw` in `test`. The console stores her
+password as `dbdatakit:runner:dev-login:crm-to-dw.test.target:password` and puts the copy `crm-to-dw-target-test`:
+
+```yaml
+schema: connection/1
+name: crm-to-dw-target-test
+engine: postgres
+connection_string: 'Host=dw.example;Database=dw_test'
+auth: { mode: sql, user: ana_test, password_secret: 'secret:dbdatakit:runner:dev-login:crm-to-dw.test.target:password' }
+```
+
+It then binds `target` in `test` to `crm-to-dw-target-test`. The Runner's Packages page shows the binding for `test`, and `GET connection-copies`
+lists the copy as used by `crm-to-dw`, `test`, `target`. A person who is only a viewer on the Runner is refused (403) at the first call, and nothing
+is stored.
+
 ## Compare, adopt and publish, and the combined posture list (IX25)
 
 The Bindings page ends with two panels, both over `ConsoleBindingCompare` (`DbDataKit.Server`), which has **no path of its own** to another server: every read and write of a Runner or a Gateway is plan 30's shared route (`DefinitionsClient` over the link `ConsolePromotions` makes **as the signed-in person**, so the server decides what the person may do and records the person as the actor).

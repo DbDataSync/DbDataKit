@@ -56,8 +56,8 @@ How the four services fit together, what runs where, and the changes planned. De
 Example: an author edits a build project on a Workspace screen and presses Publish. The control service asks the Workspace service for the built
 package, then deploys it to the Runner group as that person. The Workspace service never talks to the Runner.
 
-Example: an author sets up a development login for a connection. The screen sends the login through the relay to the Runner service, which holds it.
-The Workspace service is only told which binding now exists.
+Example: an author sets up a login for a connection. The screen sends the login to the control service, which stores it in the Runner service's
+secret store as that person. The Workspace service never sees the login.
 
 ## What runs where
 
@@ -141,10 +141,11 @@ Each service's program only runs and configures its service. Everything else is 
 
 ## Planned architecture changes
 
-- **Planned.** The Workspace service stops calling Runners and Gateways. Today it publishes packages, starts runs, reads catalogs and holds publisher
-  keys for them. The control service will do all of that, pulling the built package from the Workspace service.
+- **In progress.** The Workspace service stops calling Runners and Gateways. The control service now deploys builds, starts and reads runs, tests
+  connections and reads catalogs as the person, pulling the built package from the Workspace service. Still to go: app previews, which the Workspace
+  service still sends to a Gateway with its own publisher key, and then the publisher keys and the Workspace service's clients of the Runner and the
+  Gateway.
 - **Planned.** The Workspace service runs with an outbound allow-list of package sources and git remotes only.
-- **Planned.** Development logins go from the screen through the relay to the Runner. Today the plan has the Workspace service send them.
 - **Planned.** DDL (creating, altering or dropping tables) runs as a Runner task that a person starts from the console. The control service starts it
   on the Runner after the person approves the exact statements. Today the Runner accepts these tasks only when the Workspace service starts them; that
   goes away.

@@ -16,12 +16,17 @@ namespace DbDataKit.Runner.Api;
 /// reads the database the channel binds to the package's slot, for the person named. Who may: a console, for a person it signed in (an operator, as starting any task); a call that names no person, and a client that is not a console, are
 /// refused. Any channel the runner serves, production included: the screen that asks warns first.
 /// <list type="bullet">
-/// <item>The package must declare the slot in the channel (in the version it serves or the one staged there), and the channel must bind it: 404 and 409 otherwise, naming what is missing.</item>
+/// <item>A channel that holds a version of the package (served or staged) reads only a slot that version declares: 404 otherwise. A channel that holds no version of it (a draft never published there, whatever other channels
+/// hold) reads any slot it binds for the package. Either way the channel must bind the slot: 409 otherwise, naming what is missing.</item>
 /// <item>The login is the connection's read login when it has one, else its default one (<c>role</c> in the run's inputs); the slot is resolved through the package's binding when the run starts, so the production-binding rule holds.</item>
 /// <item>The built-in package is installed in the channel from the files beside the program (<see cref="BuiltInPackages"/>) the first time, and again when this runner's files differ from what the channel serves.</item>
 /// <item>The answer is 202 with the run's id; the result is the run's step named after the task, keyed by the run id (<c>GET .../tasks/dbdatakit-metadata/{channel}/{task}/steps/{task}?key={run id}</c>, then its payload for <c>discover</c>).</item>
 /// </list>
 /// A start is audited as any run is (<c>runner.task.run</c>, with the person); a refusal is audited as <c>runner.metadata.read</c>, never with the query or another input's value.
+/// <para>
+/// <c>GET {prefix}/metadata/channels?package=crm-sync</c> (a viewer): what a screen offers before a read of a package's slot, whether or not this runner holds a version of the package: the channels this runner serves, the bindings it holds
+/// for the package in each, and whether it holds a version (<c>{"package", "holds_version", "channels": ["dev", "prod"], "bindings": [{"channel", "slot", "bound_to"}]}</c>).
+/// </para>
 /// Design: docs/authoring-metadata.md#the-built-in-package-dbdatakit-metadata
 /// </summary>
 public static class RunnerMetadataApi
@@ -41,6 +46,21 @@ public static class RunnerMetadataApi
         var root = prefix.TrimEnd('/');
         var audit = new AuditLog(state, serviceId);
         var installs = new BuiltInInstaller(state, Path.Combine(builtinDirectory, MetadataPackage.Name));
+
+        app.MapGet($"{root}/metadata/channels", (HttpContext context) =>
+        {
+            if (!callerOf(context).Authorize(ServerRole.Viewer).Allowed) return Results.Json(new { error = "This needs the viewer role." }, statusCode: StatusCodes.Status403Forbidden);
+            var package = context.Request.Query["package"].ToString();
+            if (!PackageManifestValidator.NameRule.IsMatch(package)) return Results.Json(new { error = "Name the package: `package` (lower-case letters, digits, - and _)." }, statusCode: StatusCodes.Status400BadRequest);
+            var publisher = new RunnerPublishing(state).Publisher;
+            return Results.Json(new JsonObject
+            {
+                ["package"] = package,
+                ["holds_version"] = new DefinitionStore(state).Versions(RunnerPublishing.Kind, package).Count > 0,
+                ["channels"] = new JsonArray([.. engine().Channels.Order(StringComparer.Ordinal).Select(c => (JsonNode)JsonValue.Create(c))]),
+                ["bindings"] = new JsonArray([.. publisher.BindingsOf(RunnerPublishing.Kind, package).Select(b => (JsonNode)new JsonObject { ["channel"] = b.Channel, ["slot"] = b.Slot, ["bound_to"] = b.BoundTo })]),
+            });
+        });
 
         app.MapPost($"{root}/metadata/{{channel}}/{{task}}", async (string channel, string task, HttpContext context) =>
         {
@@ -114,12 +134,16 @@ public static class RunnerMetadataApi
     internal static string RoleOf(ConnectionDefinition? connection) =>
         connection is not null && connection.LoginFor(LoginRole.Read) is null && connection.ConnectionStringSecret is null ? "default" : "read";
 
-    /// <summary>Whether the version the channel serves, or the one staged there, declares the slot.</summary>
+    /// <summary>
+    /// Whether the slot may be read in the channel: the version the channel serves, or the one staged there, declares it. A channel that holds no version of the package declares nothing yet: a draft's slot is bound before its first
+    /// version there, and the binding alone says what is read, so any slot passes here and the binding check that follows decides.
+    /// </summary>
     private static bool DeclaresSlot(StateDatabase state, RunnerPublishing publishing, string package, string channel, string slot)
     {
         var store = new DefinitionStore(state);
-        foreach (var head in publishing.Publisher.HeadsOf(RunnerPublishing.Kind, package).Where(h => h.Channel == channel))
-            foreach (var version in new[] { head.Active, head.Staged }.OfType<int>())
+        var held = publishing.Publisher.HeadsOf(RunnerPublishing.Kind, package).Where(h => h.Channel == channel).SelectMany(h => new[] { h.Active, h.Staged }.OfType<int>()).Distinct().ToList();
+        if (held.Count == 0) return true;
+        foreach (var version in held)
                 if (store.Get(RunnerPublishing.Kind, package, version) is { } stored
                     && PackageManifestReader.Load(stored.Content, $"{package}@{version}") is { Ok: true, Manifest: { } manifest }
                     && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))

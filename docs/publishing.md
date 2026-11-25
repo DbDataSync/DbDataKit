@@ -36,7 +36,10 @@ and serves what the build holds; it never calls the Runner or the Gateway.
 1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
    kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
    Store build; a `note`).
-2. The console checks that the person holds the approver role on the Workspace server, and that the target is a registered Runner or Gateway.
+2. The console asks the Workspace server for the project as the person (`GET /api/v1/projects/{project}`). The Workspace server answers a person who
+   may read the project: one with the viewer role, or a role above it, on the project or on the whole server. Otherwise the deploy is refused in the
+   Workspace server's words: "Workspace does not let you read the project 'orders': This needs the viewer role." The console also checks that the
+   target is a registered Runner or Gateway. The console asks for no other role. The target decides what the person may do there (step 6).
 3. The console reads `GET /api/v1/projects/{project}/workspaces/{workspace}/builds/{build}/contents` from the Workspace server, as the person. The
    answer has the build record and the items the build holds to send. A build that did not succeed is refused: "This build is failed, so there is
    nothing to publish. Only a build that succeeded is published."
@@ -45,11 +48,14 @@ and serves what the build holds; it never calls the Runner or the Gateway.
 5. The console reads each file of the item by its SHA-256 (`GET .../builds/{build}/files/{sha256}`), lays the files out under their paths, and refuses a
    file whose bytes do not have the hash or the size the build listed.
 6. The console sends the item to the target over the target's publish API, through the relay as the person. The target decides what the person may
-   do there and records them as the publisher. Each version is signed with the console's publisher key over its manifest, its files and the build
-   record, when the target trusts that key (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the
-   deploy before anything is sent, and the message names the key.
+   do there: a Runner or a Gateway takes a version from a person who holds its publisher or administrator role, and records them as the publisher.
+   Each version is signed with the console's publisher key over its manifest, its files and the build record, when the target trusts that key
+   (`GET /api/v1/trust/{kind}`). A target that requires signatures and does not trust the key refuses the deploy before anything is sent, and the
+   message names the key.
 7. The console keeps the deploy (the `deploys` state module) and audits it as `build.deploy`. `GET /api/deploys?workspace_server=&project=&workspace=&build=`
-   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words.
+   lists the deploys of a Workspace server's builds, newest first. A refused deploy is kept too, with the target's words. Anyone signed in to the
+   console can read this list, for every project: each deploy shows its build record (the commit, the workspace, what the validators found), the
+   Runner, the channel and the version. The calls on one deploy are checked against the project ([Runs of a deployed build](#runs-of-a-deployed-build)).
 
 What a build holds to send, by the routes of its kind:
 
@@ -75,6 +81,10 @@ POST /api/deploys
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
 
+Example: Ben may read the project `orders` on the Workspace server and nothing else there. On the Runner `jobs` he holds the publisher and operator
+roles. He serves a build of `orders` in `dev`, and the Runner records him as the publisher. On the Runs tab he runs the task `load` of the version
+`dev` serves. **Test** of a connection's login is refused, in the Runner's words, because it needs the administrator role on `jobs`.
+
 ### Preflight before activation
 
 A package can declare a read-only manual task named `preflight`. It reads the databases the package's slots bind and records what would stand in the way
@@ -87,7 +97,7 @@ What each kind's preflight reads:
 | --- | --- | --- |
 | A Build project's refresh package | `connection status` of each connection the plans use (the input `connections` lists them by default) | An object of the project is not on the connection, the deployed structure is behind the project, a deploy step is blocked, or the status could not be read. An object changed outside dbdatabuild is a warning. |
 | A Store model's package | The `deploy` task's dry run, then the `contract` task's plan | The deploy needs a change it does not make (a column removed or retyped). What the contract would drop is information, and a blocked contract a warning, because the contract is approved on its own. |
-| A Sync set | Each mapping of each enabled replication, read with the run login of its slots: the source and target tables and columns, the filter (a read that returns no row), the logins' privileges, the change capture the reader needs, types, keys and the state table on the target ([A sync project](authoring-metadata.md#a-sync-project)) | A table or column the mapping names is missing, the filter does not compile, a login may not read the source or write the target, the reader's change capture is off, or a reader or writer is not one the driver has. A type that may not fit and a key that does not agree are warnings. |
+| A Sync set | Each mapping of each enabled replication, read with the run login of its slots: the source and target tables and columns, the filter (a read that returns no row), the logins' privileges, the change capture the reader needs, types, keys and the state table on the target ([A sync project](authoring-metadata.md#a-sync-project)) | A table or column the mapping names is missing, the filter does not compile, a login may not read the source or make a change on the target that the mapping's writers make, the reader's change capture is off, or a reader or writer is not one the driver has. A type that may not fit and a key that does not agree are warnings. |
 
 When the control service deploys a Runner package to the channel `prod` with `serve`, and the package declares `preflight`:
 
@@ -161,21 +171,27 @@ and the version, so the Workspace server is never asked where a build went and n
 - The **Provisioning** tab of a Sync project: **Apply on the Runner** runs the set's task `provision` of the deployed version.
 - The **Runs** tab of a Sync or Build project: **Run now** runs a task of the version the channel serves, and **Test** tries the login bound to a
   connection's slot.
+- The Sync Designer: **Preview rows** of a mapping and **Try** of a segmenting strategy run the set's tasks `preview` and `try-strategy` and show
+  their answer.
 - The **Deploy** tab of a Store project: **Dry run** builds the draft, has the console stage the model's package (`POST /api/deploys` with the
   `model` and the slot `storage` bound), then runs its task `deploy`; **Deploy** and the contract step run on that same deploy.
 
 Each tab takes the newest deploy of a build of the draft that the Runner took (`GET /api/deploys?workspace_server=&project=&workspace=`). A refused
 deploy and a deploy to a Gateway are skipped. When no deploy put a version on a Runner, the tab says to publish the build first.
 
-The calls name the deploy by its id. The console calls the Runner as the signed-in person, so the Runner checks that person's roles there too:
+The calls name the deploy by its id. For each call the console first asks the Workspace server for the deploy's project as the person, as a deploy
+does (step 2): a person who may not read the project is refused in the Workspace server's words. The console then calls the Runner as the signed-in
+person, and the Runner checks that person's roles there:
 
 | Call | Role on the Workspace server | Role on the Runner | What it does |
 | --- | --- | --- | --- |
-| `POST /api/deploys/{id}/runs` | approver | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. |
-| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
-| `POST /api/deploys/{id}/binding-test` | approver | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
-| `POST /api/deploys/{id}/contract` | approver | operator | Runs a Store model's approved contract plan (below). |
-| `POST /api/deploys/{id}/activate` | approver | admin | Activates the version the deploy staged in `prod` for its preflight, once the run has ended; `"confirm": true` when the preflight found an error ([Preflight before activation](#preflight-before-activation)). |
+| `POST /api/deploys/{id}/runs` | viewer of the project | operator | Starts `task` with `inputs` (names and text values). Without `served`, it runs the version the deploy put on the Runner, and only a task with no schedule and no trigger other than `manual: true` runs that way. With `"served": true`, it runs the version the channel serves now. With `"answer": true`, it waits up to 10 seconds for the run's answer and passes it on ([Rows and trials are answered, never kept](authoring-metadata.md#rows-and-trials-are-answered-never-kept)). |
+| `GET /api/deploys/{id}/runs/{run}/answer` | viewer of the project | operator | Takes the answer of a run the person started, once: `done` with the answer, `running`, `failed` with the reason, or `gone`. The console keeps nothing of it. |
+| `GET /api/deploys/{id}/runs/{run}?step=<name>` | viewer of the project | viewer | Reads the run, with the results of the steps named `step` it recorded. The answer is 404 while the run is queued and not started yet; the tabs read it again until it starts. |
+| `GET /api/deploys/{id}/runs?task=<name>&step=<name>` | viewer of the project | viewer | Reads the newest run of `task` in the deploy's channel, of whatever version ran it, with the results of the steps named `step` it recorded; `run` is null when the task never ran there. The Runs tab's newest-check card reads the newest `preflight` this way ([Every kind uses the same pieces](authoring-metadata.md#every-kind-uses-the-same-pieces)). |
+| `POST /api/deploys/{id}/binding-test` | viewer of the project | admin | The Runner tries the login bound to `slot` in the deploy's channel, with `role` `default`, `read` or `write`. The answer says how far the login got. It never holds a value. |
+| `POST /api/deploys/{id}/contract` | viewer of the project | operator | Runs a Store model's approved contract plan (below). |
+| `POST /api/deploys/{id}/activate` | viewer of the project | admin | Activates the version the deploy staged in `prod` for its preflight, once the run has ended; `"confirm": true` when the preflight found an error ([Preflight before activation](#preflight-before-activation)). |
 
 A Store model's contract step removes what the model no longer has. It runs in two steps:
 

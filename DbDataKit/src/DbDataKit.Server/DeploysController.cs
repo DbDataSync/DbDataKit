@@ -14,8 +14,11 @@ public sealed record DeployBody(string? WorkspaceServer, string? Project, string
 /// <summary>The body of <c>POST api/deploys/{id}/activate</c>: whether the person confirms the errors the preflight found (the Runner keeps the confirmation with the activation).</summary>
 public sealed record DeployActivateBody(bool Confirm = false);
 
-/// <summary>The body of <c>POST api/deploys/{id}/runs</c>: the task, its inputs (names and text values) and whether the version the channel serves runs it (<c>served</c>) rather than the version the deploy staged.</summary>
-public sealed record DeployRunBody(string? Task, Dictionary<string, string>? Inputs = null, bool Served = false);
+/// <summary>
+/// The body of <c>POST api/deploys/{id}/runs</c>: the task, its inputs (names and text values), whether the version the channel serves runs it (<c>served</c>) rather than the version the deploy staged, and whether the call waits for
+/// the run's answer (<c>answer</c>: the rows of a preview, a strategy's candidates, passed on and kept nowhere).
+/// </summary>
+public sealed record DeployRunBody(string? Task, Dictionary<string, string>? Inputs = null, bool Served = false, bool Answer = false);
 
 /// <summary>The body of <c>POST api/deploys/{id}/binding-test</c>: the slot of the package and the role of its login (default, read or write).</summary>
 public sealed record DeployBindingTestBody(string? Slot, string? Role = null);
@@ -26,7 +29,7 @@ public sealed record DeployContractBody(string? PlanRun, string? Approve, List<s
 /// <summary>
 /// The deploy of a build from a Workspace server to a Runner or a Gateway, by the console as the signed-in person (<see cref="ConsoleDeploys"/>): <c>POST api/deploys</c> deploys, <c>GET api/deploys?workspace_server=&amp;project=&amp;workspace=&amp;build=</c>
 /// lists what was deployed from a Workspace server, newest first (each parameter after the server narrows the one before), the record the Builds and Runs tabs read. The runs of a deploy to a Runner go through the console too
-/// (<see cref="ConsoleDeployRuns"/>): <c>POST api/deploys/{id}/runs</c> starts a task, <c>GET api/deploys/{id}/runs/{run}?step=</c> reads a run and its steps, <c>POST api/deploys/{id}/binding-test</c> tests a slot's login on the Runner,
+/// (<see cref="ConsoleDeployRuns"/>): <c>POST api/deploys/{id}/runs</c> starts a task (with <c>answer</c>, waits for its answer), <c>GET api/deploys/{id}/runs/{run}/answer</c> takes the answer of a run started earlier, <c>GET api/deploys/{id}/runs/{run}?step=</c> reads a run and its steps, <c>GET api/deploys/{id}/runs?task=&amp;step=</c> reads the newest run of a task in the deploy's channel, <c>POST api/deploys/{id}/binding-test</c> tests a slot's login on the Runner,
 /// <c>POST api/deploys/{id}/contract</c> runs a Store model's approved contract, and <c>POST api/deploys/{id}/activate</c> activates a version a deploy staged in production for its preflight.
 /// </summary>
 [ApiController]
@@ -64,7 +67,26 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
     {
         if (string.IsNullOrWhiteSpace(body.Task))
             return BadRequest(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the version the deploy staged, or any task with \"served\": true) and optionally its \"inputs\", an object of names and text values." });
-        var done = await runs.StartAsync(id, body.Task.Trim(), body.Inputs ?? [], body.Served, Person, ct);
+        var done = await runs.StartAsync(id, body.Task.Trim(), body.Inputs ?? [], body.Served, Person, ct, body.Answer);
+        return StatusCode(done.Status, done.Body);
+    }
+
+    [HttpGet("{id}/runs/{run}/answer")]
+    [Authorize(Policies.Viewer)]
+    public async Task<IActionResult> AnswerOf(string id, string run, CancellationToken ct)
+    {
+        if (!Guid.TryParse(run, out var runId)) return NotFound(new { error = $"'{run}' is not the id of a run." });
+        var done = await runs.AnswerAsync(id, runId, Person, ct);
+        return StatusCode(done.Status, done.Body);
+    }
+
+    [HttpGet("{id}/runs")]
+    [Authorize(Policies.Viewer)]
+    public async Task<IActionResult> Newest(string id, [FromQuery] string? task, [FromQuery] string? step, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(task) || task.Length > 64)
+            return BadRequest(new { error = "Name the task whose newest run in the deploy's channel to read: ?task=, and optionally ?step= for the steps it recorded." });
+        var done = await runs.NewestAsync(id, task.Trim(), step, Person, ct);
         return StatusCode(done.Status, done.Body);
     }
 

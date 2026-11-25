@@ -55,28 +55,27 @@ rules are in [docs/install.md](../docs/install.md).
   /api/join-tokens/<id>`, audited as `server.invite.cancel`). The story `join-by-command.spec.ts` joins a real Runner by the command it makes.
 - `dbdatakit setup single-server` registers, starts and joins every suite service installed beside `dbdatakit` (`SingleServerSetup` in
   `DbDataKit.Hosting.Cli`, the console's half `ConsoleSingleServer`): it finds the programs in the folders next to the console's (named for the service, as
-  the zips and the Scoop package lay them out, or for the program, as `install.sh` does; INSTALLER-P57), registers each by calling the registration every
+  the zips and the Scoop package lay them out, or for the program, as `install.sh` does), registers each by calling the registration every
   server's own `service install` and `service unit` now use (`SuiteServiceRegistration`), gives its top folder its owner and access list and its program
-  folder an access list only administrators can change (INSTALLER-P59), writes a join request with a single-use token (INSTALLER-P58, INSTALLER-P61),
-  starts it, waits for it to listen and to be listed by the console (INSTALLER-P60), prints `registered · started · listening · joined` per service and
+  folder an access list only administrators can change, writes a join request with a single-use token,
+  starts it, waits for it to listen and to be listed by the console, prints `registered · started · listening · joined` per service and
   the startup-failure file of one that fails, and ends with what is ready, what is not, the console's address and the setup link; a second run leaves
-  what is ready alone (INSTALLER-P62). On Windows it uses the service control manager (`WindowsSuiteServiceHost`), on Linux systemd
-  (`SystemdSuiteServiceHost`: the system user, the unit, enabled; INSTALLER-P59). `--skip-folder-permissions-check` goes on each registered command
+  what is ready alone. On Windows it uses the service control manager (`WindowsSuiteServiceHost`), on Linux systemd
+  (`SystemdSuiteServiceHost`: the system user, the unit, enabled). `--skip-folder-permissions-check` goes on each registered command
   line; `--stop` stops every suite service of the machine. Tested with fakes (`DbDataKit.Hosting.Cli.Tests`), with the real programs in the Servers suite
   (`SingleServerSetupTests`), and in the suite dry run on Windows from the extracted zips (`suite-single-server-windows`,
   `dist/tests/suite-single-server-e2e.ps1`) and on systemd (`suite-install-linux`, `dist/tests/suite-single-server-e2e.sh`); their first dry run
   found two faults, both fixed (`docs/ci-lessons.md`, "Windows services"). The Scoop package does not call it yet (INSTALLER-17).
 - The console's publisher key (`docs/install.md`, "The console's publisher key"): `ConsolePublisherKeyStore` keeps an Ed25519 key of the console's own in its
-  secret store (`dbdatakit:server:identity:publisher-key`, apart from the key that signs its tokens; INSTALLER-P53); `ConsoleTrust` reads the kinds a
-  server takes (`GET /api/v1/trust`, a new read of the shared `DefinitionsApi`, mapped on the Runner and served by the Gateway's management API;
-  INSTALLER-P55) and adds the key for each kind that does not list it (`PUT /api/v1/trust/{kind}/keys`, labelled `dbdatakit console <console id>`), as
-  the console itself (`ConsoleRelay.CallAsConsoleAsync`: a token of kind `console`, the administrator role within the ceiling; INSTALLER-P54);
+  secret store (`dbdatakit:server:identity:publisher-key`, apart from the key that signs its tokens); `ConsoleTrust` reads the kinds a
+  server takes (`GET /api/v1/trust`, a new read of the shared `DefinitionsApi`, mapped on the Runner and served by the Gateway's management API) and adds the key for each kind that does not list it (`PUT /api/v1/trust/{kind}/keys`, labelled `dbdatakit console <console id>`), as
+  the console itself (`ConsoleRelay.CallAsConsoleAsync`: a token of kind `console`, the administrator role within the ceiling);
   `ConsoleTrustService` runs it over every registered Runner and Gateway 15 seconds after the console starts, at once after a join, and again for a
   server that did not answer (2 s, 5 s, 15 s, 1 min, 5 min, then every 10 min). A revoked key is not added again; a refusal is in the console's audit
   (`server.trust`). Tests: `ConsoleTrustTests` (an in-process Runner and a Gateway's trust calls; a version the console signs verifies on the Runner
   with signatures required), `JoinByTokenTests` (the real Runner and Gateway trust the key after their join, and a signed version verifies on the
   Runner), `DefinitionsApiTests`, `PublishTrustTests`, `ManagementDefinitionsTests`.
-- Command lines that no longer publish answer `RemovedCommands.ConsoleDeploys` (`DbDataKit.Cli`; the wording is INSTALLER-P56) and exit 2:
+- Command lines that no longer publish answer `RemovedCommands.ConsoleDeploys` (`DbDataKit.Cli`; INSTALLER-33 changes the wording) and exit 2:
   `dbdatarunner package pair`; `dbdatasync package publish --to runner` with `--server` or `--code` (`--out` and `--check` stay; the real-runner staging
   tests and the Servers suite's `SyncOnRunner` write the package with `--out` and send it with `RunnerPublishClient`); `dbdatagateway apps publish --to`
   (`apps publish --dir` stays; `AppsRemoteTests` send an app version with `AppsRemote`). One test per command: `RunnerCliTests`,
@@ -103,7 +102,7 @@ rules are in [docs/install.md](../docs/install.md).
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery | none | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
+| INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery; `setup single-server` mints its join tokens through the local channel, so the administrator opens no file in the console's folder | none | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
 | INSTALLER-15 | Groups through the token: the console makes every group key (a Gateway group's too) and hands it at the join; the join answer carries a link when TRUSTZONES-1 made one; a Gateway joining an existing group gets the group's pinned ports in the join answer and they become its exact configuration (a taken one fails the ports step naming it; another is never picked); the Gateway's pinned `listen`, `public.listen` and `management.listen` in `config/server.yaml` are the settings handed over | none | M | Servers suite: two Gateway instances joined to group X serve each other's sessions with no key copied; the second instance listens on exactly the first's pinned ports; with one of them held on the second's machine, the second fails with a startup-failure file naming the port and listens on nothing; a Runner instance joined to group Y resolves the group's logins; a token for Y used by a Gateway, or for another group, is refused |
 | INSTALLER-16 | The two command lines that still publish to a Runner answer the sentence that names the console's deploy (`RemovedCommands.ConsoleDeploys`, as `package pair` does): `dbdatarunner package publish` (and its `--code`), and `dbdatabuild project publish --to runner` with `--server`, `--code` or `--promote-from` (`--out` stays). First their callers move: the Playwright stories `runner.spec.ts`, `runner-schedule.spec.ts` and `runner-checkpoints.spec.ts` publish the sample package through the console's relay as the signed-in administrator (the calls "Publish a package from files" makes: `HEAD`/`PUT /api/v1/artifacts/{sha256}`, `PUT /api/v1/definitions/integration/{name}`; `runner.spec.ts` pairs the runner before its first publish); Build's `ProjectPublishOnRunnerTests`, `BuildOperationsOnRunnerTests` and the unit `ProjectPublishTests` write the package with `--out` and send it with `RunnerPublishClient`, as Sync's tests do; `PublishApiTests` (the Runner's) keep their checks on the client library | none | M | each of the two answers its sentence (one test per command); the three stories and Build's conformance suite pass on their new publish path |
 | INSTALLER-17 | The Scoop scripts shrink (`docs/install.md`, "Scoop"): no copy; `post_install` prints the next commands; `pre_uninstall` stops the services and on an uninstall prints the `sc.exe delete` commands; verify which `pre_uninstall` runs during `scoop update` (the installed version's) and whether Scoop's running-process check comes before it, with and without `ignore_running_processes`; if both allow it, `pre_uninstall` stops the services on an update too; the outcome in `docs/ci-lessons.md` (its row on "Running process detected, skip updating" rewritten); `dist/README.md` and `docs/suite-single-server-install.md` rewritten | none | M | `suite-scoop-e2e.ps1`: install, `dbdatakit setup single-server`, every service ready and registered against `current`; the update check installs a version N whose manifest carries `pre_uninstall`, then updates to N+1 (a new manifest alone cannot show it), and records which `pre_uninstall` ran and whether the running-process check came first, with and without `ignore_running_processes`; the update from N to N+1 by the verified procedure (one command if both allow it, otherwise `setup single-server --stop`, `scoop update`, `setup single-server`) ends with the new version running; uninstall leaves no service running |
@@ -121,6 +120,8 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-30 | `health check` with no `--url` reads the `listen:` line of the server's settings file (`--repo`, or the default folder) before the default address | none | S | a test: a Runner that pinned 7841 answers a bare `health check`; with no settings file the default address is asked |
 | INSTALLER-31 | The console's and the Gateway's images, the compose files and `docs/quickstart.md` move to the suite's ports in one change, so a compose user changes their ports once; the images' health checks are a bare `health check` | INSTALLER-30 | S | the quickstart compose file starts and each service answers on its new port (the compose test) |
 | INSTALLER-32 | `docs/install.md` says what the built startup and join steps do where it does not yet: "a verifier made from the token" where it says "the token's hash"; in "Logs and the startup-failure file", where a server whose data folder is not an install's keeps its failure file; in "Service names, accounts and descriptions", each service's display name and systemd description, with a line in the release notes | none | S | `check_doc_inputs.py` passes and the owner approves the text |
+| INSTALLER-33 | The messages of the removed ways to publish (`dbdatasync package publish --to runner --server` and the others) name the Workspace's publish panel in the console, and the Runner's Packages screen for a package folder | none | S | the command-line tests check the new sentence |
+| INSTALLER-34 | An installed suite as a test fixture (not urgent; manual tests from a snapshot release meanwhile): a CI job on Linux installs the packaged suite with `install.sh`, runs `dbdatakit setup single-server`, enrols the first administrator from the setup link in `FIRST-RUN.txt` with a virtual passkey authenticator (as `tests/people.ts` does) and saves the signed-in browser state, the console's address and the testenv engines' addresses; any later story starts from that state instead of starting services from their build folders. Linux first; Windows (the MSI) later | none | M | the job installs, joins all four services, signs in, and a trivial story reusing the saved state opens the Servers page with four services joined |
 
 ## Needs from other subjects
 
@@ -128,119 +129,6 @@ rules are in [docs/install.md](../docs/install.md).
 - TRUSTZONES-1: the link the join answer carries (INSTALLER-15 carries it when it exists).
 - TASKENGINE-9: two Gateway instances behind a balancer in CI, before INSTALLER-28.
 - PUBLISHING-2: the Store command line's `gateway add` goes with `dbdatastore model publish --proxy`.
-
-## Proposed decisions
-
-### INSTALLER-P53: where the console keeps its publisher key (default, awaiting the owner)
-
-`docs/install.md` says the console signs what it deploys, and no doc says with which key. Scenario: the console deploys build 7 of the sync project
-`orders` to the Runner group `etl`, and an administrator later wants to stop trusting what the console publishes without cutting the console off.
-Built as the default: a key of its own, made at the first use and kept in the console's secret store as `dbdatakit:server:identity:publisher-key`
-(encrypted like the console's other secrets, backed up with them), apart from the key that signs the console's tokens. Revoking it on a group's
-Publishers page stops new versions the console signs there, and the console still manages the server. Option B: sign with the key that signs the
-console's tokens (the one every server already holds as the console's client key), so no second key exists, but revoking trust in what the console
-publishes then means unpairing it, and a rotation of the token key moves the publishing trust too. Recommendation: the default.
-
-### INSTALLER-P54: how the key reaches a group, and as whom (default, awaiting the owner)
-
-Scenario: Ana joins a Runner with the printed command; another Runner group was paired by code a month ago. Built as the default: the console adds the
-key itself over the trust routes (`PUT /api/v1/trust/{kind}/keys`) with a token of kind `console` (the console's id as subject, the administrator
-role within the ceiling), so the group's audit names the console, not a person; it does so a few seconds after a join, for every registered Runner
-and Gateway after the console starts, and again later for a server that did not answer. A group whose ceiling for the console is lower than
-administrator refuses, and the console records the refusal (`server.trust`) and tries again every ten minutes. Option B: the join answer carries the
-key and the server adds it at its join step (no call, no role needed), with the console's pass kept only for groups joined before. Option C: an
-administrator adds it with a button on the Servers page, as themself. Recommendation: the default; B if a join with a lower ceiling should still
-trust the console's key.
-
-### INSTALLER-P55: the console reads the kinds a group takes from a new `GET /api/v1/trust` (default, awaiting the owner)
-
-Scenario: a Gateway of the next release registers a new kind, `report-catalog`; the console must trust its key for it too. Built as the default: the
-shared publish API answers `GET /api/v1/trust` with every kind of its registry for its target type, each as `GET /api/v1/trust/{kind}` answers it
-(a viewer or an administrator; a publisher is refused); the Runner maps it. A Runner of the previous release answers 404 and the console falls back
-to `integration`; a Gateway of the previous release answers 404 and the console tries it again later. Option B: the console keeps a list of kinds per
-product, which needs a console release for each new kind. Recommendation: the default.
-
-### INSTALLER-P56: what a removed way to publish names as the console's deploy (default, awaiting the owner)
-
-Until WORKSPACEISOLATION-3 and -4 are built, the console's deploy of a project is the Workspace's publish on its screens. Scenario: a script runs
-`dbdatasync package publish --to runner --server runner-1 --channel prod`. Built as the default: it exits 2 and prints `'dbdatasync package publish
---to runner --server' is gone: command lines do not publish to a Runner or a Gateway; the console deploys. Publish the project from the Workspace in
-the console, or a package folder with "Publish a package from files" on the Runner's Packages screen in the console.` Option B: name only the
-Workspace, so the sentence does not change when the Runner's screen goes. Option C: name `docs/install.md` ("The console's publisher key") instead of
-screens. Recommendation: the default until WORKSPACEISOLATION-4, then the sentence names the Workspace's publish panel.
-
-### INSTALLER-P57: where `setup single-server` looks for the programs (default, awaiting the owner)
-
-Scenario: an administrator extracts the four Windows zips into `C:\Program Files\DbDataKit\console`, `gateway`, `runner` and `workspace` and runs
-`C:\Program Files\DbDataKit\console\dbdatakit.exe setup single-server`; on Linux `install.sh --system` put the programs in `/opt/dbdatakit`,
-`/opt/dbdatagateway` and so on. Built as the default (`SuiteDiscovery`): for each service it looks, beside the console's folder, in a folder named for
-the service's data folder (`..\gateway\dbdatagateway.exe`, the zips' and the Scoop package's layout), then in a folder named for the program
-(`/opt/dbdatagateway/dbdatagateway`), then in the console's own folder; the first found is registered, and a service found nowhere is printed as "not
-installed beside dbdatakit (looked for ...)" and left out, which does not make the run fail. The data folders are the machine's
-(`C:\ProgramData\DbDataKit\<service>`, `/var/lib/dbdatakit/<service>`, or the folder `DBDATAKIT_DATA` names). Run as `dotnet dbdatakit.dll` it
-refuses, as `service install` does. Options: B, a `--programs <folder>` option naming the folder to look in; C, a missing program fails the run.
-Recommendation: the default; B when a layout appears that these three do not cover.
-
-### INSTALLER-P58: when a server gets its join request (default, awaiting the owner)
-
-`docs/install.md` says setup "mints a join token and writes the join request; starts the service". Scenario: a Runner was installed with
-`install.sh --system` and started once (it has its `listen:` line), and is stopped; or a Runner already joined was stopped for maintenance. Built as
-the default: a server that never started (no address in its settings) or that still has a join request from an earlier run gets a new request before
-it is started, as the doc says; any other server is started as it is, and only when it listens and the console does not list the certificate it
-presents is it given a request and started again. So a stopped server that is joined spends no token, and a server that started before setup gets
-one restart more. A request left by a run that failed is replaced, since its token may have ended; the earlier token stays waiting on the Add a server
-screen until it ends. Options: B, every server that is not listed gets a request before it starts (a stopped, joined server then joins again with a
-new token and replaces its entry); C, also cancel the token a replaced request held. Recommendation: the default, and the doc's step 2 says "writes
-the join request of a server that is not listed" once answered.
-
-### INSTALLER-P59: the program folder and the registration on Linux (default, awaiting the owner)
-
-Scenario: `sudo /opt/dbdatakit/dbdatakit setup single-server` on a machine where the zips were extracted by a user, or where `install.sh --system` wrote
-the units without enabling them. Built as the default:
-- Windows: the folder that holds each program gets the access list Administrators and SYSTEM full control, Users and the service's account read and
-  run, the parent's grants cut. Only that folder is set, not the folder above it (the Scoop version folder, `C:\Program Files\DbDataKit`).
-- Linux: the program's folder and everything in it is made root's (`chown -R root:root`) with no write for the group or others (`chmod -R go-w`).
-- Linux registration: the group `dbdatakit` and the service's system user are made when missing (as `install.sh --system` makes them), the unit the
-  program's own `service unit` prints is written to `/etc/systemd/system`, `systemctl daemon-reload` runs and the unit is enabled, so the service
-  starts at boot as the Windows service does. A unit `install.sh` wrote and did not enable is therefore registered again ("registered ... again")
-  and enabled. The data folder `/var/lib/dbdatakit/<service>` is made for the service's user with mode 0700 before its first start, as systemd's
-  `StateDirectory=` would, so the join request can be written there and given to that user.
-Options: B, on Windows also set the folder above the programs; C, on Linux leave the unit as `install.sh` wrote it (not enabled). Recommendation: the
-default.
-
-### INSTALLER-P60: how setup knows a service listens, is joined or failed (default, awaiting the owner)
-
-Scenario: setup starts the Runner and waits. Built as the default: the address is read from the service's own settings (the `listen:` line; the
-Gateway's `management.listen`); the service listens when `/health/live` answers there; it is joined when the console's `instances.yaml` lists the
-certificate it presented (its SHA-256) and its join request is gone. It failed when its startup-failure file was written after setup started it and
-holds a reason (not the line of a start going on), when systemd says `failed`, or when it stays stopped for 20 seconds. A service the
-service manager is starting or gave up on when setup reaches it (a retry after a failed start) is stopped and started by setup, so a failure that
-retry wrote is never taken for setup's own; it is not ready when it has not
-listened and joined within 3 minutes. The console is ready when it listens and has made its certificate; when it is not, the other services are
-printed as "not set up: the console is not ready" and nothing is done for them. The exit code is 0 when every service is ready, 1 when one is not, 2
-for a usage error, 3 when not elevated. Options: B, a `--wait <seconds>` option; C, carry on with the other services when the console is not ready
-(registered and started, not joined). Recommendation: the default.
-
-### INSTALLER-P61: the token setup makes for each server (default, awaiting the owner)
-
-Scenario: setup joins the Gateway, the Runner and the Workspace of the console's machine. Built as the default: each gets a token with the admin
-ceiling, no group, and the default lifetime (15 minutes), made by the account that runs setup and audited as `server.invite` with the name
-"<account> (setup single-server)", actor kind `command`; the request names the console's `listen:` address (`https://localhost:7800` by default),
-which a server on the same machine reaches. Setup opens the console's state directly, as `setup invite` does, so on Windows the administrator's
-account may create a file in the console's folder (the SQLite journal); on Linux the files `state.db*` that setup ran into are given back to the
-folder's owner. Options: B, mint through the console's local channel once INSTALLER-7 gives the console one, so no file in its folder is touched by the
-administrator; C, a smaller ceiling for the servers of the console's own machine. Recommendation: the default now, B with INSTALLER-7.
-
-### INSTALLER-P62: what a second run leaves alone, and what it prints (default, awaiting the owner)
-
-Scenario: an administrator runs `dbdatakit setup single-server` twice. Built as the default: a service registered exactly as it should be (the same
-command line, account and settings on Windows; on Linux the same unit text, its user and the unit enabled), running, listening and listed is left
-alone: its folders' access lists are not set again and nothing is restarted. Its line ends with "(already)", and when every service is like that the
-summary starts "Nothing to do: every service is registered, running and joined." A service whose registration differs (another program, another
-command line, `--skip-folder-permissions-check` added or removed) is registered again and restarted, with a note naming the old command line. The
-summary always prints the console's address (its `listen:` line) and either the setup link from `FIRST-RUN.txt` or that the console has a user already
-(`dbdatakit user invite`). `--stop` cannot be given with `--skip-folder-permissions-check`. Options: B, set the folders' access lists again on every
-run; C, print the summary's link only on the run that started the console. Recommendation: the default.
 
 ## Shared areas touched
 

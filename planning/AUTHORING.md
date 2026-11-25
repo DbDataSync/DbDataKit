@@ -12,7 +12,9 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - Build's `tests`, `status` and `compare` are manual tasks of the refresh package (`ViewJobs.cs`) on the Runs tab. The operations package
   (`project publish --operations`: `init`, `seed`, `apply_plan`, `ack`) is not built by the Workspace, so those run from the Runner's screens only.
 - Sync publish: the platform comes from `WorkspaceSettings.SyncPlatform`, not from the target Runner.
-- Sync forms: all YAML-only parts have forms except the mapping preview and the segmenting strategy's try-run (both read a database).
+- Sync forms: all YAML-only parts have forms. A mapping's **Preview rows** and a segmenting strategy's **Try** run the set's tasks `preview` and
+  `try-strategy` on the Runner through the console, with the mapping as the draft has it (unsaved edits included); their answer is kept nowhere (`docs/authoring-metadata.md`, "Rows and trials are answered, never
+  kept").
 - `dbdatasync provisioning plan --from-cache` plans the target side offline; the source side (change tracking, logical slots) is `unknown` (the Sync set's `preflight` checks it live).
 - A model's `queries:` are edited as YAML only (the Build server's editor went with the server).
 - The offline verb `dbdatabuild project publish --to gateway --out` and the per-publish adopt confirmation of a hand-made data source still exist beside
@@ -23,6 +25,12 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - Resync and reconcile-deletes buttons of a sync project's Runs tab are paused (owner, 2026-11-16).
 - A package's read-only manual task `preflight` runs before the console serves a version in `prod` and from **Re-check** on the Runs tab
   (`docs/publishing.md`, "Preflight before activation"). Build's refresh package, a Store model's package and a Sync set declare it.
+- The Designer's shared reads (`@dbdatakit/workspace`): the channel picker offers **Set up for development** where a channel does not bind the slot,
+  `prod` as any other with the production warning (the console stores the login on the Runner, copies the draft's connection there and binds the slot), **Test** on the tab **Catalog**, **Describe columns** for a kind to
+  place, and the newest `preflight` per channel on the Runs tab (`docs/authoring-metadata.md`, "Every kind uses the same pieces").
+- A draft is read before it is ever published: the picker lists every channel the Runner serves (`GET /api/v1/metadata/channels`), and in a channel
+  that holds no version of the project's package `discover`, `describe` and the binding test read the slot the channel binds for it
+  (`docs/authoring-metadata.md`, "Before anything is published: Set up for development").
 
 ## Tasks
 
@@ -30,32 +38,34 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | --- | --- | --- | --- | --- |
 | AUTHORING-1 | The Workspace builds the operations package beside the refresh package, and the control service deploys both to the same channel (WORKSPACEISOLATION-3); the Runs tab offers `init`, `seed`, `apply_plan` and `ack` with their inputs | WORKSPACEISOLATION-3 | M | `WorkspaceBuildPublishTests`: a build stages both packages; vitest of `ProjectRunsPanel`: the four tasks are offered; a conformance run of `seed` started from the console through the control service |
 | AUTHORING-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (WORKSPACEISOLATION-3), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | WORKSPACEISOLATION-3 | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
-| AUTHORING-3 | The mapping preview and the strategy try-run as Runner tasks of the published set, started by the control service as the person (the console's run calls, `/api/deploys/{id}/runs`), the preview's rows returned in the call's answer and never stored | none | M | a Sync conformance test: the preview of a mapping returns its first rows through the Runner; the try-run's SQL runs against the bound login |
 | AUTHORING-5 | A form editor for a model's `queries:` in a build project (name, description, `sql` or `request`, parameters), checked as you type | none | M | vitest on the form and its YAML; Playwright: add a query with a list parameter, see a translation error at its line, fix it, publish |
 | AUTHORING-17 | Adds to the Runner's built-in package `dbdatakit-metadata` (its tasks `discover` and `describe` exist: `DbDataKit.Runner.Metadata`, the route `POST /api/v1/metadata/{channel}/{task}`, `docs/authoring-metadata.md`). Its task `facts`: the server's version and the database settings a kind's checks name, on `DbDataKit.Metadata`'s readers, started, resolved, refused and recorded as `discover` and `describe` are; never a value of a table | none | S | Runner tests on SQL Server and PostgreSQL: `facts` in `dev` answers the server's version and, on SQL Server, whether change tracking is on for the database; an author's `facts` in `prod` runs and its run record names the author |
-| AUTHORING-18 | The binding test without a staged version: by package, channel and slot on the Runner, sent by the control service for a draft (beside the console's binding test of a deploy, `POST /api/deploys/{id}/binding-test`), so **Test** works before publish in any channel that binds the slot | none | S | a test through the control service: a draft with no build tests its slot in `dev` against a Runner that binds it; the steps come back and no row; a channel that does not bind the slot says so |
-| AUTHORING-19 | **Set up for development**: from a draft on a Workspace screen, the person types a login once; the screen sends it through the relay to the project's Runner, which holds it; the control service puts the connection's copy on the Runner and binds the slot in a non-production channel (CHANNELS-1's client); the control service checks the person's role and refuses `prod`; the Workspace service only learns which binding exists (WORKSPACEISOLATION-7) | CHANNELS-1, WORKSPACEISOLATION-7 | M | a test: set up `crm` for `dev`, the Runner's Bindings show it; the login reaches no Workspace service; `prod` is refused naming the rule |
-| AUTHORING-6 | The channel picker and Refresh exist (`ChannelPicker`, `CatalogRefresh` of `@dbdatakit/workspace`; the tab **Catalog**'s **Refresh from a Runner**). The rest of the Designer's shared pieces of authoring-time reads (`DbDataKit.Authoring`, `Shared/web/workspace`), used by every kind's Designer and Files area: **Describe** (a query's columns into the kind's file, read through the console as Refresh is), **Test** (AUTHORING-18), **Set up for development** offered by the channel picker when the channel does not bind the slot (AUTHORING-19), and the newest-check card (the newest `preflight` or test run per channel, read through the control service (the console's run calls, `/api/deploys/{id}/runs`): time, run link, findings); the console's posture page lists the non-production bindings made from the Workspace. The Gateway refresh stays as a second way to fill the cache for a connection that is already a Gateway data source; nothing new is built on it | AUTHORING-18, AUTHORING-19 | M | vitest of each piece; Playwright: a build draft with no binding offers Set up for development, then Refresh fills the Catalog tab; Test shows its steps; the posture page lists the binding |
+| AUTHORING-6 | The Designer's shared pieces of authoring-time reads are built (`docs/authoring-metadata.md`, "Every kind uses the same pieces"): the channel picker with **Set up for development**, **Refresh**, **Test**, **Describe columns** (`QueryDescribe`, the console's `POST .../describe`) and the newest-check card (`NewestChecks`, the console's `GET /api/deploys/{id}/runs?task=`). What is left: the console's posture page lists the non-production bindings made from the Workspace (Set up for development makes them: a slot bound to a copy `<package>-<slot>-<channel>` whose password names a `dev-login` secret, `docs/authoring-metadata.md`, "How a screen sends a development login"); **Describe columns** writes a query's columns into a Build model's file (a Sync mapping's are written by the card **Query columns** of `@dbdatakit/sync-ui`) | none | S | vitest of the posture list and of Build's use of the columns; Playwright: after Set up for development binds the slot, the posture page lists the binding |
 | AUTHORING-7 | Retire the offline verb `project publish --to gateway --out` and the per-publish adopt confirmation (adapter first: the slot bindings' tests have run) | PUBLISHING-2 | S | the verb and `adopt` answer their sentence; `gateway-publish/1` leaves `docs/formats.json` and `docs/ui-editors.md`; the Workspace's publish tests pass unchanged |
 | AUTHORING-9 | Browser stories for the Workspace screens never opened in a browser: column lineage, model files from cached tables, the provisioning plan, scripts, the slot bindings screen, the Sync forms, the catalog refresh form; and the stories written and never run in CI: `workspace-authoring.spec.ts` (the kind picker on a new project with what each kind publishes to, check, fix, and the publish panel by product for a build, a sync and a store project), `workspace-publish.spec.ts` (create, edit, build, preview, commit, merge, publish an app) and the preview with live data; each listed in `docs/ui-coverage.md` | none | M | the Playwright specs run in CI; `scripts/check_ui_coverage.py` passes with the stories named |
-| AUTHORING-10 | The secrets overview of a Workspace project's connections (decided 2026-11-12, not built): every secret reference of the project, where it is bound, whether the target holds it (read by the control service from the Runner, never by the Workspace service) | none | S | vitest and a Playwright story: a project with three references shows each with its binding and state |
+| AUTHORING-10 | The secrets overview of a Workspace project's connections (decided 2026-11-12, not built): every secret reference of the project, where it is bound, whether the target holds it (read by the control service from the Runner, never by the Workspace service); the Sync parameter form picks a `Secret` parameter's reference from it (today the person types `secret:<name>`) | none | S | vitest and a Playwright story: a project with three references shows each with its binding and state |
 | AUTHORING-12 | Resync and reconcile-deletes buttons on a sync project's Runs tab, started through the control service (the console's run calls, `/api/deploys/{id}/runs`) (paused, owner 2026-11-16; queued until the drain works out a mapping's source key) | none | M | Sync conformance: resync of one mapping reloads it; reconcile removes target rows the source lost |
 | AUTHORING-13 | The form editor of the `access:` section (rules tables, row rules, column rules) in the Workspace's build and store model panels | none | M | vitest: the form round-trips a model's `access:` section; Playwright: add a column rule, see the check's finding for a missing rules table, publish |
 | AUTHORING-15 | Browser stories of the console's own screens that are written and never run in CI, run there like AUTHORING-9: the agents' evaluation panel (`screens-agents-evaluation.spec.ts`), the Runner's Link flow, the store approvals (`store-approvals.spec.ts`), the monitoring story against real servers (`monitoring.spec.ts`), and the others `docs/ui-coverage.md` lists as not run | none | M | the Playwright specs run in a CI job of the console; `docs/ui-coverage.md` no longer lists them as not run |
 | AUTHORING-16 | Browser stories of the Gateway's screens (shown by the console) that are written and never run in CI, and the missing ones: the semantic model browser and query explorer (`semantic-models-explorer.spec.ts`), the result cache screen (a dataset's hit rate rises after repeated queries, Clear empties it and the next query is a miss), click-to-sort of tables and matrices (`views-sort-print.spec.ts`), the stories that need a real Gateway (`views-apps-addresses`, `views-apps-embed`), and the `semantic-models.spec.ts` and `refresh-run.spec.ts` stories that need the test PostgreSQL | none | M | the Playwright specs run in a CI job against a real Gateway; the cache story passes; `docs/ui-coverage.md` no longer lists them as not run |
 | AUTHORING-25 | On SQL Server, `discover` also lists every database the connection's login can open (`sys.databases`), each with its schemas, and reads the tables of the one asked for (an input `database`); the database pickers offer them. A PostgreSQL connection reads its one database, as today | none | M | a SQL Server conformance test: a login that reads two databases sees both in the cache, and the tables of the second after a read that names it |
 | AUTHORING-26 | A read of a database's shape (`discover`, `describe`) needs the Runner's viewer role, not operator: it changes nothing, and the console has already checked that the person has access to the project | none | S | a person who is a viewer on the project's Runner refreshes the catalog; starting any other task still needs operator |
+| AUTHORING-27 | The person who staged a version held for its preflight activates it: with no error found, the Runner lets that person activate it with the role that staged it (publisher); after an error, the same person confirms the errors, recorded with their name as today. `docs/publishing.md` ("Preflight before activation" and the route table) follows | none | S | a test: Bob, a publisher on the Runner, serves a package in a production channel; its preflight finds nothing and Bob activates it; a second version's preflight finds an error and Bob's activation with `"confirm": true` is recorded with his name |
+| AUTHORING-29 | In a group of Runners, a run whose answer the console waits for (**Preview rows**, **Try**) is pinned to the instance that takes the call: that instance queues it for itself only, and the console's call that waits for the answer reaches the same instance, so the rows never leave that instance's memory and the first ask is answered. `docs/authoring-metadata.md` ("What the Runner does with an answer") follows; until it is built, a call that reaches another instance answers `gone` | none | M | a test with a group of two Runner instances behind one address: a `preview` taken by one instance runs there, and the console's answer call returns its rows on the first ask, never `gone` |
 
 ## Needs from other subjects
 
 - Agents authoring Workspace projects (through MCP or the console's embedded agent, each change approved) and the build-helper on a Workspace build
   project are AGENTACCESS-8.
 - PUBLISHING-2: the per-kind routes removed and every caller on the shared route, before AUTHORING-7.
-- CHANNELS-1: the client that puts a connection copy on a Runner, sends its login and binds it for a channel, before AUTHORING-19.
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1 and AUTHORING-2 (the target Runner's platform).
 - The Gateway catalog refresh is the console's `POST api/workspace-catalog/{workspace}/{project}/gateway-read` (`ConsoleCatalogRead.GatewayAsync`; `docs/authoring-metadata.md`, "A read from a Gateway").
 
 ## Open designs
+
+### The Runner the channel picker offers first
+
+The picker offers the Runner the catalog cache says the connection was last read from, or else the first Runner the console lists. Once a project names the Runner it deploys to, the picker offers that one.
 
 ### The Runner's built-in package where a group requires signed versions
 
@@ -63,75 +73,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 refuses it and a catalog read answers 409 naming the missing signature. The direction is to exempt that package, because it ships beside the Runner's
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
-
-### AUTHORING-P11: following a read the console stopped waiting for (default, awaiting the owner)
-
-Built as the default: `GET api/workspace-catalog/{workspace}/{project}/read/{run}` checks that the person may read the project named in the address and
-that the run is a `discover` of the built-in package in the channel given, but not that the run was started for that project, because the Runner keeps
-no inputs on a run's record. Scenario: Bob may read the project `orders` and learns the run id of Ana's read of `crm-to-dw` in `dev`. Option A (built):
-Bob follows it under `orders` and sees `crm-to-dw`'s shape; as a viewer of that Runner he could already read the same step through the relay. Option B:
-the console remembers which runs it started for which person and project, and refuses any other (a follow that lands on another console instance of a
-scaled-out console is refused too). Option C: the Runner keeps the package and slot of a metadata run on its record, and the console checks them.
-Recommendation: C.
-
-### AUTHORING-P12: a read of one table that no longer finds it (default, awaiting the owner)
-
-Built as the default: a Refresh of one table whose read no longer finds the table (it was dropped or renamed) shows "1 table removed", and Accept takes
-the table out of the cache. Scenario: the DBA drops `dbo.accounts`; Ana refreshes that table on the tab **Catalog**. Option A (built): the difference
-says the table is removed; she accepts, and the draft's check then names every mapping over it. Option B: the read of one table never removes it: the
-tab says the table was not found and leaves the cache as it was, and only a read of the whole connection removes a table. Recommendation: A, since the
-difference is shown before anything is replaced and the person decides.
-
-### AUTHORING-P13: the Runner the channel picker offers first (default, awaiting the owner)
-
-Built as the default: the picker offers the Runner the cache says the connection was last read from; with none (a first read, or a cache read through a
-Gateway), it offers the first Runner the console lists. Scenario: the console is paired with `runners-eu` and `runners-us`; Ana refreshes `crm` for the
-first time. Option A (built): `runners-eu` is offered (the first listed) and she can pick the other. Option B: the project names its Runner (a setting of
-the project, as its publish target is) and the picker offers that one. Option C: no Runner is offered until she picks one. Recommendation: B once a
-project names its Runner (WORKSPACEISOLATION's deploy will know it); A until then.
-
-### AUTHORING-P14: a channel that does not bind the slot, in the picker (default, awaiting the owner)
-
-Built as the default: such a channel is listed as "not bound", cannot be picked, and the picker says how an administrator binds it. Scenario: the package
-`crm-to-dw` is on the Runner in `dev` and `test`, and only `dev` binds `crm`. Option A (built): `test` is listed and greyed out, with the sentence on how
-to bind it. Option B: `test` can be picked, and Refresh answers the Runner's own refusal ("has no binding in channel 'test'"). Option C: such a channel
-is not listed at all. Recommendation: A until Set up for development (AUTHORING-19) is built; then picking it offers Set up for development, as
-AUTHORING-6 says.
-
-### AUTHORING-P15: which deploys wait for a preflight (default, awaiting the owner)
-
-Built as the default: only a deploy to the channel named `prod` with **serve** on waits for the package's `preflight`; a deploy that stages, or one to
-any other channel, runs none. Scenario: Ana publishes `sales` to `test` served, and to `prod` staged. Option A (built): neither runs a preflight; the
-staged `prod` version activates by itself when the Runners are ready, as before. Option B: every served deploy waits for its preflight, in any
-channel. Option C: a channel the Runner marks as production (a setting of the channel, not its name) waits, and a stage to it is held for its
-preflight too. Recommendation: C once channels carry such a setting (CHANNELS); A until then.
-
-### AUTHORING-P16: how long the deploy waits for the preflight (default, awaiting the owner)
-
-Built as the default: the deploy waits up to two minutes for the preflight run. Scenario: Ana serves `sales` in `prod`, and the preflight takes five
-minutes on a slow warehouse. Option A (built): after two minutes the deploy answers 202, the version stays staged and held, and Ana presses
-**Activate** once the run has ended. Option B: the deploy answers at once and the panel follows the run, then offers Activate. Option C: the console
-activates the version by itself when the run ends with no error, and only an error waits for Ana. Recommendation: C, so a slow preflight with nothing
-found needs no second visit.
-
-### AUTHORING-P17: what in a Build project's status is an error (default, awaiting the owner)
-
-Built as the default: in the refresh package's preflight, an object of the project that is not on the connection, a deployed structure behind the
-project (pending deploy steps), a blocked deploy step and a status that could not be read are errors; an object changed outside dbdatabuild is a
-warning; what the status noticed is information. A preflight run that fails counts as an error. Scenario: Ana adds a column to `marts.fct_orders`
-and serves the new package in `prod` before `apply_plan` has run. Option A (built): the pending step is an error, the version is not activated until
-she confirms, and the refresh would have been refused anyway. Option B: pending steps are a warning, the version is activated, and the next refresh
-fails naming the structure. Recommendation: A.
-
-### AUTHORING-P18: who may activate a version held for its preflight (default, awaiting the owner)
-
-Built as the default: the console activates as the person, and the Runner's `activate` is its administrator call, so a person with the approver
-role on the Workspace server and the publisher role on the Runner can stage the version and see its preflight but cannot activate it. Scenario: Bob
-is a publisher on the Runner `jobs`, not its administrator, and serves `sales` in `prod`; the preflight finds nothing. Option A (built): the
-activation is refused in the Runner's words and the version waits for an administrator (on the Runner's Packages screen or the publish panel).
-Option B: the Runner lets the publisher who staged a held version activate it, with the reason kept. Option C: the console activates with its own
-key after checking the person's approver role on the Workspace server. Recommendation: B, so a publisher's deploy to `prod` finishes without an
-administrator when the preflight finds nothing, and an administrator is still needed to confirm an error if the owner wants that (a further choice).
 
 ## Shared areas touched
 

@@ -153,9 +153,9 @@ function RunnerRefresh({ cache, canWrite, project }: { cache: CatalogCache | nul
   return (
     <div className="card" style={{ margin: '6px 0 10px' }} data-testid="wsp-runner-refresh">
       <div className="card-body">
-        <div className="hint" style={{ marginBottom: 6 }}>Read the shape again from a Runner channel that binds the connection, with the login bound there. Only names and types are read, never a row.</div>
+        <div className="hint" style={{ marginBottom: 6 }}>Read the shape again from a Runner channel that binds the connection, with the login bound there, or test that login. Only names and types are read, never a row.</div>
         <RefreshTarget connections={connections} cache={cache} connection={chosen} onConnection={(c) => { setConnection(c); setTable('') }} table={table} onTable={setTable} />
-        {chosen !== '' && <CatalogRefresh key={`${chosen}/${table}`} project={project} connection={chosen} table={target} current={file.text} canEdit={canWrite && draft.canEdit} onAccept={(text) => draft.edit(CATALOG_CACHE_FILE, text)} />}
+        {chosen !== '' && <CatalogRefresh key={`${chosen}/${table}`} project={project} connection={chosen} table={target} current={file.text} canEdit={canWrite && draft.canEdit} onAccept={(text) => draft.edit(CATALOG_CACHE_FILE, text)} offerTest />}
       </div>
     </div>
   )

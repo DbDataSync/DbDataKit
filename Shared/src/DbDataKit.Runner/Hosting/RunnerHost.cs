@@ -38,6 +38,9 @@ public class RunnerHost(RunnerHostSettings settings, StateDatabase state, ILogge
     private IReadOnlyDictionary<string, string> _capabilities = new Dictionary<string, string>();
     private readonly string _workerId = $"{Environment.MachineName}-{Environment.ProcessId}-{Guid.NewGuid():N}";
 
+    /// <summary>The answers this process's runs handed over (<c>Answer</c>), held in memory for the console that started each run; null until the engine has started.</summary>
+    public DbDataKit.Runner.Protocol.Server.RunAnswers? Answers => _host?.Answers;
+
     /// <summary>The control over the tasks; null until the engine has started.</summary>
     public RunnerControl? Control => _control;
 

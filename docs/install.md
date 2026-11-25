@@ -303,7 +303,7 @@ call, not a command line), each with a single-use join token in its settings:
    the service it should register.
 2. For each, in start order: it registers the service if it is not registered (or registers it again when it points elsewhere); sets the top folder's
    owner and access list; sets the program folder's access list (Administrators and SYSTEM full control, everyone else read and execute, inheritance cut,
-   so a user cannot plant a file beside a program a service runs); mints a join token and writes the join request; starts the service.
+   so a user cannot plant a file beside a program a service runs); for a server the console does not list yet, mints a join token and writes the join request; starts the service.
 3. It waits for each to be listening and joined, printing `registered · started · listening · joined` per service and, for a service that fails, the
    contents of its `startup-failure-<service>.txt`.
 4. It ends with a summary: what is ready, what is not, the console's address, and the first administrator's setup link from `FIRST-RUN.txt`. Run again,

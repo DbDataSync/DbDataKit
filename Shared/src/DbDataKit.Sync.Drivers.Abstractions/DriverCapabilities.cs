@@ -69,5 +69,7 @@ public sealed record ReaderCapability(
 public sealed record StagingCapability(string Kind, IReadOnlyList<ParameterDescriptor> Parameters);
 
 /// <param name="NeedsKey">The key the writer matches rows on (<see cref="IChangeWriter.NeedsKey"/>).</param>
+/// <param name="NeedsPrivileges">The changes the writer makes to the target table (<see cref="IChangeWriter.NeedsPrivileges"/>).</param>
 public sealed record WriterCapability(
-    string Kind, bool SupportsReconciliation, IReadOnlyList<ParameterDescriptor> Parameters, KeyNeed NeedsKey = KeyNeed.None);
+    string Kind, bool SupportsReconciliation, IReadOnlyList<ParameterDescriptor> Parameters, KeyNeed NeedsKey = KeyNeed.None,
+    WritePrivileges NeedsPrivileges = WritePrivileges.All);

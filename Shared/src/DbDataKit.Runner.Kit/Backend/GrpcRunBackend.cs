@@ -338,6 +338,11 @@ internal sealed class GrpcRunBackend : IRunBackend, IAsyncDisposable
     public async Task<IReadOnlyList<CheckStatusRow>> QualityBlocksAsync(CancellationToken ct) =>
         [.. (await CallAsync(h => _client.QualityBlocksAsync(new QualityBlocksRequest(), h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false)).Blocks.Select(WireConvert.FromWire)];
 
+    // ---- the answer a person waits for
+
+    public async Task AnswerAsync(string json, CancellationToken ct) =>
+        await CallAsync(h => _client.AnswerAsync(new AnswerRequest { Json = json }, h, cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+
     // ---- files, inbox, dead letters
 
     public async Task<bool> ClaimFileAsync(string connection, string path, long size, DateTimeOffset modified, string hash, CancellationToken ct)

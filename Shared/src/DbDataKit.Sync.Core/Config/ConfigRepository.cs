@@ -455,6 +455,10 @@ public sealed class ConfigRepository
         return YamlConfigSerializer.Serialize(mapping);
     }
 
+    /// <summary>A table mapping read from its file's text, as <see cref="LoadTableMapping"/> reads the file: the strict check first, so an unknown key or a bad value is named with <paramref name="file"/> and its position.</summary>
+    public static TableMappingConfig ReadTableMapping(string text, string file) =>
+        StrictConfigFile.Load(text, file, YamlConfigSerializer.Deserialize<TableMappingConfig>);
+
     public TableMappingConfig LoadTableMapping(string replicationName, string mappingName)
     {
         var path = ConfigPaths.TableMappingFile(_configRoot, replicationName, mappingName);

@@ -83,6 +83,10 @@ class WorkflowFilterTests(unittest.TestCase):
         shared = workflow("shared-ci.yml")
         for event in ("push", "pull_request"):
             self.assertTrue(ci_paths.would_run(ci_paths.trigger_filter(shared, event, "paths"), None, ["Shared/src/DbDataKit.Store/Store.cs"]))
+            # a shared test that reads another product's source runs when that source changes
+            for scanned in ["DbDataSync/src/DbDataSync.TaskRunner/Runner/SetPreflight.cs", "DbDataBuild/src/DbDataBuild.Execution/MutationGate.cs",
+                            "DbDataGateway/src/DbDataGateway.Server/Data/GatewaySources.cs"]:
+                self.assertTrue(ci_paths.would_run(ci_paths.trigger_filter(shared, event, "paths"), None, [scanned]), f"Shared CI {event} skips {scanned}")
 
     def test_repository_checks_and_planning_wip_start_for_docs_only_changes(self):
         checks = workflow("repo-checks.yml")

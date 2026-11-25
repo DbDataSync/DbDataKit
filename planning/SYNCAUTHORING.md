@@ -49,13 +49,13 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
 | Replication page chrome (`pages/ReplicationDetailPage.tsx`, `replication-detail/tabs.tsx`): breadcrumbs, the tab bar, **Enabled**, **Save settings**, **Delete** | `PUT .../enabled`, `PUT /api/replications/{n}`, `DELETE` | `enabled` and the replication's folder in the draft |
 | Rail: **Unpublished changes** (`components/UnpublishedChanges.tsx`) | `GET /api/runner/package/unpublished` | the draft's commits after the commit of the build last published, and its unsaved edits (the Workspace's builds and history) |
 | Overview (`OverviewPanel.tsx`, `EndpointsCard.tsx`, `components/EndpointSidePair.tsx`, `ScheduleCard.tsx`, `TrackingCard.tsx` for the `tracking:` settings) | the replication's config | `task.yaml`; connection and database pickers from the draft's connections and the catalog cache |
-| Overview sub-tabs Notes (`components/NotesPanel.tsx`), Pipeline (`MappingPipelineCard.tsx`, and `ReconcileConfigCard.tsx` for the `reconcile:` settings), Provisioning (`ReplicationProvisioningPanel.tsx`), Custom Transforms (`components/ScriptBindings.tsx`), Bulk Load (`SegmentingStrategiesCard.tsx`) | config; `GET .../provisioning`; a connection's capabilities; `/api/scripts`, `/api/scripts/slots` | `task.yaml`; the readers, staging providers and writers as a ported service; the draft's scripts from the `scripts` route the Workspace has and their slots as a ported service; the plan from `POST .../provisioning-plan`; its apply stays the Runner's `provision` task as `SyncProvisioningPanel.tsx` starts it today; a strategy's **Try** reads a database (AUTHORING-3) |
+| Overview sub-tabs Notes (`components/NotesPanel.tsx`), Pipeline (`MappingPipelineCard.tsx`, and `ReconcileConfigCard.tsx` for the `reconcile:` settings), Provisioning (`ReplicationProvisioningPanel.tsx`), Custom Transforms (`components/ScriptBindings.tsx`), Bulk Load (`SegmentingStrategiesCard.tsx`) | config; `GET .../provisioning`; a connection's capabilities; `/api/scripts`, `/api/scripts/slots` | `task.yaml`; the readers, staging providers and writers as a ported service; the draft's scripts from the `scripts` route the Workspace has and their slots as a ported service; the plan from `POST .../provisioning-plan`; its apply stays the Runner's `provision` task as `SyncProvisioningPanel.tsx` starts it today; a strategy's **Try** runs the set's task `try-strategy` through the console (built: `docs/authoring-metadata.md`, "Rows and trials are answered, never kept") |
 | Table Mappings sidebar and Overview (`TableMappingsPanel.tsx`, `MappingsOverview.tsx`): the source's tables, mapping counts, ticks, **Create mappings** | `GET .../table-mappings`, metadata, `POST .../table-mappings/bulk` | the mapping files; tables from the catalog cache; bulk create as a ported service (below) |
 | Mapping editor (`TableMappingForm.tsx`, `MappingSide.tsx`, `components/InheritableToggle.tsx`, `SourceFilterCard.tsx`, `QuerySourcePanel.tsx` without its rows, `SavedMappingHeading.tsx`) | config; metadata | the mapping file; the catalog cache |
 | Column Mapping (`ColumnMappingEditor.tsx`, `suggestMappings.ts`, `PrimaryKeyCard.tsx`, `naturalKey.ts`, `RelationshipsCard.tsx`, `CachedMetadataCard.tsx`, `components/ColumnMultiPicker.tsx`) | metadata; `.../provisioning/inferred-column-types`, `inferred-natural-key`, `.../refresh-metadata` | the mapping file and the catalog cache; inferred types and key as a ported service; refresh is the shared **Refresh** from a Runner channel (AUTHORING-6); `MappingColumns.tsx` folds into it |
 | Mapping sub-tabs Notes, Custom Transforms, Bulk Load (`DefaultSegmentingCard.tsx`), Provisioning (`ProvisioningCard.tsx`, the plan only), Pipeline (the overrides), Diagnostics (`traceTiming`), Verify (`ChecksCard.tsx`, the `verification:` list only) | config; `.../provisioning` | the mapping file; the plan |
 | Quality Checks (`ReplicationChecksPanel.tsx`, `checkForms.ts`) | `GET\|PUT .../checks` | `checks:` of `task.yaml` (`check/1`) |
-| Helpers with tests: `api/readerNotes.ts`, the writer defaults of `api/types.ts` (`writerDefaults.test.ts`), `api/resolveEndpoint.ts`, `api/canonicalJson.ts`, `api/tableExists.ts`, `components/icons.tsx`, `StatusBadge.tsx`, `mappingTabs.ts`; the shared pieces the replication's cards use: `components/CodeEditor.tsx` (a filter, a query), `ParameterForm.tsx` and `parameterValues.ts` (a script's parameters in `ScriptBindings.tsx`) | | restored with their tests |
+| Helpers with tests: `api/readerNotes.ts`, the writer defaults of `api/types.ts` (`writerDefaults.test.ts`), `api/resolveEndpoint.ts`, `api/canonicalJson.ts`, `api/tableExists.ts`, `mappingTabs.ts`; the shared pieces the replication's cards use: `components/CodeEditor.tsx` (a filter, a query), `ParameterForm.tsx` and `parameterValues.ts` (a script's parameters in `ScriptBindings.tsx`) | | restored with their tests |
 
 ### What is left out of this pass
 
@@ -70,7 +70,7 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
   its form), the Connections list and page (`ConnectionsPage.tsx`, `ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`,
   `connection-edit/ConnectionTestCard.tsx`), the Scripts list and page (`ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`).
   Connections and scripts are edited in Files (the generated forms, the Scripts tab) meanwhile.
-- **Row previews**: `PreviewGrid.tsx`, a query source's rows (`query-preview`).
+- **Row previews**: `PreviewGrid.tsx` is not restored; **Preview rows** on a mapping (`MappingRowsPreview.tsx`) shows a mapping's or a query source's first rows, read by a Runner task and never kept.
 - **Version Control** (`HistoryPanel.tsx`, `components/DiffViewer.tsx` as used there): the Files area's History, Changes and a file's earlier texts.
 - **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; an open design below.
 - The product frame and admin pages (`App.tsx`, `SyncModule.tsx`, `adminHost.tsx`, `components/AppShell.tsx`, Drivers, Libraries, Files, Docs, Admin):
@@ -139,12 +139,15 @@ the slice built and names the slice task it follows. Where a slice task uses som
   client's mapping writer with the cache's columns and key and no `targetType`; the Designer now asks the Workspace's `sync/bulk-create` for the files
   and `sync/inferred-columns` for the types and key it shows (`DbDataWorkspace/README.md`, "A project's two areas"). The cache stays read in the browser
   with those routes too: the Workspace has no metadata route (`docs/authoring-metadata.md`, "A sync project").
-- **No Set up for development** (AUTHORING-19, which needs CHANNELS-1): a read needs the project's package on the Runner with the connection's slot
-  bound in the channel, done by hand as `docs/authoring-metadata.md` says; the channel picker names a channel that binds no slot and says how.
-  AUTHORING-6 adds the button.
-- **No `facts`** (AUTHORING-17) and no live checks in the Designer (SYNCAUTHORING-11, SYNCAUTHORING-12). The set's `preflight` is built: the
+- **No Set up for development** in the slice: a read needed the project's package on the Runner with the connection's slot bound in the channel,
+  done by hand; the channel picker named a channel that binds no slot and said how. **Set up for development** is built since: the channel picker
+  stores the login, copies the draft's connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set
+  up for development").
+- **No `facts`** (AUTHORING-17), and no read of a connection whose driver is Sync's own (SYNCAUTHORING-11). The set's `preflight` is built: the
   console runs it before it serves a version in `prod`, and **Re-check** on the Runs tab runs it (`docs/publishing.md`, "Preflight before
-  activation"; `docs/authoring-metadata.md`, "A sync project"); the Designer does not show its newest run yet (SYNCAUTHORING-12).
+  activation"; `docs/authoring-metadata.md`, "A sync project"); the Designer shows its newest run on the Provisioning sub-tabs (**Newest preflight**,
+  `NewestPreflight.tsx` of `@dbdatakit/sync-ui`), and **Test** and **Describe columns** are placed on the endpoint cards and a query source's
+  Column Mapping (`DbDataWorkspace/README.md`, "A project's two areas").
 - **Publishing** is the Files area's Builds tab, linked from the Designer (**Build and publish…**, `PublishCard.tsx`), the card that also
   holds **Unpublished changes**.
 
@@ -158,14 +161,16 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package `dbdatakit-metadata` (`docs/authoring-metadata.md`) through Sync's metadata service, started through the console's catalog read as the built-in package's are (`api/workspace-catalog/...`); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
-| SYNCAUTHORING-12 | Refresh catalog on an endpoint card, Refresh on the Table Mappings overview and on a mapping's cached-metadata card are built (`RefreshPanel.tsx` of `@dbdatakit/sync-ui`). The Designer's other live pieces of a replication, on AUTHORING-6's shared ones: **Set up for development** where the channel does not bind the slot; **Describe columns** of a query source written into the mapping's column cache, read through the console; **Test** on each endpoint card (the binding test in the chosen channel, sent by the control service, no sample rows); the newest `preflight` run of the chosen channel on the Provisioning sub-tabs (time, run link, findings per mapping), read through the control service (the console's run calls, `/api/deploys/{id}/runs`) | AUTHORING-6 | M | Playwright against `workspace-fake.ts`: Describe columns fills the column cache; Test shows its steps and no row; the Provisioning sub-tab shows the newest preflight with its link; a channel that does not bind the slot offers Set up for development |
+| SYNCAUTHORING-20 | The three rules the offline check copies from Sync's engine become public methods both call: the Flight SQL driver's reading of a type (`FlightSqlTypes` in `DbDataKit.Sync.Core`), `Scd2Writer.RequireNaturalKey` and `KeyReconcileDeleteWriter.RequireKey` | none | S | `SyncOfflineCheck` holds no copied rule, and its tests and the writers' tests pass |
+| SYNCAUTHORING-21 | `sync/capabilities` says whether a target's driver keeps a state table; the Tracking card disables `target` and `both` from it, with the reason | none | S | a story picks a MySQL target and the two modes are disabled with the reason |
+| SYNCAUTHORING-22 | `provisioning-plan` takes the `unsaved` files as the `sync/` routes do; the Provisioning sub-tab and a mapping's Provisioning badge follow unsaved edits | none | S | a story turns on Create target table if missing without saving, and the plan and the badge show the statement |
+| SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
 
 ## Needs from other subjects
 
 - AUTHORING: the other project kinds (build, store, integration, app) adopt the two areas (`registerDesigner`, `DbDataWorkspace/README.md`) as their Designers are built: each
   kind's designed screens register as its Designer (its routes and navigation entries) rather than as tabs of the Files area, and a task that builds one
   says so.
-- AUTHORING-3: a segmenting strategy's **Try** on the Bulk Load sub-tab of a replication's Overview (`SegmentingStrategiesCard.tsx`); until then it says it waits on a Runner task.
 - WORKSPACEISOLATION-4: SYNCAUTHORING-11's **Build and stage for dev** deploys through the control service's deploy, as the Builds tab's publish
   panel does.
 - WORKSPACEISOLATION-1: the sync draft's `script-test` runs the author's code in a child process of the Workspace service; the Workspace's `sync/` routes leave
@@ -174,263 +179,23 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
   COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight` (`SetPreflightJob` in `DbDataSync.TaskRunner`) and SYNCAUTHORING-11's tasks.
-- AUTHORING-17, AUTHORING-18, AUTHORING-19 and AUTHORING-6, after the slice: `facts`, the connection test before publish and Set up for development
-  (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in the Designer.
+- AUTHORING-17, after the slice: `facts` (`docs/authoring-metadata.md`). **Set up for development** is built: it stores the login, copies the draft's
+  connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set up for development"). The Designer
+  places the shared **Set up for development**, **Test** and **Describe columns** already (`ChannelReads.tsx` of `@dbdatakit/sync-ui`); the connection
+  test is the console's
+  `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
-## Proposed decisions
-
-### SYNCAUTHORING-P20: how the filter of a YAML driver's connection is read offline (default, awaiting the owner)
-
-A `driver.yaml` names its identifier quoting (`quoteIdentifier: bracket`, `backtick` or `doubleQuote`) and nothing else of its engine's grammar. The
-offline check reads such a connection's source filter with the ANSI lexer and reserved words, with the descriptor's quoting: brackets as well as
-double quotes for `bracket`; backticks, and double quotes as strings, for `backtick`. Scenario: Ana's `acme-odbc` connection (a `driver.yaml` with
-`quoteIdentifier: bracket`) filters `[region code] > 3 AND regoin_code > 3`; the check reports `regoin_code` and, if the cached table has no
-`region code`, that name too, as errors on the filter's line. A filter in a grammar ANSI does not have (a `#` comment, a `$$` string) can be misread:
-a word in it may be reported as a missing column. Option A, as built. Option B, read a YAML driver's filter as not checked offline, so no error comes
-from a guess at its grammar. Option C, a `lexer:` key in `driver.yaml` naming the shared dialect whose lexer reads it (`sqlserver`, `mysql`, ...), ANSI
-when absent. Recommendation: A now, C when a driver's filters are misread.
-
-### SYNCAUTHORING-P21: the key check of a target that is not in the cache yet (default, awaiting the owner)
-
-A writer that matches rows on the target's primary key (`ChangeApply`, `KeyReconcileDelete`) is checked against the cached target table. When the
-target is not in the cache (provisioning creates it), the check builds the table provisioning would create, with Sync's `ProvisioningColumnBuilder`:
-the mapped source columns under their target names, keyed by the source's key or the mapping's `primaryKey`. Scenario: Ana maps `crm.dbo.audit_log`,
-which has no key, into `dw.public.audit_log`, which does not exist yet, under a `Watermark` reader (so the writer is `ChangeApply`). The check warns:
-"The target dw.public.audit_log is not in catalog-cache.yaml, so it is checked as provisioning would create it, with the source's key. The writer
-'ChangeApply' would refuse this mapping: ... has no primary key". Option A, as built. Option B, check only a target the cache holds, and leave a
-missing one to the set's `preflight`. Recommendation: A, since the first pass after provisioning would fail on it.
-
-### SYNCAUTHORING-P22: rules of Sync's engine the offline check copies (default, awaiting the owner)
-
-Three rules have no public method in the shared Sync libraries, so `SyncOfflineCheck` repeats them: the Flight SQL driver's reading of a type (ANSI
-first, then the dialect of the engine behind it: `FlightSqlDialect`, in `DbDataSync.Drivers.ArrowFlightSql`, which brings the Flight client),
-`KeyReconcileDeleteWriter`'s refusal of a target with no cached key, and `Scd2Writer`'s refusal of a pass with no natural key (its check is
-`internal`). The words of the two refusals are copied. Scenario: a later change makes `FlightSqlDialect` read a Flight SQL column's type in another
-order; the engine changes and the offline check does not, until someone sees the two disagree. Option A, as built, with a comment at each copy naming
-the class it copies. Option B, move each rule into a public method of the shared libraries (a `FlightSqlTypes` class in `DbDataKit.Sync.Core`,
-`Scd2Writer.RequireNaturalKey`, `KeyReconcileDeleteWriter.RequireKey`) that both the engine and the check call. Recommendation: B, as a small task of
-this subject or with SYNCAUTHORING-8.
-
-### SYNCAUTHORING-P31: Refresh on both sides of a mapping's cached-metadata card (default, awaiting the owner)
-
-The row asked for **Refresh** of one table on a mapping's cached-metadata card. The card has a Source line and a Target line, and each line has its own
-**Refresh** for that side's table, so a target table can be read again too. Scenario: Ana's mapping `dbo.Invoices` targets `dw.staging.Invoices`,
-which a DBA created by hand after the cache of `dw` was read; the Target line says "the catalog cache does not have this table". With option A she
-presses **Refresh** on the Target line, the panel says "1 table added", and after **Accept** the line compares the mapping's target columns with the
-table. With option B only the Source line has **Refresh**, and she reads the table from the Files area's Catalog tab (**Refresh from a Runner**).
-Option A, both sides (built). Option B, the source side only. Recommendation: A, since a target that
-provisioning did not create is as likely to change under a mapping as a source.
-
-### SYNCAUTHORING-P32: what Build and publish… says about edits (default, awaiting the owner)
-
-The task asked the card to say that unsaved edits are "built only once saved and committed". A build reads the files the Workspace server holds,
-committed or not (the Builds tab says "Checks and makes what is in this workspace now, committed or not", and a build of uncommitted files says so).
-So the card speaks of saving only. Scenario: Ana turns **Enabled** off on `orders`; the rail's card says "One edit of this draft is not saved, so a
-build leaves it out. Save first to build it." She presses **Save** but does not commit, and the card says nothing more; **Build and publish…** then
-makes a build with `enabled: false`, which the Builds tab marks "Built from changes that are not committed yet". Option A, as built: the card names
-unsaved edits only. Option B, the card also says when saved changes are not committed (the draft's `changes` answer), as a reminder that a build of
-uncommitted files is not in the project's history. Option C, a build requires a commit, and the card says so. Recommendation: A; the Builds tab
-already marks a build of uncommitted files, and C changes how every kind builds.
-
-### SYNCAUTHORING-P33: what Create mappings writes of the inferred types and key (default, awaiting the owner)
-
-The Workspace's `sync/bulk-create` answers, for each ticked table, the mapping file and, beside it, what would be inferred: each column's target
-type and the natural key (or why there is none). The file itself carries no `targetType` and no `primaryKey` or `naturalKey`: a column with no
-`targetType` takes the type inferred from the source's when the target is provisioned, and the key follows the source's. Scenario: Ana ticks
-`dbo.Customers` (key `customer_id`, `name nvarchar(100)`) and `dbo.Lines` (no key) for a PostgreSQL target. With option A the two files map the
-columns, Column Mapping shows `varchar(100)` for `name` as inferred, and the Pipeline tab says `dbo.Lines` has no key to derive a natural key from;
-a later change of `name` to `nvarchar(200)` at the source is followed at the next provisioning. With option B each file states `targetType:
-varchar(100)` and, for an `Scd2` writer, `naturalKey: customer_id`; the types no longer follow the source, as if a person had set them. Option A,
-as built. Option B, write the inferred types and key into the files. The mapping task's "Done when" said Create mappings "writes the inferred natural
-key and target types", which B matches; for a table with no primary key nothing can be derived either way. As built (A), Create mappings lists what
-is inferred for each new mapping, Column Mapping shows the inferred types in grey and the Pipeline tab the derived key, and the story
-`sync-designer.spec.ts` checks those and that the file has neither. Recommendation: A.
-
-### SYNCAUTHORING-P34: which of an engine's own readers need a key (default, awaiting the owner)
-
-The built-in drivers' table says `MsSqlChangeTracking` and `PgLogicalSlot` need the source's primary key, `MsSqlMerge` and `MsSqlMergeReconcile`
-the target's, and `MsSqlCdc` and `OracleFlashback` none: CDC falls back to `fn_cdc_get_all_changes_*` on a table with no key (it loses net changes,
-not rows), and a Flashback version query reads whole rows. The offline check warns from it. Scenario: Ana reads `crm.dbo.audit_log` (no primary
-key) with `MsSqlCdc`; no key warning (the writer's own key check still applies). She reads a PostgreSQL table with no primary key and `REPLICA
-IDENTITY FULL` with `PgLogicalSlot`; the check warns, though the slot would report its deletes, since the cache does not hold the replica identity.
-Option A, as built. Option B, `MsSqlCdc` needs the source's key too (net changes only). Option C, `PgLogicalSlot` needs none offline and the set's
-`preflight` alone checks the replica identity. Recommendation: A.
-
-### SYNCAUTHORING-P35: the Designer's questions carry the person's unsaved edits (default, awaiting the owner)
-
-The four `sync/` routes read the draft's saved files unless the question sends `"unsaved": {"<path>": "<text>" or null}` (for `catalog-cache.yaml`,
-files under `config/` and `drivers/<folder>/driver.yaml`, at most 500 files and 16 MiB); the Workspace then answers on a copy of those files with
-the edits over them. The three that read are `POST` for that reason (`script-slots` is `GET`). Scenario: Ana presses Refresh on the source, does
-not save, ticks `dbo.Customers` and presses Create mappings. With option A the screen sends the refreshed cache and the file maps the new columns.
-With option B the routes read only what is saved, and the screen says "save first" or the file misses the columns. Option A, as built. Option B,
-saved files only, and the routes that only read become `GET`. Recommendation: A, since the slice keeps a refresh as an unsaved edit.
-
-### SYNCAUTHORING-P36: how the built-in drivers register from the capability table (default, awaiting the owner)
-
-`BuiltInDriverCapabilities` (in `DbDataKit.Sync.Drivers.Generic`) holds each built-in driver's Kinds, settings, keys and driver answers. The engine's
-own Kinds and settings are spelled there and the drivers' readers and writers take them from it (`MsSqlDriverKinds.ChangeTracking =
-BuiltInDriverKinds.MsSqlChangeTracking`, `Parameters => BuiltInDriverOptions.MsSqlChangeTracking`); each reader and writer still states its own
-flags (deletes, segmentation, intents, the key it needs) beside the code that acts on them, and `BuiltInDriverCapabilitiesTests` holds the table
-equal to what every driver registers. Scenario: a developer adds a setting to the CDC reader. With option A they add it to the table, and the test
-fails until the reader reads the same list. With option B each driver builds its readers from the table's rows, so a flag is written once, at the
-cost of a reader no longer stating its own behaviour. Option A, as built. Option B, the table is the only place, the drivers read every property
-from it. Recommendation: A.
-
-### SYNCAUTHORING-P37: what the Unpublished changes card counts (default, awaiting the owner)
-
-The old card named the replications whose files changed since the last publish. The Workspace's history lists commits without their files, so
-`UnpublishedNotice` counts every commit of the draft after the build's commit for every replication (the set is one package), and the unsaved edits
-of this replication's folder and of the files every replication uses (connections, scripts, drivers, `catalog-cache.yaml`). Scenario: Ana staged
-version 7 of `erp-sync` on `dev`, then committed a change to the replication `events`. On the page of `orders` the card says "Version 7 on dev of
-runners-eu was built before 1 commit of the draft after the build that was staged"; an unsaved edit of `events/task.yaml` does not show on `orders`.
-Option A, as built. Option B, a Workspace route that lists the files changed since a commit, so the card names only the replications changed. Option
-C, no count of commits: the card says only that the draft's head is not the build's commit. Recommendation: A, since one package carries every
-replication.
-
-### SYNCAUTHORING-P38: how the replication's provisioning plan is grouped (default, awaiting the owner)
-
-The old plan was grouped by connection, database and side, with ticks and **Run selected** across groups. The Workspace's plan names a mapping's
-connection and `schema.table`, not its database, and the task `provision` applies one mapping's side by its action. `ReplicationProvisioningPanel`
-groups by connection and side, shows a statement two mappings need once with both names, lists a side the cache cannot plan under **Not included**,
-and offers **Apply** per mapping's side (no ticks). Scenario: `dbo.orders` and `dbo.lines` both need `CREATE SCHEMA dbo` on `dw`; the group `dw ·
-target` shows it once under "dbo.orders, dbo.lines", and its Apply buttons are `dbo.orders` and `dbo.lines`. Option A, as built. Option B, add the
-database to the plan's endpoint and group by it, as the old tab did. Recommendation: A until a replication's mappings use two databases of one
-connection.
-
-### SYNCAUTHORING-P39: which tracking modes the Tracking card offers (default, awaiting the owner)
-
-The old card disabled `target` and `both` when the live server said the target's writers keep no state table. Offline, `TrackingCard` offers every
-mode and says that the draft's check refuses `target` and `both` when the target's engine keeps no state table. Scenario: Ana picks **Target** for a
-replication whose target is MySQL; the card takes it, and the draft's check reports the mode on `task.yaml`. Option A, as built. Option B, disable
-the two modes from the target connection's engine (SQL Server and PostgreSQL keep one), a second copy of Sync's `TrackingResolution` in the browser.
-Option C, a field of `sync/capabilities` saying whether the driver keeps a state table. Recommendation: C, then disable as the old card did.
-
-### SYNCAUTHORING-P40: a secret parameter in the parameter form (default, awaiting the owner)
-
-The old form showed a `Secret` parameter as a password field that was never filled, since the server never sent one back. A draft's file holds the
-value as written, and the draft's check refuses a password in a file, so `ParameterForm` shows a `Secret` parameter as a text field for a reference
-(`secret:<name>`). Scenario: a script declares `apiKey` of type `Secret`; Ana binds it and types `secret:dbdatakit:sync:crm-key`, which is written
-into the binding's parameters. Option A, as built. Option B, a picker of the project's secret references (the secrets overview of AUTHORING).
-Recommendation: A now, B when that overview exists.
-
-### SYNCAUTHORING-P41: the Quality Checks editor refuses a check before it is in the list (default, awaiting the owner)
-
-The old panel saved the whole section through the server's strict reader, which named a fault by file and line. In the Designer a check goes into
-`task.yaml` as an unsaved edit, and the draft's check reads it. `ReplicationChecksPanel` keeps **Add to the list** disabled, with the reason, for a
-check with no id, an id the replication has already, or no dataset; everything else is left to the draft's check. Scenario: Ana adds a second
-check with the id `orders_fresh`; the button says "The replication has a check 'orders_fresh' already." Option A, as built. Option B, no check in
-the screen; the draft's check reports the duplicate. Recommendation: A.
-
-### SYNCAUTHORING-P42: `icons.tsx` and `StatusBadge.tsx` are not restored (default, awaiting the owner)
-
-"What is ported" lists `components/icons.tsx` and `StatusBadge.tsx` among the helpers. At `96601f27^` they are used only by the frame
-(`AppShell.tsx`) and the monitoring screens (`StatusCard`, `RunsPanel`, `RunDetailsDialog`, `BulkLoadProgressCard`, `MonitoringPanel`), all left
-out. Scenario: the second pass restores Run History; it restores `StatusBadge` with it. Option A, left for the pass that uses them. Option B,
-restore them now unused. Recommendation: A, and the helpers line of "What is ported" drops them.
-
-### SYNCAUTHORING-P43: which findings the navigation counts beside a replication (default, awaiting the owner)
-
-The navigation shows, beside each replication, the number of error findings of the draft's check whose file is under that replication's folder
-(`config/replications/<name>/`): its `task.yaml` and its mappings. Warnings are not counted, and a finding in a file every replication uses (a
-connection, a script, `catalog-cache.yaml`) is counted for none. The check reads the saved files. Scenario: `invoices/task.yaml` names a reader the
-source's driver does not offer and `config/connections/erp.yaml` holds a password; the navigation shows `invoices 1`, and the password is counted only
-in the chrome's count. Option A, as built. Option B, also count the errors of the connections a replication's endpoints and mappings name. Option C,
-count warnings as a second, quieter number. Recommendation: A; the chrome's count already covers the whole draft.
-
-### SYNCAUTHORING-P44: when the Provisioning sub-tab asks for the plan, and what it plans from (default, awaiting the owner)
-
-The old tab read the plan from the live server on opening. The Workspace's `provisioning-plan` reads the draft's saved files and catalog cache, and
-takes no unsaved edits. The sub-tab asks for it on opening and again after every save; **Plan again** asks at once; the tab says how many unsaved
-edits the plan leaves out. Scenario: Ana turns on **Create target table if missing** and does not save; the tab says "one unsaved edit is not in it
-until saved", and the plan shows the statements of the saved settings until she saves. Option A, as built. Option B, the route takes the unsaved edits
-as the `sync/` routes do (SYNCAUTHORING-P35), so the plan follows the screen. Option C, the plan is asked only by a button, as the Files area's tab
-does. Recommendation: B, as a small change of the route and the sub-tab.
-
-### SYNCAUTHORING-P45: the addresses of the Overview's sub-tabs and of Quality Checks (default, awaiting the owner)
-
-Notes is at the replication's own address (`designer/replications/orders`), the other sub-tabs under `overview/` (`.../orders/overview/pipeline`,
-`/provisioning`, `/transforms`, `/segmenting`, as the old Sync screens had them), and Quality Checks at `.../orders/checks`. An address naming a
-sub-tab that does not exist opens Notes. Scenario: Ana sends Ben `.../designer/replications/orders/overview/provisioning`; it opens the plan of
-`orders`. Option A, as built. Option B, the sub-tabs directly under the replication (`.../orders/pipeline`), which share one level with `mappings` and
-`checks`. Recommendation: A.
-
-### SYNCAUTHORING-P46: the addresses of a mapping's tabs (default, awaiting the owner)
-
-Each of a mapping's eight tabs is at `.../mappings/<mapping>/<tab>` (`notes`, `columns`, `transforms`, `segmenting`, `provisioning`, `pipeline`,
-`diagnostics`, `verify`); the sidebar and Create mappings open `columns`, and the mapping's own address, or one naming no tab, opens Column Mapping.
-The old screens had Notes at the mapping's own address and Verify at `.../verification`, beside the editor. Scenario: Ana sends Ben
-`.../designer/replications/orders/mappings/dbo.Lines/verify`; it opens the mapping's checks. Ben opens `.../mappings/dbo.Lines` and lands on Column
-Mapping. Option A, as built. Option B, Notes at the mapping's own address as on the replication (SYNCAUTHORING-P45), the sidebar still opening
-`columns`. Recommendation: A, since a person opening a mapping almost always wants its columns.
-
-### SYNCAUTHORING-P47: the Provisioning badge of a mapping that is not saved (default, awaiting the owner)
-
-A mapping's Provisioning tab shows its entry of the replication's plan, which the Workspace makes from the saved files (SYNCAUTHORING-P44), and the
-tab's badge counts that entry's statements. A mapping made by Create mappings and not saved has no entry, so its tab has no badge and says it is
-planned once saved; a saved mapping with unsaved edits shows the plan of its saved file and says so. Scenario: Ana creates `dbo.Lines`, whose target
-table `dw` does not have; the tab reads **Provisioning** with no number. She presses **Save mapping** and it reads **Provisioning 1**. Option A, as
-built. Option B, the plan takes the unsaved edits (SYNCAUTHORING-P44's option B), so the badge counts before the save. Recommendation: B with
-SYNCAUTHORING-P44's B; A until then.
-
-### SYNCAUTHORING-P48: the column pairs of a query source (default, awaiting the owner)
-
-**Custom query, not a table** writes `query:` and removes the source's schema and table. A query's columns are not in the catalog cache, and
-reading them (**Describe columns**) is SYNCAUTHORING-12's, so Column Mapping says the column pairs of a query source are edited in Files, and
-**Save mapping** takes a query source with no column pairs. Scenario: Ana turns the source of `dbo.Lines` into `SELECT line_no, shipped_on FROM
-dbo.Lines WHERE shipped_on IS NOT NULL` and saves; the draft's check reports the mapping until she writes its `columnMappings:` in Files. Option A, as
-built. Option B, offer **Custom query** only once Describe columns is built. Option C, let Column Mapping take column names typed by hand for a query
-source. Recommendation: A until SYNCAUTHORING-12.
-
-### SYNCAUTHORING-P49: the set's preflight asks every target login for INSERT, UPDATE and DELETE (default, awaiting the owner)
-
-The preflight checks the target with the engine's privilege functions and reports each of `INSERT`, `UPDATE` and `DELETE` the run login lacks as an
-error, whatever the mapping's writer does. Scenario: Ana's replication `audit` reloads `dw.dbo.audit` with `DeleteInsert`, which deletes and inserts
-and never updates; the DBA granted the login `INSERT` and `DELETE` only. The preflight reports "may not UPDATE dw.dbo.audit" as an error, so the
-deploy to `prod` stops until she confirms it. Option A, as built. Option B, each writer declares the privileges it needs (as it declares `NeedsKey`),
-and the preflight asks only for those. Recommendation: B, as a small task of this subject; A until then.
-
-### SYNCAUTHORING-P50: the preflight reads privileges on SQL Server and PostgreSQL only (default, awaiting the owner)
-
-The privilege functions are read on SQL Server (`HAS_PERMS_BY_NAME`) and PostgreSQL (`has_table_privilege`, `has_schema_privilege`, the table's owner
-for an alter). On MySQL, MariaDB, Oracle, DuckDB, Flight SQL and a YAML driver the preflight says the privileges are not read: the source's login
-is still checked by the read that returns no row, and whether the target's login may write is not checked. Scenario: Ana's set writes to Oracle with
-a login that may only select; the preflight reports information only, and the first pass fails on its first insert. Option A, as built. Option B,
-add MySQL (`information_schema.table_privileges`, `SHOW GRANTS`) and Oracle (`session_privs`, `all_tab_privs`), each with a conformance test on its
-engine. Recommendation: A now, B when a set writes to one of those engines in production.
-
-### SYNCAUTHORING-P51: how much a missing target table or column weighs in the preflight (default, awaiting the owner)
-
-A target table that is not there is an error, with the statement that creates it, unless the mapping says `createTargetTableIfMissing` and the run
-login may create it, when it is a warning (the first pass creates it). A mapped target column that is not there is an error unless the mapping says
-`alterTargetTableColumnsIfMissingOrChanged`, when it is a warning. Scenario: Ana's mapping `orders` targets `dw.dbo.orders`, which is not in `prod`;
-with `createTargetTableIfMissing` off the deploy stops on "The target table dw.dbo.orders is not there: apply the target side's provisioning (the
-set's `provision` task, createTargetTable) before the first pass", and she applies the provisioning or confirms the error. Option A, as built.
-Option B, a missing target table is always a warning, since `provision` creates it after the version is served. Option C, always an error.
-Recommendation: A, since a pass refuses a missing table and a confirmed error says so in the Runner's record.
-
-### SYNCAUTHORING-P52: what the preflight's read of the source compiles, and what a refused read says (default, awaiting the owner)
-
-The read that returns no row is `SELECT <the mapped columns that exist> FROM <table> WHERE (<filter>) AND 1 = 0`: a column's `transform`, a
-relationship's joined table and a query source's filter are not part of it (a query source is read as `SELECT * FROM (<query>) preflight_query WHERE
-1 = 0`). When the database refuses it, the finding gives the suite's classified words for a driver failure (`The statement was not accepted by the
-server. [db 42703]`), the statement and, for a filter, the table's columns; the database's own message is left out, as every driver failure leaves it
-out unless the host shows details. Scenario: Ana's filter `regoin > 0` fails with "The source filter of the mapping 'main' on crm.dbo.orders fails on
-the database: The statement was not accepted by the server. [db 42703] The statement, which reads no row: SELECT ... WHERE (regoin > 0) AND 1 = 0.
-The columns of crm.dbo.orders are id, name, region." Option A, as built. Option B, also compile each `transform` in the select list. Option C, show
-the database's own message for this read, which names the column and holds no row's value. Recommendation: A with C.
-
-### SYNCAUTHORING-P53: the preflight's parts and its input (default, awaiting the owner)
-
-Each mapping records one `preflight-findings` step keyed `<replication>/<mapping>`; a replication that keeps its state on the target records one
-more, `<replication> tracking`, checked once per target connection and database its mappings use. The input `replication` (empty by default, which
-is how the console starts it) checks one replication; a replication that is switched off is checked only when it is named. Scenario: the set
-`erp-sync` has `orders` (two mappings, `tracking: { mode: target }`) and `events` (switched off); the console's preflight records `orders/orders`,
-`orders/lines` and `orders tracking`, and nothing of `events`. Option A, as built. Option B, one part per replication holding all its mappings'
-findings. Recommendation: A, since SYNCAUTHORING-12 shows the findings per mapping.
-
 ## Open designs
+
+### The preflight reads privileges on MySQL and Oracle
+
+The set's preflight reads the target login's privileges on SQL Server and PostgreSQL only. When a set writes to MySQL or Oracle in production, it reads them there too (`information_schema.table_privileges` and `SHOW GRANTS`; `session_privs` and `all_tab_privs`), each with a conformance test on its engine.
+
+### A YAML driver names the dialect that reads its filters
+
+The offline check reads a YAML driver's source filter with the ANSI lexer and the driver's identifier quoting, so a filter in a grammar ANSI does not have (a `#` comment, a `$$` string) can be misread. When a driver's filters are misread, `driver.yaml` gains a `lexer:` key naming the shared dialect that reads them (`sqlserver`, `mysql`, ...), ANSI when absent.
 
 ### Monitoring and operations, second pass
 
@@ -457,8 +222,6 @@ person, or the console's Runner screens with a link from the Designer) before it
   the Runner's own screens.
 - **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is TASKENGINE's).
 - **Live updates**: the old screens followed runs over SignalR; the Runner's screens poll.
-- **Row previews**: a query source's rows and a mapping's preview, wherever authoring-time reads of a database are settled (AUTHORING's proposals on
-  where rows may be kept and where read logins live).
 
 ### Outside a replication, later
 
@@ -472,7 +235,8 @@ a sync project with their own navigation entries, or Designer pages shared by ev
   `config/replications/`) and the check's findings per replication; the form itself is restored in this pass as the navigation's **New replication**.
 - **The Connections list** (`ConnectionsPage.tsx`): driver, host, database and authentication per connection, **New connection**, and (monitoring) the
   reachable column and **Test all**. Needs: the draft's connection files; the engine list of **New connection** from the engine registry (`useSyncEngines`);
-  the reachable column and Test all wait on the connection test (SYNCAUTHORING-12) and the monitoring pass.
+  the reachable column and Test all wait on the monitoring pass; the connection test they would run is the shared `BindingTest`, which the
+  endpoint cards of a replication's Overview use.
 - **A connection's page** (`ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`, `connection-edit/ConnectionTestCard.tsx`): engine, address,
   database, timeouts, the driver's own parameters with their check, the login by secret reference and the run login, custom transforms and hooks, the
   test. Needs: the driver's connection parameters and the parameter check (`connection-parameters`, `Services/ParameterCheck.cs`), a driver's

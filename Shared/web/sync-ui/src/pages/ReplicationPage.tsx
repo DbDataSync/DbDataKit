@@ -114,7 +114,7 @@ export function ReplicationPage({ project, id, replication, rest }: { project: s
           {model.task.loading && <div className="empty">Loading…</div>}
           {task && tab === 'overview' && (
             <OverviewPanel project={project} id={id} replication={replication} rest={rest} draft={task} setDraft={model.setTask}
-              connections={model.connections} mappingCount={model.mappingNames.length} editable={editable} />
+              connections={model.connections} mappingCount={model.mappingNames.length} mappingNames={model.mappingNames} editable={editable} />
           )}
           {task && tab === 'mappings' && (
             <TableMappingsPanel project={project} id={id} replication={replication} model={model} rest={rest === 'mappings' ? '' : rest.slice('mappings/'.length)} />

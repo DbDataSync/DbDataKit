@@ -32,7 +32,7 @@ export function overviewTabOf(rest: string): OverviewTab {
  * stay above everything because every setting below is about what happens between those two. Each sub-tab has its own address, so a reload or a
  * link opens the same one, and every sub-tab edits the same draft of `task.yaml`, so moving between them keeps an unsaved edit.
  */
-export function OverviewPanel({ project, id, replication, rest, draft, setDraft, connections, mappingCount, editable = true }: {
+export function OverviewPanel({ project, id, replication, rest, draft, setDraft, connections, mappingCount, mappingNames = [], editable = true }: {
   project: string
   id: string
   replication: string
@@ -42,6 +42,8 @@ export function OverviewPanel({ project, id, replication, rest, draft, setDraft,
   setDraft: (next: ReplicationTaskConfig) => void
   connections: ConnectionView[]
   mappingCount: number
+  /** The replication's mappings, which a strategy's **Try** runs over. */
+  mappingNames?: string[]
   editable?: boolean
 }) {
   const tab = overviewTabOf(rest)
@@ -87,7 +89,7 @@ export function OverviewPanel({ project, id, replication, rest, draft, setDraft,
               onChange={(scripts) => setDraft({ ...draft, scripts })} editable={editable} />
           )}
           {tab === 'segmenting' && (
-            <SegmentingStrategiesCard strategies={draft.segmentingStrategies ?? []}
+            <SegmentingStrategiesCard strategies={draft.segmentingStrategies ?? []} trial={{ project, id, replication, mappings: mappingNames }}
               onChange={(segmentingStrategies) => setDraft({ ...draft, segmentingStrategies })} editable={editable} />
           )}
         </div>

@@ -23,6 +23,11 @@ on:
       - "global.json"
       - ".github/workflows/shared-ci.yml"
       - ".github/workflows/_shared.yml"
+      # sources of other products that shared tests read: the command-timeout scan of Sync's drivers and engine (DbDataKit.Sync.Drivers.Abstractions.Tests),
+      # the transfer gate's scan of Build (DbDataKit.Transfer.Tests), the Gateway's engine list (DbDataKit.Connections.Descriptor.Tests)
+      - "DbDataSync/src/**"
+      - "DbDataBuild/src/**"
+      - "DbDataGateway/src/DbDataGateway.Server/Data/GatewaySources.cs"
       - "!**.md"    # Markdown alone starts nothing (scripts/ci_paths.py); the last match wins, so this is last
   push:
     branches: [main]
@@ -40,6 +45,11 @@ on:
       - "global.json"
       - ".github/workflows/shared-ci.yml"
       - ".github/workflows/_shared.yml"
+      # sources of other products that shared tests read: the command-timeout scan of Sync's drivers and engine (DbDataKit.Sync.Drivers.Abstractions.Tests),
+      # the transfer gate's scan of Build (DbDataKit.Transfer.Tests), the Gateway's engine list (DbDataKit.Connections.Descriptor.Tests)
+      - "DbDataSync/src/**"
+      - "DbDataBuild/src/**"
+      - "DbDataGateway/src/DbDataGateway.Server/Data/GatewaySources.cs"
       - "!**.md"    # Markdown alone starts nothing (scripts/ci_paths.py); the last match wins, so this is last
   workflow_dispatch:
     inputs:

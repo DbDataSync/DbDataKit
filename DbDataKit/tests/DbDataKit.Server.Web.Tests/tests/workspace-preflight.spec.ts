@@ -64,5 +64,12 @@ test('a Build package served in prod waits for its preflight: an error keeps it 
   await expect(result.getByTestId('wsp-preflight-finding').first()).toHaveAttribute('data-severity', 'error')
   await expect(result.getByTestId('wsp-preflight-finding').nth(1)).toContainText('marts.dim_store was changed outside dbdatabuild')
   expect(fake.runs.at(-1)).toMatchObject({ task: 'preflight', served: true, inputs: {} })
+
+  // the newest-check card of prod is that Re-check now: its time, its run's link and what it found
+  const newest = page.locator('[data-testid="wsp-newest-check"][data-channel="prod"]')
+  await expect(newest).toHaveAttribute('data-errors', '1')
+  await expect(newest.getByTestId('wsp-newest-check-when')).toContainText('finished 2026-11-11T11:00:05Z')
+  await expect(newest.getByTestId('wsp-newest-check-link')).toHaveAttribute('href', new RegExp(`^/servers/${RUNNER}/runs\\?run=`))
+  await expect(newest.getByTestId('wsp-preflight-finding').first()).toHaveAttribute('data-severity', 'error')
   expect(fake.workspaceRuns).toEqual([])
 })

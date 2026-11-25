@@ -44,6 +44,9 @@ public sealed class ChangeApplyWriter(SqlDialect dialect, ITableCatalog catalog,
 
     public bool SupportsReconciliation => false;
 
+    /// <summary>A DELETE, an UPDATE and an INSERT over the staging table.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.All;
+
     public IReadOnlyList<ParameterDescriptor> Parameters { get; } = [ApplyBatch.Descriptor];
 
     /// <summary>An update and a delete find their target row by the target's primary key (<see cref="RequireKey"/>).</summary>

@@ -14,3 +14,31 @@ How the suite's design answers its main risks. Findings of earlier code reviews 
 | Two people change the same thing through two control services | Every write is checked against the version it was based on, and refused when that version changed. |
 | Monitoring stops when the control service is down | Each service evaluates its own health rules and keeps its own notifications. The console only shows them. |
 | A scheduled task runs twice | A Runner group's work queue gives one instance the lease of a due run and holds a run lock. A Build refresh started while another is running follows its `on_busy` setting. |
+
+## When a safety rule is worth adding
+
+A rule that refuses, warns or asks for a confirmation is added only when it stops a mistake that can actually happen, or protects something a person
+does not already control. Before adding one, answer three questions:
+
+1. **What does it stop?** Name the mistake and who makes it. "Ana runs a test against production because the channel picker chose it" names a
+   mistake. "Production should be protected" does not.
+2. **Does the person already have the access?** If they hold the login, the role or the file, the rule cannot keep them out. It only changes which way
+   they take.
+3. **What do they do when it refuses?** If the quickest way around the rule is worse than what the rule refused, do not add it.
+
+Rules the suite keeps:
+
+- A non-production channel never inherits production's connection. A test run cannot write to production because a binding was missing.
+- A read in a production channel is warned about before it starts.
+- An error found by a preflight check needs a confirmation before the version is activated, and the confirmation is recorded with the person's name.
+
+Rules the suite does not add:
+
+- Refusing to store a login for a production channel from the Workspace screens. A person who has production's password can store it under a
+  development channel instead. The refusal changes where the login is recorded, not who can use it.
+- Asking for a role on the Workspace before the console deploys a build, when the person may already publish on the Runner. A publisher who is
+  refused can still upload the package's folder on the Runner's Packages screen, which skips the build record, the console's signature and the
+  preflight check. The rule would push them onto the way the suite can trace least.
+- Hiding a failure's full message from an administrator. They are the person who has to fix it, and without the message they guess.
+
+Who may do what is set by the roles of each service. The roles are deliberately broad for now, and a rule does not narrow them on its own.

@@ -60,6 +60,9 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
 
     public bool SupportsReconciliation => false;
 
+    /// <summary>Closes a changed version (an UPDATE) and opens a new one (an INSERT); a version is never deleted.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Insert | WritePrivileges.Update;
+
     public IReadOnlyList<ParameterDescriptor> Parameters => Options;
 
     /// <summary>A row's versions are found by its natural key, stated or derived from the source's primary key.</summary>

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor, Field } from '@dbdatakit/shell'
+import { RunAnswerStatus, trialLine, TRY_STRATEGY_TASK, useDraftOrNull, useRunAnswer, type StrategyTrialAnswer } from '@dbdatakit/workspace'
+import { mappingPath } from '../model'
 import { ParameterForm } from '../components/ParameterForm'
 import { useSyncScripts } from '../useSyncDraft'
 import { runsAgainstAConnection, type ScriptView, type SegmentingStrategyConfig, type SegmentingStrategyKind } from '../types'
@@ -40,21 +42,26 @@ export function strategyAsWritten(s: SegmentingStrategyConfig): SegmentingStrate
  * The replication's named segmenting strategies (`segmentingStrategies:` of `task.yaml`), referenced by name from a mapping's Bulk Load tab: a
  * list with an editor below it. Add or Update puts the strategy in the list, which is an unsaved edit of the task until it is saved.
  */
-export function SegmentingStrategiesCard({ strategies, onChange, editable = true }: {
+/** Where a strategy is tried: the draft (project and workspace), the replication, and its mappings, one of which the strategy divides. */
+export interface StrategyTrialPlace { project: string; id: string; replication: string; mappings: string[] }
+
+export function SegmentingStrategiesCard({ strategies, onChange, editable = true, trial }: {
   strategies: SegmentingStrategyConfig[]
   onChange: (next: SegmentingStrategyConfig[]) => void
   editable?: boolean
+  trial?: StrategyTrialPlace
 }) {
   const { scripts } = useSyncScripts()
-  return <SegmentingStrategiesView strategies={strategies} scripts={scripts} onChange={onChange} editable={editable} />
+  return <SegmentingStrategiesView strategies={strategies} scripts={scripts} onChange={onChange} editable={editable} trial={trial} />
 }
 
-/** The card without its read of the draft's scripts. */
-export function SegmentingStrategiesView({ strategies, scripts, onChange, editable = true }: {
+/** The card without its read of the draft's scripts. Without `trial` the editor offers no **Try**. */
+export function SegmentingStrategiesView({ strategies, scripts, onChange, editable = true, trial }: {
   strategies: SegmentingStrategyConfig[]
   scripts: ScriptView[]
   onChange: (next: SegmentingStrategyConfig[]) => void
   editable?: boolean
+  trial?: StrategyTrialPlace
 }) {
   // null is "nothing open"; a number is the index being edited, -1 a new one, so Cancel discards
   const [editing, setEditing] = useState<number | null>(null)
@@ -94,12 +101,12 @@ export function SegmentingStrategiesView({ strategies, scripts, onChange, editab
         </div>
       ))}
 
-      {draft && <StrategyEditor draft={draft} setDraft={setDraft} scripts={scripts} onCancel={close} onCommit={commit} isNew={editing === -1} taken={taken} />}
+      {draft && <StrategyEditor draft={draft} setDraft={setDraft} scripts={scripts} onCancel={close} onCommit={commit} isNew={editing === -1} taken={taken} trial={trial} />}
     </div>
   )
 }
 
-function StrategyEditor({ draft, setDraft, scripts, onCancel, onCommit, isNew, taken }: {
+function StrategyEditor({ draft, setDraft, scripts, onCancel, onCommit, isNew, taken, trial }: {
   draft: SegmentingStrategyConfig
   setDraft: (next: SegmentingStrategyConfig) => void
   scripts: ScriptView[]
@@ -107,6 +114,7 @@ function StrategyEditor({ draft, setDraft, scripts, onCancel, onCommit, isNew, t
   onCommit: () => void
   isNew: boolean
   taken: boolean
+  trial?: StrategyTrialPlace
 }) {
   const set = (patch: Partial<SegmentingStrategyConfig>) => setDraft({ ...draft, ...patch })
   const available = scripts.filter((s) => s.kind === SEGMENTING_SLOT && s.enabled)
@@ -153,15 +161,80 @@ function StrategyEditor({ draft, setDraft, scripts, onCancel, onCommit, isNew, t
         </Field>
       )}
 
+      {trial && <StrategyTry strategy={draft} place={trial} />}
+
       <div className="row" style={{ gap: 10 }}>
-        <button type="button" className="btn btn-sm" disabled title="Trying a strategy reads a database on a Runner, which the Designer does not offer yet." data-testid="try-strategy-button">Try</button>
-        <span className="hint" data-testid="try-strategy-note">Trying a strategy reads a database on a Runner, which the Designer does not offer yet.</span>
         <span className="spacer" />
         <button type="button" className="btn btn-sm" onClick={onCancel} data-testid="cancel-strategy-button">Cancel</button>
         <button type="button" className="btn btn-sm btn-primary" disabled={!draft.name.trim() || taken} onClick={onCommit} data-testid="commit-strategy-button">{isNew ? 'Add' : 'Update'}</button>
       </div>
       {taken && <span className="hint" style={{ color: 'var(--danger-ink)' }} data-testid="strategy-name-taken">The replication has a strategy of this name already.</span>}
       <span className="hint">The strategies are kept in the replication's task file: Save settings saves them.</span>
+    </div>
+  )
+}
+
+/**
+ * **Try** a strategy as it is being edited, before it is saved: the set's task `try-strategy` on the Runner the draft was last published to runs it over one of the
+ * replication's mappings as the draft has it (unsaved edits included, sent as `mapping_text`) and a column, its SQL with the logins that channel binds (a DuckDB strategy reads no database), started through the console as the
+ * signed-in person. Every candidate is shown, selected or not. The candidates are values of a table, so they are shown here and kept nowhere.
+ * Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept
+ */
+function StrategyTry({ strategy, place }: { strategy: SegmentingStrategyConfig; place: StrategyTrialPlace }) {
+  const run = useRunAnswer<StrategyTrialAnswer>(place.project, place.id)
+  const draft = useDraftOrNull()
+  const [mapping, setMapping] = useState('')
+  const [column, setColumn] = useState('')
+  const chosen = mapping || place.mappings[0] || ''
+  const needsColumn = strategy.kind !== 'Script'
+  const why = place.mappings.length === 0 ? 'The replication has no mapping to try the strategy over.'
+    : needsColumn && column.trim() === '' ? 'Name the column of the source the bounds apply to.'
+    : strategy.kind === 'Script' && !strategy.scriptName ? 'Pick the script first.'
+    : strategy.kind !== 'Script' && !(strategy.sql ?? '').trim() ? 'Write the query first.' : null
+  const answer = run.answer
+  return (
+    <div className="stack" style={{ gap: 6 }} data-testid="try-strategy">
+      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label className="hint" htmlFor="try-strategy-mapping">Over the mapping</label>
+        <select id="try-strategy-mapping" className="select" value={chosen} onChange={(e) => setMapping(e.target.value)} data-testid="try-strategy-mapping">
+          {place.mappings.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        {needsColumn && (
+          <>
+            <label className="hint" htmlFor="try-strategy-column">column</label>
+            <input id="try-strategy-column" className="input" value={column} onChange={(e) => setColumn(e.target.value)} placeholder="created_at" data-testid="try-strategy-column" />
+          </>
+        )}
+        <button type="button" className="btn btn-sm" disabled={!run.version || why !== null || run.pending || run.running !== undefined} title={why ?? undefined}
+          onClick={() => run.ask({ task: TRY_STRATEGY_TASK, inputs: { replication: place.replication, mapping: chosen, strategy: JSON.stringify(strategyAsWritten(strategy)), name: '', column: column.trim(), repo_dir: 'repo', mapping_text: draft?.textOf(mappingPath(place.replication, chosen)) ?? '' } })}
+          data-testid="try-strategy-button">Try</button>
+      </div>
+      <span className="hint" data-testid="try-strategy-note">
+        {run.version
+          ? `Runs this strategy as written, over the mapping as the draft has it, on ${run.version.channel} of ${run.version.targetName} (version ${run.version.version})${runsAgainstAConnection(strategy.kind) ? ', with the logins that channel binds' : ''}. Nothing is saved or kept.`
+          : run.loading ? 'Looking for the version this draft published…' : 'Publish a build of this draft to a Runner first: a strategy is tried there, with the connections and drivers of that version.'}
+      </span>
+      <RunAnswerStatus version={run.version} pending={run.pending} running={run.running} error={run.error} testId="try-strategy" />
+      {answer && (
+        <div data-testid="try-strategy-result" data-run={run.run?.run_id}>
+          <div className="hint" data-testid="try-strategy-summary">{trialLine(answer)}</div>
+          {answer.candidates.length > 0 && (
+            <table className="table" data-testid="try-strategy-candidates">
+              <thead><tr><th>Label</th><th>From</th><th>Up to</th><th>Selected</th></tr></thead>
+              <tbody>
+                {answer.candidates.map((c, i) => (
+                  <tr key={i} data-testid="try-strategy-candidate" data-selected={c.selected}>
+                    <td>{c.label}</td>
+                    <td className="mono">{c.start ?? c.segment}</td>
+                    <td className="mono">{c.end ?? ''}</td>
+                    <td>{c.selected ? 'yes' : 'no'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   )
 }

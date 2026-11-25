@@ -564,6 +564,19 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         return ClientRun.From(JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!);
     }
 
+    /// <summary>
+    /// The answer of a run a person waits for (<c>GET /api/v1/runs/{id}/answer?on_behalf_of=</c>, the operator role, by the console that started the run for <paramref name="onBehalfOf"/>): the runner's status and its body as it said them,
+    /// <c>state</c> <c>done</c> with <c>answer</c>, <c>running</c>, <c>failed</c> or <c>gone</c>. The answer is taken from the runner's memory, once. A refusal (another person, a missing role) throws in the runner's words.
+    /// </summary>
+    public async Task<(int Status, JsonObject Body)> RunAnswerAsync(string server, string? code, Guid id, string onBehalfOf, Action<string>? log = null, CancellationToken ct = default)
+    {
+        using var link = await OpenAsync(server, code, log, ct);
+        using var response = await link.SendAsync(HttpMethod.Get, $"api/v1/runs/{id}/answer?on_behalf_of={Uri.EscapeDataString(onBehalfOf)}", null, ct);
+        var status = (int)response.StatusCode;
+        if (status is not (200 or 202 or 410 or 422)) throw await link.RefusedAsync(response, $"to take the answer of the run {id}", ct);
+        return (status, JsonNode.Parse(await response.Content.ReadAsStringAsync(ct)) as JsonObject ?? []);
+    }
+
     /// <summary>The lines of a run's log after line <paramref name="after"/> (<c>GET /api/v1/runs/{id}/logs</c>, the viewer role); null when the runner has no such run.</summary>
     public async Task<IReadOnlyList<ClientLogLine>?> RunLogsAsync(string server, string? code, Guid id, long? after = null, int limit = 200, Action<string>? log = null, CancellationToken ct = default)
     {

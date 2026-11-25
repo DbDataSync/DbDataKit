@@ -60,6 +60,9 @@ public static class ReplicationSetPackage
     /// <summary>The name of the set's manual, read-only preflight (<see cref="SetPreflightJob"/>), which a control service runs before it serves a version in production; a replication may not take it.</summary>
     public const string PreflightTask = Preflight.TaskName;
 
+    /// <summary>The names of the set's tasks a person waits for on a screen (<see cref="PreviewJob"/>, <see cref="TryStrategyJob"/>); a replication may not take them.</summary>
+    public static readonly IReadOnlyList<string> PreviewTaskNames = [PreviewTasks.Preview, PreviewTasks.TryStrategy];
+
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
     private static string TargetDotnet()
@@ -132,6 +135,7 @@ public static class ReplicationSetPackage
             if (!PackageManifestValidator.NameRule.IsMatch(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task name `{taskName}`, which is not 1 to 64 lower-case letters, digits, `-` or `_`."); continue; }
             if (taskName == ProvisionTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's provisioning task; rename the replication."); continue; }
             if (taskName == PreflightTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's preflight; rename the replication."); continue; }
+            if (PreviewTaskNames.Contains(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of a task the set has for its screens (the rows of a mapping, the trial of a segmenting strategy); rename the replication."); continue; }
             if (named.TryGetValue(taskName, out var other)) { problems.Add($"{file}: the replications `{other}` and `{task.Name}` both make the task `{taskName}`; rename one of them."); continue; }
             named[taskName] = task.Name;
 
@@ -223,6 +227,11 @@ public static class ReplicationSetPackage
         // the set's preflight (Design: docs/authoring-metadata.md#a-sync-project): read only, by hand, over the same connections, which a control service runs on a version staged in production before it serves it
         tasks.Add(Preflight.Declare(allSlots, inputs: SetPreflightSteps.Inputs(RepoDir)));
 
+        // what a person waits for on a screen (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept): read only, by hand, over the same connections, answered to the console and kept
+        // nowhere; two people may preview at once, and a failed one is asked again, never retried
+        tasks.Add(Screen(typeof(PreviewJob), allSlots, PreviewTasks.PreviewInputs(RepoDir)));
+        tasks.Add(Screen(typeof(TryStrategyJob), allSlots, PreviewTasks.TryStrategyInputs(RepoDir)));
+
         var manifest = new PackageManifest(package, $"The Sync replication set {package}: {tasks.Count} replication(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
             new BuiltAgainst(TargetDotnet(), null, RunnerProtocol.V1), tasks);
@@ -242,6 +251,17 @@ public static class ReplicationSetPackage
         var lineage = DbDataKit.Lineage.PackageLineage.Write(SyncLineage.Design([.. replications.Where(r => r.Task.Enabled)], lineageConnections));
 
         return new BuiltReplicationSet(package, manifest, text, Files(repoRoot), published, lineage);
+    }
+
+    /// <summary>A task a person starts from a screen and waits for: by hand only, one attempt, five minutes at most, overlapping itself.</summary>
+    private static PackageTask Screen(Type job, IReadOnlyList<ConnectionSlot> slots, IReadOnlyList<TaskInput> inputs)
+    {
+        var declared = ManifestGenerator.TaskOf(job);
+        return declared with
+        {
+            Entry = new TaskEntry(), Schedule = new Schedule(), Triggers = [TaskTrigger.ByHand()], Connections = slots, Inputs = inputs, AllowOverlap = true,
+            Limits = declared.Limits with { Attempts = 1, Timeout = TimeSpan.FromMinutes(5) },
+        };
     }
 
     /// <summary>The schedule a replication has on the runner: a periodic one its cron expression (UTC, as the Sync scheduler reads it: its drain plans once, runs what is queued and ends), a continuous one its frequency as the schedule that starts the drain again when it has ended (a continuous drain stays up and plans between passes itself, with the planner of the API, until its idle timeout; plan 28c E11, E12). Who schedules the replication is its owner (`old`, `observe`, `runner`), which a publish does not change.</summary>

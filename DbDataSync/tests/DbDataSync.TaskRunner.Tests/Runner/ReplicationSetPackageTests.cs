@@ -74,8 +74,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var built = Build(out var problems);
 
         Assert.Empty(problems);
-        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask], built.Manifest.Tasks.Select(t => t.Name));
-        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask)).ToList();
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask, PreviewTasks.Preview, PreviewTasks.TryStrategy], built.Manifest.Tasks.Select(t => t.Name));
+        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask or PreviewTasks.Preview or PreviewTasks.TryStrategy)).ToList();
         var orders = built.Manifest.Tasks.Single(t => t.Name == "orders");
         Assert.Equal("*/15 * * * *", orders.Schedule.Cron);
         Assert.Equal(TimeSpan.FromSeconds(30), built.Manifest.Tasks.Single(t => t.Name == "events").Schedule.Every);
@@ -113,6 +113,21 @@ public sealed class ReplicationSetPackageTests : IDisposable
         Assert.Equal(provision.Connections.Select(c => c.Name), preflight.Connections.Select(c => c.Name));
         Assert.Equal([("replication", ""), ("repo_dir", ReplicationSetPackage.RepoDir)], preflight.Inputs.Select(i => (i.Name, i.Default)));
         Assert.Equal([DbDataKit.Runner.Preflight.StepName], preflight.StepList.Select(s => s.Name));
+
+        // what a person waits for on a screen: by hand only, one attempt, overlapping itself (two people preview at once), over the same connections, recording no step (the answer is kept nowhere)
+        foreach (var name in new[] { PreviewTasks.Preview, PreviewTasks.TryStrategy })
+        {
+            var screen = built.Manifest.Tasks.Single(t => t.Name == name);
+            Assert.Null(screen.Schedule.Cron);
+            Assert.Null(screen.Schedule.Every);
+            Assert.Equal((1, true), (screen.Limits.Attempts, screen.AllowOverlap));
+            Assert.Equal(provision.Connections.Select(c => c.Name), screen.Connections.Select(c => c.Name));
+            Assert.Empty(screen.StepList);
+            Assert.All(screen.Inputs, i => Assert.NotNull(i.Default));
+        }
+
+        Assert.Equal(["replication", "mapping", "rows", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.Preview).Inputs.Select(i => i.Name));
+        Assert.Equal(["replication", "mapping", "strategy", "name", "column", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.TryStrategy).Inputs.Select(i => i.Name));
 
         var load = PackageManifestReader.Load(built.ManifestText, "package.yaml");
         Assert.True(load.Ok, string.Join("\n", load.Diagnostics));
@@ -227,6 +242,19 @@ public sealed class ReplicationSetPackageTests : IDisposable
 
         Assert.Null(built);
         Assert.Contains(problems, p => p.Contains(Path.Combine("preflight", "task.yaml")) && p.Contains("the name of the set's preflight"));
+    }
+
+    [Theory]
+    [InlineData("preview")]
+    [InlineData("try-strategy")]
+    public void AReplicationNamedForATaskOfTheSetsScreensIsRefused(string name)
+    {
+        Replication(name, ScheduleMode.Periodic, cron: "0 1 * * *");
+
+        var built = Build(out var problems);
+
+        Assert.Null(built);
+        Assert.Contains(problems, p => p.Contains(Path.Combine(name, "task.yaml")) && p.Contains("the name of a task the set has for its screens"));
     }
 
     [Fact]

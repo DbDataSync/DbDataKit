@@ -532,6 +532,77 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
         Assert.Equal(target, await TargetFingerprintAsync(_runnerTarget));
     }
 
+    /// <summary>A run of one of the set's tasks a person waits for: <paramref name="task"/> with <paramref name="inputs"/>, a run of its own.</summary>
+    private static TaskRunRequest ScreenRequest(TaskRunRequest drain, string task, Dictionary<string, string> inputs) =>
+        drain with { Task = new TaskRef(RunnerRig.Package, RunnerRig.Channel, task), Inputs = inputs, RunId = Guid.NewGuid(), Chain = Guid.CreateVersion7().ToString() };
+
+    [Fact]
+    public async Task ThePreviewTask_AnswersTheFirstRowsOfAMappingThroughTheRunner_AndKeepsNoneOfThem()
+    {
+        // the Designer's preview of a mapping (Design: docs/authoring-metadata.md#rows-and-trials-are-answered-never-kept): the engine's process reads the mapped source columns with the run login of the slot and
+        // hands the rows to the runner as the run's answer; no step, no log line and no failure holds a value
+        await InsertRowsAsync(3);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        var drain = await rig.DrainRequestAsync(source, "runner-sync");
+        var request = ScreenRequest(drain, PreviewTasks.Preview, new() { ["replication"] = "runner-sync", ["mapping"] = "main", ["rows"] = "2", ["repo_dir"] = "repo" });
+        var target = await TargetFingerprintAsync(_runnerTarget);
+
+        var result = await rig.Executor.RunAsync(request);
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.True(rig.Host.Answers.TryTake(result.RunId, out var json), "the run handed the runner no answer");
+        var answer = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        Assert.Equal(["Id", "Name"], answer["columns"]!.AsArray().Select(c => (string)c!));
+        var rows = answer["rows"]!.AsArray();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.StartsWith("row-", (string)r![1]!, StringComparison.Ordinal));
+        Assert.True((bool)answer["more"]!);
+        Assert.Equal(("runner-sync", "main", "src-conn"), ((string)answer["replication"]!, (string)answer["mapping"]!, (string)answer["connection"]!));
+
+        // kept nowhere: no step of the run, no line of its log, and the target is as it was
+        Assert.Empty(new DbDataKit.State.StepStore(rig.Database, new DbDataKit.State.ProgressKey(RunnerRig.Package, RunnerRig.Channel, PreviewTasks.Preview)).List(request.Chain));
+        Assert.DoesNotContain("row-", rig.LogText(result.RunId), StringComparison.Ordinal);
+        Assert.Equal(target, await TargetFingerprintAsync(_runnerTarget));
+        Assert.False(rig.Host.Answers.TryTake(result.RunId, out _));
+    }
+
+    [Fact]
+    public async Task TheTryStrategyTask_RunsTheStrategysSqlAgainstTheBoundLogin_AndAFailedOnesReasonGoesOnlyToTheAnswer()
+    {
+        // a segmenting strategy the person is editing, tried before it is saved: its SQL runs on the source with the login the channel binds to the slot (here the connection's own, sa), and every candidate
+        // is the run's answer
+        await InsertRowsAsync(3);
+        var source = await PackageSourceAsync();
+        using var rig = await RunnerRig.StartAsync(DbDataKit.State.StateEngineIds.Sqlite, Logins());
+        var drain = await rig.DrainRequestAsync(source, "runner-sync");
+        var strategy = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            name = "by-login", kind = "SourceSql",
+            sql = $"SELECT SUSER_SNAME() AS label, CAST(MIN(Id) AS NVARCHAR(20)) AS range_start, CAST(MAX(Id) + 1 AS NVARCHAR(20)) AS range_end, CAST(1 AS BIT) AS selected FROM dbo.[{_sourceTable}]",
+        });
+        var request = ScreenRequest(drain, PreviewTasks.TryStrategy, new() { ["replication"] = "runner-sync", ["mapping"] = "main", ["strategy"] = strategy, ["name"] = "", ["column"] = "Id", ["repo_dir"] = "repo" });
+
+        var result = await rig.Executor.RunAsync(request);
+
+        Assert.True(result.End.State == TaskEndState.Succeeded && result.ExitCode == 0, Describe(rig, result));
+        Assert.True(rig.Host.Answers.TryTake(result.RunId, out var json), "the run handed the runner no answer");
+        var answer = System.Text.Json.JsonSerializer.Deserialize<StrategyTrialAnswer>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        Assert.Equal(("by-login", "SourceSql", "Id", true), (answer.Strategy, answer.Kind, answer.Column, answer.ReadsADatabase));
+        var candidate = Assert.Single(answer.Candidates);
+        Assert.Equal(("sa", "Id", "1", "4", true), (candidate.Label, candidate.Column, candidate.Start, candidate.End, candidate.Selected));
+
+        // a strategy whose SQL the database refuses: the reason, which can quote a value, is the answer for the person; the run's record says only where it went
+        var failing = System.Text.Json.JsonSerializer.Serialize(new { name = "bad", kind = "SourceSql", sql = "SELECT CAST('not-a-number-7731' AS INT) AS label, 1 AS range_start, 2 AS range_end" });
+        var refused = await rig.Executor.RunAsync(ScreenRequest(drain, PreviewTasks.TryStrategy,
+            new() { ["replication"] = "runner-sync", ["mapping"] = "main", ["strategy"] = failing, ["name"] = "", ["column"] = "Id", ["repo_dir"] = "repo" }));
+        Assert.Equal(TaskEndState.Failed, refused.End.State);
+        Assert.True(rig.Host.Answers.TryTake(refused.RunId, out var why));
+        Assert.Contains("not-a-number-7731", why, StringComparison.Ordinal);
+        Assert.DoesNotContain("not-a-number-7731", rig.Run(refused.RunId).Run.Failure?.Message ?? "", StringComparison.Ordinal);
+        Assert.DoesNotContain("not-a-number-7731", rig.LogText(refused.RunId), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AMappingWhoseTargetTableDoesNotExistYet_IsPublished_ItsDrainRefusesNamingTheTable_AndAfterTheSetupIsAppliedTheDrainDelivers()
     {
