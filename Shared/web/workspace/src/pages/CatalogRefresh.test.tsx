@@ -22,7 +22,7 @@ describe('the channel picker', () => {
     expect(html).toContain('dev: crm is crm_dev')
     expect(html).toContain('prod (production): crm is crm')
     expect(html).toMatch(/<option[^>]*disabled=""[^>]*value="test"|<option[^>]*value="test"[^>]*disabled=""/)
-    expect(html).toContain('test does not bind the slot crm. An administrator binds it on the Runner&#x27;s Packages page (Bindings)')
+    expect(html).toContain('test does not bind the slot crm. Set up for development binds it with a login you type, or an administrator binds it on the Runner&#x27;s Packages page (Bindings)')
     expect(html).not.toContain('wsp-channel-production')
   })
 

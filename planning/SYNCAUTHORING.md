@@ -139,9 +139,10 @@ the slice built and names the slice task it follows. Where a slice task uses som
   client's mapping writer with the cache's columns and key and no `targetType`; the Designer now asks the Workspace's `sync/bulk-create` for the files
   and `sync/inferred-columns` for the types and key it shows (`DbDataWorkspace/README.md`, "A project's two areas"). The cache stays read in the browser
   with those routes too: the Workspace has no metadata route (`docs/authoring-metadata.md`, "A sync project").
-- **No Set up for development** (AUTHORING-19): a read needs the project's package on the Runner with the connection's slot
-  bound in the channel, done by hand as `docs/authoring-metadata.md` says; the channel picker names a channel that binds no slot and says how.
-  AUTHORING-6 adds the button.
+- **No Set up for development** in the slice: a read needed the project's package on the Runner with the connection's slot bound in the channel,
+  done by hand; the channel picker named a channel that binds no slot and said how. **Set up for development** is built since: the channel picker
+  stores the login, copies the draft's connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set
+  up for development").
 - **No `facts`** (AUTHORING-17) and no live checks in the Designer (SYNCAUTHORING-11, SYNCAUTHORING-12). The set's `preflight` is built: the
   console runs it before it serves a version in `prod`, and **Re-check** on the Runs tab runs it (`docs/publishing.md`, "Preflight before
   activation"; `docs/authoring-metadata.md`, "A sync project"); the Designer does not show its newest run yet (SYNCAUTHORING-12).
@@ -178,8 +179,9 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
   COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight` (`SetPreflightJob` in `DbDataSync.TaskRunner`) and SYNCAUTHORING-11's tasks.
-- AUTHORING-17, AUTHORING-19 and AUTHORING-6, after the slice: `facts`, Set up for development and the Designer's **Test**
-  (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in the Designer. The connection test before publish exists: the console's
+- AUTHORING-17 and AUTHORING-6, after the slice: `facts` and the Designer's **Test** (`docs/authoring-metadata.md`), which SYNCAUTHORING-12 places in
+  the Designer. Set up for development is built: the channel picker's **Set up for development** stores the login, copies the draft's connection to the
+  Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set up for development"). The connection test before publish exists: the console's
   `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
