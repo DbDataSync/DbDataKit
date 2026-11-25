@@ -77,18 +77,6 @@ the Runner's `discover` reads only a slot that a version served or staged in tha
 
 Recommendation: B, so a draft is read before it is ever built, as the Designer's example on `docs/authoring-metadata.md` describes; until then A.
 
-### AUTHORING-P51: the newest-check card shows the preflight, not the newest Test (default, awaiting the owner)
-
-Scenario: Ana pressed **Test** on `crm` in `prod` yesterday and it failed at `login`. Today the Runs tab's newest-check card of `prod` shows the newest
-`preflight` run, with its findings and link, and nothing about yesterday's test. The binding test is a call the Runner answers at once and records in
-its audit, not a run, so the console finds no run of it to show.
-
-- Option A (as built): the card shows the newest `preflight` run per channel; a test's steps are shown where **Test** is pressed.
-- Option B: the Runner keeps the newest binding test per package, channel and slot (who, when, the step it stopped at) and the card shows it beside
-  the preflight.
-
-Recommendation: A; the preflight already reads every connection with the bound logins, and a failed login shows there as an error.
-
 ### AUTHORING-P52: Set up for development is not offered for `prod` (default, awaiting the owner)
 
 Scenario: Ben designs a sync between two systems that have no development copy, so only `prod` exists on the Runner `plant`, and it does not bind the

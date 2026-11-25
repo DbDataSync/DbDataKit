@@ -523,6 +523,10 @@ Runner and channel, and asks the console for the newest run of `preflight` there
 [Runs of a deployed build](publishing.md#runs-of-a-deployed-build)). The run may be of an older version than the deploy's: the preflight a deploy ran
 before activation, or a later **Re-check**. A Re-check on the Runs tab replaces the card's run.
 
+The card never shows a **Test** of a connection. The Runner answers a test at once and records it in its audit, so it is not a run the console can
+find. The steps of a test are shown where **Test** is pressed. A login that fails shows on the card as an error of the next `preflight`, which reads
+every connection with the logins the channel binds.
+
 Example: Ana published `crm-to-dw` to `dev` and `prod` of `runners-eu`. The Runs tab shows two cards. The card of `prod` says "preflight of version 3,
 succeeded, finished 2026-11-23T08:00:05Z", links the run, and lists "error crm: Change tracking is off on dbo.orders.". The card of `dev` says "No
 preflight has run in dev yet."
