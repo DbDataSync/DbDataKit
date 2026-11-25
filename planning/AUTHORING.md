@@ -52,6 +52,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-28 | A draft is read before it is ever published: when the Runner holds no version of the project's package, the console lists the channels the Runner serves (none of them bound) in the channel picker, and the Runner lets a binding name a slot of a package it holds no version of yet, so `discover`, `describe` and the binding test read a draft that was never built. This changes the Runner's rule for its built-in package and its bindings. `docs/authoring-metadata.md` ("Before anything is published", "Until then, an administrator binds the slot by hand") follows. Until it is built, a build staged in the channel comes first | none | M | a test: on a Runner that holds no version of `sales-dw`, the picker lists the channels the Runner serves; `warehouse` is bound in `dev` for the package; **Refresh** in `dev` reads its tables and the binding test succeeds, with no version of `sales-dw` on the Runner |
 | AUTHORING-29 | In a group of Runners, a run whose answer the console waits for (**Preview rows**, **Try**) is pinned to the instance that takes the call: that instance queues it for itself only, and the console's call that waits for the answer reaches the same instance, so the rows never leave that instance's memory and the first ask is answered. `docs/authoring-metadata.md` ("What the Runner does with an answer") follows; until it is built, a call that reaches another instance answers `gone` | none | M | a test with a group of two Runner instances behind one address: a `preview` taken by one instance runs there, and the console's answer call returns its rows on the first ask, never `gone` |
 | AUTHORING-30 | **Preview rows** and **Try** read the draft's mapping: the screen sends the mapping's file as it is in the draft, unsaved edits included; the tasks `preview` and `try-strategy` read that mapping with the published version's connections and drivers; the run record keeps the mapping's text as an input (never a row). `docs/authoring-metadata.md` ("Rows and trials are answered, never kept") follows; until it is built, the tasks read the mapping the deployed version has | none | M | Sync tests: a `preview` sent a mapping whose filter is `region = 2`, over a deployed version without that filter, answers only rows of region 2, and its run record holds the mapping's text; vitest of the Sync Designer: **Preview rows** sends the unsaved mapping |
+| AUTHORING-31 | **Set up for development** offers `prod` like any other channel that does not bind the connection's slot, with the production warning a read in `prod` shows; the console stores the login as it does for `dev`, and the Runner's own admin role check stays. `docs/authoring-metadata.md` ("Set up for development in the channel picker") follows; until it is built, the picker leaves `prod` out | none | S | vitest of `ChannelPicker`: on a Runner whose only channel `prod` does not bind `erp`, the picker offers **Set up erp for development** with `prod` and shows the production warning; a console test: the login sent for `prod` is stored under its `prod` name |
 
 ## Needs from other subjects
 
@@ -61,21 +62,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - CHANNELS-1: the client that puts a connection copy on a Runner, sends its login and binds it for a channel, before AUTHORING-19.
 - WORKSPACEISOLATION-3: the control service's deploy, before AUTHORING-1 and AUTHORING-2 (the target Runner's platform).
 - The Gateway catalog refresh is the console's `POST api/workspace-catalog/{workspace}/{project}/gateway-read` (`ConsoleCatalogRead.GatewayAsync`; `docs/authoring-metadata.md`, "A read from a Gateway").
-
-## Proposed decisions
-
-### AUTHORING-P52: Set up for development is not offered for `prod` (default, awaiting the owner)
-
-Scenario: Ben designs a sync between two systems that have no development copy, so only `prod` exists on the Runner `plant`, and it does not bind the
-slot `erp`. The console accepts a login for `prod` from a person who holds the Runner's admin role. The channel picker offers **Set up erp for
-development** with `dev` only (the channel list it offers leaves `prod` out), so Ben's production login is bound by an administrator on the Runner's
-Packages page, as before.
-
-- Option A (as built): the picker never offers `prod`; production's logins are bound on the Runner.
-- Option B: the picker also offers `prod` when it does not bind the slot, with the production warning the read shows, and the console stores it as it
-  does for `dev` (the Runner still asks for its admin role).
-
-Recommendation: A, so a login typed on an authoring screen never becomes production's; B only if the owner wants production set up from the Designer.
 
 ## Open designs
 
