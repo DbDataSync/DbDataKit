@@ -62,10 +62,10 @@ POST /api/v1/metadata/dev/discover
 
 - The call needs the operator role and a console's token for a person. A call without `on_behalf_of` is refused with 400, and a call from a client
   that is not a console is refused with 403.
-- Which slots may be read depends on what the Runner holds of the package:
-  - The Runner holds a version of the package: the slot must be declared by the version the channel serves or by the one staged there; otherwise the
-    answer is 404.
-  - The Runner holds no version of the package yet (a draft that was never published): any slot the channel binds for the package is read.
+- Which slots may be read depends on what the channel holds of the package:
+  - The channel holds a version of the package (served or staged): the slot must be declared by that version; otherwise the answer is 404.
+  - The channel holds no version of the package (a draft that was never published there): any slot the channel binds for the package is read, as if
+    nothing were published, whatever other channels hold.
 - The slot must be bound in the channel; otherwise the answer is 409, which says to bind it on the Runner's Packages page (Bindings).
 - The task reads with the connection's read login when the connection has one, else with its default login. The rule that keeps a non-production
   channel off production's connection applies to these reads as it does to the package's own runs.
@@ -97,8 +97,8 @@ PostgreSQL, MySQL, MariaDB and Oracle.
 A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged in that channel.
 
 **What a screen offers before a read.** `GET /api/v1/metadata/channels?package=sales-dw` answers the channels the Runner serves, the bindings it holds
-for the package in each, and whether it holds a version of the package. The call needs the viewer role. A console asks it for a package the Runner holds
-no version of, to list the channels a draft can be read in:
+for the package in each, and whether it holds a version of the package in any channel. The call needs the viewer role. A console asks it to list the
+channels a draft can be read in:
 
 ```
 GET /api/v1/metadata/channels?package=sales-dw
@@ -116,7 +116,7 @@ The console has these routes, each under `api/workspace-catalog/{workspace}/{pro
 
 | Route | What the console does |
 | --- | --- |
-| `GET .../channels?runner=&connection=` | lists the channels of the project's package on that Runner (every channel the Runner serves when it holds no version of the package yet), whether each binds the connection's slot, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
+| `GET .../channels?runner=&connection=` | lists every channel the Runner serves, whether each binds the connection's slot for the project's package, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
 | `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
 | `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
 | `POST .../describe` with `{"runner", "channel", "connection", "sql"}` | starts `describe` of the query for the person and waits up to 10 seconds for it ([below](#how-a-screen-asks-for-a-querys-columns)) |
@@ -215,9 +215,10 @@ A read in a channel needs the connection's slot bound there. A person who works 
 connection. The console puts the draft's connection on the Runner with that login and binds the slot in the channel the person picks, so reads,
 **Test** and runs in that channel use it. The person needs the Runner's admin role for this; nobody binds the slot by hand afterwards.
 
-A draft is read before it is ever published. When the Runner holds no version of the project's package, the channel picker lists every channel the
-Runner serves, each with the binding it holds for the connection's slot. The bind works before the Runner holds any version of the package, and the
-Runner's reads (`discover`, `describe`) and its binding test then read through the slot the channel binds.
+A draft is read before it is ever published. The channel picker lists every channel the Runner serves, each with the binding it holds for the
+connection's slot. The bind works before a channel holds any version of the package, and the Runner's reads (`discover`, `describe`) and its binding
+test then read through the slot the channel binds. A channel that holds no version reads as if nothing were published, whatever other channels hold:
+Ben, who published `sales-dw` straight to `prod`, can still bind `warehouse` in `dev` and read it there.
 
 Example: Ana makes the build project `sales-dw` with the connection `warehouse`. Nothing of it is on the Runner `plant`, which serves `dev` and `prod`.
 On the tab **Catalog** the picker lists `dev` and `prod`, neither bound, and offers **Set up warehouse for development**. Ana sends her development login
@@ -308,8 +309,8 @@ picked is `prod`, the form shows the warning a read in `prod` shows: "This reads
 with production's login. Only names and types are read, never a row." The person needs the Runner's admin role for `prod` as for any channel.
 
 The screen sends the login with the draft it shows, by the route above, and keeps nothing of the password. The picker then asks the Runner
-again and offers the channel, now bound, so **Refresh** and **Test** read there. An older Runner that cannot list its channels for a package it holds
-no version of lists no channel; there the screen shows the answer as "runners-eu holds the login of crm for dev, and dev reads crm through
+again and offers the channel, now bound, so **Refresh** and **Test** read there. An older Runner that cannot list its channels offers only the channels that hold
+a version of the package, and none for a package it holds no version of; there the screen shows the answer as "runners-eu holds the login of crm for dev, and dev reads crm through
 crm-to-dw-crm-dev.", with each warning under it.
 
 Example: Ben designs a sync from `erp`, a system with no development copy. The Runner `plant` serves only `prod`, which does not bind `erp`. The picker
