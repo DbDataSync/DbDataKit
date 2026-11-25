@@ -124,6 +124,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleRunnerBindings>();
         builder.Services.AddSingleton<ConsoleCatalogRead>();   // the shape of a Workspace project's connection, read from a Runner channel as the signed-in person
         builder.Services.AddSingleton<ConsoleDevelopmentLogins>();   // a development login a Workspace screen sends, put on a Runner as the signed-in person; the Workspace server never receives it
+        builder.Services.AddSingleton<ConsoleChannelConnections>();   // a connection put on a Runner for a channel as the signed-in person: its login, its copy, the bind of a package's slot
         builder.Services.AddSingleton<ConsoleDraftBindingTest>();   // the Runner's test of a draft's connection slot in a channel, asked as the signed-in person; no version is needed
         builder.Services.AddSingleton<ConsoleBindingCompare>();   // plan 27a IX25: compare, adopt and publish of bindings and connections against a Runner or a Gateway, and the combined posture list
         builder.Services.AddSingleton<ConsolePromotions>();   // plan 30 PB06: a package promoted from one runner group to another as the signed-in person
