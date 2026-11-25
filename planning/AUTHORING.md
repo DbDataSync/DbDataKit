@@ -77,17 +77,6 @@ the setting on every publish is refused anyway, and the exemption is a supply ch
 
 ## Proposed decisions
 
-### AUTHORING-P56: a development login sent without a draft (default, awaiting the owner)
-
-Scenario: a script, or a screen outside a draft, sends `POST /api/workspace-dev-logins/ws-1/crm-to-dw` with the Runner, `dev`, `crm` and a password,
-and no `draft`. The console has no connection file to copy.
-
-- Option A (built): the console stores the password on the Runner, as it did before Set up for development bound the slot, and answers without `copy`
-  and `bound`; nothing is bound, and the person or an administrator binds the slot on the Runner.
-- Option B: the console refuses the request (400, "Name the draft whose connection is set up: `draft`"), so every set-up both stores and binds.
-
-Recommendation: A. It keeps the route's earlier callers and tests working, and the screen always sends the draft.
-
 ### AUTHORING-P57: a draft read in a channel that holds no version of a package the Runner holds elsewhere (question, awaiting the owner)
 
 Scenario: Ben published `sales-dw` straight to `prod` on the Runner `plant`, which also serves `dev`. He opens the tab **Catalog** of a new draft. The

@@ -297,7 +297,9 @@ The answer names the secret the Runner now holds, never its value. `production` 
 did, one sentence each, with a line starting `Warning:` when the copy names a reference the Runner cannot resolve or the draft's file names no address
 (a build project's connection file often names none; the run then cannot open the connection until the file names one and the set-up is sent again).
 
-A request without `draft` stores the password only, and the answer has the first lines above without the copy and the bind.
+A request without `draft` stores the password only, and the answer has the first lines above without the copy and the bind; nothing is bound until
+someone binds the slot on the Runner. Example: a script sends the Runner, `dev`, `crm` and a password with no `draft`, and the Runner holds
+`dbdatakit:runner:dev-login:crm-to-dw.dev.crm:password` with no copy naming it.
 
 **Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel the Runner lists does not
 bind the connection's slot, `prod` as any other, or when the Runner lists no channel. The person picks the channel (the unbound ones, those other than
