@@ -63,6 +63,9 @@ public static class ReplicationSetPackage
     /// <summary>The names of the set's tasks a person waits for on a screen (<see cref="PreviewJob"/>, <see cref="TryStrategyJob"/>); a replication may not take them.</summary>
     public static readonly IReadOnlyList<string> PreviewTaskNames = [PreviewTasks.Preview, PreviewTasks.TryStrategy];
 
+    /// <summary>The names of the set's tasks that read a connection's shape for a screen (<see cref="SetDiscoverJob"/>, <see cref="SetDescribeJob"/>); a replication may not take them.</summary>
+    public static readonly IReadOnlyList<string> CatalogTaskNames = [SetCatalogSteps.Discover, SetCatalogSteps.Describe];
+
     /// <summary>Where the configuration repository keeps the files a message names (the layout of <c>ConfigPaths</c>, which is internal to the core).</summary>
     /// <summary>The .NET the package is built for: what this assembly targets (<c>net10.0</c> is "10.0"), not the runtime the Sync program happens to run on (it rolls forward to a newer major where one is installed).</summary>
     private static string TargetDotnet()
@@ -135,6 +138,7 @@ public static class ReplicationSetPackage
             if (!PackageManifestValidator.NameRule.IsMatch(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task name `{taskName}`, which is not 1 to 64 lower-case letters, digits, `-` or `_`."); continue; }
             if (taskName == ProvisionTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's provisioning task; rename the replication."); continue; }
             if (taskName == PreflightTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's preflight; rename the replication."); continue; }
+            if (CatalogTaskNames.Contains(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of a task the set has for its screens (the read of a connection's tables and columns, the description of a query); rename the replication."); continue; }
             if (PreviewTaskNames.Contains(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of a task the set has for its screens (the rows of a mapping, the trial of a segmenting strategy); rename the replication."); continue; }
             if (named.TryGetValue(taskName, out var other)) { problems.Add($"{file}: the replications `{other}` and `{task.Name}` both make the task `{taskName}`; rename one of them."); continue; }
             named[taskName] = task.Name;
@@ -231,6 +235,11 @@ public static class ReplicationSetPackage
         // nowhere; two people may preview at once, and a failed one is asked again, never retried
         tasks.Add(Screen(typeof(PreviewJob), allSlots, PreviewTasks.PreviewInputs(RepoDir)));
         tasks.Add(Screen(typeof(TryStrategyJob), allSlots, PreviewTasks.TryStrategyInputs(RepoDir)));
+
+        // the shape of a connection whose driver is Sync's own, for the same screens (Design: docs/authoring-metadata.md#a-sync-project): read only, by hand, over the same connections, answered in a step keyed by the run as the
+        // runner's built-in package answers
+        tasks.Add(Screen(typeof(SetDiscoverJob), allSlots, SetCatalogSteps.DiscoverInputs(RepoDir)));
+        tasks.Add(Screen(typeof(SetDescribeJob), allSlots, SetCatalogSteps.DescribeInputs(RepoDir)));
 
         var manifest = new PackageManifest(package, $"The Sync replication set {package}: {tasks.Count} replication(s)",
             new PackageLaunch(LaunchKind.Executable, Runtime: new RuntimeReference(RuntimeName, runtimeRange)),
