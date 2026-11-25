@@ -53,9 +53,9 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     public const string Production = "prod";
 
     /// <summary>
-    /// The channels of the project's package on the Runner and whether each binds the connection's slot (<see cref="ConnectionSlots.NameOf"/>): what the channel picker lists. <c>default</c> is the first channel that is not production and
-    /// binds the slot, or null. A package the Runner holds no version of yet is listed with every channel the Runner serves and the bindings it holds for the package (<see cref="UnpublishedChannelsAsync"/>): a draft is read there once
-    /// Set up for development bound the slot, before anything is published.
+    /// The channels of the Runner and whether each binds the connection's slot (<see cref="ConnectionSlots.NameOf"/>) for the project's package: what the channel picker lists. Every channel the Runner serves is listed, whether or not
+    /// it holds a version of the package (<c>GET /api/v1/metadata/channels?package=</c>, asked as the person): a channel with no version reads any slot it binds, so a draft is read there once Set up for development bound the slot.
+    /// <c>default</c> is the first channel that is not production and binds the slot, or null. A Runner that does not answer that call (an older one) lists the channels that hold a version of the package (<see cref="PublishedChannelsAsync"/>).
     /// </summary>
     public async Task<CatalogReadAnswer> ChannelsAsync(string workspace, string project, string? runner, string? connection, CancellationToken ct)
     {
@@ -66,34 +66,40 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         if (problem is not null) return problem;
 
         var slot = ConnectionSlots.NameOf(connection!);
-        var (status, body) = await relay.CallAsync(target!, HttpMethod.Get, $"/api/v1/definitions/integration/{Uri.EscapeDataString(package!)}", null, ct);
         var answer = new JsonObject
         {
             ["package"] = package, ["connection"] = connection, ["slot"] = slot, ["runner"] = target!.InstanceId, ["runner_name"] = target.Name,
         };
-        if (status == 404) return await UnpublishedChannelsAsync(target, package!, slot, answer, ct);
-        if (status != 200 || body is not JsonObject described) return Passed(status, body, $"{target.Name} did not say which channels hold {package}.");
+        var (status, body) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/metadata/channels?package={Uri.EscapeDataString(package!)}", null, ct);
+        if (status == 404) return await PublishedChannelsAsync(target, package!, slot, answer, ct);
+        if (status != 200 || body is not JsonObject served) return Passed(status, body, $"{target.Name} did not say which channels it serves.");
 
-        var bound = (described["bindings"] as JsonArray ?? []).OfType<JsonObject>().Where(b => (string?)b["slot"] == slot)
+        var channels = (served["channels"] as JsonArray ?? []).Select(c => (string?)c).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        return new(200, Listed(answer, channels, served["bindings"] as JsonArray, package!, target.Name, slot));
+    }
+
+    /// <summary>The channels in the answer, each with whether it binds the slot and to what, the first that is not production and binds it, and what to do when none does.</summary>
+    private static JsonObject Listed(JsonObject answer, IReadOnlyList<string> channels, JsonArray? bindings, string package, string runner, string slot)
+    {
+        var bound = (bindings ?? []).OfType<JsonObject>().Where(b => (string?)b["slot"] == slot)
             .GroupBy(b => (string?)b["channel"] ?? "").ToDictionary(g => g.Key, g => (string?)g.First()["bound_to"], StringComparer.Ordinal);
-        var channels = (described["channels"] as JsonArray ?? []).OfType<JsonObject>().Select(c => (string?)c["channel"]).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         answer["channels"] = new JsonArray([.. channels.Select(c => (JsonNode?)new JsonObject
         {
             ["channel"] = c, ["production"] = c == Production, ["bound"] = bound.ContainsKey(c), ["bound_to"] = bound.GetValueOrDefault(c),
         })]);
         answer["default"] = channels.FirstOrDefault(c => c != Production && bound.ContainsKey(c));
         if (!channels.Any(bound.ContainsKey))
-            answer["note"] = $"No channel of {package} on {target.Name} binds the slot '{slot}'. Set up for development binds it in the channel you pick, or an administrator binds it on the Runner's Packages page (Bindings), to a connection the Runner has.";
-        return new(200, answer);
+            answer["note"] = $"No channel of {runner} binds the slot '{slot}' for {package}. Set up for development binds it in the channel you pick, or an administrator binds it on the Runner's Packages page (Bindings), to a connection the Runner has.";
+        return answer;
     }
 
     /// <summary>
-    /// The channels of a package the Runner holds no version of: every channel the Runner serves, each with the binding of the slot it holds for the package (<c>GET /api/v1/metadata/channels?package=</c>, asked as the person). A Runner
-    /// that does not answer that call (an older one) lists no channel, and the note says a build of the draft published to a channel comes first there.
+    /// What an older Runner, which cannot list its channels for a package, offers: the channels that hold a version of the package, from its description. A package it holds no version of lists no channel, and the note says a build of
+    /// the draft published to a channel comes first there.
     /// </summary>
-    private async Task<CatalogReadAnswer> UnpublishedChannelsAsync(RegisteredInstance target, string package, string slot, JsonObject answer, CancellationToken ct)
+    private async Task<CatalogReadAnswer> PublishedChannelsAsync(RegisteredInstance target, string package, string slot, JsonObject answer, CancellationToken ct)
     {
-        var (status, body) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/metadata/channels?package={Uri.EscapeDataString(package)}", null, ct);
+        var (status, body) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/definitions/integration/{Uri.EscapeDataString(package)}", null, ct);
         if (status == 404)
         {
             answer["channels"] = new JsonArray();
@@ -101,20 +107,9 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
             answer["note"] = $"{target.Name} has no package {package} yet. Set up for development binds the slot '{slot}' in a channel of {target.Name}; a read there needs a build of the draft published to that channel (staged is enough).";
             return new(200, answer);
         }
-        if (status != 200 || body is not JsonObject served) return Passed(status, body, $"{target.Name} did not say which channels it serves.");
-
-        var bound = (served["bindings"] as JsonArray ?? []).OfType<JsonObject>().Where(b => (string?)b["slot"] == slot)
-            .GroupBy(b => (string?)b["channel"] ?? "").ToDictionary(g => g.Key, g => (string?)g.First()["bound_to"], StringComparer.Ordinal);
-        var channels = (served["channels"] as JsonArray ?? []).Select(c => (string?)c).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
-        answer["channels"] = new JsonArray([.. channels.Select(c => (JsonNode?)new JsonObject
-        {
-            ["channel"] = c, ["production"] = c == Production, ["bound"] = bound.ContainsKey(c), ["bound_to"] = bound.GetValueOrDefault(c),
-        })]);
-        answer["default"] = channels.FirstOrDefault(c => c != Production && bound.ContainsKey(c));
-        answer["note"] = channels.Any(bound.ContainsKey)
-            ? $"{target.Name} holds no version of {package} yet; a channel that binds the slot '{slot}' reads the draft's connection."
-            : $"{target.Name} holds no version of {package} yet. Set up for development binds the slot '{slot}' in the channel you pick, and the draft's connection is read there.";
-        return new(200, answer);
+        if (status != 200 || body is not JsonObject described) return Passed(status, body, $"{target.Name} did not say which channels hold {package}.");
+        var channels = (described["channels"] as JsonArray ?? []).OfType<JsonObject>().Select(c => (string?)c["channel"]).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        return new(200, Listed(answer, channels, described["bindings"] as JsonArray, package, target.Name, slot));
     }
 
     /// <summary>Starts the read and waits for it up to <see cref="Wait"/>: the finished read (200), the run still going (202), or the run's failure (422).</summary>

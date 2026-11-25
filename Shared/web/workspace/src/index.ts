@@ -4,7 +4,7 @@ export { useSyncEngines, syncEnginesFrom, registryDescriptors, roleWords, SYNC_S
 export type { EngineRole, RoleStatus, SyncEngine, SyncEngineList, SyncRole } from './syncEngines'
 export { registerDesigner, designerOf, designerPath, filesPath, buildsPath } from './designers'
 export type { DesignerProps, DesignerRegistration } from './designers'
-export { DraftProvider, useDraft, useDraftFile, useDraftFiles, findingsKey } from './draft'
+export { DraftProvider, useDraft, useDraftFile, useDraftOrNull, useDraftFiles, findingsKey } from './draft'
 export type { Draft, DraftFile } from './draft'
 export { workspaceNav } from './WorkspaceShell'
 export { CATALOG_CACHE_FILE, CATALOG_CACHE_VERSION, readCatalogCache, readLine, schemasOf, tableLabel } from './catalogCache'

@@ -33,11 +33,14 @@ public sealed class MappingPreview(ConfigRepository config, IConnectionFactory c
     /// <summary>The longest text a value is shown with; the rest is cut.</summary>
     public const int MaxText = 500;
 
-    /// <summary>The first <paramref name="limit"/> rows of the source of <paramref name="mappingName"/>. Throws <see cref="PreviewException"/> naming what is wrong (a mapping that is not there or not 1:1, a source the database refuses).</summary>
-    public async Task<MappingPreviewAnswer> ReadAsync(string replication, string mappingName, int limit, CancellationToken ct)
+    /// <summary>
+    /// The first <paramref name="limit"/> rows of the source of <paramref name="mappingName"/>: the mapping of <paramref name="mappingText"/> when it is given (the draft's file, unsaved edits included), else the one the version has.
+    /// Throws <see cref="PreviewException"/> naming what is wrong (a mapping that is not there or not 1:1, a source the database refuses).
+    /// </summary>
+    public async Task<MappingPreviewAnswer> ReadAsync(string replication, string mappingName, int limit, CancellationToken ct, string? mappingText = null)
     {
         if (limit is < 1 or > MaxRows) throw new PreviewException($"A preview reads 1 to {MaxRows} rows, not {limit}.");
-        var (task, mapping) = Load(config, replication, mappingName);
+        var (task, mapping) = Load(config, replication, mappingName, mappingText);
         if (mapping.Sources.Count != 1) throw new PreviewException($"The mapping '{mapping.Name}' has {mapping.Sources.Count} sources; a preview reads a mapping of one source.");
         SourceTableRef source;
         try { source = EndpointResolution.ResolveSource(task, mapping.Sources[0]); }
@@ -99,14 +102,24 @@ public sealed class MappingPreview(ConfigRepository config, IConnectionFactory c
         }
     }
 
-    /// <summary>The replication and its mapping, or <see cref="PreviewException"/> naming the one that does not read.</summary>
-    internal static (ReplicationTaskConfig Task, TableMappingConfig Mapping) Load(ConfigRepository config, string replication, string mapping)
+    /// <summary>
+    /// The replication and its mapping, or <see cref="PreviewException"/> naming the one that does not read. The replication is the version's; the mapping is read from <paramref name="mappingText"/> when it is given (the
+    /// draft's file, which may hold edits the version does not have, or be a mapping the version has not got yet), else from the version.
+    /// </summary>
+    internal static (ReplicationTaskConfig Task, TableMappingConfig Mapping) Load(ConfigRepository config, string replication, string mapping, string? mappingText = null)
     {
         if (string.IsNullOrWhiteSpace(replication) || string.IsNullOrWhiteSpace(mapping)) throw new PreviewException("Name the replication and its mapping: the inputs `replication` and `mapping`.");
-        try { return (config.LoadReplicationTask(replication.Trim()), config.LoadTableMapping(replication.Trim(), mapping.Trim())); }
+        var file = $"config/replications/{replication.Trim()}/table-mappings/{mapping.Trim()}.yaml";
+        try
+        {
+            var task = config.LoadReplicationTask(replication.Trim());
+            return (task, string.IsNullOrWhiteSpace(mappingText) ? config.LoadTableMapping(replication.Trim(), mapping.Trim()) : ConfigRepository.ReadTableMapping(mappingText, file));
+        }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            throw new PreviewException($"The published version has no mapping '{mapping}' of the replication '{replication}'. Publish the draft that has it first.");
+            throw new PreviewException(string.IsNullOrWhiteSpace(mappingText)
+                ? $"The published version has no mapping '{mapping}' of the replication '{replication}'. Publish the draft that has it first."
+                : $"The published version has no replication '{replication}'. Publish the draft that has it first.");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or FormatException or YamlDotNet.Core.YamlException or ConfigValidationException or MappingLoadingException)
         {

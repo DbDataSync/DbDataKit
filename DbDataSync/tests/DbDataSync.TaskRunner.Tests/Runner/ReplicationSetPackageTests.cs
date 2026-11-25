@@ -126,8 +126,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
             Assert.All(screen.Inputs, i => Assert.NotNull(i.Default));
         }
 
-        Assert.Equal(["replication", "mapping", "rows", "repo_dir"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.Preview).Inputs.Select(i => i.Name));
-        Assert.Equal(["replication", "mapping", "strategy", "name", "column", "repo_dir"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.TryStrategy).Inputs.Select(i => i.Name));
+        Assert.Equal(["replication", "mapping", "rows", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.Preview).Inputs.Select(i => i.Name));
+        Assert.Equal(["replication", "mapping", "strategy", "name", "column", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.TryStrategy).Inputs.Select(i => i.Name));
 
         var load = PackageManifestReader.Load(built.ManifestText, "package.yaml");
         Assert.True(load.Ok, string.Join("\n", load.Diagnostics));
