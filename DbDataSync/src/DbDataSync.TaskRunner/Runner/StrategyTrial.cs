@@ -29,11 +29,12 @@ public sealed class StrategyTrial(ConfigRepository config, IConnectionFactory co
 
     /// <summary>
     /// Tries <paramref name="strategyJson"/> (an unsaved strategy: <c>{"name", "kind", "sql", "scriptName", "parameters"}</c>), or else the strategy <paramref name="strategyName"/> of the replication, over
-    /// <paramref name="column"/> of the mapping's source. Throws <see cref="PreviewException"/> naming what is wrong.
+    /// <paramref name="column"/> of the mapping's source. The mapping is the one of <paramref name="mappingText"/> when it is given (the draft's file, unsaved edits included), else the one the version has. Throws
+    /// <see cref="PreviewException"/> naming what is wrong.
     /// </summary>
-    public async Task<StrategyTrialAnswer> TryAsync(string replication, string mappingName, string strategyJson, string strategyName, string? column, CancellationToken ct)
+    public async Task<StrategyTrialAnswer> TryAsync(string replication, string mappingName, string strategyJson, string strategyName, string? column, CancellationToken ct, string? mappingText = null)
     {
-        var (task, mapping) = MappingPreview.Load(config, replication, mappingName);
+        var (task, mapping) = MappingPreview.Load(config, replication, mappingName, mappingText);
         if (mapping.Sources.Count != 1 || mapping.Targets.Count != 1)
             throw new PreviewException($"The mapping '{mapping.Name}' has {mapping.Sources.Count} source(s) and {mapping.Targets.Count} target(s); a strategy divides a mapping of one source and one target.");
         var strategy = Strategy(task, strategyJson, strategyName);

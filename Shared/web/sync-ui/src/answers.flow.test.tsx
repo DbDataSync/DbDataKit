@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { act } from 'react'
+import { act, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModuleProvider } from '@dbdatakit/shell'
-import { DraftProvider } from '@dbdatakit/workspace'
+import { DraftProvider, useDraft } from '@dbdatakit/workspace'
+import { mappingPath } from './model'
 import { MappingRowsPreview } from './mappings/MappingRowsPreview'
 import { SegmentingStrategiesView } from './replication/SegmentingStrategiesCard'
 import type { SegmentingStrategyConfig } from './types'
@@ -83,6 +84,17 @@ async function mount(node: React.ReactNode) {
   await settle()
 }
 
+/** The mapping's file as the person is editing it: an unsaved edit of the draft, whose filter the version on the Runner does not have. */
+const UNSAVED = 'schemaVersion: 1\nname: dbo.orders\nsources:\n- schema: dbo\n  table: orders\n  filter: "region = 2"\ntargets:\n- schema: dbo\n  table: orders\ncolumnMappings: []\n'
+
+/** Puts the unsaved edit in the draft before the screen is drawn, as the mapping's form does when the person types. */
+function WithUnsavedMapping({ children }: { children: React.ReactNode }) {
+  const draft = useDraft()
+  const path = mappingPath('orders', 'dbo.orders')
+  useEffect(() => { draft.edit(path, UNSAVED) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  return draft.textOf(path) === UNSAVED ? <>{children}</> : null
+}
+
 const strategy: SegmentingStrategyConfig = { name: 'by-month', kind: 'SourceSql', sql: 'SELECT ... FROM dbo.orders', scriptName: null, parameters: {} }
 
 describe('what a person waits for on a Runner: the rows of a mapping and the trial of a strategy', () => {
@@ -91,11 +103,12 @@ describe('what a person waits for on a Runner: the rows of a mapping and the tri
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals() })
 
   it('Preview rows starts the set\'s preview through the console, follows a long run, and shows the rows it answered', async () => {
-    await mount(<MappingRowsPreview replication="orders" mapping="dbo.orders" />)
-    expect(q('[data-testid="mapping-rows-preview-version"]')?.textContent).toContain('version 4 on dev of runners-eu')
+    await mount(<WithUnsavedMapping><MappingRowsPreview replication="orders" mapping="dbo.orders" /></WithUnsavedMapping>)
+    expect(q('[data-testid="mapping-rows-preview-version"]')?.textContent).toContain('as this mapping is in the draft with its unsaved edits, read on dev of runners-eu (version 4)')
     await click('[data-testid="mapping-rows-preview-go"]')
+    // the mapping goes as the draft has it, the unsaved filter included
     expect(server.asked.find((a) => a.path === 'POST /api/deploys/d-1/runs')?.body).toEqual({
-      task: 'preview', inputs: { replication: 'orders', mapping: 'dbo.orders', rows: '20', repo_dir: 'repo' }, answer: true,
+      task: 'preview', inputs: { replication: 'orders', mapping: 'dbo.orders', rows: '20', repo_dir: 'repo', mapping_text: UNSAVED }, answer: true,
     })
     expect(q('[data-testid="mapping-rows-preview-running"]')?.textContent).toContain('takes longer than 10 seconds')
     await act(async () => { await new Promise((r) => setTimeout(r, 2100)) })
@@ -110,7 +123,7 @@ describe('what a person waits for on a Runner: the rows of a mapping and the tri
   }, 15_000)
 
   it('Try runs the strategy as it is being edited over a mapping and a column, and shows every candidate', async () => {
-    await mount(<SegmentingStrategiesView strategies={[strategy]} scripts={[]} onChange={() => {}} trial={{ project: 'plant', id: 'ws', replication: 'orders', mappings: ['dbo.orders', 'dbo.customers'] }} />)
+    await mount(<WithUnsavedMapping><SegmentingStrategiesView strategies={[strategy]} scripts={[]} onChange={() => {}} trial={{ project: 'plant', id: 'ws', replication: 'orders', mappings: ['dbo.orders', 'dbo.customers'] }} /></WithUnsavedMapping>)
     await click('[data-testid="edit-strategy-by-month"]')
     expect((q('[data-testid="try-strategy-button"]') as HTMLButtonElement).disabled).toBe(true)   // no column yet
     await type('[data-testid="try-strategy-column"]', 'placed_at')
@@ -120,7 +133,7 @@ describe('what a person waits for on a Runner: the rows of a mapping and the tri
     expect(sent.task).toBe('try-strategy')
     expect(sent.answer).toBe(true)
     expect({ ...sent.inputs, strategy: JSON.parse(sent.inputs.strategy!) }).toEqual({
-      replication: 'orders', mapping: 'dbo.orders', name: '', column: 'placed_at', repo_dir: 'repo',
+      replication: 'orders', mapping: 'dbo.orders', name: '', column: 'placed_at', repo_dir: 'repo', mapping_text: UNSAVED,
       strategy: { name: 'by-month', kind: 'SourceSql', sql: 'SELECT ... FROM dbo.orders', scriptName: null, parameters: {} },
     })
     expect(q('[data-testid="try-strategy-summary"]')?.textContent).toBe('2 candidates of by-month over placed_at, 1 selected.')
