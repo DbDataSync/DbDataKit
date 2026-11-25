@@ -38,6 +38,10 @@ public interface IChangeWriter
     /// whole rows or whole scopes.</summary>
     KeyNeed NeedsKey => KeyNeed.None;
 
+    /// <summary>The changes this writer makes to the target table, and so the privileges its run login needs there (the set's preflight asks the
+    /// engine for these and no others). <see cref="WritePrivileges.All"/> for a writer that does not say.</summary>
+    WritePrivileges NeedsPrivileges => WritePrivileges.All;
+
     /// <param name="mappingName">The table mapping this write belongs to — see
     /// <see cref="IChangeReader.ReadChangesAsync"/>'s identical parameter.</param>
     /// <param name="targetColumns">The target's cached shape — see

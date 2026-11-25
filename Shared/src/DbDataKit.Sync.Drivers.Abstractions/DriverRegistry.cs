@@ -96,7 +96,7 @@ public sealed class DriverRegistry
                         r.NeedsKey))
                     .ToList(),
                 driver.StagingProviders.Select(p => new StagingCapability(p.Kind, p.Parameters)).ToList(),
-                driver.Writers.Select(w => new WriterCapability(w.Kind, w.SupportsReconciliation, w.Parameters, w.NeedsKey)).ToList(),
+                driver.Writers.Select(w => new WriterCapability(w.Kind, w.SupportsReconciliation, w.Parameters, w.NeedsKey, w.NeedsPrivileges)).ToList(),
                 driver is IConnectionTester,
                 driver is IProvisioner provisioner ? provisioner.SupportedActions : [],
                 // Phase 109j: hide "Validate library" the same way SupportsConnectionTest already

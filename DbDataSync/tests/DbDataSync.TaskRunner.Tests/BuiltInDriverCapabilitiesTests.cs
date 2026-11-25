@@ -12,8 +12,8 @@ namespace DbDataSync.TaskRunner.Tests;
 /// <summary>
 /// The built-in drivers' capability table (<see cref="BuiltInDriverCapabilities"/>) is what a screen and the Workspace's offline answers read in
 /// place of the drivers. These tests hold it equal to what each built-in driver registers the way every run does
-/// (<see cref="EngineComposition.RegisterBuiltInDrivers"/>): its readers, staging providers and writers in order, their settings and the key
-/// each needs, and the driver's own answers.
+/// (<see cref="EngineComposition.RegisterBuiltInDrivers"/>): its readers, staging providers and writers in order, their settings, the key
+/// each needs and the changes each writer makes, and the driver's own answers.
 /// </summary>
 public sealed class BuiltInDriverCapabilitiesTests : IDisposable
 {
@@ -71,4 +71,17 @@ public sealed class BuiltInDriverCapabilitiesTests : IDisposable
     [InlineData(DriverIds.MySql, "Scd2", KeyNeed.NaturalKey)]
     public void A_writer_says_which_key_it_needs(string driver, string kind, KeyNeed key) =>
         Assert.Equal(key, Registered().Get(driver).Writers.Single(w => w.Kind == kind).NeedsKey);
+
+    [Theory]
+    [InlineData(DriverIds.MsSql, "MsSqlMerge", WritePrivileges.All)]
+    [InlineData(DriverIds.MsSql, "MsSqlDeleteInsert", WritePrivileges.Insert | WritePrivileges.Delete)]
+    [InlineData(DriverIds.MsSql, "MsSqlBulkInsert", WritePrivileges.Insert | WritePrivileges.Delete)]
+    [InlineData(DriverIds.Postgres, "DeleteInsert", WritePrivileges.Insert | WritePrivileges.Delete)]
+    [InlineData(DriverIds.Postgres, "ChangeApply", WritePrivileges.All)]
+    [InlineData(DriverIds.Postgres, "KeyReconcileDelete", WritePrivileges.Delete)]
+    [InlineData(DriverIds.MySql, "KeyReconcileScd2Close", WritePrivileges.Update)]
+    [InlineData(DriverIds.MySql, "Scd2", WritePrivileges.Insert | WritePrivileges.Update)]
+    [InlineData(DriverIds.Oracle, "Snapshot", WritePrivileges.Insert)]
+    public void A_writer_says_which_changes_it_makes(string driver, string kind, WritePrivileges privileges) =>
+        Assert.Equal(privileges, Registered().Get(driver).Writers.Single(w => w.Kind == kind).NeedsPrivileges);
 }

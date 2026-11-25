@@ -27,6 +27,9 @@ public sealed class MsSqlMergeReconcileWriter : IChangeWriter, IStatementPreview
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>A MERGE with an insert, an update and a delete branch, and SQL Server checks the privilege of every branch.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.All;
+
     /// <summary>MERGE matches on the target's primary key, every key column mapped (<see cref="MsSqlTargetShape.RequireMergeKey"/>).</summary>
     public KeyNeed NeedsKey => KeyNeed.TargetKey;
 
