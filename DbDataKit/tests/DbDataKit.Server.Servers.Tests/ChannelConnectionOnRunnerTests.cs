@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using DbDataKit.Deploy;
 using DbDataKit.Runner;
+using DbDataKit.Runner.Api;
 using DbDataKit.Scheduling;
 using DbDataKit.Secrets;
 using DbDataKit.Secrets.Store;
@@ -25,14 +26,14 @@ public sealed class ChannelConnectionOnRunnerTests
     private const string Password = "pw-channel-login-4471";
     private const string Secret = "dbdatakit:runner:dev-login:crm-to-dw.test.target:password";
 
-    /// <summary>The package as the runner holds it: one task that reads <c>source</c> and writes <c>target</c> (its files are never run here).</summary>
+    /// <summary>The package as the runner holds it: one task that writes through <c>target</c> (its files are never run here).</summary>
     private static string WritePackage(string folder)
     {
         Directory.CreateDirectory(Path.Combine(folder, "files"));
         File.WriteAllText(Path.Combine(folder, "files", "Load.dll"), "not run here");
         var task = new PackageTask("load", new TaskEntry("Load"), new Schedule(), [], [], [], ProgressDeclaration.Empty, TaskLimits.None, [], [])
         {
-            Connections = [new ConnectionSlot("source", "database", Access: SlotAccess.Read), new ConnectionSlot("target", "database")],
+            Connections = [new ConnectionSlot("target", "database")],
         };
         var manifest = new PackageManifest(Package, null, new PackageLaunch(LaunchKind.Assembly, Assembly: "Load.dll"), new BuiltAgainst("10.0", null, "dbdatakit.runner.v1"), [task]);
         File.WriteAllText(Path.Combine(folder, "package.yaml"), PackageManifestWriter.Write(manifest));
@@ -50,6 +51,9 @@ public sealed class ChannelConnectionOnRunnerTests
             var runner = Programs.Runner;
             var runnerDirectory = Path.Combine(root, "runner");
             Directory.CreateDirectory(runnerDirectory);
+            // a version that declares a write slot is installed only where the slot is bound: test binds target to a connection the runner has no copy of yet
+            var state = StateDatabase.OpenModules(Path.Combine(runnerDirectory, "state.db"), RunnerNames.EngineModules, new StateScope(Group: "main", Service: RunnerNames.ServiceId));
+            new RunnerPublishing(state).Bind(Package, Channel, new Dictionary<string, string> { ["target"] = "not-set-up" }, null, RunnerActor.Local());
             var package = WritePackage(Path.Combine(root, "package"));
             await RealProcess.RunAsync(runner, "package", "install", Path.Combine(package, "package.yaml"), Path.Combine(package, "files"), "--channel", Channel, "--repo", runnerDirectory);
             var code = Programs.CodeIn(await RealProcess.RunAsync(runner, "server", "pair", "--repo", runnerDirectory, "--max-role", "admin"));
@@ -99,6 +103,14 @@ public sealed class ChannelConnectionOnRunnerTests
             Assert.True((bool?)copy["secrets"]![0]!["resolves"], copy.ToJsonString());
             Assert.Contains(copy["used_by"]!.AsArray().OfType<JsonObject>(), u => (string?)u["package"] == Package && (string?)u["channel"] == Channel && (string?)u["slot"] == "target");
             Assert.DoesNotContain(Password, copies.ToJsonString());
+
+            // a package the runner does not hold yet is bound the same way, before its first deploy
+            var (calls, none) = await channels.OnRunnerAsync(runnerId, ada, default);
+            Assert.Null(none);
+            var early = await calls!.BindAsync("orders-to-dw", Channel, "target", Copy);
+            Assert.True(early.Bound, early.Error);
+            var (_, again) = await relay.CallAsAsync(instance, ada.Id, ada.Name, ada.Role, HttpMethod.Get, "/api/v1/connection-copies", null, default);
+            Assert.Contains(again!["copies"]![0]!["used_by"]!.AsArray().OfType<JsonObject>(), u => (string?)u["package"] == "orders-to-dw" && (string?)u["channel"] == Channel);
 
             // the runner holds the password, and the copy names the person who sent it
             Assert.Contains(ada.Id, (string?)copy["sent_by"] ?? "");
