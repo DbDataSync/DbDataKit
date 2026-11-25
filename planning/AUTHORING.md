@@ -28,8 +28,8 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - The Designer's shared reads (`@dbdatakit/workspace`): the channel picker offers **Set up for development** where a channel does not bind the slot,
   `prod` as any other with the production warning (the console stores the login on the Runner, copies the draft's connection there and binds the slot), **Test** on the tab **Catalog**, **Describe columns** for a kind to
   place, and the newest `preflight` per channel on the Runs tab (`docs/authoring-metadata.md`, "Every kind uses the same pieces").
-- A draft is read before it is ever published: when the Runner holds no version of the project's package, the picker lists every channel the Runner
-  serves (`GET /api/v1/metadata/channels`), and `discover`, `describe` and the binding test read the slot a channel binds for it
+- A draft is read before it is ever published: the picker lists every channel the Runner serves (`GET /api/v1/metadata/channels`), and in a channel
+  that holds no version of the project's package `discover`, `describe` and the binding test read the slot the channel binds for it
   (`docs/authoring-metadata.md`, "Before anything is published: Set up for development").
 
 ## Tasks
@@ -73,23 +73,6 @@ The picker offers the Runner the catalog cache says the connection was last read
 refuses it and a catalog read answers 409 naming the missing signature. The direction is to exempt that package, because it ships beside the Runner's
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
-
-## Proposed decisions
-
-### AUTHORING-P57: a draft read in a channel that holds no version of a package the Runner holds elsewhere (question, awaiting the owner)
-
-Scenario: Ben published `sales-dw` straight to `prod` on the Runner `plant`, which also serves `dev`. He opens the tab **Catalog** of a new draft. The
-picker lists only `prod`, the channel that holds a version of `sales-dw`, and offers **Set up warehouse for development** with `dev`. Ben sends his
-development login and the console binds `warehouse` in `dev`, but `dev` is still not listed, and a read in `dev` is refused with 404: `dev` holds no
-version of `sales-dw`, which declares no slot there.
-
-- Option A (built): the rule is per package. A Runner that holds no version of the package anywhere lists every channel it serves and reads any slot
-  a channel binds for it; once a version exists in one channel, only the channels holding a version are listed and read, so Ben publishes a build to
-  `dev` first.
-- Option B: the rule is per channel. The picker always lists every channel the Runner serves, and a channel that holds no version of the package (staged
-  or served) reads any slot it binds for it; a channel that holds a version reads only the slots that version declares.
-
-Recommendation: B. It is the same rule in every case, and a draft can be read in `dev` whatever was published to `prod` first.
 
 ## Shared areas touched
 
