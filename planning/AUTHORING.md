@@ -28,6 +28,9 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 - The Designer's shared reads (`@dbdatakit/workspace`): the channel picker offers **Set up for development** where a channel does not bind the slot
   (the console stores the login on the Runner, copies the draft's connection there and binds the slot), **Test** on the tab **Catalog**, **Describe columns** for a kind to
   place, and the newest `preflight` per channel on the Runs tab (`docs/authoring-metadata.md`, "Every kind uses the same pieces").
+- A draft is read before it is ever published: when the Runner holds no version of the project's package, the picker lists every channel the Runner
+  serves (`GET /api/v1/metadata/channels`), and `discover`, `describe` and the binding test read the slot a channel binds for it
+  (`docs/authoring-metadata.md`, "Before anything is published: Set up for development").
 
 ## Tasks
 
@@ -48,7 +51,6 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-25 | On SQL Server, `discover` also lists every database the connection's login can open (`sys.databases`), each with its schemas, and reads the tables of the one asked for (an input `database`); the database pickers offer them. A PostgreSQL connection reads its one database, as today | none | M | a SQL Server conformance test: a login that reads two databases sees both in the cache, and the tables of the second after a read that names it |
 | AUTHORING-26 | A read of a database's shape (`discover`, `describe`) needs the Runner's viewer role, not operator: it changes nothing, and the console has already checked that the person has access to the project | none | S | a person who is a viewer on the project's Runner refreshes the catalog; starting any other task still needs operator |
 | AUTHORING-27 | The person who staged a version held for its preflight activates it: with no error found, the Runner lets that person activate it with the role that staged it (publisher); after an error, the same person confirms the errors, recorded with their name as today. `docs/publishing.md` ("Preflight before activation" and the route table) follows | none | S | a test: Bob, a publisher on the Runner, serves a package in a production channel; its preflight finds nothing and Bob activates it; a second version's preflight finds an error and Bob's activation with `"confirm": true` is recorded with his name |
-| AUTHORING-28 | A draft is read before it is ever published: when the Runner holds no version of the project's package, the console lists the channels the Runner serves (with the bindings it holds for the package) in the channel picker, so `discover`, `describe` and the binding test read a draft that was never built (a binding of a slot of a package the Runner holds no version of is built: Set up for development makes one). This changes the Runner's rule for its built-in package. `docs/authoring-metadata.md` ("Before anything is published: Set up for development") follows. Until it is built, a build staged in the channel comes first | none | M | a test: on a Runner that holds no version of `sales-dw`, the picker lists the channels the Runner serves; `warehouse` is bound in `dev` for the package; **Refresh** in `dev` reads its tables and the binding test succeeds, with no version of `sales-dw` on the Runner |
 | AUTHORING-29 | In a group of Runners, a run whose answer the console waits for (**Preview rows**, **Try**) is pinned to the instance that takes the call: that instance queues it for itself only, and the console's call that waits for the answer reaches the same instance, so the rows never leave that instance's memory and the first ask is answered. `docs/authoring-metadata.md` ("What the Runner does with an answer") follows; until it is built, a call that reaches another instance answers `gone` | none | M | a test with a group of two Runner instances behind one address: a `preview` taken by one instance runs there, and the console's answer call returns its rows on the first ask, never `gone` |
 | AUTHORING-30 | **Preview rows** and **Try** read the draft's mapping: the screen sends the mapping's file as it is in the draft, unsaved edits included; the tasks `preview` and `try-strategy` read that mapping with the published version's connections and drivers; the run record keeps the mapping's text as an input (never a row). `docs/authoring-metadata.md` ("Rows and trials are answered, never kept") follows; until it is built, the tasks read the mapping the deployed version has | none | M | Sync tests: a `preview` sent a mapping whose filter is `region = 2`, over a deployed version without that filter, answers only rows of region 2, and its run record holds the mapping's text; vitest of the Sync Designer: **Preview rows** sends the unsaved mapping |
 | AUTHORING-31 | **Set up for development** offers `prod` like any other channel that does not bind the connection's slot, with the production warning a read in `prod` shows; the console stores the login as it does for `dev`, and the Runner's own admin role check stays. `docs/authoring-metadata.md` ("Set up for development in the channel picker") follows; until it is built, the picker leaves `prod` out | none | S | vitest of `ChannelPicker`: on a Runner whose only channel `prod` does not bind `erp`, the picker offers **Set up erp for development** with `prod` and shows the production warning; a console test: the login sent for `prod` is stored under its `prod` name |
@@ -73,6 +75,23 @@ The picker offers the Runner the catalog cache says the connection was last read
 refuses it and a catalog read answers 409 naming the missing signature. The direction is to exempt that package, because it ships beside the Runner's
 own program and is as trusted as the program, with the audit line of its install saying so. **Why it waits:** signatures are not built yet, so with
 the setting on every publish is refused anyway, and the exemption is a supply chain exception to weigh again when they are. No code changes until then.
+
+## Proposed decisions
+
+### AUTHORING-P57: a draft read in a channel that holds no version of a package the Runner holds elsewhere (question, awaiting the owner)
+
+Scenario: Ben published `sales-dw` straight to `prod` on the Runner `plant`, which also serves `dev`. He opens the tab **Catalog** of a new draft. The
+picker lists only `prod`, the channel that holds a version of `sales-dw`, and offers **Set up warehouse for development** with `dev`. Ben sends his
+development login and the console binds `warehouse` in `dev`, but `dev` is still not listed, and a read in `dev` is refused with 404: `dev` holds no
+version of `sales-dw`, which declares no slot there.
+
+- Option A (built): the rule is per package. A Runner that holds no version of the package anywhere lists every channel it serves and reads any slot
+  a channel binds for it; once a version exists in one channel, only the channels holding a version are listed and read, so Ben publishes a build to
+  `dev` first.
+- Option B: the rule is per channel. The picker always lists every channel the Runner serves, and a channel that holds no version of the package (staged
+  or served) reads any slot it binds for it; a channel that holds a version reads only the slots that version declares.
+
+Recommendation: B. It is the same rule in every case, and a draft can be read in `dev` whatever was published to `prod` first.
 
 ## Shared areas touched
 
