@@ -93,7 +93,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
                 new JsonObject { ["channel"] = "prod", ["slot"] = "crm_db", ["bound_to"] = "crm" },
                 new JsonObject { ["channel"] = "test", ["slot"] = "other", ["bound_to"] = "x" }),
         }));
-        // what a Runner serves for a package it holds no version of: its channels and the bindings it holds for the package (an older Runner, here for legacy-dw, does not answer the call)
+        // the channels a Runner serves and the bindings it holds for a package (an older Runner, here for crm-to-dw and legacy-dw, does not answer the call)
         server.MapGet("/api/v1/metadata/channels", (string package, HttpContext c) =>
         {
             reached.Enqueue($"runner GET metadata/channels {package} by {c.ManagementToken().SubjectName}");
@@ -165,7 +165,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
     private const string Base = $"/api/workspace-catalog/{WorkspaceId}/crm-to-dw";
 
     [Fact]
-    public async Task The_channel_picker_lists_the_packages_channels_with_the_ones_that_bind_the_connections_slot_and_offers_the_first_that_is_not_production()
+    public async Task An_older_runner_lists_the_packages_channels_with_the_ones_that_bind_the_connections_slot_and_offers_the_first_that_is_not_production()
     {
         var (status, body) = await Call(HttpMethod.Get, $"{Base}/channels?runner={RunnerId}&connection=CRM-db");
         Assert.Equal(HttpStatusCode.OK, status);
@@ -182,7 +182,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_package_the_runner_holds_no_version_of_lists_every_channel_the_runner_serves_with_the_bindings_it_holds_for_the_package()
+    public async Task The_picker_lists_every_channel_the_runner_serves_with_the_bindings_it_holds_for_the_package()
     {
         var (status, body) = await Call(HttpMethod.Get, $"/api/workspace-catalog/{WorkspaceId}/sales-dw/channels?runner={RunnerId}&connection=warehouse");
         Assert.True(status == HttpStatusCode.OK, body.ToJsonString());
@@ -191,7 +191,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
         Assert.Equal("sales-dw-warehouse-dev", (string?)body["channels"]![0]!["bound_to"]);
         Assert.True((bool)body["channels"]![1]!["production"]!);
         Assert.Equal("dev", (string?)body["default"]);
-        Assert.Contains("holds no version of sales-dw", (string)body["note"]!);
+        Assert.Null(body["note"]);
         Assert.Contains(reached, r => r == "runner GET metadata/channels sales-dw by Ada Admin");
 
         // a connection nothing binds yet: every channel is listed, none offered first, and Set up for development is how to bind one
@@ -200,7 +200,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
         Assert.Null((string?)unbound["default"]);
         Assert.Contains("Set up for development", (string)unbound["note"]!);
 
-        // a Runner that does not answer the call lists no channel and says a build published to a channel comes first
+        // a Runner that does not answer the call (an older one) lists the channels that hold a version of the package, and none for a package it does not hold
         var (_, older) = await Call(HttpMethod.Get, $"/api/workspace-catalog/{WorkspaceId}/legacy-dw/channels?runner={RunnerId}&connection=warehouse");
         Assert.Empty(older["channels"]!.AsArray());
         Assert.Contains("has no package legacy-dw yet", (string)older["note"]!);

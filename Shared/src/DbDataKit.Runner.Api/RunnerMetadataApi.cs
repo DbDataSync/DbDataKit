@@ -16,8 +16,8 @@ namespace DbDataKit.Runner.Api;
 /// reads the database the channel binds to the package's slot, for the person named. Who may: a console, for a person it signed in (an operator, as starting any task); a call that names no person, and a client that is not a console, are
 /// refused. Any channel the runner serves, production included: the screen that asks warns first.
 /// <list type="bullet">
-/// <item>The package must declare the slot in the channel (in the version it serves or the one staged there), and the channel must bind it: 404 and 409 otherwise, naming what is missing. A package this runner holds no version of yet
-/// (a draft that was never published, whose slot was bound before its first version) is read through whatever slot the channel binds for it.</item>
+/// <item>A channel that holds a version of the package (served or staged) reads only a slot that version declares: 404 otherwise. A channel that holds no version of it (a draft never published there, whatever other channels
+/// hold) reads any slot it binds for the package. Either way the channel must bind the slot: 409 otherwise, naming what is missing.</item>
 /// <item>The login is the connection's read login when it has one, else its default one (<c>role</c> in the run's inputs); the slot is resolved through the package's binding when the run starts, so the production-binding rule holds.</item>
 /// <item>The built-in package is installed in the channel from the files beside the program (<see cref="BuiltInPackages"/>) the first time, and again when this runner's files differ from what the channel serves.</item>
 /// <item>The answer is 202 with the run's id; the result is the run's step named after the task, keyed by the run id (<c>GET .../tasks/dbdatakit-metadata/{channel}/{task}/steps/{task}?key={run id}</c>, then its payload for <c>discover</c>).</item>
@@ -135,15 +135,15 @@ public static class RunnerMetadataApi
         connection is not null && connection.LoginFor(LoginRole.Read) is null && connection.ConnectionStringSecret is null ? "default" : "read";
 
     /// <summary>
-    /// Whether the version the channel serves, or the one staged there, declares the slot. A package this runner holds no version of declares nothing yet: a draft's slot is bound before its first version, and the binding alone says what
-    /// is read, so any slot passes here and the binding check that follows decides.
+    /// Whether the slot may be read in the channel: the version the channel serves, or the one staged there, declares it. A channel that holds no version of the package declares nothing yet: a draft's slot is bound before its first
+    /// version there, and the binding alone says what is read, so any slot passes here and the binding check that follows decides.
     /// </summary>
     private static bool DeclaresSlot(StateDatabase state, RunnerPublishing publishing, string package, string channel, string slot)
     {
         var store = new DefinitionStore(state);
-        if (store.Versions(RunnerPublishing.Kind, package).Count == 0) return true;
-        foreach (var head in publishing.Publisher.HeadsOf(RunnerPublishing.Kind, package).Where(h => h.Channel == channel))
-            foreach (var version in new[] { head.Active, head.Staged }.OfType<int>())
+        var held = publishing.Publisher.HeadsOf(RunnerPublishing.Kind, package).Where(h => h.Channel == channel).SelectMany(h => new[] { h.Active, h.Staged }.OfType<int>()).Distinct().ToList();
+        if (held.Count == 0) return true;
+        foreach (var version in held)
                 if (store.Get(RunnerPublishing.Kind, package, version) is { } stored
                     && PackageManifestReader.Load(stored.Content, $"{package}@{version}") is { Ok: true, Manifest: { } manifest }
                     && manifest.Tasks.Any(t => t.Connections.Any(c => c.Name == slot)))

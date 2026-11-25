@@ -117,6 +117,36 @@ public sealed class RunnerMetadataTests
         Assert.Empty(new RunnerPublishing(h.State).Publisher.HeadsOf(RunnerPublishing.Kind, "sales-dw"));
     }
 
+    /// <summary>
+    /// A version of the package in <c>prod</c> and none in <c>dev</c>: <c>dev</c> is listed with the slot it binds, and a read there goes through whatever slot <c>dev</c> binds, as if nothing were published; <c>prod</c> reads only the slots
+    /// its version declares.
+    /// </summary>
+    [Fact]
+    public async Task A_channel_with_no_version_reads_any_slot_it_binds_while_another_channel_holds_a_version()
+    {
+        await using var h = new RunnerHarness(StateEngineIds.Sqlite, channels: ["dev", "prod"]);
+        // a version of sample in prod only, declaring the slot source
+        new RunnerPublishing(h.State).Bind("sample", "prod", new Dictionary<string, string> { ["source"] = "erp_prod" }, null, RunnerActor.Local());
+        RunnerPackageInstaller.Install(h.State, SamplePackage.WriteManifest(SamplePackage.Manifest(SamplePackage.Task("ok") with { Connections = [new ConnectionSlot("source", "database")] })), SamplePackage.Directory, "prod", "test");
+        new RunnerPublishing(h.State).Bind("sample", "dev", new Dictionary<string, string> { ["warehouse"] = "warehouse_dev" }, null, RunnerActor.Local());
+        new RunnerPublishing(h.State).Bind("sample", "prod", new Dictionary<string, string> { ["warehouse"] = "warehouse_prod" }, null, RunnerActor.Local());
+        await h.StartAsync();
+
+        var (_, channels) = await h.GetAsync("/api/v1/metadata/channels?package=sample");
+        Assert.True((bool)channels!["holds_version"]!);
+        Assert.Equal(["dev", "prod"], channels["channels"]!.AsArray().Select(c => (string)c!).ToArray());
+        Assert.Contains(channels["bindings"]!.AsArray(), b => (string?)b!["channel"] == "dev" && (string?)b["slot"] == "warehouse");
+
+        // dev holds no version: the slot it binds is read, though prod's version does not declare it
+        Assert.Equal(HttpStatusCode.Accepted, (await h.PostAsync("/api/v1/metadata/dev/discover", ServerRole.Operator, Read(slot: "warehouse"))).Status);
+        Assert.DoesNotContain(new RunnerPublishing(h.State).Publisher.HeadsOf(RunnerPublishing.Kind, "sample"), x => x.Channel == "dev");
+        // prod holds a version: only the slots it declares
+        var (undeclared, said) = await h.PostAsync("/api/v1/metadata/prod/discover", ServerRole.Operator, Read(slot: "warehouse"));
+        Assert.Equal(HttpStatusCode.NotFound, undeclared);
+        Assert.Contains("does not declare the slot 'warehouse'", (string)said!["error"]!);
+        Assert.Equal(HttpStatusCode.Accepted, (await h.PostAsync("/api/v1/metadata/prod/discover", ServerRole.Operator, Read())).Status);
+    }
+
     public static TheoryData<string> Engines => ["sqlserver", "postgres"];
 
     /// <summary>
