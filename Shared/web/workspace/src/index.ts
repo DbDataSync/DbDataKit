@@ -16,16 +16,16 @@ export type { ColumnChoices } from './mappingColumns'
 // the read of a connection's shape from a Runner channel, through the console, for every kind's Designer and the Files area's Catalog tab
 export { CatalogRefresh, ChannelPicker, RefreshDifference } from './pages/CatalogRefresh'
 export { catalogReadApi, differenceLine, isUnchanged, productionWarning, refreshDifference, refreshOutcome, withRefresh, workspaceServerOf } from './catalogRefresh'
-export type { CatalogDifference, CatalogReadAnswer, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'
+export type { CatalogDifference, CatalogReadAnswer, CatalogReader, CatalogReadRequest, ChannelChoice, ChannelList, ColumnChange, RefreshOutcome, RunnerChoice } from './catalogRefresh'
 // the Designer's other shared reads, through the console: Set up for development, Test, Describe and the newest-check card
-export { BindingTest, DevelopmentSetUp, NewestCheck, NewestChecks, QueryDescribe, RunAnswerStatus, useNewestRun, usePublishedChannels, useRunAnswer } from './pages/AuthoringReads'
+export { BindingTest, BuildAndStage, DevelopmentSetUp, NewestCheck, NewestChecks, QueryDescribe, RunAnswerStatus, useNewestRun, usePublishedChannels, useRunAnswer } from './pages/AuthoringReads'
 export { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightPartsOf } from './pages/PreflightCard'
 export type { PreflightFinding, PreflightPart, PreflightSeverity } from './pages/PreflightCard'
 export type { AnswerAsk } from './pages/AuthoringReads'
 export { useChannelChoice } from './pages/CatalogRefresh'
-export { authoringReadApi, describedLine, newestPerChannel, PREVIEW_TASK, previewLine, previewValue, setUpChannels, setUpOffered, testLine, TEST_STEP_WORDS, trialLine, TRY_STRATEGY_TASK } from './authoringReads'
+export { authoringReadApi, buildAndStage, describedLine, needsBuildOf, newestPerChannel, PREVIEW_TASK, previewLine, previewValue, setUpChannels, setUpOffered, testLine, TEST_STEP_WORDS, trialLine, TRY_STRATEGY_TASK } from './authoringReads'
 export type {
-  DescribeAnswer, DescribedColumn, DescribeRequest, DraftTestAnswer, DraftTestRequest, MappingPreviewAnswer, NewestRun, PreviewValue, RunAnswer, StrategyCandidate, StrategyTrialAnswer, TestStep, TestStepName,
+  DescribeAnswer, DescribedColumn, DescribeRequest, DraftTestAnswer, DraftTestRequest, MappingPreviewAnswer, NeedsBuild, NewestRun, PreviewValue, RunAnswer, StageTarget, StrategyCandidate, StrategyTrialAnswer, TestStep, TestStepName,
 } from './authoringReads'
 // a development login, sent to the console, which puts it on a Runner; the Workspace server never receives it
 export { developmentLoginApi, developmentLoginLine, developmentLoginWarning, developmentLoginWarnings } from './developmentLogin'
