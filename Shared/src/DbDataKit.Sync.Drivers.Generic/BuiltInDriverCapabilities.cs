@@ -140,7 +140,7 @@ public static class BuiltInDriverOptions
 
 /// <summary>
 /// What each of Sync's built-in drivers offers, as the engine registers it (<see cref="DriverRegistry.Describe"/>): its readers, staging
-/// providers and writers with their settings and the key each needs, whether it tests a connection, what it provisions. A screen and an
+/// providers and writers with their settings, the key each needs and the changes each writer makes, whether it tests a connection, what it provisions. A screen and an
 /// offline check ask this table, so they answer without the engine's database clients; Sync's own tests hold it equal to what each driver
 /// registers. A driver a project carries (<c>driver.yaml</c>, a compiled driver) is not in it.
 /// </summary>
@@ -164,12 +164,12 @@ public static class BuiltInDriverCapabilities
     /// <summary>The generic writers every SQL engine's driver registers, in its order.</summary>
     private static readonly IReadOnlyList<WriterCapability> GenericWriters =
     [
-        new(GenericDriverKinds.ChangeApply, false, [ApplyBatch.Descriptor], KeyNeed.TargetKey),
-        new(GenericDriverKinds.DeleteInsert, true, [ApplyBatch.Descriptor]),
-        new(GenericDriverKinds.KeyReconcileDelete, true, [], KeyNeed.TargetKey),
-        new(GenericDriverKinds.KeyReconcileScd2Close, true, [], KeyNeed.NaturalKey),
-        new(GenericDriverKinds.Snapshot, false, []),
-        new(GenericDriverKinds.Scd2, false, Scd2Writer.Options, KeyNeed.NaturalKey),
+        new(GenericDriverKinds.ChangeApply, false, [ApplyBatch.Descriptor], KeyNeed.TargetKey, WritePrivileges.All),
+        new(GenericDriverKinds.DeleteInsert, true, [ApplyBatch.Descriptor], KeyNeed.None, WritePrivileges.Insert | WritePrivileges.Delete),
+        new(GenericDriverKinds.KeyReconcileDelete, true, [], KeyNeed.TargetKey, WritePrivileges.Delete),
+        new(GenericDriverKinds.KeyReconcileScd2Close, true, [], KeyNeed.NaturalKey, WritePrivileges.Update),
+        new(GenericDriverKinds.Snapshot, false, [], KeyNeed.None, WritePrivileges.Insert),
+        new(GenericDriverKinds.Scd2, false, Scd2Writer.Options, KeyNeed.NaturalKey, WritePrivileges.Insert | WritePrivileges.Update),
     ];
 
     private static readonly IReadOnlyList<string> Provisions =
@@ -191,10 +191,10 @@ public static class BuiltInDriverCapabilities
             ],
             [new(BuiltInDriverKinds.MsSqlStagingTable, []), StagingTable, new(GenericDriverKinds.PassThrough, [])],
             [
-                new(BuiltInDriverKinds.MsSqlMerge, false, BuiltInDriverOptions.MsSqlMerge, KeyNeed.TargetKey),
-                new(BuiltInDriverKinds.MsSqlMergeReconcile, true, [], KeyNeed.TargetKey),
-                new(BuiltInDriverKinds.MsSqlDeleteInsert, true, []),
-                new(BuiltInDriverKinds.MsSqlBulkInsert, true, BuiltInDriverOptions.MsSqlBulkInsert),
+                new(BuiltInDriverKinds.MsSqlMerge, false, BuiltInDriverOptions.MsSqlMerge, KeyNeed.TargetKey, WritePrivileges.All),
+                new(BuiltInDriverKinds.MsSqlMergeReconcile, true, [], KeyNeed.TargetKey, WritePrivileges.All),
+                new(BuiltInDriverKinds.MsSqlDeleteInsert, true, [], KeyNeed.None, WritePrivileges.Insert | WritePrivileges.Delete),
+                new(BuiltInDriverKinds.MsSqlBulkInsert, true, BuiltInDriverOptions.MsSqlBulkInsert, KeyNeed.None, WritePrivileges.Insert | WritePrivileges.Delete),
                 .. GenericWriters,
             ],
             SupportsConnectionTest: true, Provisions, SupportsLibraryValidation: true, DefaultTestQuery: "SELECT @@VERSION;", SupportsTieSafeRowLimit: true),

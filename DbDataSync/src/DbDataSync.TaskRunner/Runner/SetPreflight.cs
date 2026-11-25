@@ -23,6 +23,7 @@ public sealed record SetPreflightPart(string Part, IReadOnlyList<PreflightFindin
 /// What weighs how much: a table or a column the mapping names that is not there, a filter that does not compile, a login that may not read the source or write the target, change capture
 /// that the reader needs and that is off, and a Kind the driver does not have are errors, since the first pass would fail on them. A type that does not fit, a key that does not agree and a
 /// key a reader or writer needs and does not get are warnings, as in the offline check. What is in order, and what the engine has no privilege function for, is information.
+/// The target's login is asked only for the changes the mapping's writers make (<see cref="IChangeWriter.NeedsPrivileges"/>): a refill of a scope needs no UPDATE.
 /// </para>
 /// </summary>
 public sealed class SetPreflight(ConfigRepository config, IConnectionFactory connections, MappingProvisioner provisioner)
@@ -263,12 +264,18 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
                 found.Add(new(ProvisioningResolution.AlterTargetTableColumns(task, mapping) ? Preflight.Warning : Preflight.Error,
                     $"The target column '{column.TargetColumn}' of the mapping '{mapping.Name}' is not a column of {Label(target)}.", about));
 
+        // only what the mapping's writers do to the table: a writer that refills a scope (DeleteInsert) never updates, so its login needs no UPDATE
+        var writers = Stages(task, mapping).Where(s => s.Role == "writer" && !string.IsNullOrEmpty(s.Kind)).Select(s => s.Kind!).Distinct(StringComparer.Ordinal).ToList();
         var unknown = false;
-        foreach (var privilege in new[] { Privilege.Insert, Privilege.Update, Privilege.Delete })
+        foreach (var (privilege, change) in new[] { (Privilege.Insert, WritePrivileges.Insert), (Privilege.Update, WritePrivileges.Update), (Privilege.Delete, WritePrivileges.Delete) })
         {
+            // a Kind the driver does not have needs nothing here: the key check reports it as an error
+            var needing = writers.Where(kind => side.Driver.Writers.FirstOrDefault(w => w.Kind == kind) is { } writer && writer.NeedsPrivileges.HasFlag(change)).ToList();
+            if (needing.Count == 0) continue;
             var may = await PrivilegeAsync(side, privilege, target, ct).ConfigureAwait(false);
             if (may is null) { unknown = true; break; }
-            if (may == false) found.Add(new(Preflight.Error, $"The run login of '{target.ConnectionName}' may not {Word(privilege)} {Label(target)}.", about));
+            if (may == false)
+                found.Add(new(Preflight.Error, $"The run login of '{target.ConnectionName}' may not {Word(privilege)} {Label(target)}, which the writer {string.Join(" and the writer ", needing.Select(k => $"'{k}'"))} does.", about));
         }
         if (unknown) found.Add(new(Preflight.Info, $"The {side.Driver.DriverType} engine's privileges are not read by the preflight, so whether the run login may write {Label(target)} is not checked.", about));
 
@@ -364,20 +371,7 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
             && !new HashSet<string>(targetKey!, StringComparer.OrdinalIgnoreCase).SetEquals(targetPrimary))
             found.Add(new(Preflight.Warning, $"The mapping's key ({string.Join(", ", targetKey)}) is not the primary key ({string.Join(", ", targetPrimary)}) of the target {Label(target)}.", target.ConnectionName));
 
-        var stages = new List<(string Role, string? Kind, IReadOnlyDictionary<string, string> Options)>
-        {
-            ("reader", PipelineResolution.Reader(task, mapping).Kind, PipelineResolution.Reader(task, mapping).Options),
-            ("writer", PipelineResolution.Writer(task, mapping).Kind, PipelineResolution.Writer(task, mapping).Options),
-        };
-        if (PipelineResolution.BulkLoadReader(task, mapping) is { } bulkReader) stages.Add(("reader", bulkReader.Kind, bulkReader.Options));
-        if (PipelineResolution.BulkLoadWriter(task, mapping) is { } bulkWriter) stages.Add(("writer", bulkWriter.Kind, bulkWriter.Options));
-        if (PipelineResolution.Reconcile(task, mapping).Enabled)
-        {
-            stages.Add(("reader", PipelineResolution.ReconcileReaderKind(task, mapping), new Dictionary<string, string>()));
-            stages.Add(("writer", PipelineResolution.ReconcileWriterKind(task, mapping), PipelineResolution.Writer(task, mapping).Options));
-        }
-
-        foreach (var (role, kind, options) in stages.DistinctBy(s => (s.Role, s.Kind)))
+        foreach (var (role, kind, options) in Stages(task, mapping).DistinctBy(s => (s.Role, s.Kind)))
         {
             if (string.IsNullOrEmpty(kind)) continue;
             var driver = role == "reader" ? sourceDriver : targetDriver;
@@ -401,6 +395,24 @@ public sealed class SetPreflight(ConfigRepository config, IConnectionFactory con
             };
             if (problem is not null) found.Add(new(Preflight.Warning, $"The {role} '{kind}' would refuse the mapping '{mapping.Name}': {problem}.", side));
         }
+    }
+
+    /// <summary>Each reader and writer a pass of the mapping runs: the change processing's, the bulk load's, and the reconcile's when it is on.</summary>
+    private static List<(string Role, string? Kind, IReadOnlyDictionary<string, string> Options)> Stages(ReplicationTaskConfig task, TableMappingConfig mapping)
+    {
+        var stages = new List<(string Role, string? Kind, IReadOnlyDictionary<string, string> Options)>
+        {
+            ("reader", PipelineResolution.Reader(task, mapping).Kind, PipelineResolution.Reader(task, mapping).Options),
+            ("writer", PipelineResolution.Writer(task, mapping).Kind, PipelineResolution.Writer(task, mapping).Options),
+        };
+        if (PipelineResolution.BulkLoadReader(task, mapping) is { } bulkReader) stages.Add(("reader", bulkReader.Kind, bulkReader.Options));
+        if (PipelineResolution.BulkLoadWriter(task, mapping) is { } bulkWriter) stages.Add(("writer", bulkWriter.Kind, bulkWriter.Options));
+        if (PipelineResolution.Reconcile(task, mapping).Enabled)
+        {
+            stages.Add(("reader", PipelineResolution.ReconcileReaderKind(task, mapping), new Dictionary<string, string>()));
+            stages.Add(("writer", PipelineResolution.ReconcileWriterKind(task, mapping), PipelineResolution.Writer(task, mapping).Options));
+        }
+        return stages;
     }
 
     // ---- the state on the target

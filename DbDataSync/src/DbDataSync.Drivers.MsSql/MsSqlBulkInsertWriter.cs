@@ -50,6 +50,9 @@ public sealed class MsSqlBulkInsertWriter : IPassThroughWriter, IStatementPrevie
 
     public bool SupportsReconciliation => true;
 
+    /// <summary>Clears the scope, then bulk-copies the rows in.</summary>
+    public WritePrivileges NeedsPrivileges => WritePrivileges.Insert | WritePrivileges.Delete;
+
     public IReadOnlyList<ParameterDescriptor> Parameters => BuiltInDriverOptions.MsSqlBulkInsert;
 
     /// <summary>The settings as configured; an unstated or unrecognised one takes its default, a
