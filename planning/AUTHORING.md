@@ -50,6 +50,8 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 | AUTHORING-26 | A read of a database's shape (`discover`, `describe`) needs the Runner's viewer role, not operator: it changes nothing, and the console has already checked that the person has access to the project | none | S | a person who is a viewer on the project's Runner refreshes the catalog; starting any other task still needs operator |
 | AUTHORING-27 | The person who staged a version held for its preflight activates it: with no error found, the Runner lets that person activate it with the role that staged it (publisher); after an error, the same person confirms the errors, recorded with their name as today. `docs/publishing.md` ("Preflight before activation" and the route table) follows | none | S | a test: Bob, a publisher on the Runner, serves a package in a production channel; its preflight finds nothing and Bob activates it; a second version's preflight finds an error and Bob's activation with `"confirm": true` is recorded with his name |
 | AUTHORING-28 | A draft is read before it is ever published: when the Runner holds no version of the project's package, the console lists the channels the Runner serves (none of them bound) in the channel picker, and the Runner lets a binding name a slot of a package it holds no version of yet, so `discover`, `describe` and the binding test read a draft that was never built. This changes the Runner's rule for its built-in package and its bindings. `docs/authoring-metadata.md` ("Before anything is published", "Until then, an administrator binds the slot by hand") follows. Until it is built, a build staged in the channel comes first | none | M | a test: on a Runner that holds no version of `sales-dw`, the picker lists the channels the Runner serves; `warehouse` is bound in `dev` for the package; **Refresh** in `dev` reads its tables and the binding test succeeds, with no version of `sales-dw` on the Runner |
+| AUTHORING-29 | In a group of Runners, a run whose answer the console waits for (**Preview rows**, **Try**) is pinned to the instance that takes the call: that instance queues it for itself only, and the console's call that waits for the answer reaches the same instance, so the rows never leave that instance's memory and the first ask is answered. `docs/authoring-metadata.md` ("What the Runner does with an answer") follows; until it is built, a call that reaches another instance answers `gone` | none | M | a test with a group of two Runner instances behind one address: a `preview` taken by one instance runs there, and the console's answer call returns its rows on the first ask, never `gone` |
+| AUTHORING-30 | **Preview rows** and **Try** read the draft's mapping: the screen sends the mapping's file as it is in the draft, unsaved edits included; the tasks `preview` and `try-strategy` read that mapping with the published version's connections and drivers; the run record keeps the mapping's text as an input (never a row). `docs/authoring-metadata.md` ("Rows and trials are answered, never kept") follows; until it is built, the tasks read the mapping the deployed version has | none | M | Sync tests: a `preview` sent a mapping whose filter is `region = 2`, over a deployed version without that filter, answers only rows of region 2, and its run record holds the mapping's text; vitest of the Sync Designer: **Preview rows** sends the unsaved mapping |
 
 ## Needs from other subjects
 
@@ -74,33 +76,6 @@ Packages page, as before.
   does for `dev` (the Runner still asks for its admin role).
 
 Recommendation: A, so a login typed on an authoring screen never becomes production's; B only if the owner wants production set up from the Designer.
-
-### AUTHORING-P54: in a group of Runners, an answer is held by the instance that ran the task (default, awaiting the owner)
-
-Scenario: the Runner group `plant` has two instances behind one address. Ana presses **Preview rows**; the instance `plant-a` takes her request and
-queues the run, and `plant-b` claims it and runs it. The answer is in `plant-b`'s memory. When the console's call to take it reaches `plant-a`, the
-answer is `gone` ("another instance of the group ran it") and Ana presses **Preview rows** again.
-
-- Option A (as built): the answer stays in the memory of the instance that ran it; a call to another instance answers `gone`.
-- Option B: the instance that takes the call queues the run for itself only (a run pinned to an instance), and the console's call that waits for the
-  answer reaches the same instance.
-- Option C: the answer is kept in the group's state for the minutes it waits, encrypted with a key only the instances hold, and removed when taken.
-  This stores the rows, for minutes.
-- Option D: an instance that does not hold the answer asks the instance that ran the task for it.
-
-Recommendation: B, so rows never leave the instance's memory and every group answers on the first ask; until then A.
-
-### AUTHORING-P55: Preview rows reads the published mapping, not the draft's unsaved edit (default, awaiting the owner)
-
-Scenario: Ana adds `region = 2` to the filter of `dbo.orders` and presses **Preview rows** before she saves. The rows come from the version the draft
-last published, so they include every region; the card says which version it read. To see her filter at work she saves, builds and publishes to
-`dev`, then previews again. **Try** of a strategy sends the strategy as she is editing it, but reads the mapping from the published version too.
-
-- Option A (as built): the preview reads the mapping the deployed version has; the card names the version.
-- Option B: the screen sends the mapping's file as it is in the draft (unsaved edits included), and the task reads that mapping with the published
-  version's connections and drivers. The run record then keeps the mapping's text as an input.
-
-Recommendation: B, as the old Sync server previewed what the author was editing; A until then.
 
 ## Open designs
 
