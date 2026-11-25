@@ -28,7 +28,7 @@ also runs authors' build children and script compiles, the last place a login sh
 says what the run will be able to read, not what someone else's login sees. Ana's own login sees `hr.salaries` and the run's does not; a cache made with
 Ana's login would offer a table no run can read.
 
-A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a non-production channel, sent
+A person never reads with a login of their own. A login a person types is used in one way only: as the login of a slot in a channel the person picks, sent
 to the Runner once (below). Integrated sign-in (Windows, Entra) cannot be typed or delegated from a browser to a server in any case.
 
 Who may ask: anyone with access to the project, in every channel, `prod` included. A read in `prod` is shown with a clear warning that it reads
@@ -299,12 +299,20 @@ did, one sentence each, with a line starting `Warning:` when the copy names a re
 
 A request without `draft` stores the password only, and the answer has the first lines above without the copy and the bind.
 
-**Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel other than `prod` does not
-bind the connection's slot, or when no channel binds it (also when the Runner holds no version of the package yet). The person picks
-the channel (the unbound ones other than `prod`; `dev` when the Runner lists none), types the user and the password once, and presses **Send the login
-to `<Runner>`**. The screen sends them with the draft it shows, by the route above, and keeps nothing of the password. The picker then asks the Runner
+**Set up for development in the channel picker.** The channel picker offers **Set up `crm` for development** when a channel the Runner lists does not
+bind the connection's slot, `prod` as any other, or when the Runner lists no channel. The person picks the channel (the unbound ones, those other than
+`prod` first; `dev` when the Runner lists none), types the user and the password once, and presses **Send the login to `<Runner>`**. When the channel
+picked is `prod`, the form shows the warning a read in `prod` shows: "This reads production: the shape of crm as the prod channel of runners-eu binds it,
+with production's login. Only names and types are read, never a row." The person needs the Runner's admin role for `prod` as for any channel.
+
+The screen sends the login with the draft it shows, by the route above, and keeps nothing of the password. The picker then asks the Runner
 again and offers the channel, now bound, so **Refresh** and **Test** read there. An older Runner that cannot list its channels for a package it holds
-no version of lists no channel; there the screen shows the answer as "runners-eu holds the login of crm for dev, and dev reads crm through crm-to-dw-crm-dev.", with each warning under it.
+no version of lists no channel; there the screen shows the answer as "runners-eu holds the login of crm for dev, and dev reads crm through
+crm-to-dw-crm-dev.", with each warning under it.
+
+Example: Ben designs a sync from `erp`, a system with no development copy. The Runner `plant` serves only `prod`, which does not bind `erp`. The picker
+offers **Set up erp for development** with `prod` and the warning above; Ben types the production login he holds, and the console stores it under
+`dbdatakit:runner:dev-login:erp-sync.prod.erp:password` and binds the slot in `prod`. **Refresh** then reads the shape of `erp` in `prod`.
 
 ## The catalog cache
 

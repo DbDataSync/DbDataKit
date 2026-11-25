@@ -126,18 +126,23 @@ export function trialLine(answer: StrategyTrialAnswer): string {
 export const previewValue = (v: PreviewValue): string => (v === null ? 'NULL' : String(v))
 
 /**
- * Whether the picker offers **Set up for development**: a channel other than production the Runner lists does not bind the slot, or no channel binds it at
- * all (also when the Runner holds no version of the package yet, and lists no channel). Production is never set up from a screen.
+ * Whether the picker offers **Set up for development**: a channel the Runner lists does not bind the slot, production as any other, or the Runner lists no
+ * channel at all (an older Runner, for a package it holds no version of).
  */
 export function setUpOffered(list: ChannelList | undefined): boolean {
   if (!list) return false
-  return list.channels.some((c) => !c.production && !c.bound) || !list.channels.some((c) => c.bound)
+  return list.channels.length === 0 || list.channels.some((c) => !c.bound)
 }
 
-/** The channels a development login can be set up for: those the Runner lists that are not production and do not bind the slot; `dev` when it lists none but production. */
+/**
+ * The channels a development login can be set up for: those the Runner lists that do not bind the slot, the ones that are not production first; `dev`
+ * when it lists none.
+ */
 export function setUpChannels(list: ChannelList | undefined): string[] {
-  const others = (list?.channels ?? []).filter((c) => !c.production)
-  return others.length === 0 ? ['dev'] : others.filter((c) => !c.bound).map((c) => c.channel)
+  const channels = list?.channels ?? []
+  if (channels.length === 0) return ['dev']
+  const unbound = channels.filter((c) => !c.bound)
+  return [...unbound.filter((c) => !c.production), ...unbound.filter((c) => c.production)].map((c) => c.channel)
 }
 
 /** The newest deploy to a Runner of each channel (by Runner and channel), from the console's records, newest first: what a newest-check card reads per channel. */
