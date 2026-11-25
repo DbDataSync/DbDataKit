@@ -33,7 +33,7 @@ public sealed class SyncPreviewDraftMappingTests : IAsyncLifetime
         Directory.CreateDirectory(directory);
         var tool = Path.Combine(h.Root, "dbdatasync");
         File.WriteAllText(tool, $"#!/bin/bash\nexec dotnet \"{Programs.Sync}\" \"$@\"\n", new UTF8Encoding(false));
-        File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         workspace = WorkspaceServer.Build(new WorkspaceSettings(directory, new Uri("https://127.0.0.1:0")) { SyncExecutable = tool }, WorkspaceServer.Certificate(directory), _ => { });
         await workspace.StartAsync();
         var instances = h.Console.Services.GetRequiredService<ConsoleInstances>();
@@ -73,6 +73,15 @@ public sealed class SyncPreviewDraftMappingTests : IAsyncLifetime
           targetColumn: name
         - sourceColumn: region
           targetColumn: region
+        sourceColumns:
+        - name: id
+          nativeType: int
+          isPrimaryKey: true
+          keyOrdinal: 1
+        - name: name
+          nativeType: nvarchar(50)
+        - name: region
+          nativeType: int
 
         """;
 
@@ -119,9 +128,10 @@ public sealed class SyncPreviewDraftMappingTests : IAsyncLifetime
         var build = (string)requested.Body!["id"]!;
         for (var i = 0; ; i++)
         {
-            var status = (string)(await Workspace(HttpMethod.Get, $"/projects/{project}/workspaces/{draft}/builds/{build}")).Body!["build"]!["status"]!;
+            var read = (await Workspace(HttpMethod.Get, $"/projects/{project}/workspaces/{draft}/builds/{build}")).Body!;
+            var status = (string)read["build"]!["status"]!;
             if (status == "succeeded") break;
-            Assert.True(status != "failed" && i < 1200, $"the build {status}");
+            Assert.True(status != "failed" && i < 1200, read.ToJsonString());
             await Task.Delay(250);
         }
 
