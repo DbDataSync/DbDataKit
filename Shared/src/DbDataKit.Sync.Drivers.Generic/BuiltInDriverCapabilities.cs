@@ -140,7 +140,7 @@ public static class BuiltInDriverOptions
 
 /// <summary>
 /// What each of Sync's built-in drivers offers, as the engine registers it (<see cref="DriverRegistry.Describe"/>): its readers, staging
-/// providers and writers with their settings, the key each needs and the changes each writer makes, whether it tests a connection, what it provisions. A screen and an
+/// providers and writers with their settings, the key each needs and the changes each writer makes, whether it tests a connection, what it provisions, whether a target keeps the state table. A screen and an
 /// offline check ask this table, so they answer without the engine's database clients; Sync's own tests hold it equal to what each driver
 /// registers. A driver a project carries (<c>driver.yaml</c>, a compiled driver) is not in it.
 /// </summary>
@@ -197,7 +197,7 @@ public static class BuiltInDriverCapabilities
                 new(BuiltInDriverKinds.MsSqlBulkInsert, true, BuiltInDriverOptions.MsSqlBulkInsert, KeyNeed.None, WritePrivileges.Insert | WritePrivileges.Delete),
                 .. GenericWriters,
             ],
-            SupportsConnectionTest: true, Provisions, SupportsLibraryValidation: true, DefaultTestQuery: "SELECT @@VERSION;", SupportsTieSafeRowLimit: true),
+            SupportsConnectionTest: true, Provisions, SupportsLibraryValidation: true, DefaultTestQuery: "SELECT @@VERSION;", SupportsTieSafeRowLimit: true, KeepsStateTable: true),
         new(DriverIds.Postgres,
             [
                 Watermark,
@@ -209,7 +209,7 @@ public static class BuiltInDriverCapabilities
             ],
             [new(BuiltInDriverKinds.PgCopyStaging, []), StagingTable],
             GenericWriters,
-            SupportsConnectionTest: true, Provisions, SupportsLibraryValidation: true, DefaultTestQuery: "SELECT version();", SupportsTieSafeRowLimit: true),
+            SupportsConnectionTest: true, Provisions, SupportsLibraryValidation: true, DefaultTestQuery: "SELECT version();", SupportsTieSafeRowLimit: true, KeepsStateTable: true),
         new(DriverIds.MySql,
             [Watermark, TriggerAudit, BatchReload(), KeyReconcile, ScriptedQuery],
             [StagingTable],
