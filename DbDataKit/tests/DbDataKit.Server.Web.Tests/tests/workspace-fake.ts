@@ -243,18 +243,23 @@ function syncDesigner(route: Route, w: { files: Map<string, string> }, question:
 /** The plan of each mapping of a replication the question sees but the template's `orders`: its target table is created when the catalog cache does not have it. */
 function mappingPlans(files: Map<string, string>, replication: string) {
   const folder = `config/replications/${replication}/table-mappings/`
-  const task = YAML.parse(files.get(`config/replications/${replication}/task.yaml`) ?? 'null') as { endpoints?: { target?: { connectionName?: string } } } | null
+  const task = YAML.parse(files.get(`config/replications/${replication}/task.yaml`) ?? 'null') as { endpoints?: { target?: { connectionName?: string } }; provisioning?: { createTargetTableIfMissing?: boolean | null } } | null
   return [...files.entries()].filter(([p]) => p.startsWith(folder) && p !== `${folder}orders.yaml`).sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => {
-    const m = YAML.parse(text) as { name: string; targets?: { connectionName?: string; schema?: string; table: string }[] }
+    const m = YAML.parse(text) as { name: string; targets?: { connectionName?: string; schema?: string; table: string }[]; provisioning?: { createTargetTableIfMissing?: boolean | null } }
     const t = m.targets?.[0] ?? { table: m.name }
     const connection = t.connectionName ?? task?.endpoints?.target?.connectionName ?? ''
     const table = `${t.schema ?? 'public'}.${t.table}`
     const there = cachedColumns(files, connection, t.schema ?? '', t.table) !== undefined
     return { mapping: m.name, source: null, target: { connection, table }, excluded: null, source_plan: null,
       target_plan: there ? { action: 'createTargetTable', state: 'satisfied', steps: [], warnings: [] }
-        : { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${table} (...)`, rationale: 'it is not in the catalog cache', scope: 'table' }], warnings: [] } }
+        : { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${table} (...)`, rationale: 'it is not in the catalog cache', scope: 'table' }], warnings: [whoCreates(m.provisioning?.createTargetTableIfMissing ?? task?.provisioning?.createTargetTableIfMissing ?? false)] } }
   })
 }
+
+/** Who runs a missing table's CREATE TABLE, in the words `dbdatasync provisioning plan` says it: the first pass with the setting on, a person with it off. */
+const whoCreates = (on: boolean) => on
+  ? 'Create target table if missing is on: the first pass creates the table with this statement, or apply it now.'
+  : 'Create target table if missing is off: a pass does not create the table and fails until it exists. Apply this statement (the replication\'s provisioning), create the table yourself, or turn the setting on.'
 
 /** What a story adds to the fake: `syncFiles` are put in every new sync draft beside the template's (a `catalog-cache.yaml`, for the Designer's pickers). */
 export interface FakeOptions {
