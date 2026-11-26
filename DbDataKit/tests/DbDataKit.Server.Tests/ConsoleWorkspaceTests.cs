@@ -303,7 +303,10 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         // what a build holds to send and each file by hash: read by the console's deploy, as the person, with the viewer role
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/contents"));
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/files/" + new string('a', 64)));
-        Assert.Equal(ServerRole.Approver, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/contract"));   // plan 33 SC24
+        // the Workspace server's own publish, run, contract and catalog calls are gone: the console makes them itself (/api/deploys, /api/workspace-catalog)
+        foreach (var gone in new[] { "/publish", "/run", "/binding-test", "/contract", "/preview-data" })
+            Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + gone));
+        Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/publisher-keys"));
         Assert.All(ServerProducts.WorkspaceRoutes, r => Assert.True(ServerProducts.Relayable("dbdataworkspace", r.Method, r.Route.Replace("{p}", "orders").Replace("{id}", "ada-draft").Replace("{b}", Build).Replace("{sha}", "abc1234").Replace("{name}", "edge").Replace("{path}", "views/orders.yaml"))));
     }
 }

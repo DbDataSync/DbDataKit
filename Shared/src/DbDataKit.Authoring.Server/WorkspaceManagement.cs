@@ -51,7 +51,7 @@ public static class WorkspaceManagement
         ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/binding-test", ConsoleDoesIt + "test a binding with the console's POST /api/deploys/{id}/binding-test."),
         ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/contract", ConsoleDoesIt + "approve a model's contract with the console's POST /api/deploys/{id}/contract (the Deploy tab)."),
         ("POST", "/api/v1/projects/{project}/workspaces/{id}/catalog/refresh", ConsoleDoesIt + "refresh the catalog from a Gateway on the Catalog tab, or with the console's POST /api/workspace-catalog/{workspace}/{project}/gateway-read."),
-        ("GET", "/api/v1/publish-targets", ConsoleDoesIt + "it lists the Runners and Gateways it manages (GET /api/instances)."),
+        ("GET", "/api/v1/publish-targets", ConsoleDoesIt + "the console lists the Runners and Gateways it manages (GET /api/instances)."),
         ("GET", "/api/v1/publisher-keys", ConsoleDoesIt + ConsoleSigns),
         ("PUT", "/api/v1/publisher-keys/{name}", ConsoleDoesIt + ConsoleSigns),
         ("DELETE", "/api/v1/publisher-keys/{name}", ConsoleDoesIt + ConsoleSigns),
