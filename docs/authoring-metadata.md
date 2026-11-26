@@ -674,8 +674,8 @@ console answers `needs_build`, the panel offers **Build and stage for `<channel>
 the build to that channel of the Runner through the console (`POST /api/deploys` with the channel and no `serve`), as the Builds tab's publish panel
 does. Staged is enough: the read runs in the staged version, and nothing is served. When the build is staged, the panel asks the read again. The
 deploy needs every slot of the set bound in the channel; a slot that is not bound is refused with the Runner's words, and **Set up for development**
-binds it. A build reads the saved files, so the panel says when an edit is not saved. In `prod` the panel offers nothing: a build goes there from the
-Builds tab, with its preflight.
+binds it. A build reads the saved files, so the panel says when an edit is not saved. In `prod` the panel offers it too, with the warning a read in
+`prod` shows: the build is staged there and not served, so no preflight runs, and the Runner's roles decide whether the person may stage in `prod`.
 
 Example: the set `plant-sync` reads the connection `lite`, whose engine is the set's YAML driver `sqlite.generic`. Ana presses **Refresh catalog** on
 the source card in `dev`. The panel says "lite is a sqlite.generic connection, whose driver is Sync's own, so this set's own package reads it, in the
