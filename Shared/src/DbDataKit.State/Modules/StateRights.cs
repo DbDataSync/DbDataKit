@@ -35,7 +35,7 @@ public static class StateRights
             if (level == GrantLevel.Migrate && !Flag(connection, "SELECT has_schema_privilege(@s, 'CREATE');", ("s", schema))) missing.Add($"CREATE on schema {schema}");
         }
 
-        foreach (var table in layout.Namespaces.SelectMany(n => n.Tables.Values).Prepend(layout.Registry).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var table in layout.Namespaces.SelectMany(n => n.ExistingTables.Values).Prepend(layout.Registry).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             foreach (var privilege in Wanted(layout, table, level))
                 if (PostgresTable(connection, table, privilege) == false) missing.Add($"{privilege} on {table}");
@@ -64,7 +64,7 @@ public static class StateRights
         }
 
         // the registry, and the tables of a namespace with no schema of its own, are asked about one by one
-        var loose = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.Tables.Values).Prepend(layout.Registry).Distinct(StringComparer.OrdinalIgnoreCase);
+        var loose = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.ExistingTables.Values).Prepend(layout.Registry).Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var table in loose)
         {
             foreach (var privilege in Wanted(layout, table, level))

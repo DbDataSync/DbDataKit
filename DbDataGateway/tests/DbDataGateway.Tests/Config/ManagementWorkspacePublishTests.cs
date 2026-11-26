@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
-using DbDataKit.Authoring.Server;
+using DbDataKit.Deploy;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,12 +8,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DbDataGateway.Tests.Config;
 
 /// <summary>
-/// Plan 33 SW01: the Workspace server's publish (<see cref="WorkspaceGatewayPublish"/>, the code <c>WorkspacePublishing</c> runs for a Store project's models and a Build project's models and data source documents) against a real Gateway's shared publish API, end to end:
+/// Plan 33 SW01: the deploy of a Store project's models and a Build project's models and data source documents (<see cref="GatewayDefinitionsPublish"/>, which the console runs as the person) against a real Gateway's shared publish API, end to end:
 /// the Gateway's own hooks, owner rules, slot refusal, signature policy and audit answer it, with a real pairing and token check; only the transport is the harness's.
 /// </summary>
 public sealed partial class ManagementTests
 {
-    /// <summary>The Workspace's call as the shared API's caller makes it: relative to <c>/api/v1/</c>, as the paired publisher client.</summary>
+    /// <summary>A deploy's call as the shared API's caller makes it: relative to <c>/api/v1/</c>, as a paired publisher client.</summary>
     private sealed class WorkspaceLink(ManagementTests owner, ConsoleIdentity who, PairedServer server) : IDefinitionsLink
     {
         public string Name => "the Gateway";
@@ -45,7 +45,7 @@ public sealed partial class ManagementTests
         await StartAsync();
         var first = await PairPublisherAsync(build1);
         var steps = new List<string>();
-        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, steps.Add);
+        var publish = new GatewayDefinitionsPublish(new WorkspaceLink(this, build1, first), build1, steps.Add);
         var folder = BuildFolder("sales_catalog", "sales-ro", ("sales-ro", SalesData("sales-ro")));
 
         var (models, sources) = await publish.PublishSemanticModelsAsync(folder, null);
@@ -98,14 +98,14 @@ public sealed partial class ManagementTests
         // plan 33 SC20n: the dashboards and reports of a Build project travel with its models, as dashboard and report definitions through the shared routes
         await StartAsync();
         var first = await PairPublisherAsync(build1);
-        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
+        var publish = new GatewayDefinitionsPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
         var folder = BuildFolder("sales_catalog", "sales-ro", ("sales-ro", SalesData("sales-ro")));
         await publish.PublishSemanticModelsAsync(folder, null);
         Directory.CreateDirectory(Path.Combine(folder, "views", "dashboards"));
         File.WriteAllText(Path.Combine(folder, "views", "dashboards", "Sales.yaml"), SalesDashboard);
 
         // a group requires signed dashboards by default (plan 30 PB03): until an administrator trusts the Workspace's key for them, the refusal names the call
-        var untrusted = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishViewsAsync(folder));
+        var untrusted = await Assert.ThrowsAsync<DeployException>(() => publish.PublishViewsAsync(folder));
         Assert.Contains("PUT /api/v1/trust/dashboard/keys", untrusted.Message);
         var admin = await PairAsync();
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/trust/dashboard/keys", ServerRole.Admin, JsonSerializer(new { public_key = DbDataKit.State.Api.Url.Encode(build1.Key.PublicKey), label = "workspace" }))).StatusCode);
@@ -117,7 +117,7 @@ public sealed partial class ManagementTests
         Assert.Equal("semantic-model:sales_catalog@1", (string)Assert.Single(view["depends_on"]!.AsArray())!);
 
         File.WriteAllText(Path.Combine(folder, "views", "dashboards", "Sales.yaml"), SalesDashboard.Replace("orders.net_revenue", "orders.no_such_measure"));
-        var refused = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishViewsAsync(folder));
+        var refused = await Assert.ThrowsAsync<DeployException>(() => publish.PublishViewsAsync(folder));
         Assert.Contains("The Gateway refused the dashboard sales", refused.Message);
         Assert.Contains("no_such_measure", refused.Message);
     }
@@ -130,11 +130,11 @@ public sealed partial class ManagementTests
         var first = await PairPublisherAsync(build1);
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(SalesData("by-hand"), null))).StatusCode);
         var handMade = File.ReadAllText(ConnectionFile("by-hand"));
-        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
+        var publish = new GatewayDefinitionsPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
         // the build's document of that name is not sent over the one made by hand
         var folder = BuildFolder("sales_catalog", "by-hand", ("by-hand", SalesData("by-hand")));
 
-        var refused = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishSemanticModelsAsync(folder, null));
+        var refused = await Assert.ThrowsAsync<DeployException>(() => publish.PublishSemanticModelsAsync(folder, null));
         Assert.Equal(409, refused.Status);
         Assert.Contains("An administrator of the Gateway binds it once (PUT /api/v1/bindings/prod/semantic-model/sales_catalog", refused.Message);
         Assert.Equal("by-hand", (string)refused.Adopt!["data_source"]!);   // the screen still has what the confirmation (adopt) needs
@@ -165,7 +165,7 @@ public sealed partial class ManagementTests
         var first = await PairPublisherAsync(build1);
         Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, "/api/v1/data-sources/by-hand", ServerRole.Admin, Put(Plain("by-hand"), null))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await CallAsAsync(build1, first, HttpMethod.Put, "/api/v1/data-sources/mine", ServerRole.Publisher, Put(Plain("mine"), null))).StatusCode);   // made through the per-kind route: a file, not a definition
-        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
+        var publish = new GatewayDefinitionsPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
         var entities = app.Services.GetRequiredService<DbDataGateway.Server.Serving.PublishedEntityModels>();
         string Model(string name, string dataSource) => TerritoriesModel.Replace("name: territories", $"name: {name}", StringComparison.Ordinal).Replace("connection: by-hand", $"connection: {dataSource}", StringComparison.Ordinal);
 
@@ -175,7 +175,7 @@ public sealed partial class ManagementTests
         Assert.NotNull(entities.Find("mine"));
 
         // one made by hand: refused naming who binds it, then bound by an administrator, then published with no confirmation
-        var refused = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishEntityModelsAsync([("territories.yaml", Model("territories", "by-hand"))], null, null));
+        var refused = await Assert.ThrowsAsync<DeployException>(() => publish.PublishEntityModelsAsync([("territories.yaml", Model("territories", "by-hand"))], null, null));
         Assert.Contains("An administrator of the Gateway binds it once (PUT /api/v1/bindings/prod/entity-model/territories", refused.Message);
         Assert.Null(entities.Find("territories"));
         Assert.Equal(HttpStatusCode.OK, (await BindAsync(admin, "entity-model", "territories", "by-hand", "by-hand")).Status);
@@ -195,13 +195,13 @@ public sealed partial class ManagementTests
         await StartAsync();
         var admin = await PairAsync();
         var first = await PairPublisherAsync(build1);
-        var publish = new WorkspaceGatewayPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
+        var publish = new GatewayDefinitionsPublish(new WorkspaceLink(this, build1, first), build1, _ => { });
         foreach (var kind in new[] { "data-source", "semantic-model" })
             Assert.Equal(HttpStatusCode.OK, (await CallAsync(admin, HttpMethod.Put, $"/api/v1/settings/signatures/{kind}", ServerRole.Admin, "{\"required\":true}")).StatusCode);
         var folder = BuildFolder("sales_catalog", "sales-ro", ("sales-ro", SalesData("sales-ro")));
 
         // the group requires signed versions and does not trust the key: the sentence names the call that trusts it, and nothing was written
-        var untrusted = await Assert.ThrowsAsync<WorkspacePublishException>(() => publish.PublishSemanticModelsAsync(folder, null));
+        var untrusted = await Assert.ThrowsAsync<DeployException>(() => publish.PublishSemanticModelsAsync(folder, null));
         Assert.Contains("requires signed versions of data-source and does not trust this client's key", untrusted.Message);
         Assert.Contains("PUT /api/v1/trust/data-source/keys", untrusted.Message);
         Assert.False(File.Exists(ConnectionFile("sales-ro")));

@@ -84,6 +84,26 @@ public sealed class StateMoveServiceTests : IDisposable
     }
 
     [Theory]
+    [MemberData(nameof(ServiceScratch.Pairs), MemberType = typeof(ServiceScratch))]
+    public async Task A_module_whose_later_migration_drops_a_table_is_moved_and_the_dropped_table_is_neither_read_nor_made(string from, string to)
+    {
+        // the workspace module's second migration drops the table its first made (publisher_key)
+        Assert.Contains(WorkspaceModule.Module.Migrations, m => m.Contains("DROP TABLE {table:publisher_key}", StringComparison.Ordinal));
+        var (source, _, _) = Seed(from, WorkspaceModule.Module);
+        var sourceDatabase = StateOpener.Open(source.Settings, source.SqliteFile!, [.. Modules, WorkspaceModule.Module], Scope, _scratch.Resolver);
+        Assert.True(new WorkspaceStore(sourceDatabase).AddProject("orders", "app", null, null, "ada"));
+        var target = _scratch.Provision(to);
+
+        var result = await Move(source, target, SettingsFile(), new MoveOptions { DeleteSnapshotOnSuccess = true }, null, WorkspaceModule.Module);
+
+        Assert.True(result.VerifiedAgainstSnapshot.Equal, result.VerifiedAgainstSnapshot.Summary);
+        Assert.True(result.VerifiedAgainstSource.Equal, result.VerifiedAgainstSource.Summary);
+        var moved = StateOpener.Open(StateSettingsWriter.Load(Path.Combine(_scratch.Directory, "settings.yaml")) with { ConnectionString = target.Settings.ConnectionString }, target.SqliteFile ?? "", [.. Modules, WorkspaceModule.Module], Scope, _scratch.Resolver);
+        Assert.Equal(["orders"], new WorkspaceStore(moved).Projects().Select(p => p.Id));
+        Assert.Equal(2, Assert.Single(moved.RegisteredModules(), m => m.Module == "workspace").Version);
+    }
+
+    [Theory]
     [InlineData("sqlite", "sqlite")]
     [InlineData("sqlite", "postgres")]
     [InlineData("mssql", "sqlite")]

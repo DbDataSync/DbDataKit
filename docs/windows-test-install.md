@@ -87,12 +87,7 @@ Each task below names where its full description lives. The console's **Docs** h
 A build project (SQL models) and a sync project (replications) are authored in the Workspace and published to the Runner, which runs them. The
 Workspace runs the `dbdatabuild` and `dbdatasync` programs the package installed for its checks and builds.
 
-First pair the Workspace with the Runner as a publisher, once:
-
-```powershell
-dbdatarunner server pair --max-role publisher      # prints a code
-dbdataworkspace publisher pair runner --url https://127.0.0.1:7840 --code <code>
-```
+The console publishes a build to the Runner as you, so you need the publisher role on the Runner. The Workspace never connects to the Runner.
 
 | # | Task | Pass when |
 | --- | --- | --- |

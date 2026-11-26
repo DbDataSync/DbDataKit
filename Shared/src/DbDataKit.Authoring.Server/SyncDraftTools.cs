@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -10,14 +9,13 @@ namespace DbDataKit.Authoring.Server;
 public sealed record DraftToolResult(bool Ok, IReadOnlyList<ProjectDiagnostic> Diagnostics, JsonNode? Data);
 
 /// <summary>
-/// What a Sync draft can do beyond being checked, offline (plan 33 SC22k, SC22j): list its scripts, compile and test one against generated input (<c>script test</c>), and plan the provisioning of a replication from the catalog cache
-/// (<c>provisioning plan --from-cache</c>). Each runs the product's own program on a copy of the draft in a child process with a cleared environment and a time limit and leaves the draft untouched.
+/// What a Sync draft can do beyond being checked, offline (plan 33 SC22k, SC22j): list its scripts and plan the provisioning of a replication from the catalog cache (<c>provisioning plan --from-cache</c>). Each runs the
+/// product's own program on a copy of the draft in a child process with a cleared environment and a time limit and leaves the draft untouched. Neither runs a script: the test of one runs on a Runner, as the set's task
+/// <c>script-test</c> (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner).
 /// </summary>
 public interface ISyncDraftTools
 {
     Task<DraftToolResult> ScriptsAsync(string root, CancellationToken cancellationToken);
-
-    Task<DraftToolResult> ScriptTestAsync(string root, string name, int rows, CancellationToken cancellationToken);
 
     /// <summary>The plan of a replication's source and target tables from the draft's <c>catalog-cache.yaml</c> (plan 33 SC22j), offline: <c>provisioning plan --from-cache</c>.</summary>
     Task<DraftToolResult> ProvisioningPlanAsync(string root, string replication, CancellationToken cancellationToken);
@@ -62,9 +60,6 @@ public sealed partial class SyncProjectKind : ISyncDraftTools
     private static ProjectDiagnostic Failed(int exit, string error) => new("error", "DBD-WS-SYNC-FAILED", $"dbdatasync stopped with exit code {exit}: {error.Trim()}");
 
     public Task<DraftToolResult> ScriptsAsync(string root, CancellationToken cancellationToken) => RunJsonAsync(root, ["script", "list"], cancellationToken);
-
-    public Task<DraftToolResult> ScriptTestAsync(string root, string name, int rows, CancellationToken cancellationToken) =>
-        RunJsonAsync(root, ["script", "test", name, "--rows", rows.ToString(CultureInfo.InvariantCulture)], cancellationToken);
 
     public Task<DraftToolResult> ProvisioningPlanAsync(string root, string replication, CancellationToken cancellationToken) =>
         RunJsonAsync(root, ["provisioning", "plan", replication, "--from-cache"], cancellationToken);

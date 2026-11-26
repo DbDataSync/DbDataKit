@@ -135,25 +135,4 @@ public sealed class WorkspaceManagementTests
         Assert.Equal(["billing"], seen.Select(p => (string)p!["id"]!));       // the project it holds a role on, and not orders
         Assert.Equal(HttpStatusCode.NotFound, (await server.Send("sue", ServerRole.Viewer, HttpMethod.Get, "/api/v1/projects/nope/workspaces")).Response.StatusCode);
     }
-
-    [Fact]
-    public async Task The_publishers_key_is_kept_as_a_reference_only_and_by_an_administrator()
-    {
-        await using var server = await WorkspaceHarness.StartAsync();
-        const string key = "AAAAC3NzaC1lZDI1NTE5AAAAIGkZ0q";
-
-        var set = await server.AsAdmin(HttpMethod.Put, "/api/v1/publisher-keys/main-group", """{"secret_ref":"secret:dbdatakit:workspace:publisher:main-group"}""");
-        Assert.Equal(HttpStatusCode.OK, set.Response.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await server.AsAdmin(HttpMethod.Put, "/api/v1/publisher-keys/main-group", $$"""{"secret_ref":"{{key}}"}""")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await server.AsAdmin(HttpMethod.Put, "/api/v1/publisher-keys/main-group", "{}")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Put, "/api/v1/publisher-keys/main-group", """{"secret_ref":"secret:x"}""")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await server.AsAda(HttpMethod.Get, "/api/v1/publisher-keys")).Response.StatusCode);
-
-        var keys = (await server.AsAdmin(HttpMethod.Get, "/api/v1/publisher-keys")).Body!["keys"]!.AsArray();
-        Assert.Equal("secret:dbdatakit:workspace:publisher:main-group", (string)keys.Single()!["secret_ref"]!);
-        Assert.DoesNotContain(key, File.ReadAllText(Path.Combine(server.Directory, "management-audit.log")));
-        Assert.Equal(HttpStatusCode.NoContent, (await server.AsAdmin(HttpMethod.Delete, "/api/v1/publisher-keys/main-group")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await server.AsAdmin(HttpMethod.Delete, "/api/v1/publisher-keys/main-group")).Response.StatusCode);
-        Assert.Contains(server.Audit(), a => a.Command == "publisher-key.remove");
-    }
 }

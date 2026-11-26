@@ -286,39 +286,6 @@ public sealed partial class WorkspaceBuilds : IDisposable
         catch (Exception ex) when (ex is IOException or JsonException) { return (row, null); }
     }
 
-    private readonly object publishGate = new();
-
-    /// <summary>What was published from a build, oldest first: the lines of <c>publishes.jsonl</c> in the build's folder (when, who, to which target, whether it worked and what the Gateway said).</summary>
-    public JsonArray Publishes(string project, Guid id)
-    {
-        var file = Path.Combine(FolderOf(project, id), "publishes.jsonl");
-        var all = new JsonArray();
-        lock (publishGate)
-        {
-            if (!File.Exists(file)) return all;
-            foreach (var line in File.ReadAllLines(file).Where(l => l.Length > 0))
-            {
-                try { all.Add(JsonNode.Parse(line)); }
-                catch (JsonException) { /* a damaged line is skipped */ }
-            }
-        }
-        return all;
-    }
-
-    public void RecordPublish(string project, Guid id, JsonObject entry)
-    {
-        var folder = FolderOf(project, id);
-        try
-        {
-            lock (publishGate)
-            {
-                Directory.CreateDirectory(folder);
-                File.AppendAllText(Path.Combine(folder, "publishes.jsonl"), entry.ToJsonString() + "\n");
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log($"The record of a publish of build {id} could not be written: {ex.Message}"); }
-    }
-
     public void Dispose()
     {
         stopping.Cancel();
