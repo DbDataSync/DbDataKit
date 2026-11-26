@@ -1,4 +1,4 @@
-# PLUGINHOST: one program for every role, and each kind of project as a plugin
+# PLUGINS: one program for every role, and each kind of project as a plugin
 
 ## Goal
 
