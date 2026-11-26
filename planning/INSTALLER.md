@@ -31,8 +31,7 @@ rules are in [docs/install.md](../docs/install.md).
   the description of `SuiteServices` (also in their systemd units); `dist.py` and `msi.py` read the names from the table (`dist/suite_services.py`),
   and the Scoop e2e reads them back with `sc qc` and `sc qdescription` (`docs/install.md`, "Service names, accounts and descriptions").
 - Ports: the console, Runner and Workspace take their port from `--listen`, else the `listen:` line of their settings file, else the first free port of their sub-block of 7800 to 7899 (defaults 7800, 7840, 7860), which they write as that line once they listen on it (`ListenPorts` in the startup library; `docs/install.md`, "Ports"); the identity home on its own defaults to 7819; the Gateway's public, Flight SQL and management listeners take free ports of 7820 to 7839 and pin them as `listen` settings. `scripts/check_default_ports.py` checks the range, the sub-blocks, the defaults and Windows' default ports.
-- Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatarunner package promote
-  --code` (`RunnerCli.cs`); `dbdatagateway apps instance-save|list|rollback|approve --to --code`
+- Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatagateway apps instance-save|list|rollback|approve --to --code`
   (`AppsCommand.cs`); `dbdataworkspace publisher pair --code` (`WorkspaceAdminCommand.cs`); `gateway add --code`
   of the Runner and of `dbdatastore` (`GatewayNoun` in `DbDataKit.Serving.Notify`, `StoreAdminCommand.cs`). Also announcement (`ConsoleAnnouncer`,
   `--announce-listen`, `DBDATAKIT_ANNOUNCE_URL`) and the bundle token (`bundle/1`).
