@@ -30,7 +30,7 @@ rules are in [docs/install.md](../docs/install.md).
 - The four servers' `service install` register `DbDataKit`, `DbDataGateway`, `DbDataRunner` and `DbDataWorkspace`, each as `NT SERVICE\<name>`, with
   the description of `SuiteServices` (also in their systemd units); `dist.py` and `msi.py` read the names from the table (`dist/suite_services.py`),
   and the Scoop e2e reads them back with `sc qc` and `sc qdescription` (`docs/install.md`, "Service names, accounts and descriptions").
-- Ports: the console, Runner and Workspace take their port from `--listen`, else the `listen:` line of their settings file, else the first free port of their sub-block of 7800 to 7899 (defaults 7800, 7840, 7860), which they write as that line once they listen on it (`ListenPorts` in the startup library; `docs/install.md`, "Ports"); the identity home on its own defaults to 7819; the Gateway's public, Flight SQL and management listeners take free ports of 7820 to 7839 and pin them as `listen` settings. `scripts/check_default_ports.py` checks the range, the sub-blocks, the defaults and Windows' default ports.
+- Ports: the console, Runner and Workspace take their port from `--listen`, else the `listen:` line of their settings file, else the first free port of their sub-block of 7800 to 7899 (defaults 7800, 7840, 7860), which they write as that line once they listen on it (`ListenPorts` in the startup library; `docs/install.md`, "Ports"); the identity home on its own defaults to 7819; the Gateway's public, Flight SQL and management listeners take free ports of 7820 to 7839 and pin them as `listen` settings. `scripts/check_default_ports.py` checks the range, the sub-blocks, the defaults and Windows' default ports. A bare `health check` (`HealthNoun`) asks the address of the server's `listen:` line (`--repo`, or the default folder), else the default address. The console's and the Gateway's images and the compose files of `dist/compose` use the suite's ports (the console 7800, the Gateway's Flight SQL 7821 and management 7822), and both images' health checks are a bare `health check`.
 - Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatarunner package publish --code` and `package promote
   --code` (`RunnerCli.cs`); `dbdatabuild` publish to a Runner `--code` (`CliApp.cs`); `dbdatagateway apps instance-save|list|rollback|approve --to --code`
   (`AppsCommand.cs`); `dbdataworkspace publisher pair --code` (`WorkspaceAdminCommand.cs`); `gateway add --code`
@@ -117,12 +117,37 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-27 | Console-started pairing for networks where a server cannot reach the console (low priority): `setup invite` and the Add a server screen offer it; the console still generates the command for the remote, code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command prints; it then connects to the server and pins it, with the token's scope and single use | none | M | Servers suite: a Runner whose calls to the console are blocked joins by this path and is listed ready, once with its address given up front and once with the address the command printed entered afterwards; a reused or expired code is refused; a Playwright story of entering the address |
 | INSTALLER-28 | Serving groups upgrade rolling, draining first (waits for the first stable release) | TASKENGINE-9 | L | the servers suite upgrades a two-instance group with a query running; no query fails; the second instance waits for the first |
 | INSTALLER-29 | The compatibility job runs the previous release's programs against the current build (waits for the first stable release); the release workflows write `release.json` with the compatibility generation, so the console's "outside N-1" mark shows for a release from GitHub, not only from a mirror | none | M | the `compatibility` job pairs the previous stable console with the current Gateway and Runner and the reverse, and a publish and a query pass; a snapshot release carries `release.json` with its generation and the console's Upgrades page marks a release outside N-1 from it |
-| INSTALLER-30 | `health check` with no `--url` reads the `listen:` line of the server's settings file (`--repo`, or the default folder) before the default address | none | S | a test: a Runner that pinned 7841 answers a bare `health check`; with no settings file the default address is asked |
-| INSTALLER-31 | The console's and the Gateway's images, the compose files and `docs/quickstart.md` move to the suite's ports in one change, so a compose user changes their ports once; the images' health checks are a bare `health check` | INSTALLER-30 | S | the quickstart compose file starts and each service answers on its new port (the compose test) |
 | INSTALLER-32 | `docs/install.md` says what the built startup and join steps do where it does not yet: "a verifier made from the token" where it says "the token's hash"; in "Logs and the startup-failure file", where a server whose data folder is not an install's keeps its failure file; in "Service names, accounts and descriptions", each service's display name and systemd description, with a line in the release notes | none | S | `check_doc_inputs.py` passes and the owner approves the text |
 | INSTALLER-33 | The messages of the removed ways to publish (`dbdatasync package publish --to runner --server` and the others) name the Workspace's publish panel in the console, and the Runner's Packages screen for a package folder | none | S | the command-line tests check the new sentence |
 | INSTALLER-34 | An installed suite as a test fixture (not urgent; manual tests from a snapshot release meanwhile): a CI job on Linux installs the packaged suite with `install.sh`, runs `dbdatakit setup single-server`, enrols the first administrator from the setup link in `FIRST-RUN.txt` with a virtual passkey authenticator (as `tests/people.ts` does) and saves the signed-in browser state, the console's address and the testenv engines' addresses; any later story starts from that state instead of starting services from their build folders. Linux first; Windows (the MSI) later | none | M | the job installs, joins all four services, signs in, and a trivial story reusing the saved state opens the Servers page with four services joined |
 | INSTALLER-35 | `dbdatarunner package promote --code` answers the sentence that names the console's deploy (`RemovedCommands.ConsoleDeploys`), as `package publish` does since INSTALLER-16; the console's **Promote** is the one way to send a version between Runner groups; its callers (tests, stories, docs) move first | none | S | a test: the command answers its sentence; the promote tests pass through the console |
+
+## Proposed decisions
+
+### INSTALLER-P64: what a bare `health check` does when the server's settings file cannot be read (default, awaiting the owner)
+
+A non-root user runs `dbdatarunner health check` on Linux, where `/var/lib/dbdatakit/runner` is mode 0700 for the service's user, or the
+`listen:` line of `server.yaml` is `listen: soon`. The command cannot learn the address the Runner listens on.
+
+- A (built): the check fails (exit 1) and says it cannot read the address, naming the file and `--url`. It never asks another address, where a
+  different program could answer and report a false "healthy".
+- B: it asks the default address (`https://localhost:7840/health/live`), as when there is no settings file.
+
+Recommendation: A. If A stands, `docs/install.md` ("Ports", where `health check` asks) gains the case.
+
+### INSTALLER-P65: the ports the container images and the compose files use (default, awaiting the owner)
+
+`docker compose -f dist/compose/quickstart.yml up` now publishes `7800:7800` (the console) and `7821:7821` (the Gateway's Flight SQL); a Flight client
+connects to `localhost:7821`. Inside the containers: the console 7800, its announce port 7801, the Gateway's Flight SQL 7821 and management 7822 (the
+order a Gateway with no settings takes: public 7820, Flight SQL 7821, management 7822), and in `quickstart-apps.yml` the identity home 7823 and the
+apps host 7824. The host side of each `ports:` entry moved too, so the address a person opens is the one an install uses.
+
+- A (built): these ports.
+- B: other ports of the sub-blocks, or the host side kept on the old ports (`"8480:7800"`), so a compose user's bookmarks keep working.
+
+Recommendation: A. Two related points the change left as they were: the Gateway image's public listener has no setting, so inside the container it
+takes the first free port of the block (7820) and is not published; and the demo PostgreSQL keeps `15434` on the host, which is also the port
+`testenv` gives `postgres16`, so the quickstart and `testenv up postgres16` cannot run at once on one machine.
 
 ## Needs from other subjects
 

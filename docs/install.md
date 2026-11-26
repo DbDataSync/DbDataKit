@@ -161,8 +161,6 @@ Where `health check` asks, with no `--url`:
 - The server's settings file has a `listen:` line: that address. A server that listens on `0.0.0.0`, `::` or a host name is asked on `localhost`.
   `--repo` names the server's folder when it is not the default one.
 - The file or its `listen:` line is not there: the default address (`https://localhost:7800`, `:7840` or `:7860`).
-- The file cannot be read, or its `listen:` line is not an address: the check fails, naming the file. It does not ask the default address, because
-  another server could answer there. Fix the line, or give the address with `--url`.
 
 The Gateway's `health check` asks its `listen` address from `config/server.yaml` in its data folder, which `--repo` names in the same way.
 
