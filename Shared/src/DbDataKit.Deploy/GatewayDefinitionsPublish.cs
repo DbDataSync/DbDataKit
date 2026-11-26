@@ -62,7 +62,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
             published.Add(new JsonObject
             {
                 ["model"] = model.Name, ["data_source"] = onto, ["version"] = (int?)answer.Body["version"], ["created"] = (bool?)answer.Body["created"], ["unchanged"] = (bool?)answer.Body["unchanged"],
-                ["adopted"] = answer.Body["adopted"]?.DeepClone(), ["slots_used"] = answer.Body["slots_used"]?.DeepClone(),
+                ["adopted"] = answer.Body["adopted"]?.DeepClone(), ["slots_used"] = answer.Body["slots_used"]?.DeepClone(), ["signature"] = (string?)answer.Body["signature"],
             });
         }
         return published;
@@ -116,7 +116,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
             models.Add(new JsonObject
             {
                 ["model"] = name, ["data_sources"] = map.DeepClone(), ["version"] = (int?)answer.Body["version"], ["created"] = (bool?)answer.Body["created"], ["unchanged"] = (bool?)answer.Body["unchanged"],
-                ["adopted"] = answer.Body["adopted"]?.DeepClone(), ["slots_used"] = answer.Body["slots_used"]?.DeepClone(),
+                ["adopted"] = answer.Body["adopted"]?.DeepClone(), ["slots_used"] = answer.Body["slots_used"]?.DeepClone(), ["signature"] = (string?)answer.Body["signature"],
             });
         }
         return (models, sources);
