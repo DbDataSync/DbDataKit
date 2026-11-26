@@ -39,6 +39,9 @@ Rules the suite does not add:
 - Asking for a role on the Workspace before the console deploys a build, when the person may already publish on the Runner. A publisher who is
   refused can still upload the package's folder on the Runner's Packages screen, which skips the build record, the console's signature and the
   preflight check. The rule would push them onto the way the suite can trace least.
+- The suite does not refuse or hide a feature in `prod`. Every feature of the Workspace screens works in `prod` as in any other channel. The screen
+  warns before a read or a write touches production, and the target's roles decide who may. A person refused in `prod` would use the Runner's own
+  screens or the database's tools instead, where the suite records less.
 - Hiding a failure's full message from an administrator. They are the person who has to fix it, and without the message they guess.
 
 Who may do what is set by the roles of each service. The roles are deliberately broad for now, and a rule does not narrow them on its own.
