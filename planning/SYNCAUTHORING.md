@@ -143,7 +143,8 @@ the slice built and names the slice task it follows. Where a slice task uses som
   done by hand; the channel picker named a channel that binds no slot and said how. **Set up for development** is built since: the channel picker
   stores the login, copies the draft's connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set
   up for development").
-- **No `facts`** (AUTHORING-17), and no read of a connection whose driver is Sync's own (SYNCAUTHORING-11). The set's `preflight` is built: the
+- **No `facts`** (AUTHORING-17). A connection whose driver is Sync's own is read by the set's own `discover` and `describe`, with **Build and stage**
+  where the channel holds no build (`docs/authoring-metadata.md`, "Sync's own drivers: the set's `discover` and `describe`"). The set's `preflight` is built: the
   console runs it before it serves a version in `prod`, and **Re-check** on the Runs tab runs it (`docs/publishing.md`, "Preflight before
   activation"; `docs/authoring-metadata.md`, "A sync project"); the Designer shows its newest run on the Provisioning sub-tabs (**Newest preflight**,
   `NewestPreflight.tsx` of `@dbdatakit/sync-ui`), and **Test** and **Describe columns** are placed on the endpoint cards and a query source's
@@ -160,7 +161,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | --- | --- | --- | --- | --- |
 | SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
-| SYNCAUTHORING-11 | The set's own `discover` and `describe` tasks, for a connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script), answering the same shape as the built-in package `dbdatakit-metadata` (`docs/authoring-metadata.md`) through Sync's metadata service, started through the console's catalog read as the built-in package's are (`api/workspace-catalog/...`); the Designer offers **Build and stage for dev** when no build is staged in the channel, which the control service deploys (WORKSPACEISOLATION-4) | WORKSPACEISOLATION-4 | M | Sync conformance: `discover` of a YAML-driver SQLite connection returns its tables and columns; `describe` of a query gives its columns and no row |
 | SYNCAUTHORING-20 | The three rules the offline check copies from Sync's engine become public methods both call: the Flight SQL driver's reading of a type (`FlightSqlTypes` in `DbDataKit.Sync.Core`), `Scd2Writer.RequireNaturalKey` and `KeyReconcileDeleteWriter.RequireKey` | none | S | `SyncOfflineCheck` holds no copied rule, and its tests and the writers' tests pass |
 | SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
 
@@ -169,14 +169,12 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - AUTHORING: the other project kinds (build, store, integration, app) adopt the two areas (`registerDesigner`, `DbDataWorkspace/README.md`) as their Designers are built: each
   kind's designed screens register as its Designer (its routes and navigation entries) rather than as tabs of the Files area, and a task that builds one
   says so.
-- WORKSPACEISOLATION-4: SYNCAUTHORING-11's **Build and stage for dev** deploys through the control service's deploy, as the Builds tab's publish
-  panel does.
 - WORKSPACEISOLATION-1: the sync draft's `script-test` runs the author's code in a child process of the Workspace service; the Workspace's `sync/` routes leave
   it as it is (they compile and run no script), and the list says where it goes.
 - COMMANDLINES (needs review): if it is accepted, COMMANDLINES-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
-  COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight` (`SetPreflightJob` in `DbDataSync.TaskRunner`) and SYNCAUTHORING-11's tasks.
+  COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight`, `discover` and `describe` (`SetPreflightJob` and `SetCatalogJobs.cs` in `DbDataSync.TaskRunner`).
 - AUTHORING-17, after the slice: `facts` (`docs/authoring-metadata.md`). **Set up for development** is built: it stores the login, copies the draft's
   connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set up for development"). The Designer
   places the shared **Set up for development**, **Test** and **Describe columns** already (`ChannelReads.tsx` of `@dbdatakit/sync-ui`); the connection
@@ -184,6 +182,22 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
+
+## Proposed decisions
+
+### SYNCAUTHORING-P60: the database a `metadataProvider` script is asked for by the set's `discover`
+
+Default, awaiting the owner. The set's `discover` reads the database the connection opens, over one connection, and asks a bound `metadataProvider`
+script for the tables and columns of the database `""` (empty), as it asks the driver. The old Sync server's pickers passed the database the person
+had picked. Example: Ben's connection `erp` (SQL Server, `address.database: sales`) binds a script whose `ListTablesAsync` runs
+`SELECT ... FROM [{database}].INFORMATION_SCHEMA.TABLES`. Asked with `""`, the script builds `[].INFORMATION_SCHEMA.TABLES` and the read fails; a script
+that treats an empty database as "the current one" works.
+
+- A, the default: the script gets `""`, which means the database the connection opens. Scripts written for the old server may need a line for it.
+- B: the script gets the connection's configured database (`address.database`, or `extensions.sync.database`), and `""` only when the file names none.
+  The driver path keeps `""`, so a driver that cannot switch database (SQLite) still reads.
+
+Recommendation: B, so a script written for the old server keeps working; it is a small change in `MetadataService.ReadCatalogAsync`.
 
 ## Open designs
 

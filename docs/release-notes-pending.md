@@ -149,6 +149,17 @@ release moves the entries into its notes and empties this file.
 - **New: Preview rows of a mapping and Try of a segmenting strategy in the Sync Designer.** Every Sync package has two more manual, read-only tasks: `preview` reads the first rows of a mapping's source (20, or up to 100) with the run login the channel binds, and `try-strategy` runs a segmenting strategy, saved or as it is being edited, over a mapping and a column as a reload would. The console starts them as the signed-in person (`POST /api/deploys/<deploy>/runs` with `"answer": true`, then `GET /api/deploys/<deploy>/runs/<run>/answer` for a run longer than 10 seconds) and passes the rows or candidates to the screen. The Runner keeps them in memory for that console and that person only, at most 10 minutes, and never in its state, a step, the run's log or the audit (`GET /api/v1/runs/<run>/answer?on_behalf_of=<person>`, the operator role; the runner protocol's new call `Answer`). A replication may no longer be named `preview` or `try-strategy`. What to do: rename a replication with one of those names before you build the set again; publish a build of the draft to a Runner before you preview its rows.
 - **Preview rows and Try read the mapping as the draft has it, unsaved edits included.** The Sync Designer sends the mapping's file with the run (the new input `mapping_text` of the set's tasks `preview` and `try-strategy`), and the task reads it with the deployed version's replication, connections and drivers. A filter typed and not yet saved is in the rows. The run's record keeps the mapping's text as an input. A run started without `mapping_text` reads the mapping the version has, as before. What to do: build and publish the set again. On a version built earlier, Preview rows and Try fail with "The input 'mapping_text' is not declared".
 
+## A Sync connection on a driver of Sync's own is read by the set's own package
+
+- **New: a Sync package has the manual, read-only tasks `discover` and `describe`, which read a connection whose driver is Sync's own.** A
+  connection on a YAML driver or another driver the set carries, on DuckDB or Flight SQL, or one that binds a `metadataProvider` script, is read by them
+  instead of the Runner's built-in package. They answer what the built-in package answers: the connection's tables and columns as `catalog-cache/2`, and
+  a query's columns. The console runs them in the newest build of the set that the channel holds (`POST /api/workspace-catalog/<workspace>/<project>/read`
+  and `.../describe` with `"reader": "package"`), and answers 409 with `needs_build` when the channel holds none. In the Sync Designer, **Refresh** and
+  **Describe columns** then offer **Build and stage for `<channel>`**, which builds the draft and stages the build there through the console. A
+  replication may no longer be named `discover` or `describe`. What to do: rename a replication with one of those names before you build the set
+  again; build and stage the set in a channel before you read such a connection there.
+
 ## Column types: one set of answers for every product
 
 - **Fixed: Sync no longer reads SQL Server's `tinyint` (0 to 255) as a signed 8-bit integer, nor MySQL's unsigned integers as signed ones.** A
