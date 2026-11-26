@@ -253,7 +253,7 @@ public static class ServerProducts
 
     /// <summary>What the relay tells a person whose call it does not pass.</summary>
     public static string RefusalFor(string? product, string name) => product == Workspace
-        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, workspaces and their files, changes, history, commit, push and merge, builds, previews, publishing and the publisher keys)."
+        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, workspaces and their files, changes, history, commit, push and merge, builds and previews). The console deploys a build, runs its tasks and reads a Gateway's catalog itself: POST /api/deploys, /api/deploys/{{id}}/..., /api/workspace-catalog/..."
         : $"{name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).";
 
     /// <summary>A relayed path as it goes to the server: each part escaped, because the relay holds the decoded one and a file name may hold <c>#</c>, <c>?</c> or <c>%</c>.</summary>

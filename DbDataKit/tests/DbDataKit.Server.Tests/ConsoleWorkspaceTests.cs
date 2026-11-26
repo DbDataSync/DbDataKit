@@ -268,6 +268,16 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_call_the_workspace_server_no_longer_has_is_refused_at_the_relay_naming_the_consoles_own_calls()
+    {
+        var response = await Send(HttpMethod.Post, Relay("api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish"), admin, "{}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("POST /api/deploys", (string)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["error"]!);
+        Assert.Empty(reached);
+    }
+
+    [Fact]
     public void The_table_names_each_route_with_its_method_and_role_and_the_project_it_is_in()
     {
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects"));
