@@ -43,7 +43,13 @@ public sealed class RunnerDataChangedTests : IDisposable
 
     private static async Task RunReports(RunnerHarness h)
     {
-        var (queued, started) = await h.PostAsync("/api/v1/tasks/sample/dev/reports/run");
+        // the run before writes its end a moment before its queue item is finished, and until then the task is still running and a new run is refused
+        // with 409: ask again until the server takes it
+        var (queued, started) = await h.WaitAsync(async () =>
+        {
+            var answer = await h.PostAsync("/api/v1/tasks/sample/dev/reports/run");
+            return answer.Status == HttpStatusCode.Conflict ? null : new Tuple<HttpStatusCode, JsonNode?>(answer.Status, answer.Body);
+        }, "the runner to take a run of reports (the run before still held the task)");
         Assert.Equal(HttpStatusCode.Accepted, queued);
         var runId = (string)started!["run_id"]!;
         await h.WaitAsync(async () => (await h.RunsAsync("?package=sample&channel=dev&task=reports")).FirstOrDefault(r => (string)r!["id"]! == runId && r["finished"] is not null), "the run to end");
