@@ -9,7 +9,7 @@ Commands:
   label    Labels on the runners of the group: an administrator's labels route tasks that require them; reported capabilities are labels too, read-only
   lineage  What feeds what: the lineage graph, the impact of a change, the provenance of a result
   gateway  The serving groups this server tells when it finishes writing a dataset
-  package  Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
+  package  Packages in a runner: install into this runner's own state (the development path), promote between runner groups, build and test an integration, and the publishing settings
   state    The state database: where it is, whether it works, and the rights it needs
   service  Registration of 'server run' with Windows or systemd
   cert     The server's TLS certificate
@@ -80,11 +80,9 @@ Verbs:
       The runs that named a version of a definition [Offline only]
 
 $ dbdatarunner package help
-dbdatarunner package: Packages in a runner: publish to a server's API as a paired publisher, or install into this runner's own state (the development path)
+dbdatarunner package: Packages in a runner: install into this runner's own state (the development path), promote between runner groups, build and test an integration, and the publishing settings
 
 Verbs:
-  package publish <manifest.yaml> <directory> --server <name or https address> --channel <name> [--code <code>] [--stage] [--expected-version <n>] [--client-dir <directory>]
-      Publish a package to a runner's API: uploads only the files the runner does not have, then publishes the version (served at once, or staged with --stage) [Target writes (data only)]
   package promote <package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>, default prod] [--version <n>] [--stage] [--bind <slot>=<connection>[,<slot>=<connection>...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]
       Promote a package to another runner group (plan 30 PB06): the same version, read from one runner and sent by hash to another (files it has are not sent again), published there in the channel asked with its signature, which the target's trust store must trust; the slots of that channel are the target's own (--bind) and an unbound one refuses naming it [Target writes (data only)]
   package require-signatures [on|off] [--repo <server directory>]

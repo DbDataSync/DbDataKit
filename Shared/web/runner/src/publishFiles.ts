@@ -20,7 +20,7 @@ export const MANIFEST_NAMES = ['package.yaml', 'package.yml']
 /** The name rule of packages and channels on a runner (`PackageManifestValidator.NameRule`): lower case letters and digits with `_` and `-`, at most 64, not starting with a symbol. */
 export const NAME_RULE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
-/** A path inside the package: the chosen folder's own name is dropped (the files are the folder's content, as `package publish <manifest> <directory>` sends them). */
+/** A path inside the package: the chosen folder's own name is dropped (the files are the folder's content, which the runner keeps by their paths inside it). */
 export function packagePath(file: Pick<FileLike, 'name' | 'webkitRelativePath'>): string {
   const relative = file.webkitRelativePath
   if (!relative) return file.name
@@ -157,7 +157,7 @@ export class PublishFailure extends Error {
 }
 
 /**
- * Sends a package the way `dbdatarunner package publish` does: asks the runner (HEAD) for each distinct file, sends (PUT) only those it does not have, then publishes the version naming every file by its hash. Stops at the first refusal with the
+ * Sends a package the way the runner client library (`RunnerPublishClient`) does: asks the runner (HEAD) for each distinct file, sends (PUT) only those it does not have, then publishes the version naming every file by its hash. Stops at the first refusal with the
  * words of the step: a file that was sent stays on the runner, so a second try does not send it again.
  */
 export async function sendPackage(api: PublishApi, prepared: Prepared, form: PublishForm, onStep?: (step: Step) => void): Promise<Published> {
