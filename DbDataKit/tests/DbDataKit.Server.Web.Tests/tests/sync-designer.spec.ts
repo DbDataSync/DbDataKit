@@ -379,12 +379,16 @@ test('the rest of a mapping: Create mappings with what is inferred, a verificati
   await page.getByTestId('default-segmenting-custom-column').fill('shipped_on')
   await shot(page, '09-mapping-segmenting')
 
-  // not saved yet, the replication's plan is asked with the mapping as it is here: Create target table if missing turned on, the target table is
-  // missing, so the plan shows its statement and the Provisioning tab's badge counts the one step
+  // not saved yet, the replication's plan is asked with the mapping as it is here. The target table is missing, so the plan shows its statement and
+  // the Provisioning tab's badge counts the one step whether Create target table if missing is on or off: with it off (the replication's default) a
+  // pass does not create the table, so the statement is the person's to apply; turned on here, the first pass runs it
   await page.getByTestId('mapping-tab-provisioning').click()
+  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
+  await expect(page.getByTestId('provisioning-plan-target-warnings')).toContainText('is off: a pass does not create the table')
   await page.getByTestId('provisioning-create-override').click()
   await page.getByTestId('provisioning-create-checkbox').check()
   await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  await expect(page.getByTestId('provisioning-plan-target-warnings')).toContainText('is on: the first pass creates the table')
   await expect(page.getByTestId('mapping-provisioning-plan-basis')).toContainText('its unsaved edits included')
   await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
   await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')

@@ -6,6 +6,8 @@ export { registerDesigner, designerOf, designerPath, filesPath, buildsPath } fro
 export type { DesignerProps, DesignerRegistration } from './designers'
 export { DraftProvider, useDraft, useDraftFile, useDraftOrNull, useDraftFiles, findingsKey } from './draft'
 export type { Draft, DraftFile } from './draft'
+export { MAX_UNSAVED_FILES, isQuestionPath, unsavedOf } from './unsaved'
+export type { Unsaved } from './unsaved'
 export { workspaceNav } from './WorkspaceShell'
 export { CATALOG_CACHE_FILE, CATALOG_CACHE_VERSION, readCatalogCache, readLine, schemasOf, tableLabel } from './catalogCache'
 export type { CacheColumn, CacheConnection, CacheDatabase, CacheFinding, CacheReadAt, CacheTable, CatalogCache } from './catalogCache'
