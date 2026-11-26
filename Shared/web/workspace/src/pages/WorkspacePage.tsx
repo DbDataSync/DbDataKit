@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { DraftProvider, findingsKey, filesKey, useDraft, useDraftFile } from '../draft'
 import { designerOf, designerPath, filesPath } from '../designers'
@@ -382,8 +382,12 @@ export function WorkspacePage() {
   const crumbs = [{ label: 'Workspaces', to: '/' }, { label: project, mono: true }, { label: mine?.name ?? id, mono: true, heading: true }]
   const { area, file: selected, rest } = placeOf(splat)
   const tab = tabOf(search.get('tab'))
-  const openFile = (path: string | null) => navigate(filesPath(project, id, path, area === 'files' && search.get('tab') ? tab : undefined))
-  const openTab = (t: Tab) => navigate(filesPath(project, id, area === 'files' ? selected : null, t), { replace: area === 'files' })
+  // where the page is now, read when a file or a tab is opened, not when the call that opens it was made: a Delete or a Move ends after its
+  // refreshes, and a tab picked meanwhile stays picked instead of the page going back to the tab of the moment the button was pressed
+  const here = useRef({ area, selected, tab, tabNamed: search.get('tab') !== null })
+  useEffect(() => { here.current = { area, selected, tab, tabNamed: search.get('tab') !== null } })
+  const openFile = (path: string | null) => { const now = here.current; navigate(filesPath(project, id, path, now.area === 'files' && now.tabNamed ? now.tab : undefined)) }
+  const openTab = (t: Tab) => { const now = here.current; navigate(filesPath(project, id, now.area === 'files' ? now.selected : null, t), { replace: now.area === 'files' }) }
 
   if (merged) {
     return (

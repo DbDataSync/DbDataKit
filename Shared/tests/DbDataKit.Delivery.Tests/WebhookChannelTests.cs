@@ -11,10 +11,11 @@ namespace DbDataKit.Delivery.Tests;
 /// <summary>A request the local listener took.</summary>
 public sealed record HttpSeen(string Method, string Path, string Body, Dictionary<string, string> Headers);
 
-/// <summary>An HTTP server in the test's process (an <see cref="HttpListener"/> on the loopback address) that answers as it is told.</summary>
+/// <summary>An HTTP server in the test's process (an <see cref="HttpListener"/> on the loopback address) that answers as it is told; the status 599 means it never answers (the call is held until the listener stops).</summary>
 public sealed class LocalHttp : IDisposable
 {
     private readonly HttpListener _listener = new();
+    private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
 
     public LocalHttp(Func<HttpSeen, (int Status, string Body, Dictionary<string, string>? Headers)>? answer = null)
@@ -38,8 +39,16 @@ public sealed class LocalHttp : IDisposable
                 var seen = new HttpSeen(request.HttpMethod, request.Url!.AbsolutePath, body, request.Headers.AllKeys.ToDictionary(k => k!, k => request.Headers[k]!, StringComparer.OrdinalIgnoreCase));
                 lock (Seen) Seen.Add(seen);
                 var (status, text, headers) = Answer(seen);
-                if (status == 599) { await Task.Delay(5000); }
-                context.Response.StatusCode = status == 599 ? 200 : status;
+                if (status == 599)
+                {
+                    // a server that never answers: the call is held until the listener stops. An answer that came after a delay would race the client's
+                    // timeout, and a process stalled for longer than the gap (a loaded runner) could read it as sent
+                    try { await Task.Delay(Timeout.Infinite, _stop.Token); } catch (OperationCanceledException) { }
+                    try { context.Response.Abort(); } catch (Exception) { /* the listener is closed */ }
+                    continue;
+                }
+
+                context.Response.StatusCode = status;
                 foreach (var (k, v) in headers ?? []) context.Response.Headers[k] = v;
                 var bytes = Encoding.UTF8.GetBytes(text);
                 try { await context.Response.OutputStream.WriteAsync(bytes); context.Response.Close(); } catch (Exception) { /* the client gave up */ }
@@ -57,9 +66,11 @@ public sealed class LocalHttp : IDisposable
 
     public void Dispose()
     {
+        _stop.Cancel();
         _listener.Stop();
         _listener.Close();
         try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch (Exception) { /* stopped */ }
+        _stop.Dispose();
     }
 }
 
