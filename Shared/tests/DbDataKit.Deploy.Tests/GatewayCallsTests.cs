@@ -69,4 +69,47 @@ public sealed class GatewayCallsTests
             unreachable);
         Assert.True(answering.Disposed && failing.Disposed && down.Disposed);
     }
+
+    [Fact]
+    public async Task What_each_workspace_key_published_is_handed_to_the_console_one_call_per_client_and_another_client_is_left_alone()
+    {
+        using var link = new FakeLink(Gateway.Url)
+        {
+            Answer = (method, path, body) => (method, path) switch
+            {
+                ("GET", "clients") => (200, new JsonObject { ["clients"] = new JsonArray(new JsonObject { ["id"] = "workspace-0a1b", ["name"] = "dbdataworkspace@ws1" }, new JsonObject { ["id"] = "build-1", ["name"] = "a Build server" }) }),
+                ("PUT", "settings/handovers/workspace-0a1b") => (200, new JsonObject
+                {
+                    ["handover"] = new JsonObject { ["from"] = "workspace-0a1b", ["to"] = (string?)JsonNode.Parse(body!)!["to"] }, ["unchanged"] = false,
+                    ["definitions"] = new JsonArray(new JsonObject { ["kind"] = "data-source", ["name"] = "erp" }),
+                }),
+                _ => null,
+            },
+        };
+        var steps = new List<string>();
+
+        var done = await GatewayCalls.HandOverAsync(link, Gateway, "console-1", null, steps.Add);
+
+        Assert.Equal(["GET clients", "PUT settings/handovers/workspace-0a1b"], link.Calls.Select(c => $"{c.Method} {c.Path}"));
+        Assert.Equal("console-1", (string?)JsonNode.Parse(link.Calls[1].Body!)!["to"]);
+        Assert.Equal("erp", (string?)done["handovers"]![0]!["definitions"]![0]!["name"]);
+        Assert.Equal(["edge handed what 'workspace-0a1b' owns to 'console-1': 1 definition(s)."], steps);
+    }
+
+    [Fact]
+    public async Task A_hand_over_the_gateway_refuses_comes_back_in_its_words_and_a_gateway_with_no_workspace_key_has_nothing_to_hand_over()
+    {
+        using var refusing = new FakeLink(Gateway.Url) { Answer = (_, _, _) => (403, new JsonObject { ["error"] = "This call is refused: this needs the admin role." }) };
+        var refused = await Assert.ThrowsAsync<DeployException>(() => GatewayCalls.HandOverAsync(refusing, Gateway, "console-1", ["workspace-0a1b"], _ => { }));
+        Assert.Equal((403, "edge refused to hand what 'workspace-0a1b' owns to 'console-1' (403): This call is refused: this needs the admin role."), (refused.Status, refused.Message));
+
+        using var none = new FakeLink(Gateway.Url) { Answer = (_, path, _) => path == "clients" ? (200, new JsonObject { ["clients"] = new JsonArray() }) : null };
+        var steps = new List<string>();
+        var done = await GatewayCalls.HandOverAsync(none, Gateway, "console-1", null, steps.Add);
+        Assert.Empty(done["handovers"]!.AsArray());
+        Assert.Equal(["edge has no client of a Workspace server's publisher key, so there is nothing to hand over."], steps);
+
+        var runner = await Assert.ThrowsAsync<DeployException>(() => GatewayCalls.HandOverAsync(none, Gateway with { Product = DeployProducts.Runner }, "console-1", null, _ => { }));
+        Assert.Contains("is handed over on a Gateway", runner.Message);
+    }
 }

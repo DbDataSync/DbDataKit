@@ -85,6 +85,34 @@ Example: Ben may read the project `orders` on the Workspace server and nothing e
 roles. He serves a build of `orders` in `dev`, and the Runner records him as the publisher. On the Runs tab he runs the task `load` of the version
 `dev` serves. **Test** of a connection's login is refused, in the Runner's words, because it needs the administrator role on `jobs`.
 
+### Taking over what a Workspace key published
+
+A Workspace server that published to a Gateway with its own publisher key paired with that Gateway as a server client, with an id that starts with
+`workspace-`. The Gateway lets only the owner of a data source, a model or a view change it, so the console's deploys cannot publish over what that
+key published. An administrator of the Gateway hands it to the console once per Gateway:
+
+```
+POST /api/deploys/handover
+{"gateway": "edge"}
+```
+
+1. The console asks the Gateway, as the person, for its paired server clients (`GET /api/v1/clients`) and keeps those whose id starts with
+   `workspace-`. A body with `"clients": ["workspace-0a1b2c"]` names the clients instead.
+2. For each client, the console asks `PUT /api/v1/settings/handovers/{client}` with `{"to": "<the console's id>"}`. The Gateway takes this call from a
+   person with its administrator role. Anyone else is refused in the Gateway's words.
+3. The Gateway keeps the hand-over in its group's settings and records it in its audit: one `definition.handover` entry for the client, and one
+   `definition.owner` entry for each definition whose owner changes (`data-source/erp`, "handed from workspace-0a1b2c to console-5d6e7f"). The answer
+   lists those definitions.
+4. The console audits the step as `gateway.handover`.
+
+From then on, the Gateway counts everything the client handed over as the console's: what it published before and what it publishes later. The
+console's deploys publish over those data sources, models and views as the person with no adoption asked, and each version records that person as
+its publisher. The client handed over can no longer read or change them. Nothing the client published is rewritten: a signed version keeps the
+`managedBy` it was signed with.
+
+`GET /api/v1/settings/handovers` on the Gateway lists the hand-overs (who, to whom, by whom, when). An administrator ends one with
+`DELETE /api/v1/settings/handovers/{client}`; what carries the client's id is then its own again.
+
 ### Preflight before activation
 
 A package can declare a read-only manual task named `preflight`. It reads the databases the package's slots bind and records what would stand in the way

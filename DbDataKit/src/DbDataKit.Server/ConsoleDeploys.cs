@@ -134,6 +134,38 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
         }
     }
 
+    /// <summary>The audit verb of a hand-over on a Gateway (<see cref="HandOverAsync"/>).</summary>
+    public const string HandoverVerb = "gateway.handover";
+
+    /// <summary>
+    /// Makes the console the owner, on the Gateway <paramref name="gateway"/>, of what the Workspace servers' publisher keys published there (or what the clients of <paramref name="clients"/> own), as the person, who must be an
+    /// administrator of that Gateway: the Gateway decides and records each change of owner (Design: docs/publishing.md#taking-over-what-a-workspace-key-published). One step per Gateway, audited here as <see cref="HandoverVerb"/>;
+    /// from then on the console's deploys publish over those definitions as the person with no adoption asked.
+    /// </summary>
+    public async Task<DeployBuildOutcome> HandOverAsync(string gateway, IReadOnlyList<string>? clients, RelayPerson person, CancellationToken ct)
+    {
+        var steps = new List<string>();
+        var target = instances.Registry.Find(gateway);
+        try
+        {
+            if (target is null) throw new Refusal(404, $"No server '{gateway}' is registered.");
+            var product = await relay.ProductOfAsync(target, ct);
+            if (DeployProducts.OfServer(product) != DeployProducts.Gateway)
+                throw new Refusal(400, $"{target.Name} is {(product is null ? "not answering" : "a " + product + " server")}; what a publisher key published is handed over on a Gateway.");
+            var link = promotions.LinkFor(target.InstanceId, person) ?? throw new Refusal(404, $"No server '{gateway}' is registered.");
+            var consoleId = (await identity.GetOrCreateAsync(ct)).Id;
+            var answer = await GatewayCalls.HandOverAsync(link, new DeployTarget(target.Name, target.Url.ToString().TrimEnd('/'), target.InstanceId, DeployProducts.Gateway), consoleId, clients, steps.Add, ct);
+            audit.Record(new AuditEvent("user", person.Id, HandoverVerb, AuditEvent.Ok, TargetKind: "server", TargetId: target.InstanceId, Detail: answer.ToJsonString()));
+            return new DeployBuildOutcome(200, new JsonObject { ["steps"] = Steps(steps), ["handed"] = answer });
+        }
+        catch (Exception ex) when (ex is Refusal or DeployException)
+        {
+            var code = ex is Refusal r ? r.Status : ((DeployException)ex).Status;
+            audit.Record(new AuditEvent("user", person.Id, HandoverVerb, AuditEvent.Refused, TargetKind: "server", TargetId: target?.InstanceId ?? gateway, Detail: JsonSerializer.Serialize(new { gateway, error = ex.Message })));
+            return new DeployBuildOutcome(code is >= 400 and < 600 ? code : 502, new JsonObject { ["error"] = ex.Message, ["steps"] = Steps(steps) });
+        }
+    }
+
     /// <summary>
     /// The preflight of the version <paramref name="kept"/> staged held in production, then its activation: the preflight runs on the staged version as the person and is waited for (<see cref="PreflightWait"/>); with no error, or
     /// with the person's confirmation (<paramref name="confirmed"/>), the Runner activates it and keeps the reason. An error not confirmed answers 409 with the findings and leaves the version staged; a run still going answers 202. Either way
