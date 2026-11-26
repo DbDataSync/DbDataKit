@@ -35,7 +35,7 @@ and serves what the build holds; it never calls the Runner or the Gateway.
 
 1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
    kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
-   Store build; a `note`).
+   Store build; for an app, the `previewInstance` it previews; a `note`).
 2. The console asks the Workspace server for the project as the person (`GET /api/v1/projects/{project}`). The Workspace server answers a person who
    may read the project: one with the viewer role, or a role above it, on the project or on the whole server. Otherwise the deploy is refused in the
    Workspace server's words: "Workspace does not let you read the project 'orders': This needs the viewer role." The console also checks that the
@@ -80,6 +80,23 @@ POST /api/deploys
 
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
+
+An app build can also go to a Gateway as the preview of one of its instances. The body names the instance as `previewInstance`. The console sends the
+build to the Gateway's `preview` channel (`PUT /api/v1/apps/{name}/channels/preview`) and points that instance's preview at it
+(`PUT /api/v1/app-instances/{instance}/channels/preview`), both as the person. The Gateway refuses a preview of an instance that production does not
+have: "There is no instance 'ghost' in production to preview." A build of any other kind is refused: "Only an app has a preview with data." The deploy
+record keeps the preview with the channel `preview`, the mode `preview` and `preview` (the instance, and the preview's address and path on the
+Gateway's apps host).
+
+Example: Ana sends build `7d20...` of the app `sales` as the preview of the instance `sales` on the Gateway `edge`:
+
+```
+POST /api/deploys
+{"workspaceServer": "Workspace", "project": "sales", "workspace": "draft-3", "build": "7d20...", "target": "edge", "previewInstance": "sales"}
+```
+
+The answer's `deployed` has `channel` `preview`, the app's `version` in that channel and `preview_address`, `https://apps.example.com/apps/sales~preview/`.
+People who may open the instance `sales` open its preview there, signed in as themselves ([apps.md](apps.md#building-previewing-and-publishing-in-the-workspace-server)).
 
 Example: Ben may read the project `orders` on the Workspace server and nothing else there. On the Runner `jobs` he holds the publisher and operator
 roles. He serves a build of `orders` in `dev`, and the Runner records him as the publisher. On the Runs tab he runs the task `load` of the version

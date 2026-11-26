@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DbDataKit.Server;
 
-/// <summary>The body of <c>POST api/deploys</c>: the build (Workspace server, project, workspace, build), the target, and what the deploy of its kind takes (<see cref="DeployBuildRequest"/>).</summary>
+/// <summary>The body of <c>POST api/deploys</c>: the build (Workspace server, project, workspace, build), the target, and what the deploy of its kind takes (<see cref="DeployBuildRequest"/>); <c>previewInstance</c> sends an app build as that instance's preview.</summary>
 public sealed record DeployBody(string? WorkspaceServer, string? Project, string? Workspace, string? Build, string? Target, string? Channel = null, bool Serve = false, int? ExpectedVersion = null,
-    Dictionary<string, string>? Bind = null, string? DataSource = null, List<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false);
+    Dictionary<string, string>? Bind = null, string? DataSource = null, List<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false, string? PreviewInstance = null);
 
 /// <summary>The body of <c>POST api/deploys/{id}/activate</c>: whether the person confirms the errors the preflight found (the Runner keeps the confirmation with the activation).</summary>
 public sealed record DeployActivateBody(bool Confirm = false);
@@ -48,7 +48,7 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
         if (string.IsNullOrWhiteSpace(body.WorkspaceServer) || string.IsNullOrWhiteSpace(body.Project) || string.IsNullOrWhiteSpace(body.Workspace) || string.IsNullOrWhiteSpace(body.Build) || string.IsNullOrWhiteSpace(body.Target))
             return BadRequest(new { error = "Name the build (\"workspaceServer\", \"project\", \"workspace\", \"build\") and the Runner or Gateway it goes to (\"target\")." });
         var done = await deploys.DeployAsync(new DeployBuildRequest(body.WorkspaceServer, body.Project, body.Workspace, body.Build, body.Target, body.Channel, body.Serve, body.ExpectedVersion, body.Bind, body.DataSource, body.Adopt,
-            body.Model, body.Note, body.ConfirmPreflight), Person, ct);
+            body.Model, body.Note, body.ConfirmPreflight, body.PreviewInstance), Person, ct);
         return StatusCode(done.Status, done.Body);
     }
 
