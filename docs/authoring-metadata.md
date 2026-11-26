@@ -14,7 +14,8 @@ plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discov
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
 or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
 the channel picker with **Set up for development** (the login stored, the draft's connection copied and the slot bound on the Runner), **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
-segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)); a Sync script's **Test**, run on a Runner
+([below](#a-scripts-test-runs-on-a-runner)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -557,6 +558,52 @@ Nothing of the candidates is in the draft or on the Runner.
 Example: version 3 of `crm-to-dw` on `dev` has the mapping `dbo.orders` with no filter. Ana types the filter `region = 2` on the mapping and, before she
 saves it, presses **Preview rows**. The screen sends the mapping's file with her filter, and the rows shown are only those of region 2, read with the
 connection `crm` of version 3 and the login `dev` binds. The run's record on `runners-eu` keeps the mapping's text she sent.
+
+## A script's test runs on a Runner
+
+**Test** on the Scripts tab of a Sync project compiles one script of `config/scripts/` and runs it against generated sample input. The script is the
+author's C#, and the Workspace server never runs it. The test is the manual task `script-test` of the replication set's package, run on a Runner in a
+channel that is not production. It opens no connection, so it needs no login.
+
+When a person presses **Test** next to a script, the screen does three things through the console, as that person:
+
+1. It asks the Workspace server to build the draft as saved, and waits for the build. A draft that does not build is not tested, and the screen shows
+   why the build failed.
+2. It stages the build on the Runner and channel chosen beside the button (`POST /api/deploys` with `"serve": false`). The version is staged and never
+   served. `prod` is refused before anything is sent.
+3. It starts `script-test` on the staged version and waits for its answer (`POST /api/deploys/{id}/runs` with `"answer": true`), as a preview does
+   ([How a screen asks for rows](#how-a-screen-asks-for-rows)).
+
+| Input | What it is |
+| --- | --- |
+| `name` | the script, as its file under `config/scripts/` is named |
+| `rows` | how many rows of sample input, 1 to 50; 5 when empty |
+| `repo_dir` | where the definition is in the package; `repo` |
+
+The answer has the script's name and slot, `ok`, where the input came from, each case (the input, the output and a note), the log lines a transform
+wrote, and `message`. A script that does not compile, that throws, or that does not exist is still a test that ran: `ok` is false and `message` has the
+compiler's or the script's words. The run fails only when an input is wrong. Like every answer, it is shown on the screen that asked and kept nowhere.
+
+```
+POST /api/deploys/01a2.../runs
+{"task": "script-test", "answer": true, "inputs": {"name": "upper-name", "rows": "3"}}
+
+200 {"state": "done", "run_id": "01a3...", "runner_name": "runners-eu", "channel": "dev", "production": false, "link": "/servers/r-1/runs?run=01a3...",
+     "answer": {"name": "upper-name", "kind": "sqlColumnExpression", "ok": true, "source": "generated sample, ANSI quoting",
+                "cases": [{"input": "Name -> Name (nvarchar(50))", "output": "UPPER(\"Name\")", "note": null}], "log": [], "message": null}}
+```
+
+A version staged in a channel needs every connection slot of the set bound there, although `script-test` opens none of them. When a slot is not
+bound, the Runner refuses the stage with its own words, naming the slot and the channel, and the screen shows them. Binding the slots in `dev` once,
+with **Set up for development** or a publish, is enough for every later test.
+
+To stage and run, the person needs what every deploy and run needs ([Runs of a deployed build](publishing.md#runs-of-a-deployed-build)): to read
+the project on the Workspace server, and the publisher and operator roles on the Runner.
+
+Example: Ana edits `config/scripts/upper-name.csx` and saves it. On the Scripts tab she leaves `runners-eu` and `dev` beside the buttons and presses
+**Test** next to `upper-name`. The screen says "Building the draft...", then "Staging the build...", then "Running the test...", and shows
+"upper-name compiled and ran: generated sample, ANSI quoting." with each case, and a link to the run on `runners-eu`. She breaks a line of the
+script, saves, and presses **Test** again: the screen shows "Script 'upper-name' did not compile: (1,14) ..." and the run's link.
 
 ## Checking before production: `preflight`
 
