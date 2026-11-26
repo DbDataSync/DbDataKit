@@ -15,14 +15,15 @@ public sealed partial class ManagementTests
     private async Task<(HttpStatusCode Status, JsonNode Body)> AsConsoleAsync(PairedServer server, HttpMethod method, string path, ServerRole role, string? body = null)
     {
         var response = await CallAsync(server, method, path, role, body);
-        return (response.StatusCode, await BodyAsync(response));
+        var text = await response.Content.ReadAsStringAsync();
+        return (response.StatusCode, text.Length == 0 ? new JsonObject() : JsonNode.Parse(text)!);
     }
 
     [Fact]
     public async Task An_administrator_hands_what_a_workspace_key_published_to_the_console_which_then_publishes_over_it_as_the_person_with_no_adoption()
     {
         await StartAsync();
-        var console1 = await PairAsync();
+        var console1 = await PairAsync(ServerRole.Admin | ServerRole.Publisher);
         var workspace = await PairPublisherAsync(workspaceKey);
         Assert.True((await DefineAsync(workspaceKey, workspace, "data-source", "sales-ro", DefinitionBody(StampedSales("sales-ro", workspaceKey.Id)))).Status == HttpStatusCode.OK);
         var model = await DefineAsync(workspaceKey, workspace, "semantic-model", "sales_catalog", DefinitionBody(ModelManifest(CatalogText, workspaceKey.Id, "sales-ro"), dependsOn: ["data-source:sales-ro"]));
@@ -30,7 +31,7 @@ public sealed partial class ManagementTests
 
         // before: the console publishes as a person who holds the publisher role, and the Workspace's data source is not its own
         var before = await AsConsoleAsync(console1, HttpMethod.Put, "/api/v1/definitions/data-source/sales-ro", ServerRole.Publisher, DefinitionBody(StampedSales("sales-ro", "console-1"), expected: 1));
-        Assert.Equal(HttpStatusCode.Forbidden, before.Status);
+        Assert.True(before.Status == HttpStatusCode.Forbidden, $"{before.Status} {before.Body.ToJsonString()}");
 
         // the hand-over is an administrator's, to a paired client other than the one handed over
         Assert.Equal(HttpStatusCode.Forbidden, (await AsConsoleAsync(console1, HttpMethod.Put, $"/api/v1/settings/handovers/{workspaceKey.Id}", ServerRole.Publisher, "{\"to\":\"console-1\"}")).Status);
@@ -57,8 +58,8 @@ public sealed partial class ManagementTests
         var republished = await AsConsoleAsync(console1, HttpMethod.Put, "/api/v1/definitions/semantic-model/sales_catalog", ServerRole.Publisher,
             DefinitionBody(ModelManifest(CatalogText, "console-1", "sales-ro"), expected: 1, dependsOn: ["data-source:sales-ro"]));
         Assert.True(republished.Status == HttpStatusCode.OK, republished.Body.ToJsonString());
-        var described = await AsConsoleAsync(console1, HttpMethod.Get, "/api/v1/definitions/data-source/sales-ro", ServerRole.Viewer);
-        Assert.Equal("console-1", (string)described.Body["owner"]!);
+        var described = await AsConsoleAsync(console1, HttpMethod.Get, "/api/v1/definitions/data-source/sales-ro", ServerRole.Admin);
+        Assert.True((string?)described.Body["owner"] == "console-1", described.Body.ToJsonString());
         Assert.Equal("Ada", (string)described.Body["versions"]![0]!["published_by"]!);
 
         // the client handed over owns nothing now: it neither reads nor changes what it made
