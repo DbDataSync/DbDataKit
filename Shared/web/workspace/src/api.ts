@@ -30,9 +30,7 @@ export interface BuildResult {
   /** A kind that makes something to publish (plan 33): its name, and what it made (`package`, `tasks`, `files`; `models`, `data_sources`). */
   kind?: string; info?: Record<string, string>
 }
-/** What was published from a build: when, by whom, to which target, whether it worked and what the Gateway said. */
-export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: PublishedAnswer; /** the instance of a preview with data, when this record is one (GP35d) */ preview?: string }
-export interface BuildDetail { build: BuildSummary; result: BuildResult | null; publishes: PublishRecord[] }
+export interface BuildDetail { build: BuildSummary; result: BuildResult | null }
 /** Whether the server can build, and what it lacks (`GET /api/v1/app-build`): each problem is a sentence that says what to set. */
 export interface BuildReadiness {
   ready: boolean; problems: string[]
@@ -40,8 +38,6 @@ export interface BuildReadiness {
   bun: { path: string; source: string } | null
   isolation: { setting: string; available: boolean }
 }
-/** A paired target; `instance` is its instance id, which is also the console's name for the server (its relay is `/relay/<instance>/...`). */
-export interface PublishTarget { name: string; gateway: string | null; product?: string | null; instance?: string | null; accepts?: boolean | null; can_publish: boolean }
 
 /** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
 /** A starting point for a new project of a kind besides its plain one (plan 27a IX21): ordinary code the author then owns. */
@@ -68,8 +64,6 @@ export interface StagedRun { id: string; task: string; outcome: string; started:
 export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[]; model?: string }
 /** The Gateway refused a publish for want of an adoption (SC21f): the data source a model would go on and who made it (`hand`: by hand or by an administrator). A screen asks the person, then publishes again with `adopt`. */
 export interface AdoptionRequest { data_source: string; made_by: string }
-/** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
-export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
 
 /** One file a compile of a draft makes, against the draft's committed `rendered/`: its text comes with an added or changed one (`truncated` when it was too large to send). */
 export interface CompiledFile { path: string; status: 'added' | 'changed' | 'unchanged' | 'removed'; content: string | null; truncated: boolean }
@@ -150,10 +144,5 @@ export const workspaceApi = {
   requestBuild: (project: string, id: string) => request<BuildSummary>(builds(project, id), { method: 'POST' }),
   /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
-  publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
-  publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
-  pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
-  setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),
-  removeKey: (name: string) => request<void>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'DELETE' }),
   events: (project: string, id: string) => request<{ events: WorkspaceEvent[] }>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/events`).then((r) => r.events),
 }

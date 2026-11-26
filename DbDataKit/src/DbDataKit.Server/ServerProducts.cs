@@ -224,22 +224,8 @@ public static class ServerProducts
         // what a build holds to send and its record, and each file by hash: what the console reads to deploy a build as the person
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contents", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/files/{name}", ServerRole.Viewer),
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/publish", ServerRole.Approver),
-        // plan 28c E21 step e: a manual task (Sync's provision) of the version a build staged on a Runner, for the person, and that run read back
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/run", ServerRole.Approver),
-        ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/runs/{b}", ServerRole.Viewer),
-        // plan 33 SC22h: a connection of what a build published, tried by the Runner with the login its channel binds (the Runner asks its administrator role of the pairing)
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/binding-test", ServerRole.Approver),
-        // plan 33 SC24: a Store model's approved contract, checked against the lineage of the paired Gateways before it runs on the Runner
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contract", ServerRole.Approver),
-        // GP35d: send the build to the Gateway's preview channel (a read-only preview instance with the instance's data); nothing goes to production, so the author may
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview-data", ServerRole.Author),
-        ("GET", "api/v1/publish-targets", ServerRole.Approver),
-        // the publisher's key reference: which secret holds the key of a target and which Gateway it is paired with; an administrator's, audited at the server. The key itself is never in a call.
-        ("GET", "api/v1/publisher-keys", ServerRole.Admin),
-        ("PUT", "api/v1/publisher-keys/{name}", ServerRole.Admin),
-        ("POST", "api/v1/publisher-keys/{name}/pair", ServerRole.Admin),
-        ("DELETE", "api/v1/publisher-keys/{name}", ServerRole.Admin),
+        // the routes that sent a build to a Runner or a Gateway, ran its tasks there, read a Gateway's catalog or kept publisher keys are gone from the Workspace
+        // server (it answers 410 naming the console's call); the console does them itself as the person (/api/deploys, /api/workspace-catalog)
     ];
 
     private static readonly IReadOnlyList<(string Method, Regex Pattern, ServerRole Needed)> WorkspaceTable =

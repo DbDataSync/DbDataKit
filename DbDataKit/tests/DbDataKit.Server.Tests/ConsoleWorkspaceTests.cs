@@ -73,19 +73,13 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/commit", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Ok()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/push", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Ok()));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Ok()));
-        // builds, previews, publishing and the publisher keys (plan 22a GP35b), each with the server's own role rule
+        // builds and previews (plan 22a GP35b), each with the server's own role rule
         workspace.MapGet("/api/v1/app-build", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { ready = true })));
         workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds", (HttpContext c) => Needs(c, ServerRole.Author, () => Results.Json(new { id = Build }, statusCode: 202)));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { builds = Array.Empty<object>() })));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}", (HttpContext c) => Needs(c, ServerRole.Viewer, () => Results.Json(new { build = new { id = Build } })));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview", (HttpContext c) => Needs(c, ServerRole.Viewer, () => PreviewPage()));
         workspace.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview/{**path}", (HttpContext c) => Needs(c, ServerRole.Viewer, () => PreviewPage()));
-        workspace.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Json(new { published = new { version = 1 } })));
-        workspace.MapGet("/api/v1/publish-targets", (HttpContext c) => Needs(c, ServerRole.Approver, () => Results.Json(new { targets = Array.Empty<object>() })));
-        workspace.MapGet("/api/v1/publisher-keys", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { keys = Array.Empty<object>() })));
-        workspace.MapPut("/api/v1/publisher-keys/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Ok()));
-        workspace.MapPost("/api/v1/publisher-keys/{name}/pair", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.Json(new { name = "edge" }, statusCode: 201)));
-        workspace.MapDelete("/api/v1/publisher-keys/{name}", (HttpContext c) => Needs(c, ServerRole.Admin, () => Results.NoContent()));
     }
 
     private const string Build = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -186,12 +180,6 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         { "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build, "viewer", 200 },
         { "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/preview", "viewer", 200 },
         { "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/preview/main.js", "viewer", 200 },
-        { "POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish", "approver", 200 },
-        { "GET", "api/v1/publish-targets", "approver", 200 },
-        { "GET", "api/v1/publisher-keys", "admin", 200 },
-        { "PUT", "api/v1/publisher-keys/edge", "admin", 200 },
-        { "POST", "api/v1/publisher-keys/edge/pair", "admin", 201 },
-        { "DELETE", "api/v1/publisher-keys/edge", "admin", 204 },
     };
 
     [Theory]
@@ -256,9 +244,14 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
     [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/builds/not-a-build")]
     [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish")]
     [InlineData("GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/result")]
-    [InlineData("GET", "api/v1/publisher-keys/edge")]                       // a key is never read: only its reference is listed
-    [InlineData("PUT", "api/v1/publisher-keys/edge/pair")]
-    [InlineData("PUT", "api/v1/publisher-keys/Edge Name")]
+    // the routes the Workspace server no longer has (it answers 410 naming the console's call): the relay does not pass them
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish")]
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/run")]
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/contract")]
+    [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/catalog/refresh")]
+    [InlineData("GET", "api/v1/publish-targets")]
+    [InlineData("GET", "api/v1/publisher-keys")]
+    [InlineData("POST", "api/v1/publisher-keys/edge/pair")]
     [InlineData("PUT", "api/v1/projects/orders/workspaces")]
     [InlineData("POST", "api/v1/projects/orders/workspaces/ada-draft/files/x.yaml")]
     [InlineData("PATCH", "api/v1/projects/orders/workspaces/ada-draft/commit")]
@@ -285,15 +278,12 @@ public sealed class ConsoleWorkspaceTests : IAsyncLifetime
         Assert.Null(ServerProducts.ProjectOf("dbdataworkspace", "GET", "api/v1/projects"));
         Assert.Equal(ServerRole.Approver, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/merge"));
         Assert.Equal(ServerRole.Author, ServerProducts.RoleNeeded("dbdataworkspace", "PUT", "api/v1/projects/orders/workspaces/ada-draft/files/views/orders.yaml"));
-        Assert.Equal(ServerRole.Admin, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/publisher-keys"));
-        Assert.Equal(ServerRole.Approver, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/publish"));
         Assert.Equal("orders", ServerProducts.ProjectOf("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/builds/" + Build + "/preview/x.js"));
-        Assert.Null(ServerProducts.ProjectOf("dbdataworkspace", "GET", "api/v1/publisher-keys"));
         Assert.Null(ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/a/b/events"));
         Assert.Null(ServerProducts.RoleNeeded("dbdatarunner", "GET", "api/v1/projects"));      // another product's table is its own
         Assert.True(ServerProducts.Relayable("dbdatabuild", "DELETE", "api/v1/projects/x"));   // a product with no table is not limited
         // every route of the table is a call a screen makes: the list is the whole of what passes
-        Assert.Equal(56, ServerProducts.WorkspaceRoutes.Count);
+        Assert.Equal(45, ServerProducts.WorkspaceRoutes.Count);
         // the sync Designer's questions: reading them is the viewer's, Create mappings the author's
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "GET", "api/v1/projects/orders/workspaces/ada-draft/sync/script-slots"));
         Assert.Equal(ServerRole.Viewer, ServerProducts.RoleNeeded("dbdataworkspace", "POST", "api/v1/projects/orders/workspaces/ada-draft/sync/capabilities"));

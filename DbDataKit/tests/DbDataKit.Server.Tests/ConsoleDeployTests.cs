@@ -200,9 +200,9 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeploys.AuditVerb));
         Assert.Contains(audited, a => a.Entry.ActorId == personId && a.Entry.Outcome == AuditEvent.Ok && a.Entry.TargetId == runnerId);
 
-        // the Workspace server sent nothing: it holds no publisher key and no target, and knows nothing of the deploy
-        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
-        Assert.Empty((await Workspace(HttpMethod.Get, $"/projects/orders/workspaces/{draft}/builds/{build}")).Body!["publishes"]!.AsArray());
+        // the Workspace server sent nothing: it has no targets to list (the relay passes no such call) and knows nothing of the deploy
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Get, "/publish-targets")).Status);
+        Assert.Null((await Workspace(HttpMethod.Get, $"/projects/orders/workspaces/{draft}/builds/{build}")).Body!["publishes"]);
     }
 
     [Fact]
@@ -471,11 +471,9 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.Equal(2, audited.Count(a => a.Entry.ActorId == personId && a.Entry.Outcome == AuditEvent.Ok && a.Entry.TargetId == runnerId));
         Assert.NotEmpty(console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.BindingTestVerb)));
 
-        // the Workspace server knows nothing of where the build went: it has no target, and its own run route cannot find a staged version
-        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
-        var own = await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" });
-        Assert.Equal(HttpStatusCode.Conflict, own.Status);
-        Assert.Contains("has not been staged on a Runner", (string?)own.Body!["error"]);
+        // the Workspace server knows nothing of where the build went: it lists no target and runs no task (the relay passes neither call)
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Get, "/publish-targets")).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" })).Status);
     }
 
     [Fact]

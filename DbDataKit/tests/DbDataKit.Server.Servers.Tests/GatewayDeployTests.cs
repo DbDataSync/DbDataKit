@@ -273,7 +273,7 @@ public sealed class GatewayDeployTests : IAsyncLifetime
         Assert.Equal("preview", (string?)listed[2]["mode"]);
 
         // ---- the Workspace server sent nothing: it holds no target and knows of no publish from these builds
-        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
-        Assert.Empty((await Workspace(HttpMethod.Get, $"/projects/sales/workspaces/{appDraft}/builds/{appBuild}")).Body!["publishes"]!.AsArray());
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Get, "/publish-targets")).Status);
+        Assert.Null((await Workspace(HttpMethod.Get, $"/projects/sales/workspaces/{appDraft}/builds/{appBuild}")).Body!["publishes"]);
     }
 }

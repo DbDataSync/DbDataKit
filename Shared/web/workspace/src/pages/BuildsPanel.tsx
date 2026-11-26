@@ -79,8 +79,6 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
   })
   const preflight = preflightOfPublish(publish.isSuccess ? publish.data : null, publish.isError ? publish.error : null)
   const shownPreflight = activate.data ? { deploy: activate.data.deploy.id, preflight: activate.data.preflight } : preflight
-  // what the Workspace server sent from this build itself, before publishing and previews went through the console
-  const sentByServer = detail.data?.publishes ?? []
   // a preview with data is a deploy too: the console sends the app build to the Gateway's preview channel as the person, and keeps it in its record
   const previewData = useMutation<DeployAnswer, Error, { target: string; instance: string }>({
     mutationFn: (p) => deployApi.deploy({ workspaceServer: server!, project, workspace: id, build: buildId, target: p.target, previewInstance: p.instance }),
@@ -182,16 +180,6 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
             {deploys.data!.map((d) => (
               <div key={d.id} data-testid="wsp-deploy-record" data-outcome={d.outcome} data-target={d.target_name} data-version={d.version ?? ''}>
                 {d.deployed_by} to {d.target_name} {when(d.deployed_at)}: {deployLine(d)}
-              </div>
-            ))}
-          </div>
-        )}
-        {sentByServer.length > 0 && (
-          <div data-testid="wsp-publishes">
-            <div className="hint" style={{ marginTop: 8 }}>Sent from this build by the Workspace server</div>
-            {sentByServer.map((p, i) => (
-              <div key={i} data-testid="wsp-publish-record" data-ok={String(p.ok)}>
-                {p.by} {p.preview ? `previewed ${p.preview} on` : 'to'} {p.target} {when(p.at)}: {p.ok ? (p.answer ? publishedLine(p.answer) : '') : p.error}
               </div>
             ))}
           </div>
