@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseYaml } from '@dbdatakit/shell'
 import { WorkspaceModule, commitsAfter, errorsUnder, registerDesigner } from '@dbdatakit/workspace'
 import { syncDesigner } from './designer'
+import { PLAN_SETTLE_MS } from './api/hooks'
 import { overviewTabOf } from './pages/OverviewPanel'
 import { tabOf } from './pages/ReplicationPage'
 import { PipelineView, endpointWords, withStage } from './replication/PipelineCard'
@@ -54,6 +55,7 @@ const PLAN = {
 function fakeServer(files: Record<string, string>) {
   const writes: string[] = []
   const calls: string[] = []
+  const plans: { replication: string; unsaved?: Record<string, string | null> }[] = []
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -79,7 +81,7 @@ function fakeServer(files: Record<string, string>) {
     if (rest === 'changes') return reply({ changes: [], uncommitted: false })
     if (rest === 'history') return reply({ commits: [] })
     if (rest === 'events') return reply({ events: [] })
-    if (rest === 'provisioning-plan') return reply(PLAN)
+    if (rest === 'provisioning-plan') { plans.push(JSON.parse(String(init?.body)) as { replication: string; unsaved?: Record<string, string | null> }); return reply(PLAN) }
     if (rest === 'sync/script-slots') return reply({ slots: [{ slot: 'rowTransform', levels: ['connection', 'replication', 'mapping'], label: 'Row transform', description: 'Transforms a whole row.' }] })
     if (rest === 'sync/capabilities') {
       const connection = (JSON.parse(String(init?.body ?? '{}')) as { connection: string }).connection
@@ -87,7 +89,7 @@ function fakeServer(files: Record<string, string>) {
     }
     return reply({ error: 'no' }, 404)
   })
-  return { files, writes, calls, fetcher }
+  return { files, writes, calls, plans, fetcher }
 }
 
 let root: Root
@@ -202,8 +204,17 @@ describe('the rest of a replication\'s page', () => {
     expect(q('[data-testid="provisioning-step-sql"]')?.textContent).toBe('CREATE TABLE "dbo"."orders" ("id" integer)')
     expect(q('[data-testid="provisioning-apply"]')).toBeNull()
     expect(q('[data-testid="provisioning-staged"]')?.textContent).toContain('No build of this draft is staged on a Runner yet')
+    expect(server.plans[0].unsaved).toBeUndefined()
     await click('[data-testid="task-provisioning-create"] button.toggle')
-    expect(q('[data-testid="provisioning-saved-only"]')?.textContent).toContain('one unsaved edit is not in it')
+    await click('[data-testid="task-provisioning-create-checkbox"]')
+    expect(q('[data-testid="provisioning-plan-basis"]')?.textContent).toContain('one unsaved edit included')
+    // the plan is asked again with the edit once the edits have settled
+    await act(async () => { await new Promise((r) => setTimeout(r, PLAN_SETTLE_MS + 20)) })
+    await settle()
+    const asked = server.plans.at(-1)!.unsaved ?? {}
+    expect(Object.keys(asked)).toEqual(['config/replications/orders/task.yaml'])
+    expect(yamlOf(asked['config/replications/orders/task.yaml'] ?? '').provisioning.createTargetTableIfMissing).toBe(true)
+    expect(server.writes).toEqual([])
   })
 
   it('adds a freshness check on Quality Checks as an unsaved edit of task.yaml', async () => {

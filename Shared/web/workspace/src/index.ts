@@ -32,6 +32,6 @@ export { developmentLoginApi, developmentLoginLine, developmentLoginWarning, dev
 export type { DevelopmentLoginAnswer, DevelopmentLoginRequest } from './developmentLogin'
 // what a kind's Designer reads through the frame: the draft's check, where it stands against its newest deploy to a Runner, a replication's provisioning plan and its apply
 export { commitsAfter, errorsUnder, provisioningPlanKey, useDraftCheck, useDraftPublication, useProvisioningApply, useProvisioningPlan } from './designerData'
-export type { DraftPublication, ProvisioningApply } from './designerData'
+export type { DraftPublication, PlanEdits, ProvisioningApply } from './designerData'
 export { RunResult as ProvisioningRunResult } from './pages/SyncProvisioningPanel'
 export type { RunnerVersion } from './deploys'
