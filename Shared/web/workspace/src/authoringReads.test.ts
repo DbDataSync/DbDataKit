@@ -137,7 +137,7 @@ describe('a read by the project\'s own package that needs a build', () => {
     let looks = 0
     const calls: StageCalls = {
       requestBuild: async (project, id) => { asked.push(`build ${project}/${id}`); return { id: 'b-7', workspace: id, status: 'queued', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null } },
-      build: async (_p, _i, build) => { looks++; asked.push(`look ${build}`); return { build: { id: build, workspace: 'ws', status: looks < 2 ? 'running' : 'succeeded', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null }, result: null, publishes: [] } },
+      build: async (_p, _i, build) => { looks++; asked.push(`look ${build}`); return { build: { id: build, workspace: 'ws', status: looks < 2 ? 'running' : 'succeeded', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null }, result: null } },
       deploy: async (body) => { asked.push(`deploy ${JSON.stringify(body)}`); return { steps: ['Staged.'], deployed: {} as never, deploy: {} as never } },
     }
     const steps: string[] = []

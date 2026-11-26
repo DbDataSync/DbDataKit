@@ -3,8 +3,8 @@ using DbDataKit.State.Snapshots;
 namespace DbDataKit.State.Tests;
 
 /// <summary>
-/// Plan 22a GP31: the <c>workspace</c> module on every state engine: its conventions, layout and retention, the projects, the drafts and their history written in one transaction, the builds, the publisher's key reference (only a
-/// reference), and a format change that is refused naming the database.
+/// Plan 22a GP31: the <c>workspace</c> module on every state engine: its conventions, layout and retention, the projects, the drafts and their history written in one transaction, the builds, the drop of the publisher's key
+/// references, and a format change that is refused naming the database.
 /// </summary>
 public sealed class WorkspaceStoreTests : IDisposable
 {
@@ -49,9 +49,9 @@ public sealed class WorkspaceStoreTests : IDisposable
         Assert.Equal(("occurred_at", 365d), (rules["workspace_event"].TimeColumn, rules["workspace_event"].DefaultDays));
         Assert.Equal(("requested_at", 90d), (rules["build"].TimeColumn, rules["build"].DefaultDays));
         Assert.Equal("workspace", WorkspaceModule.Module.Name);
-        Assert.Equal(1, WorkspaceModule.Module.Version);
+        Assert.Equal(2, WorkspaceModule.Module.Version);
         Assert.Equal(StateScopeKind.Service, WorkspaceModule.Module.Scope);
-        Assert.Equal(["build", "project", "publisher_key", "workspace", "workspace_event"], StateTableDefinitions.Read(WorkspaceModule.Module).Select(t => t.Name).Order());
+        Assert.Equal(["build", "project", "workspace", "workspace_event"], StateTableDefinitions.Read(WorkspaceModule.Module).Select(t => t.Name).Order());
         Assert.All(StateTableDefinitions.Read(WorkspaceModule.Module), t => Assert.NotEmpty(t.PrimaryKey));
     }
 
@@ -60,8 +60,8 @@ public sealed class WorkspaceStoreTests : IDisposable
     {
         var (_, database, _) = Open(engine);
         Assert.Equal("workspace", database.Layout!.Namespace(WorkspaceModule.Name).Module.Name);
-        Assert.Equal(1, Assert.Single(database.RegisteredModules(), m => m.Module == "workspace").Version);
-        foreach (var table in new[] { "project", "workspace", "workspace_event", "build", "publisher_key" }) Assert.Equal(0, Count(database, table));
+        Assert.Equal(2, Assert.Single(database.RegisteredModules(), m => m.Module == "workspace").Version);
+        foreach (var table in new[] { "project", "workspace", "workspace_event", "build" }) Assert.Equal(0, Count(database, table));
     }
 
     [Theory, MemberData(nameof(Engines))]
@@ -179,47 +179,38 @@ public sealed class WorkspaceStoreTests : IDisposable
         Assert.Throws<ArgumentException>(() => store.SetBuildStatus(queued.Id, "lost"));
     }
 
-    // ---- the publisher's key reference ----
+    // ---- the publisher's key references, dropped ----
 
     [Theory, MemberData(nameof(Engines))]
-    public void The_publishers_key_is_a_reference_that_is_set_replaced_and_removed(string engine)
+    public void A_database_of_the_first_version_loses_its_publisher_key_references_and_keeps_the_rest(string engine)
     {
-        var (store, _, clock) = Open(engine);
-        var first = store.SetPublisherKey("main-group", "secret:dbdatakit:workspace:publisher:main-group", "ada");
-        clock.Advance(TimeSpan.FromHours(1));
-        var again = store.SetPublisherKey("main-group", "secret:dbdatakit:workspace:publisher:main-group-2", "bob");
+        var location = _engines.Provision(engine);
+        var first = new StateModule("workspace", StateScopeKind.Service, [WorkspaceModule.Module.Migrations[0]], retention: WorkspaceModule.Module.Retention);
+        var old = location.Open([first], StateScope.Standalone, time: new StateTestClock(Start));
+        new WorkspaceStore(old).AddProject("orders", "app", null, null, "ada");
+        using (var connection = old.OpenConnection())
+        using (var insert = old.Command(WorkspaceModule.Name, connection, "INSERT INTO {table:publisher_key} (name, secret_ref, created_at, created_by, updated_at) VALUES ('t', 'secret:dbdatakit:workspace:publisher-key:t', $at, 'ada', $at);"))
+        {
+            insert.Bind(old, "at", Start);
+            insert.ExecuteNonQuery();
+        }
 
-        Assert.Equal(("secret:dbdatakit:workspace:publisher:main-group-2", "ada", Start, Start.AddHours(1)), (again.SecretRef, again.CreatedBy, again.CreatedAt, again.UpdatedAt));
-        Assert.Equal(Start, first.UpdatedAt);
-        Assert.Single(store.PublisherKeys());
+        var upgraded = location.Open([WorkspaceModule.Module], StateScope.Standalone, time: new StateTestClock(Start));
 
-        Assert.True(store.RemovePublisherKey("main-group"));
-        Assert.False(store.RemovePublisherKey("main-group"));
-        Assert.Empty(store.PublisherKeys());
-    }
-
-    [Theory, MemberData(nameof(Engines))]
-    public void Anything_that_is_not_a_reference_is_refused_and_never_reaches_a_row(string engine)
-    {
-        var (store, database, _) = Open(engine);
-        const string key = "AAAAC3NzaC1lZDI1NTE5AAAAIGkZ0q";
-
-        foreach (var bad in new[] { key, "", "secret:", "secret: with space", "secret:" + new string('x', 200) })
-            Assert.Throws<ArgumentException>(() => store.SetPublisherKey("t", bad, "ada"));
-
-        Assert.Equal(0, Count(database, "publisher_key"));
+        Assert.Equal(2, Assert.Single(upgraded.RegisteredModules(), m => m.Module == "workspace").Version);
+        Assert.Single(new WorkspaceStore(upgraded).Projects());
+        Assert.ThrowsAny<Exception>(() => Count(upgraded, "publisher_key"));   // the table is gone
     }
 
     // ---- retention ----
 
     [Theory, MemberData(nameof(Engines))]
-    public void Events_older_than_a_year_and_builds_older_than_ninety_days_go_and_the_drafts_and_keys_stay(string engine)
+    public void Events_older_than_a_year_and_builds_older_than_ninety_days_go_and_the_drafts_stay(string engine)
     {
         var (store, database, clock) = Open(engine);
         store.RecordCreated(Draft(at: Start.AddDays(-400)));   // its creation event is as old as that
         store.RecordEvent("orders", "ada-new-orders", "committed", "ada", "Ada", "recent");
         store.RequestBuild("orders", "ada-new-orders", "ada");
-        store.SetPublisherKey("t", "secret:dbdatakit:workspace:publisher:t", "ada");
         Assert.Equal(2, Count(database, "workspace_event"));
         clock.Advance(TimeSpan.FromDays(100));    // the build is 100 days old now
 
@@ -230,11 +221,9 @@ public sealed class WorkspaceStoreTests : IDisposable
         Assert.Equal(["committed"], store.Events("orders", "ada-new-orders").Select(e => e.Kind));
         Assert.Empty(store.Builds("orders"));
         Assert.Single(store.Workspaces("orders"));
-        Assert.Single(store.PublisherKeys());
         clock.Advance(TimeSpan.FromDays(300));
         Assert.Equal(1, new RetentionJob(database).Run().Removed["workspace.workspace_event"]);
         Assert.Single(store.Workspaces("orders"));
-        Assert.Single(store.PublisherKeys());
     }
 
     // ---- a format change ----
@@ -249,8 +238,8 @@ public sealed class WorkspaceStoreTests : IDisposable
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([WorkspaceModule.Module], StateScope.Standalone));
 
         Assert.Contains("'workspace", ex.Message);
+        Assert.Contains("version 3", ex.Message);
         Assert.Contains("version 2", ex.Message);
-        Assert.Contains("version 1", ex.Message);
         Assert.Contains("newer-workspace 2.0", ex.Message);
         Assert.Contains("state database", ex.Message);
     }
@@ -260,7 +249,7 @@ public sealed class WorkspaceStoreTests : IDisposable
     {
         var location = _engines.Provision(engine);
         location.Open([WorkspaceModule.Module], StateScope.Standalone);
-        var edited = new StateModule("workspace", StateScopeKind.Service, [WorkspaceModule.Module.Migrations[0].Replace("occurred_at  {{time}} NOT NULL", "occurred_at  {{time}} NULL", StringComparison.Ordinal)]);
+        var edited = new StateModule("workspace", StateScopeKind.Service, [WorkspaceModule.Module.Migrations[0].Replace("occurred_at  {{time}} NOT NULL", "occurred_at  {{time}} NULL", StringComparison.Ordinal), .. WorkspaceModule.Module.Migrations.Skip(1)]);
         Assert.NotEqual(WorkspaceModule.Module.Migrations[0], edited.Migrations[0]);
 
         var ex = Assert.Throws<InvalidOperationException>(() => location.Open([edited], StateScope.Standalone));

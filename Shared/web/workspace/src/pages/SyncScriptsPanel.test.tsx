@@ -9,7 +9,7 @@ import { ScriptTestView, SyncScriptsPanel } from './SyncScriptsPanel'
 import type { BuildSummary, ScriptTest } from '../api'
 import type { RunAnswer } from '../authoringReads'
 import type { DeployBody } from '../deploys'
-import { channelProblem, defaultScriptTestPlace, testScriptOnRunner, type ScriptTestCalls, type ScriptTestPhase } from '../scriptTestOnRunner'
+import { channelProblem, defaultScriptTestPlace, scriptTestProductionWarning, testScriptOnRunner, type ScriptTestCalls, type ScriptTestPhase } from '../scriptTestOnRunner'
 
 const paths = ['config/scripts/upper-name.yaml', 'config/scripts/upper-name.csx', 'config/scripts/clean.yaml', 'config/replications/orders/task.yaml']
 
@@ -89,7 +89,7 @@ describe('a script tested on a Runner', () => {
     const builds = [summary('queued'), summary('running'), summary('succeeded')]
     const calls: ScriptTestCalls = {
       requestBuild: async () => builds.shift()!,
-      build: async () => ({ build: builds.shift()!, result: null, publishes: [] }),
+      build: async () => ({ build: builds.shift()!, result: null }),
       deploy: async (body) => { deployed.push(body); return { steps: [], deployed: {} as never, deploy: { id: 'dep-1', version: 4 } as never } },
       answer: async (_d, task, inputs) => { said.push(task); asked.push(inputs); return runAnswer('running') },
       followAnswer: async () => runAnswer('done', { answer }),
@@ -111,12 +111,14 @@ describe('a script tested on a Runner', () => {
     expect(done).toMatchObject({ run_id: 'r-7', link: '/servers/r-1/runs/r-7', runner_name: 'jobs', build: 'b-3', version: 4 })
   })
 
-  it('never stages in production', async () => {
+  it('stages in production as in any other channel, and the warning says what it replaces there', async () => {
     const { calls, deployed } = fake()
-    await expect(testScriptOnRunner(calls, { ...place, channel: 'prod' }, 'upper-name', 5, () => {})).rejects.toThrow('never tested in production')
-    expect(deployed).toEqual([])
+    await testScriptOnRunner(calls, { ...place, channel: 'prod' }, 'upper-name', 5, () => {})
+    expect(deployed.map((d) => [d.channel, d.serve])).toEqual([['prod', false]])
+    expect(channelProblem('prod')).toBeNull()
     expect(channelProblem('dev')).toBeNull()
     expect(channelProblem('Dev X')).toContain('lower-case')
+    expect(scriptTestProductionWarning('prod', 'jobs')).toBe('This stages the draft in production (prod on jobs): it replaces the version staged there, not the one production serves. The script runs against generated input and opens no connection.')
   })
 
   it('stops with the build\'s reason when the draft does not build, and with the run\'s when it fails', async () => {
@@ -127,10 +129,10 @@ describe('a script tested on a Runner', () => {
     await expect(testScriptOnRunner(refused.calls, place, 'upper-name', 5, () => {})).rejects.toThrow('The input `name` names a script')
   })
 
-  it('is staged where the draft was last staged outside production, else in dev', () => {
+  it('is staged where the draft was last deployed to a Runner, production included, else in dev', () => {
     const version = (channel: string) => ({ deploy: 'd', build: 'b', target: 'r-2', targetName: 'etl', package: 'p', channel, version: '1', mode: 'stage', tasks: [] })
     expect(defaultScriptTestPlace(version('test'), [{ id: 'r-1' }])).toEqual({ runner: 'r-2', channel: 'test' })
-    expect(defaultScriptTestPlace(version('prod'), [{ id: 'r-1' }])).toEqual({ runner: 'r-2', channel: 'dev' })
+    expect(defaultScriptTestPlace(version('prod'), [{ id: 'r-1' }])).toEqual({ runner: 'r-2', channel: 'prod' })
     expect(defaultScriptTestPlace(null, [{ id: 'r-1' }])).toEqual({ runner: 'r-1', channel: 'dev' })
     expect(defaultScriptTestPlace(null, [])).toBeNull()
   })

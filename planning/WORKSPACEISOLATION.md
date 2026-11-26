@@ -10,14 +10,11 @@ whom" and "Planned architecture changes").
 
 ## What exists today
 
-- The Workspace service publishes to Gateways and Runners itself (`WorkspacePublishing`, `WorkspacePublishingArtifacts`, `WorkspaceGatewayPublish` in
-  `DbDataKit.Authoring.Server`), signed in with its own publisher key for each target, kept in its secret store and managed on its Publisher keys
-  screen.
-- It starts runs, reads run results, tests bindings and reads lineage on Runners (`RunStagedTaskAsync`, `RunServedTaskAsync`, `RunOfAsync`,
-  `TestBindingAsync`, `GatewayLineageAsync`), and reads a data source's catalog through a Gateway (`WorkspaceCatalogRefresh`).
+- The Workspace service never calls a Runner or a Gateway and does not hold a publisher key. The console deploys a build, runs its tasks, tests its
+  bindings and reads a Gateway's catalog as the person (`DbDataKit.Deploy`); the Workspace's former routes for these answer 410 naming the console's
+  call (`docs/publishing.md`, "Deploying a build from the control service").
 - It starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` as child programs (COMMANDLINES).
-- It runs a sync draft's script against generated input in a child process (`POST .../script-test`, `SyncDraftTools`), which executes the
-  author's code on the Workspace service.
+- A sync draft's script is tested on a Runner (the set's task `script-test`); `POST .../script-test` answers 410.
 
 ## What is kept
 
@@ -38,9 +35,8 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | none | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
-| WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
-| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
+| WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | none | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
+| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-9 | S | the owner approves the text |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 
@@ -50,9 +46,9 @@ Every route, class and member of the Workspace's publish, run, check and catalog
 `DbDataKit.Authoring.Server` and `DbDataWorkspace`. Each one is marked:
 
 - **Stays**: it builds or checks a draft, on the Workspace service.
-- **Moves**: it is in the shared library `DbDataKit.Deploy` (`Shared/src`), which the control service can use; the Workspace reaches it through
-  an adapter until WORKSPACEISOLATION-8.
-- **Removed**: it calls another service or holds a publisher key. It goes with WORKSPACEISOLATION-8, once the task named has moved its work.
+- **Moves**: it is in the shared library `DbDataKit.Deploy` (`Shared/src`), which the control service uses.
+- **Removed**: it called another service or held a publisher key, and is gone from the Workspace server. A removed route answers 410 with the
+  console's call to use instead (`WorkspaceManagement.RemovedRoutes`; `docs/publishing.md`, "Deploying a build from the control service").
 
 ### Routes of the management API
 
@@ -78,16 +74,16 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `GET {ws}/builds/{b}/preview[/{path}]` | viewer | the built app, read only, in a sandbox | **Stays** |
 | `POST {ws}/builds/{b}/publish` | approver | sends a build to a target with the target's publisher key: an app; a Runner package (bind, then stage or serve); Store models, or Build semantic models and views, to a Gateway | **Removed**: its work is the console's `POST /api/deploys` (`ConsoleDeploys`), which the Builds tab calls; the code it calls **Moves** (below) |
 | `POST {ws}/builds/{b}/preview-data` | author | sends an app build to a Gateway's `preview` channel and points an instance's preview at it | **Removed**; it is the console's `POST /api/deploys` with `previewInstance`, a deploy to the `preview` channel |
-| `GET /api/v1/publish-targets` | approver | the paired targets, whether the project's kind may go to each (`accepts`) and whether the pairing may publish | **Removed** (WORKSPACEISOLATION-8): the control service lists the Runners and Gateways it manages; the `accepts` test moves with `RouteFor` |
-| `GET /api/v1/publisher-keys` | admin | each target's key reference and pairing | **Removed** (WORKSPACEISOLATION-8) |
-| `PUT /api/v1/publisher-keys/{name}` | admin | records a reference to a key in the server's secret store | **Removed** (WORKSPACEISOLATION-8) |
-| `POST /api/v1/publisher-keys/{name}/pair` | admin | makes a key and pairs it with a Gateway or a Runner | **Removed** (WORKSPACEISOLATION-8) |
-| `DELETE /api/v1/publisher-keys/{name}` | admin | removes a key's reference | **Removed** (WORKSPACEISOLATION-8) |
-| `POST {ws}/builds/{b}/run` | approver | runs a manual task of the version the build staged, or (`served`) a task of the version the channel serves, on the Runner, for the person | **Removed** (WORKSPACEISOLATION-8); the screens call the console's `/api/deploys/{id}/...` |
-| `GET {ws}/builds/{b}/runs/{run}` | viewer | a run and the steps it recorded, read back from the Runner | **Removed** (WORKSPACEISOLATION-8); the screens call the console's `/api/deploys/{id}/...` |
-| `POST {ws}/builds/{b}/binding-test` | approver | the Runner's test of the login bound to a slot | **Removed** (WORKSPACEISOLATION-8); the screens call the console's `/api/deploys/{id}/...` |
-| `POST {ws}/builds/{b}/contract` | approver | a Store model's approved contract: reads the plan's run from the Runner, checks the approved hash, asks each paired Gateway for its lineage and refuses a dropped column that a consumer reads (`ContractGuard`), then runs `contract` on the Runner | **Removed** (WORKSPACEISOLATION-8); its checks are the console's `POST /api/deploys/{id}/contract`, which asks the Gateways the console manages |
-| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed** (WORKSPACEISOLATION-8). The screens no longer call it: the Catalog tab's Gateway refresh asks the console (`POST api/workspace-catalog/{workspace}/{project}/gateway-read`, `ConsoleCatalogRead.GatewayAsync`) |
+| `GET /api/v1/publish-targets` | approver | the paired targets, whether the project's kind may go to each (`accepts`) and whether the pairing may publish | **Removed**: the control service lists the Runners and Gateways it manages; the `accepts` test moves with `RouteFor` |
+| `GET /api/v1/publisher-keys` | admin | each target's key reference and pairing | **Removed** |
+| `PUT /api/v1/publisher-keys/{name}` | admin | records a reference to a key in the server's secret store | **Removed** |
+| `POST /api/v1/publisher-keys/{name}/pair` | admin | makes a key and pairs it with a Gateway or a Runner | **Removed** |
+| `DELETE /api/v1/publisher-keys/{name}` | admin | removes a key's reference | **Removed** |
+| `POST {ws}/builds/{b}/run` | approver | runs a manual task of the version the build staged, or (`served`) a task of the version the channel serves, on the Runner, for the person | **Removed**; the screens call the console's `/api/deploys/{id}/...` |
+| `GET {ws}/builds/{b}/runs/{run}` | viewer | a run and the steps it recorded, read back from the Runner | **Removed**; the screens call the console's `/api/deploys/{id}/...` |
+| `POST {ws}/builds/{b}/binding-test` | approver | the Runner's test of the login bound to a slot | **Removed**; the screens call the console's `/api/deploys/{id}/...` |
+| `POST {ws}/builds/{b}/contract` | approver | a Store model's approved contract: reads the plan's run from the Runner, checks the approved hash, asks each paired Gateway for its lineage and refuses a dropped column that a consumer reads (`ContractGuard`), then runs `contract` on the Runner | **Removed**; its checks are the console's `POST /api/deploys/{id}/contract`, which asks the Gateways the console manages |
+| `POST {ws}/catalog/refresh` | author (the draft's owner) | asks a paired Gateway for a data source's tables and columns (`ReadSchemaAsync`) and writes `catalog-cache.yaml` | **Removed**. The screens no longer call it: the Catalog tab's Gateway refresh asks the console (`POST api/workspace-catalog/{workspace}/{project}/gateway-read`, `ConsoleCatalogRead.GatewayAsync`) |
 
 The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST /api/v1/projects`, the workspace calls of `WorkspaceApi`
 (workspaces, files, move, changes, history, file history, commit, push, merge) and `GET {ws}/events`.
@@ -114,22 +110,22 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `WorkspaceBuilds`: `Publishes`, `RecordPublish` (`publishes.jsonl`) | what was published from a build; the run routes read it | **Removed** with the publish route; the control service keeps the deploy record |
 | `WorkspacePreview`, `WorkspaceAppSettings`, `WorkspaceProjects` | the preview, the `apps:` settings, the projects | **Stays** |
 | `WorkspaceOrigin` | the token `[workspace:<instance>/<project>/<workspace>]` at the end of a published version's note | **Moves**: the control service writes the note |
-| `PublishTarget`, `Targets`, `Find`, `Save` (`publish-targets.json`) | the targets this server paired with: address, instance, pinned certificate fingerprint, roles, product | **Removed** (WORKSPACEISOLATION-8): the servers the control service manages replace them |
-| `ReferenceFor`, `PairAsync`, `DetectProductAsync` | make a publisher key, keep it in the secret store and pair it with a target | **Removed** (WORKSPACEISOLATION-8) |
-| `KeyAsync`, `ResolveTarget`, `RunnerClientAsync` | read a key from the secret store; find a target and the role its pairing allows | **Removed** (WORKSPACEISOLATION-8) |
+| `PublishTarget`, `Targets`, `Find`, `Save` (`publish-targets.json`) | the targets this server paired with: address, instance, pinned certificate fingerprint, roles, product | **Removed**: the servers the control service manages replace them |
+| `ReferenceFor`, `PairAsync`, `DetectProductAsync` | make a publisher key, keep it in the secret store and pair it with a target | **Removed** |
+| `KeyAsync`, `ResolveTarget`, `RunnerClientAsync` | read a key from the secret store; find a target and the role its pairing allows | **Removed** |
 | `GatewayLink`, `GatewayHttp` | a call to a Gateway as the key's client, over the pinned certificate | **Removed**: the control service calls as the person, as `ConsolePromotions` already does for the binding compare |
 | `PublishProducts`, `RouteFor` | the products a target can be; whether a kind may go to a target's product | **Moves** |
 | `WorkspacePublishException` | a refusal: its status and, when an adoption is asked, the data source the screen asks about | **Moves** |
 | `ArtifactPublishOptions` | channel, serve, expected version, bind, data source, adopt, model, note | **Moves** |
 | `PublishAsync`, `PreviewChannel` | an app to a Gateway: the Gateway's check, then the version, or the preview channel | **Moves**, without its key and target lookup |
 | `PublishArtifactAsync` | picks the way to send by what the kind makes | **Moves**, without its key and target lookup |
-| `ModelPackageFolder` | which model's deploy package of a Store build is sent | **Stays**: it names the packages a Store build serves, one per model |
+| `ModelPackageFolder` | which model's deploy package of a Store build is sent | **Removed** with the publishing code: `BuildContents` (`DbDataKit.Deploy`) names the packages a Store build serves, one item per model (`model-package/<model>`) |
 | `PublishPackageAsync` | a Runner package: reads `package.yaml`, binds slots, publishes or stages through `RunnerPublishClient` | **Moves** |
 | `PublishModelsAsync`, `PublishSemanticModelsAsync` | Store models, and Build semantic models with their views, to a Gateway | **Moves** |
 | `WorkspaceGatewayPublish` (the whole class) | entity models, data source documents, semantic models and views over the shared publish API; binds slots where the Gateway lets the client; refusals in the Gateway's words | **Moves**; it signs, and sets `managedBy`, with the publisher key's identity; an administrator hands what the Workspace's keys published to the console first (the console's `POST /api/deploys/handover`, `docs/publishing.md`) |
 | `RunStagedTaskAsync`, `RunServedTaskAsync`, `RunOfAsync`, `TestBindingAsync`, `Refused` | a run of a staged or served version; a run and its steps; a binding test; a Runner's refusal as a status | **Moves**, without its key and target lookup; the console's runs use it (`ConsoleDeployRuns`) |
 | `GatewayLineageAsync` | the lineage graph of each paired Gateway, and the Gateways that did not answer | **Moves** |
-| `ReadSchemaAsync` (`WorkspaceCatalogRefresh.cs`) | a data source's tables and columns from a Gateway (`POST /api/v1/data-sources/{name}/schema`) | **Moves**: `GatewayCalls.ReadSchemaAsync` (`DbDataKit.Deploy`), which the console's `gateway-read` calls over `ConsolePromotions.LinkFor` as the person; the Workspace's adapter keeps its key and target lookup until WORKSPACEISOLATION-8; the merge into the cache is `CatalogCache.Refreshed`, already in `DbDataKit.Catalog.Cache` |
+| `ReadSchemaAsync` (`WorkspaceCatalogRefresh.cs`) | a data source's tables and columns from a Gateway (`POST /api/v1/data-sources/{name}/schema`) | **Moves**: `GatewayCalls.ReadSchemaAsync` (`DbDataKit.Deploy`), which the console's `gateway-read` calls over `ConsolePromotions.LinkFor` as the person; the Workspace's adapter is gone; the merge into the cache is `CatalogCache.Refreshed`, already in `DbDataKit.Catalog.Cache` |
 | `StagedOf` (in `WorkspaceManagement`) | finds the target, package, channel and version a build was staged with, in `publishes.jsonl` | **Removed**: the control service's deploy record replaces it |
 | the contract route's checks (in `WorkspaceManagement`) | the plan's run and hash, `ContractGuard` over the Gateways' lineage, the allowances | **Moves**; the console's contract uses it (`ConsoleDeployRuns`) |
 
@@ -139,18 +135,18 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 
 | Part | What it does today | Goes |
 | --- | --- | --- |
-| `WorkspaceServer.Build` | wires the engine | **Stays**; the `WorkspacePublishing` it makes with the secret store goes (WORKSPACEISOLATION-8) |
-| `WorkspaceAdminCommand.Publisher` (`dbdataworkspace publisher pair\|list`) and its line in `WorkspaceCli` | pairs a key with a target from the command line, and lists the keys | **Removed** (WORKSPACEISOLATION-8) |
+| `WorkspaceServer.Build` | wires the engine | **Stays**; the `WorkspacePublishing` it made with the secret store is gone, and it deletes the publisher keys an earlier version kept (`WorkspaceSecrets.ForgetPublisherKeysAsync`) |
+| `WorkspaceAdminCommand.Publisher` (`dbdataworkspace publisher pair\|list`) and its line in `WorkspaceCli` | pairs a key with a target from the command line, and lists the keys | **Removed** |
 | `WorkspaceAdminCommand.Project`, `WorkspaceAdminCommand.Workspace`, `WorkspaceCli`, `WorkspaceService`, `WorkspaceState` | the server's command line, its service and its state | **Stays** |
-| `WorkspaceSecrets` | the server's secret store: the state connection's login, and the publisher keys (`dbdatakit:workspace:publisher-key:<name>`) | **Stays** for the state login; WORKSPACEISOLATION-8 deletes the publisher keys in it |
+| `WorkspaceSecrets` | the server's secret store: the state connection's login, and the publisher keys (`dbdatakit:workspace:publisher-key:<name>`) | **Stays** for the state login; the server deletes the publisher keys in it when it starts (`ForgetPublisherKeysAsync`) |
 | `WorkspaceSettings`: `BuildExecutable`, `SyncExecutable`, `SyncPlatform`, `RunnerExecutable`, `DotnetExecutable`, `IntegrationSources`, `IntegrationCache` | where the child programs and the integrations' packages are | **Stays** until COMMANDLINES replaces the programs |
-| `WorkspaceStore`: `SetPublisherKey`, `PublisherKeys`, `RemovePublisherKey`; the table `publisher_key` of `WorkspaceModule` (`DbDataKit.State`) | the references to the keys | **Removed** (WORKSPACEISOLATION-8; the table goes by an appended migration) |
+| `WorkspaceStore`: `SetPublisherKey`, `PublisherKeys`, `RemovePublisherKey`; the table `publisher_key` of `WorkspaceModule` (`DbDataKit.State`) | the references to the keys | **Removed** (the table goes by the module's second migration) |
 
 ### Callers outside these projects
 
 - The console's relay table, `ServerProducts.WorkspaceRoutes` (`DbDataKit/src/DbDataKit.Server/ServerProducts.cs`): each removed route's row leaves with
   the route.
-- The Workspace screens (`Shared/web/workspace`): `KeysPage` (the Publisher keys screen) goes with WORKSPACEISOLATION-8; the publish of `BuildsPanel`,
+- The Workspace screens (`Shared/web/workspace`): `KeysPage` (the Publisher keys screen) is gone; the publish of `BuildsPanel`,
   `PublishForm`, `PreviewDataForm` and `StoreDeployPanel` calls the control service's deploy; the runs of
   `ProjectRunsPanel`, `StoreDeployPanel` (deploy, contract) and `SyncProvisioningPanel` (provision) go through the console's `/api/deploys/{id}/...`
   (`docs/publishing.md`, "Runs of a deployed build"); the Gateway refresh of
@@ -200,20 +196,18 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   - `DeployRoutes.RouteFor` (it takes the kind's name and its routes, which the control service can read from `GET /api/v1/project-kinds`),
     `DeployTarget`, `DeployOptions`, `DeployException`, `DeployProducts` and `DeployOrigin`.
 - Every moved call takes the link it calls through (`IDefinitionsLink`, paths relative to `/api/v1/`) and the key it signs with (`ConsoleIdentity`).
-  The Workspace's adapter (`WorkspacePublishing`, `WorkspaceGatewayPublish`) passes a link that signs with its publisher key over the pinned
-  certificate until WORKSPACEISOLATION-8; the control service passes a link as the person (`ConsolePromotions.LinkFor`, as `ConsoleBindingCompare`
-  does) and its own key.
+  The control service passes a link as the person (`ConsolePromotions.LinkFor`, as `ConsoleBindingCompare` does) and its own key. The Workspace's
+  adapter (`WorkspacePublishing`, `WorkspaceGatewayPublish`) is gone.
 - A build has more than one thing to send. A Build build has a Runner package and Gateway models with their views; a Store build has Gateway models and
-  one Runner package per model (`ModelPackageFolder`). The Workspace serves each of them (`.../builds/{b}/contents`), with the build record.
+  one Runner package per model (`model-package/<model>`). The Workspace serves each of them (`.../builds/{b}/contents`), with the build record.
 - A Runner or a Gateway checks a signed version against its trust store (`DefinitionSignatures`), where an administrator adds the publisher keys a group
   trusts. The control service's key has to be there for its signed deploys to verify (`ConsoleTrust` puts it there); INSTALLER-16 registers publisher keys through the console.
-- The run, run-read, binding-test and contract routes find what a build staged in its `publishes.jsonl` (`StagedOf`). The record of what a build was
-  deployed to is kept by the control service, by Workspace server, project, workspace and build; the Builds and Runs tabs read it there, and the
-  Workspace stops writing `publishes.jsonl` (WORKSPACEISOLATION-8). The Builds, Runs, Provisioning and Deploy tabs read the console's record now.
+- The record of what a build was deployed to is kept by the control service, by Workspace server, project, workspace and build; the Builds, Runs,
+  Provisioning and Deploy tabs read it there. The Workspace no longer writes `publishes.jsonl`, and a build's detail has no `publishes`.
 - A preview with data is the console's deploy with `previewInstance`, which the Builds tab's form calls; the screens run `contract` through
   the console's `POST /api/deploys/{id}/contract`.
 - What the Workspace's keys published on a Gateway is owned by the key's client until an administrator hands it to the console
-  (`POST /api/deploys/handover`); a deploy by the console over a model a Workspace key published needs that hand-over first.
+  (`POST /api/deploys/handover`); -3's test of a publish over a model published before does that first.
 - Not for the deploy: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
@@ -240,8 +234,9 @@ on the Runner.
 ### WORKSPACEISOLATION-P32: where a Test is staged (default, awaiting the owner)
 
 Beside the Test buttons the tab offers the console's Runners and a channel. It starts on the Runner and channel of the draft's newest deploy to a
-Runner when that channel is not `prod`; on that Runner in `dev` when it is `prod`; and on the first Runner the console lists, in `dev`, when the draft
-was never deployed. `prod` is refused before anything is sent. Example: Ana last staged the draft in `test` on `runners-eu`; Test stages there again.
+Runner, whatever the channel, and on the first Runner the console lists, in `dev`, when the draft was never deployed. `prod` is a channel like any
+other: picking it shows the production warning, and the Runner's roles decide. Example: Ana last staged the draft in `test` on `runners-eu`; Test
+stages there again.
 
 Each Test stages a new version in that channel (the same content makes no new version), so it replaces what was staged there before: a version Ben
 staged in `dev` for a review is no longer the staged one after Ana's Test.

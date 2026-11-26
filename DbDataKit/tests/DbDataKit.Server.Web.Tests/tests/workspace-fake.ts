@@ -20,7 +20,7 @@ export const GATEWAY = 'edge'
 type Kind = 'store' | 'sync' | 'build' | 'integration'
 interface Project { id: string; kind: Kind; title: string | null; created: string }
 interface Workspace { id: string; project: string; name: string; branch: string; base: string; created: string; files: Map<string, string>; builds: Build[] }
-interface Build { id: string; kind: Kind; publishes: { at: string; by: string; target: string; ok: boolean; answer?: unknown }[] }
+interface Build { id: string; kind: Kind }
 interface Finding { severity: 'error' | 'warning' | 'info'; code: string; message: string; file: string | null; line: number | null }
 
 export interface FakeWorkspace {
@@ -396,14 +396,6 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       projects.push(project)
       return json(route, { ...project, workspaces: 0 }, 201)
     }
-    if (tail === 'publish-targets') {
-      const kind = projects.find((p) => p.id === url.searchParams.get('project'))?.kind
-      const gateway = kind === 'store'
-      return json(route, { targets: [
-        { name: 'edge', gateway: 'https://gateway.invalid', product: 'gateway', accepts: gateway, can_publish: true },
-        { name: 'plant', gateway: 'https://runner.invalid', product: 'runner', accepts: !gateway, can_publish: true },
-      ] })
-    }
     if (parts[0] !== 'projects' || !parts[1]) return json(route, { error: 'There is no such call.' }, 404)
     const project = projects.find((p) => p.id === parts[1])
     if (!project) return json(route, { error: `There is no project '${parts[1]}'.` }, 404)
@@ -452,7 +444,7 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     if (rest[0] === 'events') return json(route, { events: [] })
     if (rest[0] === 'builds' && rest.length === 1 && method === 'GET') return json(route, { builds: w.builds.map((b) => buildSummary(w, b)) })
     if (rest[0] === 'builds' && rest.length === 1 && method === 'POST') {
-      const b: Build = { id: `b${w.builds.length + 1}`, kind: project.kind, publishes: [] }
+      const b: Build = { id: `b${w.builds.length + 1}`, kind: project.kind }
       w.builds.unshift(b)
       return json(route, buildSummary(w, b), 202)
     }
@@ -464,19 +456,12 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
       return json(route, {
         build: { ...buildSummary(w, b), status },
         result: { status, message: status === 'failed' ? 'The draft has problems.' : 'Made.', diagnostics: bad, uncommitted_changes: true, commit: null, seconds: 1, kind: project.kind, info: status === 'succeeded' ? { package: project.id, version: '1' } : undefined },
-        publishes: b.publishes,
       })
     }
-    // the Workspace server's own publish, with its publisher key: no screen calls it any more (the Builds tab and the Store project's Deploy tab deploy through the console)
+    // the Workspace server's own publish is gone and the console's relay passes no such call: a screen that still called it is counted, and refused as the relay refuses
     if (rest[0] === 'builds' && rest[2] === 'publish' && method === 'POST') {
-      const b = w.builds.find((x) => x.id === rest[1])!
-      const sent = JSON.parse(body) as Record<string, unknown>
-      workspacePublishes.push({ project: project.id, body: sent })
-      if (project.kind === 'store' && fake.adoptRefusal && !(Array.isArray(sent.adopt) && sent.adopt.includes(fake.adoptRefusal)))
-        return json(route, { error: `The Gateway refused the model ${project.id} on the data source '${fake.adoptRefusal}' (400): it was made by hand. Publish again with "adopt".`, steps: ['Asked the Gateway for the version it serves.'], adopt: { data_source: fake.adoptRefusal, made_by: 'hand' } }, 409)
-      const answer = project.kind === 'store' ? { target: sent.target, gateway: 'https://gateway.invalid', models: [{ model: project.id, data_source: String(sent.data_source ?? 'mdm_sql'), version: 1, created: true, adopted: Array.isArray(sent.adopt) ? sent.adopt[0] : null }] } : { target: sent.target, runner: 'https://runner.invalid', package: project.id, channel: sent.channel, mode: sent.serve ? 'served' : 'staged', changed: true }
-      b.publishes.push({ at: stamp(), by: 'tester', target: String(sent.target), ok: true, answer })
-      return json(route, { steps: ['Read what was made.', 'Sent it.'], published: answer })
+      workspacePublishes.push({ project: project.id, body: JSON.parse(body) as Record<string, unknown> })
+      return json(route, { error: 'The console does not pass this call to a Workspace server.' }, 403)
     }
     return json(route, { error: 'There is no such call.' }, 404)
   })

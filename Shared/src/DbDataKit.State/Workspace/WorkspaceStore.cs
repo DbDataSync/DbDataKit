@@ -15,8 +15,6 @@ public sealed record WorkspaceEventRow(string Project, string WorkspaceId, strin
 /// <summary>A build a draft asked for.</summary>
 public sealed record WorkspaceBuildRow(Guid Id, string Project, string WorkspaceId, string Status, string? CommitSha, string RequestedBy, string? Message, DateTimeOffset RequestedAt, DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt);
 
-/// <summary>A target and the reference to the secret that holds the publisher's key for it.</summary>
-public sealed record PublisherKeyRow(string Name, string SecretRef, DateTimeOffset CreatedAt, string CreatedBy, DateTimeOffset UpdatedAt);
 
 /// <summary>
 /// Writes and reads the <c>workspace</c> module (<see cref="WorkspaceModule"/>). A change to a draft and the event that says so are written in <b>one transaction</b>, so the history never lacks a draft's creation or end.
@@ -205,60 +203,6 @@ public sealed class WorkspaceStore(StateDatabase database)
             while (reader.Read())
                 rows.Add(new WorkspaceBuildRow(reader.Uuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), Text(reader, 4), reader.GetString(5), Text(reader, 6), reader.Time(7), reader.NullableTime(8), reader.NullableTime(9)));
             return rows;
-        });
-
-    // ---- the publisher's key reference ----
-
-    /// <summary>
-    /// Sets the reference to the secret that holds the publisher's key for a target. Only a <b>reference</b> is stored: text that is not one (it does not start with <c>secret:</c>) is refused, so a key pasted into the wrong field never reaches
-    /// a row.
-    /// </summary>
-    public PublisherKeyRow SetPublisherKey(string name, string secretRef, string by)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(by);
-        if (secretRef is null || !secretRef.StartsWith("secret:", StringComparison.Ordinal) || secretRef.Length <= "secret:".Length || secretRef.Any(char.IsWhiteSpace) || secretRef.Length > 200)
-            throw new ArgumentException("The publisher's key is kept in the server's secret store; give its reference (secret:<name>), not the key.", nameof(secretRef));
-        var now = database.Time.GetUtcNow();
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var transaction = database.BeginTransaction(connection, Module);
-            using (var update = database.Command(Module, connection, transaction, "UPDATE {table:publisher_key} SET secret_ref = $ref, updated_at = $at WHERE name = $name;"))
-            {
-                update.Bind(database, "ref", secretRef).Bind(database, "at", now).Bind(database, "name", name);
-                if (update.ExecuteNonQuery() == 0)
-                {
-                    using var insert = database.Command(Module, connection, transaction, "INSERT INTO {table:publisher_key} (name, secret_ref, created_at, created_by, updated_at) VALUES ($name, $ref, $at, $by, $at);");
-                    insert.Bind(database, "name", name).Bind(database, "ref", secretRef).Bind(database, "at", now).Bind(database, "by", by);
-                    insert.ExecuteNonQuery();
-                }
-            }
-
-            transaction.Commit();
-        });
-        return PublisherKeys().Single(k => k.Name == name);
-    }
-
-    public IReadOnlyList<PublisherKeyRow> PublisherKeys() =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var command = database.Command(Module, connection, "SELECT name, secret_ref, created_at, created_by, updated_at FROM {table:publisher_key} ORDER BY name;");
-            using var reader = command.ExecuteReader();
-            var rows = new List<PublisherKeyRow>();
-            while (reader.Read()) rows.Add(new PublisherKeyRow(reader.GetString(0), reader.GetString(1), reader.Time(2), reader.GetString(3), reader.Time(4)));
-            return rows;
-        });
-
-    /// <summary>Removes the reference (not the secret). False when there was none.</summary>
-    public bool RemovePublisherKey(string name) =>
-        database.Retry(() =>
-        {
-            using var connection = database.OpenConnection();
-            using var delete = database.Command(Module, connection, "DELETE FROM {table:publisher_key} WHERE name = $name;");
-            delete.Bind(database, "name", name);
-            return delete.ExecuteNonQuery() > 0;
         });
 
     private static string? Text(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);

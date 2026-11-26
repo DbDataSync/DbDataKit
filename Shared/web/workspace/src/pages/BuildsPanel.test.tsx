@@ -70,7 +70,7 @@ function fakeConsole(kind: 'sync' | 'app' = 'sync') {
     if (url.pathname === ws) return reply({ builds: [build] })
     if (url.pathname === `${ws}/b1`) return reply({ build, result: kind === 'app'
       ? { status: 'succeeded', message: 'Built.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, app: 'orders', version: '1.0.0', files: 3, bundled: [] }
-      : { status: 'succeeded', message: 'Made.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, kind: 'sync', info: { package: 'orders' } }, publishes: [] })
+      : { status: 'succeeded', message: 'Made.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, kind: 'sync', info: { package: 'orders' } } })
     return reply({ error: 'There is no such call.' }, 404)
   })
   return { calls, deploys, fetcher }

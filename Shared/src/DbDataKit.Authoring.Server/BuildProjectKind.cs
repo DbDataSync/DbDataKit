@@ -85,7 +85,7 @@ public sealed partial class BuildProjectKind(BuildTool tool) : IProjectKind, IDr
     }
 
     /// <summary>The folders of a project's dashboards and reports, as the Views tab and Build's `dashboard`/`report` commands keep them.</summary>
-    public static IReadOnlyList<(string Folder, string Kind)> ViewFolders => DbDataKit.Deploy.GatewayDefinitionsPublish.ViewFolders;
+    public static IReadOnlyList<(string Folder, string Kind)> ViewFolders => DbDataKit.Deploy.BuildContents.ViewFolders;
 
     /// <summary>Copies <c>dashboards/*.yaml</c> and <c>reports/*.yaml</c> of the draft into <c>views/</c> of the models' folder; returns them as <c>kind:name</c>.</summary>
     internal static List<string> CopyViews(string root, string folder)

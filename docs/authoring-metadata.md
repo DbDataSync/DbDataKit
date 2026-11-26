@@ -14,8 +14,7 @@ plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discov
 ([below](#the-built-in-package-dbdatakit-metadata)); the console's routes that read a connection's shape for a Workspace project from a Runner channel
 or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
 the channel picker with **Set up for development** (the login stored, the draft's connection copied and the slot bound on the Runner), **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
-segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)); a Sync script's **Test**, run on a Runner
-([below](#a-scripts-test-runs-on-a-runner)); a Sync set's own tasks `discover` and `describe`, which read a connection whose driver is Sync's own, with **Build and stage** where the channel holds no build of the set ([A sync project](#a-sync-project)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)); a Sync set's own tasks `discover` and `describe`, which read a connection whose driver is Sync's own, with **Build and stage** where the channel holds no build of the set ([A sync project](#a-sync-project)); a Sync script's **Test**, run on a Runner ([below](#a-scripts-test-runs-on-a-runner)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -569,15 +568,16 @@ connection `crm` of version 3 and the login `dev` binds. The run's record on `ru
 ## A script's test runs on a Runner
 
 **Test** on the Scripts tab of a Sync project compiles one script of `config/scripts/` and runs it against generated sample input. The script is the
-author's C#, and the Workspace server never runs it. The test is the manual task `script-test` of the replication set's package, run on a Runner in a
-channel that is not production. It opens no connection, so it needs no login.
+author's C#, and the Workspace server never runs it. The test is the manual task `script-test` of the replication set's package, run on a Runner in the
+channel the person picks. It opens no connection, so it needs no login.
 
 When a person presses **Test** next to a script, the screen does three things through the console, as that person:
 
 1. It asks the Workspace server to build the draft as saved, and waits for the build. A draft that does not build is not tested, and the screen shows
    why the build failed.
 2. It stages the build on the Runner and channel chosen beside the button (`POST /api/deploys` with `"serve": false`). The version is staged and never
-   served. `prod` is refused before anything is sent.
+   served. Production is a channel like any other: when the person picks `prod`, the tab first shows that the test replaces the version staged in
+   production, not the one it serves, and the Runner's roles decide whether the person may stage there.
 3. It starts `script-test` on the staged version and waits for its answer (`POST /api/deploys/{id}/runs` with `"answer": true`), as a preview does
    ([How a screen asks for rows](#how-a-screen-asks-for-rows)).
 

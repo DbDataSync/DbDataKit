@@ -33,6 +33,26 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 The control service deploys a build of a Workspace project to a Runner or a Gateway as the person who asks. The Workspace service builds the project
 and serves what the build holds; it never calls the Runner or the Gateway.
 
+The Workspace server does not hold a publisher key. The calls it had for sending a build, running its tasks and reading a Gateway's catalog answer
+`410 Gone` with the sentence that names the console's call to use instead:
+
+| Workspace server call | What to use |
+| --- | --- |
+| `POST .../builds/{b}/publish` | **Publish** on the Builds tab, or `POST /api/deploys` |
+| `POST .../builds/{b}/preview-data` | **Preview with data** on the Builds tab, or `POST /api/deploys` with `previewInstance` |
+| `POST .../builds/{b}/run`, `GET .../builds/{b}/runs/{run}` | `POST /api/deploys/{id}/runs`, `GET /api/deploys/{id}/runs/{run}` |
+| `POST .../builds/{b}/binding-test` | `POST /api/deploys/{id}/binding-test` |
+| `POST .../builds/{b}/contract` | `POST /api/deploys/{id}/contract` |
+| `POST .../catalog/refresh` | **Refresh** from a Gateway on the Catalog tab, or `POST /api/workspace-catalog/{workspace}/{project}/gateway-read` |
+| `GET /api/v1/publish-targets` | `GET /api/instances`: the Runners and Gateways the console manages |
+| `GET`, `PUT`, `DELETE /api/v1/publisher-keys/{name}`, `POST .../pair` | none: the console signs with its own publisher key ([install.md](install.md#the-consoles-publisher-key)) |
+
+The Workspace server's former command `publisher` (its verbs `pair` and `list`) answers the same way and exits with code 2.
+
+Example: a script sends `POST /api/v1/projects/orders/workspaces/ana-draft/builds/4f1c.../publish` to the Workspace server. It answers 410 with
+"The Workspace server never calls a Runner or a Gateway and does not hold a publisher key; the console does this, as the signed-in person: deploy
+the build from the Builds tab, or with the console's POST /api/deploys." The console's relay does not pass these calls.
+
 1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
    kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
    Store build; for an app, the `previewInstance` it previews; a `note`).
@@ -129,6 +149,11 @@ its publisher. The client handed over can no longer read or change them. Nothing
 
 `GET /api/v1/settings/handovers` on the Gateway lists the hand-overs (who, to whom, by whom, when). An administrator ends one with
 `DELETE /api/v1/settings/handovers/{client}`; what carries the client's id is then its own again.
+
+When a Workspace server of this version starts, it deletes the publisher keys an earlier version kept in its secret store
+(`dbdatakit:workspace:publisher-key:<name>`) and its list of targets, `publish-targets.json`, and says so in its log. The key's client stays paired
+on each Gateway and Runner. Hand what it published to the console first, then remove the pairing on that server:
+`dbdatagateway server unpair workspace-0a1b2c` (or `dbdatarunner server unpair ...`).
 
 ### Preflight before activation
 
