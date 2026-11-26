@@ -40,6 +40,9 @@ public sealed record BuildItem(string Id, string Product, string What, string? M
 /// </summary>
 public static class BuildContents
 {
+    /// <summary>The folders of a Build project's views under its models folder, and the definition kind each holds: what a build copies and a deploy sends after the models.</summary>
+    public static readonly IReadOnlyList<(string Folder, string Kind)> ViewFolders = [("dashboards", "dashboard"), ("reports", "report")];
+
     /// <summary>The items of a build of a kind with <paramref name="routes"/>, whose folder is <paramref name="buildFolder"/> (it holds <c>artifact/</c>, or <c>app/</c> for an app).</summary>
     public static IReadOnlyList<BuildItem> Of(IReadOnlyList<ProjectPublishRoute> routes, string buildFolder)
     {

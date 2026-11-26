@@ -145,8 +145,7 @@ public sealed class CatalogReadFromRunnerTests
             Assert.Contains("operator", (string)refused["error"]!);
 
             // the Workspace server has no runner or gateway it could call: the reads went from the console to the runner
-            var (_, targets) = await As(ada, HttpMethod.Get, $"/relay/{workspaceId}/api/v1/publish-targets");
-            Assert.Empty(targets["targets"]!.AsArray());
+            Assert.Equal(HttpStatusCode.Forbidden, (await As(ada, HttpMethod.Get, $"/relay/{workspaceId}/api/v1/publish-targets")).Status);
         }
         finally
         {

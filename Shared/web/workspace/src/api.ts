@@ -30,9 +30,7 @@ export interface BuildResult {
   /** A kind that makes something to publish (plan 33): its name, and what it made (`package`, `tasks`, `files`; `models`, `data_sources`). */
   kind?: string; info?: Record<string, string>
 }
-/** What was published from a build: when, by whom, to which target, whether it worked and what the Gateway said. */
-export interface PublishRecord { at: string; by: string; target: string; ok: boolean; error?: string; answer?: PublishedAnswer; /** the instance of a preview with data, when this record is one (GP35d) */ preview?: string }
-export interface BuildDetail { build: BuildSummary; result: BuildResult | null; publishes: PublishRecord[] }
+export interface BuildDetail { build: BuildSummary; result: BuildResult | null }
 /** Whether the server can build, and what it lacks (`GET /api/v1/app-build`): each problem is a sentence that says what to set. */
 export interface BuildReadiness {
   ready: boolean; problems: string[]
@@ -40,8 +38,6 @@ export interface BuildReadiness {
   bun: { path: string; source: string } | null
   isolation: { setting: string; available: boolean }
 }
-/** A paired target; `instance` is its instance id, which is also the console's name for the server (its relay is `/relay/<instance>/...`). */
-export interface PublishTarget { name: string; gateway: string | null; product?: string | null; instance?: string | null; accepts?: boolean | null; can_publish: boolean }
 
 /** A kind of project the server hosts (`GET /api/v1/project-kinds`) and what it publishes as, to which product (plan 33 SC20). */
 /** A starting point for a new project of a kind besides its plain one (plan 27a IX21): ordinary code the author then owns. */
@@ -64,14 +60,10 @@ export interface BindingTestAnswer { slot: string; ok: boolean; step: string; me
 export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; instance?: string; on_behalf_of: string }
 /** A run read back from the Runner through the console (`GET /api/deploys/{id}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
 export interface StagedRun { id: string; task: string; outcome: string; started: string; finished: string | null; version: string | null; failure: { kind: string | null; message: string } | null; steps?: { key: string; started: string; completed: string | null; result: unknown }[] }
-/** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
-export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
 /** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models and, once the person confirmed it (plan 33 SC21f), the data sources made by hand the models may go on (`adopt`). */
 export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[]; model?: string }
 /** The Gateway refused a publish for want of an adoption (SC21f): the data source a model would go on and who made it (`hand`: by hand or by an administrator). A screen asks the person, then publishes again with `adopt`. */
 export interface AdoptionRequest { data_source: string; made_by: string }
-/** A target's publisher key as a person may see it: the reference to the secret, never the key, and the Gateway it is paired with. */
-export interface PublisherKey { name: string; secret_ref: string; updated: string; gateway: { url: string; roles: string[]; client_name: string; paired: string } | null }
 
 /** One file a compile of a draft makes, against the draft's committed `rendered/`: its text comes with an added or changed one (`truncated` when it was too large to send). */
 export interface CompiledFile { path: string; status: 'added' | 'changed' | 'unchanged' | 'removed'; content: string | null; truncated: boolean }
@@ -83,8 +75,8 @@ export interface SampleTable { name: string; kind: string; origin: string | null
 export interface SampleResult { ok: boolean; diagnostics: CheckDiagnostic[]; data: { tables: SampleTable[] } | null }
 /** One case of a script's test: what went in, what came out, and why when that is not obvious. */
 export interface ScriptCase { input: string; output: string | null; note: string | null }
-/** What `dbdatasync script test --json` printed, as the tool wrote it: `ok` is false when the script did not compile or threw, and `error` has the words. */
-export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; error: string | null }
+/** What the set's task `script-test` answered: `ok` is false when the script did not compile, threw or does not exist, and `message` has the words. */
+export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; message: string | null }
 /** One script of `config/scripts/`; `error` is why its manifest cannot be read. */
 export interface ScriptEntry { name: string; kind: string; language: string; error: string | null }
 /** The answer of a Sync draft's tool route: `ok` is false when the program did not answer (the findings say why), `data` is its document. */
@@ -120,8 +112,6 @@ export const workspaceApi = {
   sample: (project: string, id: string, options: SampleOptions = {}) => request<SampleResult>(`${ws(project, id)}/sample`, json(options)),
   /** The scripts of a Sync draft with the slot each fills (`dbdatasync script list`, on a copy). */
   scripts: (project: string, id: string) => request<ToolAnswer<{ scripts: ScriptEntry[] }>>(`${ws(project, id)}/scripts`),
-  /** Compiles one script of a Sync draft and runs it against generated input, offline, on a copy (plan 33 SC22k). */
-  scriptTest: (project: string, id: string, name: string, rows = 5) => request<ToolAnswer<ScriptTest>>(`${ws(project, id)}/script-test`, json({ name, rows })),
   /** The column lineage of a Build draft as `project show graph --columns` computes it, read only (plan 33 SC20h); with `column` (`model.column`) also what that column comes from and what is built from it. `data` is the tool's own document. */
   lineage: (project: string, id: string, column?: string) => request<ToolAnswer<unknown>>(`${ws(project, id)}/lineage`, json(column ? { column } : {})),
   /** The mapped models `project import --from-cache` would make of the draft's catalog cache for one connection (plan 33 SC20k): on a copy, nothing written; `data` is the tool's own document with the text of each file it wrote. With no `tables` it refreshes the descriptors the project has. */
@@ -154,11 +144,5 @@ export const workspaceApi = {
   requestBuild: (project: string, id: string) => request<BuildSummary>(builds(project, id), { method: 'POST' }),
   /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
-  publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
-  previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
-  publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
-  pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
-  setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),
-  removeKey: (name: string) => request<void>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'DELETE' }),
   events: (project: string, id: string) => request<{ events: WorkspaceEvent[] }>(`/api/v1/projects/${enc(project)}/workspaces/${enc(id)}/events`).then((r) => r.events),
 }

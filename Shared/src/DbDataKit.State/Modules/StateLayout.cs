@@ -10,6 +10,15 @@ namespace DbDataKit.State;
 /// <param name="File">SQLite only: the file this namespace is in when it is not the main one; <paramref name="Schema"/> is then the alias it is attached as.</param>
 public sealed record StateNamespace(StateModule Module, string? ScopeName, string? Schema, string Prefix, IReadOnlyDictionary<string, string> Tables, string? File = null)
 {
+    /// <summary>
+    /// The tables a later migration of the module drops (<c>DROP TABLE {table:name}</c>) and none after it makes again. They stay in <see cref="Tables"/>, because the migrations
+    /// that made and dropped them name them, and they are not in <see cref="ExistingTables"/>.
+    /// </summary>
+    public IReadOnlySet<string> DroppedTables { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The tables a database at the module's version has, by the module's name for each, with their real names: what a digest, a grant or a check of rights reads.</summary>
+    public IReadOnlyDictionary<string, string> ExistingTables => DroppedTables.Count == 0 ? Tables : Tables.Where(t => !DroppedTables.Contains(t.Key)).ToDictionary(t => t.Key, t => t.Value, StringComparer.Ordinal);
+
     /// <summary>What the registry records as the namespace's place: the schema, and for a namespace in a file of its own the file too, so moving a module to another file is noticed rather than starting it again empty.</summary>
     public string Placement => (Schema ?? "") + (File is null ? "" : "=" + File);
 
@@ -201,7 +210,7 @@ public sealed partial class StateLayout
                     throw new InvalidOperationException($"The module '{module.Name}' says its table '{owner.Table}' owns payloads, and none of its migrations create it.");
             }
 
-            var ns = new StateNamespace(module, scopeName, schema, prefix, tables, file);
+            var ns = new StateNamespace(module, scopeName, schema, prefix, tables, file) { DroppedTables = DroppedTables(module) };
             namespaces.Add(ns);
             layout._byModule[module.Name] = ns;
         }
@@ -245,6 +254,25 @@ public sealed partial class StateLayout
         .Where(m => !m.Groups["module"].Success || m.Groups["module"].Value == module.Name)
         .Select(m => m.Groups["table"].Value)
         .Distinct(StringComparer.Ordinal);
+
+    [GeneratedRegex(@"\b(?<verb>CREATE|DROP)\s+TABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?\{table:(?<table>[a-z][a-z0-9_]*)\}", RegexOptions.IgnoreCase)]
+    private static partial Regex CreateOrDropTable { get; }
+
+    [GeneratedRegex(@"--[^\n]*")]
+    private static partial Regex SqlLineComment { get; }
+
+    /// <summary>The module's own tables that its migrations, read in order, leave dropped: a <c>DROP TABLE</c> after the last <c>CREATE TABLE</c> of the same name.</summary>
+    private static HashSet<string> DroppedTables(StateModule module)
+    {
+        var dropped = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var migration in module.Migrations)
+            foreach (Match m in CreateOrDropTable.Matches(SqlLineComment.Replace(migration, "")))
+            {
+                if (string.Equals(m.Groups["verb"].Value, "DROP", StringComparison.OrdinalIgnoreCase)) dropped.Add(m.Groups["table"].Value);
+                else dropped.Remove(m.Groups["table"].Value);
+            }
+        return dropped;
+    }
 
     private static IEnumerable<string> DeclaredIndexes(StateModule module) => module.Migrations
         .SelectMany(m => IndexToken.Matches(m))

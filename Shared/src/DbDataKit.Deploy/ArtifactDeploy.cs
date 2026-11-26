@@ -77,7 +77,7 @@ public static class ArtifactDeploy
         try
         {
             var published = await new GatewayDefinitionsPublish(link, publisher, step, ct, build).PublishEntityModelsAsync([.. files.Select(f => (f, File.ReadAllText(f)))], options.DataSource, options.Adopt);
-            return new JsonObject { ["models"] = published, ["target"] = target.Name, ["gateway"] = target.Url };
+            return new JsonObject { ["models"] = published, ["target"] = target.Name, ["gateway"] = target.Url, ["signature"] = SignatureOf(published) };
         }
         catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
     }
@@ -93,10 +93,18 @@ public static class ArtifactDeploy
             var publish = new GatewayDefinitionsPublish(link, publisher, step, ct, build);
             var (models, dataSources) = await publish.PublishSemanticModelsAsync(folder, options.Adopt);
             var views = await publish.PublishViewsAsync(folder);
-            var answer = new JsonObject { ["models"] = models, ["data_sources"] = dataSources, ["target"] = target.Name, ["gateway"] = target.Url };
+            var answer = new JsonObject { ["models"] = models, ["data_sources"] = dataSources, ["target"] = target.Name, ["gateway"] = target.Url, ["signature"] = SignatureOf(models) };
             if (views.Count > 0) answer["views"] = views;
             return answer;
         }
         catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+    }
+
+    /// <summary>What the Gateway said of the signatures of the models it took: <c>verified</c> when it verified every one, otherwise the first other word it gave (a model it took unsigned); null when it said nothing of one of them.</summary>
+    private static string? SignatureOf(JsonArray models)
+    {
+        var words = models.OfType<JsonObject>().Select(m => (string?)m["signature"]).ToList();
+        if (words.Count == 0 || words.Any(w => w is null)) return words.FirstOrDefault(w => w is not null and not "verified");
+        return words.FirstOrDefault(w => w != "verified") ?? "verified";
     }
 }

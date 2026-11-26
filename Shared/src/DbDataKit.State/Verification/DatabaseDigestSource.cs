@@ -31,7 +31,7 @@ public sealed class DatabaseDigestSource : IRowDigestSource
     public string Description => _description ?? $"the {_database.Dialect.Engine} state database";
 
     public IReadOnlyList<DigestModule> Modules() =>
-        [.. _database.Layout!.Namespaces.Select(ns => new DigestModule(ns.Key, ns.Module.Name, ns.Module.Version, StateMigrator.Checksum(ns.Module, ns.Module.Version), [.. ns.Tables.Keys]))];
+        [.. _database.Layout!.Namespaces.Select(ns => new DigestModule(ns.Key, ns.Module.Name, ns.Module.Version, StateMigrator.Checksum(ns.Module, ns.Module.Version), [.. ns.ExistingTables.Keys]))];
 
     public TableDigest Digest(string moduleKey, string table, VerifyOptions options, CancellationToken cancellationToken, Action<long>? onRows = null)
     {

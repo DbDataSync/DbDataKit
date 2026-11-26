@@ -207,9 +207,8 @@ public sealed class WorkspaceBuildTests
         Assert.True((bool)done["result"]!["uncommitted_changes"]!);
         var row = Assert.Single(server.Store().Builds("orders", workspace));
         Assert.Equal("failed", row.Status);
-        // there is nothing to preview or publish
+        // there is nothing to preview or to hand the console
         Assert.Equal(HttpStatusCode.Conflict, (await server.Send("vic", ServerRole.Viewer, HttpMethod.Get, $"{root}/builds/{id}/preview")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"{root}/builds/{id}/publish", """{"target":"edge"}""")).Response.StatusCode);
 
         // the administrator's allow-list is what lets it build: the package must be in the store too, so a name the store lacks is named by the check
         await using var allowing = await WorkspaceHarness.StartAsync(apps: Real(NetworkIsolator.IsAvailable ? NetworkIsolation.Required : NetworkIsolation.IfAvailable, allowed: ["left-pad"]));

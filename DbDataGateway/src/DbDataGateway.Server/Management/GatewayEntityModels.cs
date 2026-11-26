@@ -16,7 +16,8 @@ namespace DbDataGateway.Server.Management;
 /// name of the call, and its data source is one of this server's (for a publishing client, one it made); <c>GET</c> lists and reads, <c>DELETE</c> stops serving it. Every instance of the group serves what is published
 /// (<see cref="PublishedEntityModels"/>). The structure stays the store's server's to change: it publishes the model its tables have.
 /// </summary>
-public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null)
+public sealed partial class GatewayEntityModels(PublishedEntityModels models, Func<GatewayOptions> options, Func<string, string?> ownerOfDataSource, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null,
+    Func<string?, string?>? ownerNow = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -43,10 +44,13 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
 
     internal static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
 
+    /// <summary>Who owns what <paramref name="managedBy"/> names now, after the group's hand-overs.</summary>
+    private string? OwnerNow(string? managedBy) => ownerNow is null ? managedBy : ownerNow(managedBy);
+
     internal ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
     {
         if (IsAdministrator(caller)) return null;
-        var owner = models.Current(name) is { } current ? PublishedEntityModels.Parse(current).ManagedBy : null;
+        var owner = models.Current(name) is { } current ? OwnerNow(PublishedEntityModels.Parse(current).ManagedBy) : null;
         var decision = OwnerScope.Authorize(caller.Token!, action, action == ObjectAction.Create ? null : new ManagedObject(owner));
         return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that model.");
     }
@@ -58,7 +62,7 @@ public sealed partial class GatewayEntityModels(PublishedEntityModels models, Fu
         foreach (var version in models.Published())
         {
             var content = PublishedEntityModels.Parse(version);
-            if (client is not null && content.ManagedBy != client) continue;
+            if (client is not null && OwnerNow(content.ManagedBy) != client) continue;
             var served = models.Find(version.Name);
             items.Add(new JsonObject
             {

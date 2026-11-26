@@ -7,8 +7,9 @@ using DbDataKit.Web.Trust;
 namespace DbDataWorkspace.Tests;
 
 /// <summary>
-/// The scripts of a Sync draft (plan 33 SC22k): the list and the test of one run through <c>dbdatasync script list|test --json</c> on a copy of the draft, offline, the draft untouched; testing needs the Author role because it runs the draft's C#. These run the
-/// stand-in <see cref="FakeSync"/> for the mechanics; the real program is the test of <c>DBDATAKIT_TEST_DBDATASYNC</c> (<see cref="WorkspaceSyncKindTests"/>).
+/// The scripts of a Sync draft (plan 33 SC22k): the list runs through <c>dbdatasync script list --json</c> on a copy of the draft, offline, the draft untouched. The Workspace server never tests a script: that runs the
+/// draft's C#, which is the set's task <c>script-test</c> on a Runner (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner), and the route that did it answers where it went. These run the stand-in
+/// <see cref="FakeSync"/> for the mechanics; the real program is the test of <c>DBDATAKIT_TEST_DBDATASYNC</c> (<see cref="WorkspaceSyncKindTests"/>).
 /// </summary>
 [Collection(ServerCollection.Name)]
 public sealed class WorkspaceSyncScriptTests
@@ -56,80 +57,40 @@ public sealed class WorkspaceSyncScriptTests
     }
 
     [Fact]
-    public async Task A_script_is_tested_on_a_copy_and_the_cases_come_back_as_the_tool_printed_them()
+    public async Task The_route_that_tested_a_script_says_it_runs_on_a_Runner_and_starts_no_program()
     {
         var fake = Fake();
         await using var server = await WorkspaceHarness.StartAsync(syncExecutable: fake);
         var id = await DraftAsync(server);
 
         var tested = await Post(server, id, "script-test", """{"name":"upper-name","rows":3}""");
-        Assert.Equal(HttpStatusCode.OK, tested.Response.StatusCode);
-        Assert.True((bool)tested.Body!["ok"]!, tested.Body.ToJsonString());
-        var data = tested.Body["data"]!;
-        Assert.True((bool)data["ok"]!);
-        Assert.Contains("generated sample", (string)data["source"]!);
-        Assert.Contains("UPPER", (string)data["cases"]![0]!["output"]!);
-
-        // the program was asked for the JSON form, with the rows, on a folder that is not the draft's
-        var arguments = File.ReadAllLines(Path.Combine(Path.GetDirectoryName(fake)!, "arguments.txt")).Last();
-        Assert.Contains("script test upper-name --rows 3 --json --repo ", arguments);
-        Assert.DoesNotContain(id, arguments.Split(' ').Last());
+        Assert.Equal(HttpStatusCode.Gone, tested.Response.StatusCode);
+        Assert.Equal(WorkspaceManagement.ScriptTestMoved, (string)tested.Body!["error"]!);
+        Assert.Contains("on a Runner", WorkspaceManagement.ScriptTestMoved);
+        var arguments = Path.Combine(Path.GetDirectoryName(fake)!, "arguments.txt");
+        Assert.False(File.Exists(arguments) && File.ReadAllText(arguments).Contains("script test"), "the Workspace server started dbdatasync script test");
     }
 
     [Fact]
-    public async Task A_script_that_does_not_compile_is_an_answer_with_the_compilers_words_not_an_error_of_the_route()
-    {
-        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
-        var id = await DraftAsync(server);
-        Assert.True((await server.AsAda(HttpMethod.Put, $"/api/v1/projects/orders-set/workspaces/{id}/files/config/scripts/upper-name.csx", new JsonObject { ["content"] = "this is not C#;\nnew X()" }.ToJsonString())).Response.IsSuccessStatusCode);
-
-        var tested = await Post(server, id, "script-test", """{"name":"upper-name"}""");
-        Assert.Equal(HttpStatusCode.OK, tested.Response.StatusCode);
-        Assert.False((bool)tested.Body!["data"]!["ok"]!);
-        Assert.Contains("did not compile", (string)tested.Body["data"]!["error"]!);
-    }
-
-    [Fact]
-    public async Task A_script_that_does_not_exist_is_named_and_the_path_of_the_servers_copy_is_not_shown()
-    {
-        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
-        var id = await DraftAsync(server);
-
-        var tested = await Post(server, id, "script-test", """{"name":"nope"}""");
-        var error = (string)tested.Body!["data"]!["error"]!;
-        Assert.Contains("'nope' does not exist", error);
-        Assert.DoesNotContain("ddw-sync-", error);
-    }
-
-    [Theory]
-    [InlineData("""{"name":"../x"}""")]
-    [InlineData("""{"name":"-rf"}""")]
-    [InlineData("""{"name":"a/b"}""")]
-    [InlineData("""{}""")]
-    [InlineData("""{"name":"ok","rows":0}""")]
-    [InlineData("""{"name":"ok","rows":51}""")]
-    public async Task The_body_is_checked_before_anything_runs(string body)
-    {
-        var fake = Fake();
-        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: fake);
-        var id = await DraftAsync(server);
-
-        Assert.Equal(HttpStatusCode.BadRequest, (await Post(server, id, "script-test", body)).Response.StatusCode);
-        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(fake)!, "arguments.txt")) && File.ReadAllText(Path.Combine(Path.GetDirectoryName(fake)!, "arguments.txt")).Contains("script test"));
-    }
-
-    [Fact]
-    public async Task Running_a_script_needs_the_author_role_and_a_build_project_has_no_sync_scripts()
+    public async Task A_build_project_has_no_sync_scripts()
     {
         await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake(), buildExecutable: FakeBuild.Create());
-        var id = await DraftAsync(server);
-
-        var viewer = await server.Send("vic", ServerRole.Viewer, HttpMethod.Post, $"/api/v1/projects/orders-set/workspaces/{id}/script-test", """{"name":"upper-name"}""");
-        Assert.Equal(HttpStatusCode.Forbidden, viewer.Response.StatusCode);
-
         Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", """{"id":"shop","kind":"build"}""")).Response.StatusCode);
         var other = (string)(await server.AsAda(HttpMethod.Post, "/api/v1/projects/shop/workspaces", """{"name":"draft"}""")).Body!["id"]!;
-        Assert.Equal(HttpStatusCode.Conflict, (await server.AsAda(HttpMethod.Post, $"/api/v1/projects/shop/workspaces/{other}/script-test", """{"name":"x"}""")).Response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/shop/workspaces/{other}/scripts")).Response.StatusCode);
+    }
+
+    /// <summary>What the program printed on its standard output.</summary>
+    private static async Task<string> RunAsync(string program, params string[] arguments)
+    {
+        var info = new System.Diagnostics.ProcessStartInfo(program) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(info)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        await error;
+        return await output;
     }
 
     /// <summary>The skeletons the Scripts tab writes (the same text as <c>Shared/web/workspace/src/syncScripts.ts</c>, kept in step by this test) compile and run in the real program.</summary>
@@ -159,17 +120,32 @@ public sealed class WorkspaceSyncScriptTests
         var names = listed.Body["data"]!["scripts"]!.AsArray().Select(s => (string)s!["name"]!).ToList();
         Assert.Contains("upper-name", names);
         Assert.Equal(3, names.Count);
-        foreach (var name in names)
-        {
-            var tested = await Post(server, id, "script-test", new JsonObject { ["name"] = name }.ToJsonString());
-            Assert.True((bool)tested.Body!["data"]!["ok"]!, tested.Body.ToJsonString());
-            Assert.NotEmpty(tested.Body["data"]!["cases"]!.AsArray());
-        }
-        Assert.Contains("UPPER(", (await Post(server, id, "script-test", """{"name":"upper-name"}""")).Body!.ToJsonString());
 
-        Assert.True((await server.AsAda(HttpMethod.Put, $"/api/v1/projects/orders-set/workspaces/{id}/files/config/scripts/upper-name.csx", new JsonObject { ["content"] = "this is not C#;\nnew X()" }.ToJsonString())).Response.IsSuccessStatusCode);
-        var broken = (await Post(server, id, "script-test", """{"name":"upper-name"}""")).Body!["data"]!;
-        Assert.False((bool)broken["ok"]!);
-        Assert.Contains("did not compile", (string)broken["error"]!);
+        // each script compiles and runs in the real program's sample test (on a Runner, the set's task script-test runs the same test), on a folder of its own: the Workspace server runs none
+        var repo = Directory.CreateTempSubdirectory("ddw-script-skeletons-").FullName;
+        try
+        {
+            foreach (var name in names)
+                foreach (var extension in new[] { ".yaml", ".csx" })
+                {
+                    var path = Path.Combine(repo, "config", "scripts", name + extension);
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.WriteAllText(path, (string)(await server.AsAda(HttpMethod.Get, $"/api/v1/projects/orders-set/workspaces/{id}/files/config/scripts/{name}{extension}")).Body!["content"]!);
+                }
+
+            foreach (var name in names)
+            {
+                var tested = JsonNode.Parse(await RunAsync(real, "script", "test", name, "--json", "--repo", repo))!;
+                Assert.True((bool)tested["ok"]!, tested.ToJsonString());
+                Assert.NotEmpty(tested["cases"]!.AsArray());
+            }
+            Assert.Contains("UPPER(", await RunAsync(real, "script", "test", "upper-name", "--json", "--repo", repo));
+
+            File.WriteAllText(Path.Combine(repo, "config", "scripts", "upper-name.csx"), "this is not C#;\nnew X()");
+            var broken = JsonNode.Parse(await RunAsync(real, "script", "test", "upper-name", "--json", "--repo", repo))!;
+            Assert.False((bool)broken["ok"]!);
+            Assert.Contains("did not compile", (string)broken["error"]!);
+        }
+        finally { Directory.Delete(repo, recursive: true); }
     }
 }

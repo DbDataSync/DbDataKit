@@ -202,3 +202,15 @@ backup/trustzones-13-uncommitted
 tmp/delete-test-claude
 # --- group 23: the session branch the harness started on (2026-11-21); it is at main's head and holds nothing main lacks. Deletion approved by the owner
 claude/sleepy-keller-vowppp
+# --- group 24: branches untouched for days whose work is on main (checked 2026-11-26 with the full history, deletion approved by the owner): no commit missing from main
+planning/syncauthoring-isolation
+claude/relaxed-shannon-207fd2
+# --- group 25: backups of the server-removal and CI work (2026-11-12 to 2026-11-15); each missing commit is on main under another commit, in main's current files, or changed files deleted with the Sync server and the old plans (checked 2026-11-26, deletion approved by the owner)
+backup/work/removal2
+backup/work/removal3
+backup/work/removal5
+backup/work/removal7
+backup/work/ci-24
+# --- group 26: an earlier session-start hook (2026-11-14 and 15, .claude/hooks/session-start.sh, never on main), replaced by CLAUDE.md's Docker steps and CLOUDDEV-6 (deletion approved by the owner)
+claude/gifted-wozniak-8lddde
+claude/keen-davinci-rqddww

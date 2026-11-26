@@ -11,9 +11,10 @@ namespace DbDataKit.Server;
 /// <summary>
 /// What a person asks the console to deploy: a build (<see cref="Build"/>) of a workspace of a project on a Workspace server, to a registered Runner or Gateway (<see cref="Target"/>), with what the deploy of its kind takes: for a Runner
 /// the channel, staged or served, the version the person saw and the slots to bind; for a Gateway the data source and the adoptions the person confirmed; the model of a Store build, and a note kept with the version.
+/// <see cref="PreviewInstance"/> sends an app build to the Gateway's preview channel and points that instance's preview at it, in place of publishing a version.
 /// </summary>
 public sealed record DeployBuildRequest(string WorkspaceServer, string Project, string Workspace, string Build, string Target, string? Channel = null, bool Serve = false, int? ExpectedVersion = null,
-    IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false);
+    IReadOnlyDictionary<string, string>? Bind = null, string? DataSource = null, IReadOnlyList<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false, string? PreviewInstance = null);
 
 /// <summary>What a deploy answered: the HTTP status and the body (the steps, the target's answer and the deploy record; or the refusal in words, with the data source to confirm when an adoption is asked).</summary>
 public sealed record DeployBuildOutcome(int Status, JsonObject Body);
@@ -83,6 +84,8 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
                 ?? throw new Refusal(409, $"{workspaceServer.Name} does not say where a {kind} project is published.");
             var publishes = routes.OfType<JsonObject>().Select(r => new ProjectPublishRoute((string?)r["product"] ?? "", (string?)r["what"] ?? "", (string?)r["description"] ?? "")).ToList();
             var route = DeployRoutes.RouteFor(kind, publishes, deployTarget);
+            var preview = string.IsNullOrWhiteSpace(request.PreviewInstance) ? null : request.PreviewInstance.Trim();
+            if (preview is not null && route.What != "app") throw new Refusal(409, "Only an app has a preview with data.");
 
             var items = (contents["items"] as JsonArray ?? []).OfType<JsonObject>().Select(BuildItem.FromJson).Where(i => i.Product == route.Product && i.What == route.What).ToList();
             item = PickItem(items, route, request.Model);
@@ -95,7 +98,7 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             var publisher = new ConsoleIdentity((await identity.GetOrCreateAsync(ct)).Id, await keys.GetOrCreateAsync(ct));
             var provenance = $"From workspace {request.Workspace} of project {request.Project}, build {request.Build}" + ((string?)described["commit"] is { Length: > 0 } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "")
                 + (described["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", deployed by {person.Name ?? person.Id}.";
-            var note = (string.IsNullOrWhiteSpace(request.Note) ? provenance : request.Note.Trim() + " | " + provenance) + " " + DeployOrigin.Token(workspaceServer.InstanceId, request.Project, request.Workspace);
+            var note = (preview is null ? "" : $"Preview of {preview}. ") + (string.IsNullOrWhiteSpace(request.Note) ? provenance : request.Note.Trim() + " | " + provenance) + " " + DeployOrigin.Token(workspaceServer.InstanceId, request.Project, request.Workspace);
             // a package served in prod is checked first when it declares a preflight: staged held, the preflight run on the staged version, then activated (below)
             var preflightAsked = ConsoleDeployPreflight.AskedFor(request.Channel, request.Serve, deployProduct, route.What);
             var gated = preflightAsked && ArtifactDeploy.PackageTasks(root).Contains(DbDataKit.Runner.Preflight.TaskName);
@@ -105,10 +108,12 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
             try
             {
                 answer = route.What == "app"
-                    ? await AppDeploy.SendAsync(link, deployTarget, AppDeploy.Read(root, note, steps.Add), steps.Add, ct)
+                    ? await AppDeploy.SendAsync(link, deployTarget, AppDeploy.Read(root, note, steps.Add), steps.Add, ct, preview)
                     : await ArtifactDeploy.DeployAsync(kind, route, link, publisher, deployTarget, root, options, person.Name ?? person.Id, steps.Add, ct, record);
             }
             catch (DeployException ex) { throw new Refusal(ex.Status, ex.Message, ex.Adopt); }
+            // a preview is kept as a deploy to the Gateway's preview channel: the record says so, with the instance and the preview's address
+            if (preview is not null) { answer["channel"] ??= AppDeploy.PreviewChannel; answer["mode"] = "preview"; }
 
             if (preflightAsked && !gated) answer["preflight"] = new JsonObject { ["declared"] = false };
             var kept = Keep(request, person, workspaceServer, target, deployProduct, kind, route.What, item, record, AuditEvent.Ok, null, answer, publisher.Key.Fingerprint);
@@ -131,6 +136,38 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
         {
             try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* a temporary copy; the next start of the machine clears it */ }
+        }
+    }
+
+    /// <summary>The audit verb of a hand-over on a Gateway (<see cref="HandOverAsync"/>).</summary>
+    public const string HandoverVerb = "gateway.handover";
+
+    /// <summary>
+    /// Makes the console the owner, on the Gateway <paramref name="gateway"/>, of what the Workspace servers' publisher keys published there (or what the clients of <paramref name="clients"/> own), as the person, who must be an
+    /// administrator of that Gateway: the Gateway decides and records each change of owner (Design: docs/publishing.md#taking-over-what-a-workspace-key-published). One step per Gateway, audited here as <see cref="HandoverVerb"/>;
+    /// from then on the console's deploys publish over those definitions as the person with no adoption asked.
+    /// </summary>
+    public async Task<DeployBuildOutcome> HandOverAsync(string gateway, IReadOnlyList<string>? clients, RelayPerson person, CancellationToken ct)
+    {
+        var steps = new List<string>();
+        var target = instances.Registry.Find(gateway);
+        try
+        {
+            if (target is null) throw new Refusal(404, $"No server '{gateway}' is registered.");
+            var product = await relay.ProductOfAsync(target, ct);
+            if (DeployProducts.OfServer(product) != DeployProducts.Gateway)
+                throw new Refusal(400, $"{target.Name} is {(product is null ? "not answering" : "a " + product + " server")}; what a publisher key published is handed over on a Gateway.");
+            var link = promotions.LinkFor(target.InstanceId, person) ?? throw new Refusal(404, $"No server '{gateway}' is registered.");
+            var consoleId = (await identity.GetOrCreateAsync(ct)).Id;
+            var answer = await GatewayCalls.HandOverAsync(link, new DeployTarget(target.Name, target.Url.ToString().TrimEnd('/'), target.InstanceId, DeployProducts.Gateway), consoleId, clients, steps.Add, ct);
+            audit.Record(new AuditEvent("user", person.Id, HandoverVerb, AuditEvent.Ok, TargetKind: "server", TargetId: target.InstanceId, Detail: answer.ToJsonString()));
+            return new DeployBuildOutcome(200, new JsonObject { ["steps"] = Steps(steps), ["handed"] = answer });
+        }
+        catch (Exception ex) when (ex is Refusal or DeployException)
+        {
+            var code = ex is Refusal r ? r.Status : ((DeployException)ex).Status;
+            audit.Record(new AuditEvent("user", person.Id, HandoverVerb, AuditEvent.Refused, TargetKind: "server", TargetId: target?.InstanceId ?? gateway, Detail: JsonSerializer.Serialize(new { gateway, error = ex.Message })));
+            return new DeployBuildOutcome(code is >= 400 and < 600 ? code : 502, new JsonObject { ["error"] = ex.Message, ["steps"] = Steps(steps) });
         }
     }
 
@@ -265,7 +302,18 @@ public sealed class ConsoleDeploys(StateDatabase state, ConsoleInstances instanc
         ["target"] = d.Target, ["target_name"] = d.TargetName, ["product"] = d.Product, ["route"] = d.Route, ["name"] = d.DefinitionName, ["channel"] = d.Channel, ["version"] = d.Version, ["mode"] = d.Mode,
         ["signature"] = d.Signature, ["build_record"] = BuildRecord.Read(d.BuildRecord), ["deployed_by"] = d.DeployedBy, ["deployed_at"] = d.DeployedAt.UtcDateTime.ToString("O"), ["outcome"] = d.Outcome, ["error"] = d.Error,
         ["preflight"] = PreflightOf(d.Answer),
+        ["preview"] = PreviewOf(d.Answer),
     };
+
+    /// <summary>The preview a deploy of an app made (the instance, and the address and path of its preview on the Gateway's apps host), or null for a deploy that is not a preview.</summary>
+    public static JsonObject? PreviewOf(string? answer)
+    {
+        JsonObject? parsed;
+        try { parsed = string.IsNullOrEmpty(answer) ? null : JsonNode.Parse(answer) as JsonObject; }
+        catch (JsonException) { return null; }
+        if ((string?)parsed?["mode"] != "preview") return null;
+        return new JsonObject { ["instance"] = (string?)parsed!["instance"], ["address"] = (string?)parsed["preview_address"], ["path"] = (string?)parsed["preview_path"] };
+    }
 
     /// <summary>The preflight the deploy waited for (its run, link, findings and what became of the activation), or null for a deploy that waited for none.</summary>
     public static JsonObject? PreflightOf(string? answer)

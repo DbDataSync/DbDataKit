@@ -122,8 +122,7 @@ Builds tab. Its tasks, in build order:
 10. Built: the Designer's Refresh buttons on the endpoint cards, the Table Mappings overview and the cached-metadata card (`DbDataWorkspace/README.md`,
     "A project's two areas"; `RefreshPanel.tsx` of `@dbdatakit/sync-ui`).
 11. Built: **Build and publish…** in a replication page's rail opens the draft's Builds tab, whose panel deploys through the console
-    (`PublishCard.tsx` of `@dbdatakit/sync-ui`; `DbDataWorkspace/README.md`, "A project's two areas"); the slice is finished only when
-    WORKSPACEISOLATION-3 and WORKSPACEISOLATION-4 are.
+    (`PublishCard.tsx` of `@dbdatakit/sync-ui`; `DbDataWorkspace/README.md`, "A project's two areas").
 
 **The rule: the slice only leaves features out.** Every slice task builds the full design's routes, formats and components (the Designer's addresses,
 `@dbdatakit/sync-ui` and its draft model, `catalog-cache/2`, the package `dbdatakit-metadata` and its answer, the console's catalog read, the shared channel

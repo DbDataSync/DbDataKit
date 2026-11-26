@@ -18,7 +18,8 @@ offers the running instance's MCP endpoints to the session through a development
 - People sign in to the console with passkeys; agents with identity-home tokens (`ddk_...`, personal or a service account's) on the Gateway.
 - The Gateway's `mcp` module is built; the console's MCP endpoint is AGENTACCESS-5.
 - The harness: Docker is installed with its daemon stopped; a port is shown in the preview pane when the session reports it (not every client shows one);
-  `.mcp.json` servers start with the session, alongside `SessionStart` hooks. The repository has no `.claude/settings.json` and no `.mcp.json`.
+  `.mcp.json` servers start with the session, alongside `SessionStart` hooks. The repository's `.claude/settings.json` holds the protection of the owner's files (ask rules and a Bash hook) and no `SessionStart`
+  hook; there is no `.mcp.json`.
 
 ## Tasks
 

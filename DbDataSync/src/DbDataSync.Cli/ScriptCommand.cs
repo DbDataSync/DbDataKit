@@ -97,17 +97,12 @@ public static class ScriptCommand
         return entries;
     }
 
-    /// <summary>Compiles the script and runs it against generated sample input. Never opens a connection.</summary>
+    /// <summary>Compiles the script and runs it against generated sample input (<see cref="ScriptSampleTest"/>). Never opens a connection.</summary>
     public static async Task<TestOutcome> TestAsync(ConfigRepository repository, string name, int rows)
     {
-        ScriptDefinition script;
-        try { script = repository.LoadScript(name); }
-        catch (FileNotFoundException) { return new(name, "", false, "", [], [], $"Script '{name}' does not exist in {repository.ScriptsDirectory}."); }
-
         var cache = new ScriptCacheDirectory(Path.Combine(Path.GetTempPath(), "dbdatasync-script-test-cache"));
-        var service = new ScriptTestService(repository, new ScriptCompiler(cache, repository.ScriptsDirectory));
-        var result = await service.RunAsync(new ScriptTestRequest(script, SampleRows: rows), CancellationToken.None);
-        return new(name, script.Manifest.Kind, result.Error is null, result.Source, [.. result.Cases.Select(c => new TestCase(c.Input, c.Output, c.Note))], result.Log, result.Error);
+        var outcome = await ScriptSampleTest.RunAsync(repository, name, rows, cache, CancellationToken.None);
+        return new(outcome.Name, outcome.Kind, outcome.Ok, outcome.Source, [.. outcome.Cases.Select(c => new TestCase(c.Input, c.Output, c.Note))], outcome.Log, outcome.Error);
     }
 
     private static void WriteText(TestOutcome outcome)
