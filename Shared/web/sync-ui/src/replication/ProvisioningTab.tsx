@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { ErrorBanner, InheritableToggle } from '@dbdatakit/shell'
-import { ProvisioningRunResult, useDraft, useProvisioningApply, useProvisioningPlan, type RunnerVersion } from '@dbdatakit/workspace'
+import { ProvisioningRunResult, useDraft, useProvisioningApply, type RunnerVersion } from '@dbdatakit/workspace'
+import { useDraftProvisioningPlan } from '../api/hooks'
+import { isQuestionPath } from '../api/syncApi'
 import { NewestPreflight } from './NewestPreflight'
 import { ReplicationProvisioningPanel } from './ReplicationProvisioningPanel'
 import type { ProvisioningConfig, ReplicationTaskConfig } from '../types'
@@ -17,8 +19,8 @@ export function stagedLine(staged: RunnerVersion | null | undefined, loading: bo
 
 /**
  * The Overview's Provisioning tab: what every table mapping of the replication may do to its target unless the mapping says otherwise, and below it
- * what that amounts to: the replication's plan, made by the Workspace offline from the draft's saved files and catalog cache, in the old tab's
- * layout. **Apply** on a mapping's side runs the set's task `provision` of the version a build of this draft staged on a Runner, through the
+ * what that amounts to: the replication's plan, made by the Workspace offline from the draft's files and catalog cache with the unsaved edits
+ * over them, in the old tab's layout. **Apply** on a mapping's side runs the set's task `provision` of the version a build of this draft staged on a Runner, through the
  * console as the person, as the Files area's Provisioning tab does. Under the plan, the newest `preflight` of a channel the draft was published to says
  * what the live check found for each mapping.
  */
@@ -32,10 +34,10 @@ export function ProvisioningTab({ project, id, replication, draft, setDraft, map
   editable?: boolean
 }) {
   const files = useDraft()
-  const plan = useProvisioningPlan(project, id, replication)
+  const plan = useDraftProvisioningPlan(replication)
   const { staged, apply } = useProvisioningApply(project, id)
   const settings = provisioningOf(draft)
-  const unsaved = files.dirtyPaths.filter((p) => p.startsWith('config/') || p === 'catalog-cache.yaml').length
+  const unsaved = files.dirtyPaths.filter(isQuestionPath).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="replication-provisioning">
@@ -68,9 +70,9 @@ export function ProvisioningTab({ project, id, replication, draft, setDraft, map
       </div>
 
       <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="hint" data-testid="provisioning-saved-only">
+        <span className="hint" data-testid="provisioning-plan-basis">
           {unsaved > 0
-            ? `The plan is made from the saved files: ${unsaved === 1 ? 'one unsaved edit is' : `${unsaved} unsaved edits are`} not in it until saved.`
+            ? `The plan is made from the draft as shown here, ${unsaved === 1 ? 'one unsaved edit' : `${unsaved} unsaved edits`} included, and the catalog cache. Apply runs the version on the Runner, which has none of these edits.`
             : 'The plan is made from the saved files and the catalog cache.'}
         </span>
         <button type="button" className="btn btn-sm spacer" disabled={plan.isFetching} onClick={() => void plan.refetch()} data-testid="provisioning-replan">

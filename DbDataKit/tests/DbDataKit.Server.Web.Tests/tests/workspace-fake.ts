@@ -240,8 +240,8 @@ function syncDesigner(route: Route, w: { files: Map<string, string> }, question:
   return json(route, { error: 'There is no such call.' }, 404)
 }
 
-/** The plan of each saved mapping of a replication but the template's `orders`: its target table is created when the catalog cache does not have it. */
-function savedPlans(files: Map<string, string>, replication: string) {
+/** The plan of each mapping of a replication the question sees but the template's `orders`: its target table is created when the catalog cache does not have it. */
+function mappingPlans(files: Map<string, string>, replication: string) {
   const folder = `config/replications/${replication}/table-mappings/`
   const task = YAML.parse(files.get(`config/replications/${replication}/task.yaml`) ?? 'null') as { endpoints?: { target?: { connectionName?: string } } } | null
   return [...files.entries()].filter(([p]) => p.startsWith(folder) && p !== `${folder}orders.yaml`).sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => {
@@ -429,11 +429,13 @@ export async function mockWorkspace(page: Page, options: FakeOptions = {}): Prom
     }
     if (rest[0] === 'check') return json(route, { kind: project.kind, ok: !check(project.kind, w.files).some((f) => f.severity === 'error'), diagnostics: check(project.kind, w.files) })
     if (rest[0] === 'changes') return json(route, { changes: [], uncommitted: true })
-    // the plan of a replication's tables, made offline from the draft's saved files and catalog cache: the template's orders, whose target table is
-    // not there yet, then each other saved mapping of the replication, whose target table is created when the cache does not have it
+    // the plan of a replication's tables, made offline from the draft's saved files with the question's unsaved edits over them, and the catalog cache:
+    // the template's orders, whose target table is not there yet, then each other mapping of the replication, whose target table is created when the
+    // cache does not have it
     if (rest[0] === 'provisioning-plan' && method === 'POST') {
-      const replication = (JSON.parse(body || '{}') as { replication?: string }).replication ?? ''
-      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [...savedPlans(w.files, replication), {
+      const asked = JSON.parse(body || '{}') as { replication?: string; unsaved?: Record<string, string | null> }
+      const replication = asked.replication ?? ''
+      return json(route, { ok: true, diagnostics: [], data: { replication, cache_generated_at: '2026-11-11T09:00:00Z', cache_server: 'edge', mappings: [...mappingPlans(viewOf(w, asked.unsaved), replication), {
         mapping: 'orders', source: { connection: 'source-db', table: 'dbo.Orders' }, target: { connection: 'target-db', table: 'public.orders' }, excluded: null,
         source_plan: { action: 'enableSourceChangeCapture', state: 'satisfied', steps: [], warnings: [] },
         target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: 'CREATE TABLE "public"."orders" ("id" bigint)', rationale: 'it is not there', scope: 'table' }], warnings: [] },

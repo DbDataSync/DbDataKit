@@ -379,17 +379,27 @@ test('the rest of a mapping: Create mappings with what is inferred, a verificati
   await page.getByTestId('default-segmenting-custom-column').fill('shipped_on')
   await shot(page, '09-mapping-segmenting')
 
-  // saved, the replication's plan has the mapping: its target table is missing, so the Provisioning tab's badge counts the one step
-  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveCount(0)
+  // not saved yet, the replication's plan is asked with the mapping as it is here: Create target table if missing turned on, the target table is
+  // missing, so the plan shows its statement and the Provisioning tab's badge counts the one step
+  await page.getByTestId('mapping-tab-provisioning').click()
+  await page.getByTestId('provisioning-create-override').click()
+  await page.getByTestId('provisioning-create-checkbox').check()
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  await expect(page.getByTestId('mapping-provisioning-plan-basis')).toContainText('its unsaved edits included')
+  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
+  await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')
+  await expect(page.getByTestId('provisioning-plan-target-sql')).toContainText('CREATE TABLE dbo.Lines')
+  expect(workspace.files('plant', 'mapping-rest')?.has(mappingFile('dbo.Lines'))).toBe(false)
+
+  // saved, the plan of the saved file is the same
   await page.getByTestId('save-mapping-button').click()
   await expect(page.getByTestId('mapping-dirty')).toHaveCount(0)
   await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
-  await page.getByTestId('mapping-tab-provisioning').click()
-  await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')
   await expect(page.getByTestId('provisioning-plan-target-sql')).toContainText('CREATE TABLE dbo.Lines')
   const lines = saved(workspace, 'mapping-rest', mappingFile('dbo.Lines'))
   expect(lines.verification).toEqual([expect.objectContaining({ name: 'rows', kind: 'RowCount' })])
   expect(lines.defaultSegmenting).toEqual([{ mode: 'custom', strategyName: 'by-month', column: 'shipped_on' }])
+  expect(lines.provisioning?.createTargetTableIfMissing).toBe(true)
   expect(lines.columnMappings.some((c: Record<string, unknown>) => 'targetType' in c)).toBe(false)
   expect(lines.primaryKey).toBeUndefined()
   expect(JSON.stringify(lines)).not.toContain('naturalKey')
