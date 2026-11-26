@@ -4,7 +4,8 @@ namespace DbDataSync.TaskRunner.Tests.Runner;
 
 /// <summary>
 /// A Sync repository whose one connection, <c>lite</c>, runs on a YAML driver of the repository (<c>drivers/sqlite.generic/driver.yaml</c>, its catalog read by its own queries) over a SQLite file holding <c>items</c> (two rows) and
-/// <c>notes</c>. The provider is the process's own Microsoft.Data.Sqlite: the library names its factory, and nothing is restored. SQLite needs no server.
+/// <c>notes</c>. The provider is the process's own Microsoft.Data.Sqlite: the library names its factory, and nothing is restored. SQLite needs no server. Every connection to the file is opened
+/// without a pool (the setup's and the connection file's), so nothing holds the file once a read ends: a test may copy or delete the folder at once, on Windows too.
 /// </summary>
 internal static class SqliteYamlSet
 {
@@ -13,7 +14,8 @@ internal static class SqliteYamlSet
     {
         Directory.CreateDirectory(root);
         var database = Path.Combine(root, "lite.db");
-        using (var connection = new SqliteConnection($"Data Source={database}"))
+        // no pool: a pooled connection keeps the file open after it is disposed, and Windows then refuses to copy the folder into a package view
+        using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
         {
             connection.Open();
             using var command = connection.CreateCommand();
@@ -53,7 +55,7 @@ internal static class SqliteYamlSet
             schema: connection/1
             name: lite
             engine: sqlite.generic
-            connection_string: 'Mode=ReadWrite'
+            connection_string: 'Mode=ReadWrite;Pooling=False'
             auth:
               mode: none
             extensions:

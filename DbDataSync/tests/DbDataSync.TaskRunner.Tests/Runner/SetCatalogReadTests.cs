@@ -87,7 +87,7 @@ public sealed class SetCatalogReadTests : IDisposable
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => Read().DescribeAsync("lite", "DELETE FROM items", CancellationToken.None));
         Assert.Contains("read-only", refused.Message, StringComparison.Ordinal);
-        await using var check = new SqliteConnection($"Data Source={_database}");
+        await using var check = new SqliteConnection($"Data Source={_database};Pooling=False");
         await check.OpenAsync();
         await using var count = check.CreateCommand();
         count.CommandText = "SELECT COUNT(*) FROM items";
