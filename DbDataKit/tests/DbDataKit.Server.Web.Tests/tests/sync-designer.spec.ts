@@ -199,6 +199,39 @@ test('a replication from New replication to its endpoints and schedule, Enabled 
   await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'invoices')
 })
 
+/** A MySQL connection beside the template's two: a target of its driver keeps no state table. */
+const MART = 'schema: connection/1\nname: mart-db\nengine: mysql\naddress:\n  host: mart.example.com\n  database: mart\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:mart-db\n'
+
+test('the tracking modes follow the target: a MySQL target disables Target and Both with the reason, a PostgreSQL target offers them', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Tracking', `sync-tracking-${Date.now()}@example.com`)
+  await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE, 'config/connections/mart-db.yaml': MART } })
+  await makeDraft(page, 'plant', 'sync', 'tracking-edit')
+  await expect(page).toHaveURL(/\/designer\/replications\/orders$/)
+
+  // the MySQL target: its driver keeps no state table, so the two modes that keep one there are disabled and the card says why
+  await page.getByTestId('task-target-connection-select').selectOption('mart-db')
+  const card = page.getByTestId('tracking-card')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveText('The target connection mart-db (driver MySql) keeps no state table, so this replication keeps its state on the Runner: choose State only or Default.')
+  await expect(card.getByTestId('tracking-mode-target')).toBeDisabled()
+  await expect(card.getByTestId('tracking-mode-both')).toBeDisabled()
+  await expect(card.locator('option[value="state"]')).toBeEnabled()
+  await card.getByTestId('tracking-mode-select').selectOption('state')
+  await expect(card.getByTestId('tracking-mode-select')).toHaveValue('state')
+  await shot(page, '03b-tracking-mysql-target')
+
+  // the PostgreSQL target keeps one: both modes are offered and the reason is gone
+  await page.getByTestId('task-target-connection-select').selectOption('target-db')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveCount(0)
+  await expect(card.getByTestId('tracking-mode-target')).toBeEnabled()
+  await card.getByTestId('tracking-mode-select').selectOption('both')
+  await expect(card.getByTestId('tracking-primary-select')).toHaveValue('target')
+
+  // back to MySQL with both chosen: the file's mode stays shown, and the reason says why the check will refuse it
+  await page.getByTestId('task-target-connection-select').selectOption('mart-db')
+  await expect(card.getByTestId('tracking-mode-select')).toHaveValue('both')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveClass(/warn/)
+})
+
 test('table mappings: Create mappings from two ticked tables, then Auto-map, the key and an overridden target schema on one, the same changes in Files', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Sync Mappings', `sync-mappings-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE_WITH_TARGET } })

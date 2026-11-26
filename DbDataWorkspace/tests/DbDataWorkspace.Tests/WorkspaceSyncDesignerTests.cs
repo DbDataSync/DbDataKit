@@ -144,6 +144,22 @@ public sealed class WorkspaceSyncDesignerTests
         var postgres = (await Ask(server, id, "capabilities", new JsonObject { ["connection"] = "target-db" })).Body!;
         Assert.Equal("SourceKey", (string)Kind(postgres["readers"], "PgLogicalSlot")["needsKey"]!);
         Assert.DoesNotContain(postgres["writers"]!.AsArray(), w => ((string)w!["kind"]!).StartsWith("MsSql", StringComparison.Ordinal));
+        Assert.True((bool)body["keepsStateTable"]!);
+        Assert.True((bool)postgres["keepsStateTable"]!);
+    }
+
+    [Fact]
+    public async Task A_MySQL_connection_says_its_target_keeps_no_state_table()
+    {
+        await using var server = await WorkspaceHarness.StartAsync();
+        var id = await DraftAsync(server);
+        Assert.True((await Put(server, id, "config/connections/mart.yaml", "schema: connection/1\nname: mart\nengine: mysql\naddress:\n  host: mart.example.com\n  database: mart\nauth:\n  mode: none\n")).Response.IsSuccessStatusCode);
+
+        var answer = await Ask(server, id, "capabilities", new JsonObject { ["connection"] = "mart" });
+        Assert.True(answer.Response.StatusCode == HttpStatusCode.OK, answer.Body?.ToJsonString());
+        Assert.Equal("MySql", (string)answer.Body!["driverType"]!);
+        Assert.False((bool)answer.Body["keepsStateTable"]!);
+        Assert.NotEmpty(answer.Body["writers"]!.AsArray());
     }
 
     [Fact]
@@ -171,6 +187,7 @@ public sealed class WorkspaceSyncDesignerTests
         Assert.True(legacy.Response.StatusCode == HttpStatusCode.OK, legacy.Body?.ToJsonString());
         Assert.Equal(["Watermark", "BatchReload"], legacy.Body!["readers"]!.AsArray().Select(r => (string)r!["kind"]!));
         Assert.Empty(legacy.Body["writers"]!.AsArray());
+        Assert.False((bool)legacy.Body["keepsStateTable"]!);
 
         var gone = await Ask(server, id, "capabilities", new JsonObject { ["connection"] = "gone" });
         Assert.Equal(HttpStatusCode.NotFound, gone.Response.StatusCode);

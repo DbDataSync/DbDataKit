@@ -143,13 +143,18 @@ function capabilitiesOf(engine: string) {
     ({ kind, supportsSegmentation: kind === 'BatchReload', detectsDeletes, parameters: [], supportedIntents: kind === 'BatchReload' ? [] : ['Changes', 'ChangesFromEarliest', 'ChangesFromLatest'], detectsKeyChanges: kind !== 'Watermark', needsKey })
   const writer = (kind: string, needsKey = 'None', supportsReconciliation = false) => ({ kind, supportsReconciliation, parameters: [], needsKey })
   const base = { supportsConnectionTest: true, supportedProvisioningActions: ['enableSourceChangeCapture', 'createTargetTable', 'alterTargetTable'], supportsLibraryValidation: true, supportsTieSafeRowLimit: true }
-  if (engine === 'sqlserver') return { driverType: 'MsSql', ...base, defaultTestQuery: 'SELECT @@VERSION;',
+  if (engine === 'sqlserver') return { driverType: 'MsSql', ...base, keepsStateTable: true, defaultTestQuery: 'SELECT @@VERSION;',
     readers: [reader('MsSqlChangeTracking', 'SourceKey', true), reader('Watermark'), reader('BatchReload')],
     stagingProviders: [{ kind: 'MsSqlStagingTable', parameters: [] }, { kind: 'StagingTable', parameters: [] }],
     writers: [writer('MsSqlMerge', 'TargetKey'), writer('ChangeApply', 'TargetKey'), writer('DeleteInsert', 'None', true)] }
-  if (engine === 'postgres') return { driverType: 'Postgres', ...base, defaultTestQuery: 'SELECT version();',
+  if (engine === 'postgres') return { driverType: 'Postgres', ...base, keepsStateTable: true, defaultTestQuery: 'SELECT version();',
     readers: [reader('Watermark'), reader('BatchReload'), reader('PgLogicalSlot', 'SourceKey', true)],
     stagingProviders: [{ kind: 'PgCopyStaging', parameters: [] }, { kind: 'StagingTable', parameters: [] }],
+    writers: [writer('ChangeApply', 'TargetKey'), writer('DeleteInsert', 'None', true), writer('Scd2', 'NaturalKey')] }
+  // MySQL keeps a replication's state on the Runner only: its target keeps no state table
+  if (engine === 'mysql') return { driverType: 'MySql', ...base, keepsStateTable: false, supportsTieSafeRowLimit: false, defaultTestQuery: 'SELECT VERSION();',
+    readers: [reader('Watermark'), reader('BatchReload')],
+    stagingProviders: [{ kind: 'StagingTable', parameters: [] }],
     writers: [writer('ChangeApply', 'TargetKey'), writer('DeleteInsert', 'None', true), writer('Scd2', 'NaturalKey')] }
   return null
 }
