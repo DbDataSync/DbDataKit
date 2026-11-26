@@ -83,9 +83,22 @@ export async function followStagedRun(read: () => Promise<StagedRun>, intervalMs
 export const provisioningPlanKey = (project: string, id: string, replication?: string) =>
   ['workspace', 'provisioning-plan', project, id, ...(replication === undefined ? [] : [replication])]
 
-/** A replication's provisioning plan, made by the Workspace offline from the draft's saved files and catalog cache (no connection is opened). */
-export function useProvisioningPlan(project: string, id: string, replication: string) {
-  return useQuery({ queryKey: provisioningPlanKey(project, id, replication), queryFn: () => workspaceApi.provisioningPlan(project, id, replication), retry: false })
+/** The unsaved edits a plan is asked with, and a digest of them that names the answer. */
+export interface PlanEdits { unsaved: Record<string, string | null>; digest: string }
+
+/**
+ * A replication's provisioning plan, made by the Workspace offline from the draft's files and catalog cache (no connection is opened), with the
+ * unsaved edits given over them. While the plan of new edits is made, the plan of the previous ones stays shown; a plan no longer wanted is cancelled.
+ */
+export function useProvisioningPlan(project: string, id: string, replication: string, edits: PlanEdits = { unsaved: {}, digest: '' }) {
+  const of = provisioningPlanKey(project, id, replication)
+  return useQuery({
+    queryKey: [...of, edits.digest],
+    queryFn: ({ signal }) => workspaceApi.provisioningPlan(project, id, replication, edits.unsaved, signal),
+    // the plan of the same replication with other edits, never another replication's
+    placeholderData: (previous, query) => (query && of.every((part, i) => query.queryKey[i] === part) ? previous : undefined),
+    retry: false,
+  })
 }
 
 /** What applying one mapping's side asks: the replication, the mapping and the side's action (`createTargetTable`, ...). */

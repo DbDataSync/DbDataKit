@@ -23,6 +23,7 @@ const ID = "{name: 'id', type: 'int', nullable: false, key: true}"
 
 /** What the console's read answers, by connection and table: `crm`, never read before; `erp` with `dbo.invoices` added and `segment` on `dbo.orders`. */
 function answer(connection: string, tableName: string | undefined): string {
+  if (connection === 'lite') return [...head('lite', 'sqlite.generic'), '    databases:', "      - {name: 'main', schemas: ['main']}", '    tables:', ...table('main', 'main', 'items', [ID]), ''].join('\n')
   if (connection === 'crm') return [...head('crm', 'sqlserver'), '    databases:', "      - {name: 'crm_db', schemas: ['dbo']}", '    tables:', ...table('crm_db', 'dbo', 'accounts', [ID]), ''].join('\n')
   const orders = table('sales', 'dbo', 'orders', [ID, "{name: 'customer_id', type: 'int', nullable: true}", "{name: 'total', type: 'decimal(18,2)', nullable: true}", "{name: 'placed_at', type: 'datetime2', nullable: true}", "{name: 'segment', type: 'nvarchar(20)', nullable: true}"])
   const customers = table('sales', 'dbo', 'customers', [ID, "{name: 'name', type: 'nvarchar(100)', nullable: true}"])
@@ -39,6 +40,9 @@ function fakeConsole(workspace: string, files: Record<string, string>) {
   const writes: string[] = []
   const reads: unknown[] = []
   const calls: string[] = []
+  const deploys: unknown[] = []
+  /** Whether the Runner holds a build of the set in dev: the set's own package reads a connection only then. */
+  let staged = false
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -50,9 +54,17 @@ function fakeConsole(workspace: string, files: Record<string, string>) {
       return reply({ package: 'plant', connection: url.searchParams.get('connection'), slot: url.searchParams.get('connection'), runner: 'r-1', runner_name: 'runners-eu', default: 'dev',
         channels: [{ channel: 'dev', production: false, bound: true, bound_to: 'dev_login' }, { channel: 'prod', production: true, bound: true, bound_to: 'prod_login' }] })
     }
+    if (full === '/api/deploys' && init?.method === 'POST') {
+      deploys.push(JSON.parse(String(init.body)))
+      staged = true
+      return reply({ steps: ['Staged plant as version 1 in dev of runners-eu.'], deployed: {}, deploy: { id: 'd-1' } })
+    }
     if (full === `${catalog}/read`) {
-      const body = JSON.parse(String(init!.body)) as { connection: string; table?: string; channel: string }
+      const body = JSON.parse(String(init!.body)) as { connection: string; table?: string; channel: string; reader?: string }
       reads.push(body)
+      if (body.reader === 'package' && !staged) {
+        return reply({ error: 'runners-eu holds no build of plant in \'dev\'.', needs_build: true, package: 'plant', task: 'discover', runner: 'r-1', runner_name: 'runners-eu', channel: 'dev', production: false, connection: body.connection }, 409)
+      }
       return reply({ state: 'done', run_id: `run-${reads.length}`, link: '/servers/r-1/runs', runner: 'r-1', runner_name: 'runners-eu', channel: body.channel, production: false, connection: body.connection, cache: answer(body.connection, body.table) })
     }
     const path = full.replace(new RegExp(`^/relay/${workspace}`), '')
@@ -68,13 +80,14 @@ function fakeConsole(workspace: string, files: Record<string, string>) {
       if (init?.method === 'PUT') { files[p] = (JSON.parse(String(init.body)) as { content: string }).content; writes.push(p); return reply({ path: p, created: false, size: 1 }) }
       return p in files ? reply({ path: p, content: files[p] }) : reply({ error: 'none' }, 404)
     }
+    if (rest === 'builds' && init?.method === 'POST') return reply({ id: 'b-1', workspace: 'ws-p', status: 'succeeded', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null })
     if (rest === 'check') return reply({ kind: 'sync', ok: true, diagnostics: [] })
     if (rest === 'changes') return reply({ changes: [], uncommitted: false })
     if (rest === 'history') return reply({ commits: [] })
     if (rest === 'events') return reply({ events: [] })
     return reply({ error: 'no' }, 404)
   })
-  return { files, writes, reads, calls, fetcher }
+  return { files, writes, reads, calls, deploys, fetcher }
 }
 
 let root: Root
@@ -140,6 +153,26 @@ describe('the Designer\'s Refresh buttons, through the console\'s catalog read',
     expect(server.writes).toEqual([])
     // the read was the console's: nothing of it went to the Workspace server
     expect(server.calls.filter((c) => c.includes(`/relay/${workspace}/`) && !/\/api\/(auth\/status|notifications|v1\/projects)\b/.test(c.slice(c.indexOf('/relay/') + `/relay/${workspace}`.length)))).toEqual([])
+  })
+
+  it('reads a connection whose driver is Sync\'s own with the set\'s own package, and offers Build and stage where the channel holds no build', async () => {
+    server.files['config/connections/lite.yaml'] = 'schema: connection/1\nname: lite\nengine: sqlite.generic\nconnection_string: Mode=ReadOnly\nauth:\n  mode: none\n'
+    await render('/plant/ws-p/designer/replications/orders')
+    await choose('[data-testid="task-source-connection-select"]', 'lite')
+    await click('[data-testid="task-source-refresh-catalog"]')
+    expect(q('[data-testid="task-source-refresh-own-package"]')?.textContent).toContain("lite is a sqlite.generic connection, whose driver is Sync's own")
+    await click('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-go"]')
+    expect(server.reads).toEqual([{ runner: 'r-1', channel: 'dev', connection: 'lite', reader: 'package' }])
+    expect(q('[data-testid="wsp-build-stage"]')?.dataset.channel).toBe('dev')
+
+    // Build and stage: the draft is built on its Workspace server, the build staged in dev through the console's deploy, and the read asked again
+    await click('[data-testid="wsp-build-stage-go"]')
+    expect(server.calls).toContain(`POST /relay/${workspace}/api/v1/projects/plant/workspaces/ws-p/builds`)
+    expect(server.deploys).toEqual([{ workspaceServer: workspace, project: 'plant', workspace: 'ws-p', build: 'b-1', target: 'r-1', channel: 'dev' }])
+    expect(server.reads).toHaveLength(2)
+    expect(q('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-summary"]')?.textContent).toBe('1 table added')
+    await click('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-accept"]')
+    expect(all('[data-testid="task-source-database-select"] option').map((o) => o.textContent)).toEqual(['Select…', 'main'])
   })
 
   it('lists a table the overview\'s Refresh found once it is accepted, before anything is saved', async () => {

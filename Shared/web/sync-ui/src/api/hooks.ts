@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useDraft } from '@dbdatakit/workspace'
+import { useDraft, useProvisioningPlan } from '@dbdatakit/workspace'
 import { syncApi, unsavedOf, type Unsaved } from './syncApi'
 
 /** A short, stable digest of the edits a question carries, so an answer is asked again when they change and kept while they do not. */
@@ -59,4 +59,24 @@ export function useBulkCreate(replication: string) {
   const draft = useDraft()
   const { unsaved } = useUnsaved()
   return useMutation({ mutationFn: (tables: { schema: string; table: string }[]) => syncApi.bulkCreate(draft.project, draft.id, replication, tables, unsaved) })
+}
+
+/** How long the edits stay unchanged before a replication's plan is asked again: the plan runs a program, so typing does not ask it on each key. */
+export const PLAN_SETTLE_MS = 300
+
+/**
+ * A replication's provisioning plan made with the draft's unsaved edits, so the Provisioning tabs and a mapping's count follow what the person
+ * sees. The first plan is asked at once; a later edit is asked once the edits have stayed unchanged for {@link PLAN_SETTLE_MS}, and the plan
+ * before it stays shown meanwhile.
+ */
+export function useDraftProvisioningPlan(replication: string) {
+  const draft = useDraft()
+  const edits = useUnsaved()
+  const [settled, setSettled] = useState(edits)
+  useEffect(() => {
+    if (edits.digest === settled.digest) return
+    const timer = setTimeout(() => setSettled(edits), PLAN_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [edits, settled.digest])
+  return useProvisioningPlan(draft.project, draft.id, replication, settled)
 }

@@ -84,4 +84,20 @@ public sealed class BuiltInDriverCapabilitiesTests : IDisposable
     [InlineData(DriverIds.Oracle, "Snapshot", WritePrivileges.Insert)]
     public void A_writer_says_which_changes_it_makes(string driver, string kind, WritePrivileges privileges) =>
         Assert.Equal(privileges, Registered().Get(driver).Writers.Single(w => w.Kind == kind).NeedsPrivileges);
+
+    [Theory]
+    [InlineData(DriverIds.MsSql, true)]
+    [InlineData(DriverIds.Postgres, true)]
+    [InlineData(DriverIds.MySql, false)]
+    [InlineData(DriverIds.Oracle, false)]
+    [InlineData(DriverIds.DuckDb, false)]
+    [InlineData(DriverIds.ArrowFlightSqlMsSql, false)]
+    public void A_target_keeps_the_state_table_where_the_save_check_accepts_tracking_on_the_target(string driver, bool keeps)
+    {
+        Assert.Equal(keeps, Registered().Describe(driver)!.KeepsStateTable);
+        Assert.Equal(keeps, BuiltInDriverCapabilities.For(driver)!.KeepsStateTable);
+        var target = new TrackingConfig { Mode = "target" };
+        if (keeps) TrackingResolution.Validate(target, "orders", driver);
+        else Assert.Throws<ConfigValidationException>(() => TrackingResolution.Validate(target, "orders", driver));
+    }
 }

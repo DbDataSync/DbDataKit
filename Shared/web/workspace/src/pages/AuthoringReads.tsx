@@ -3,13 +3,13 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link as ConsoleLink } from 'react-router-dom'
 import { ErrorBanner, useModule } from '@dbdatakit/shell'
 import {
-  authoringReadApi, describedLine, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
-  type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NewestRun, type RunAnswer,
+  authoringReadApi, buildAndStage, describedLine, needsBuildOf, newestPerChannel, setUpChannels, TEST_STEP_WORDS, testLine,
+  type DescribeAnswer, type DescribedColumn, type DescribeRequest, type DraftTestAnswer, type NeedsBuild, type NewestRun, type RunAnswer,
 } from '../authoringReads'
-import { productionWarning, workspaceServerOf, type ChannelList } from '../catalogRefresh'
+import { productionWarning, workspaceServerOf, type CatalogReader, type ChannelList } from '../catalogRefresh'
 import { developmentLoginApi, developmentLoginLine, developmentLoginWarning, developmentLoginWarnings, type DevelopmentLoginAnswer, type DevelopmentLoginRequest } from '../developmentLogin'
 import { useDraftOrNull } from '../draft'
-import { deployApi, useHostedServer, useRunnerVersion, type RunnerVersion } from '../deploys'
+import { deployApi, useHostedServer, useRunnerVersion, type DeployAnswer, type RunnerVersion } from '../deploys'
 import { findingsSummary, PREFLIGHT_STEP, PREFLIGHT_TASK, PreflightFindings, preflightFindingsOf } from './PreflightCard'
 
 // The Designer's shared pieces of authoring-time reads besides the channel picker and Refresh: Set up for development, Test, Describe and the newest-check
@@ -126,8 +126,10 @@ const FOLLOW_MS = 2000
  * person. The query is described, never run: no row comes back. A description that takes longer than the console waits is followed by its run. The kind
  * decides where the columns go (a Sync mapping's column cache, a Build model's descriptor): **Use these columns** hands them to `onColumns`.
  */
-export function QueryDescribe({ project, connection, runner, channel, sql, onColumns, canEdit }: {
+export function QueryDescribe({ project, connection, runner, channel, sql, onColumns, canEdit, reader }: {
   project: string; connection: string; runner: string; channel: string; sql: string; onColumns?: (columns: DescribedColumn[]) => void; canEdit: boolean
+  /** Who describes the query: the Runner's built-in package (the default) or the project's own package. */
+  reader?: CatalogReader
 }) {
   const workspace = workspaceServerOf(useModule().apiBase)
   const [asked, setAsked] = useState<DescribeRequest | null>(null)
@@ -144,7 +146,7 @@ export function QueryDescribe({ project, connection, runner, channel, sql, onCol
   return (
     <div style={{ marginTop: 6 }} data-testid="wsp-describe" data-connection={connection}>
       <button type="button" className="btn btn-sm" disabled={runner === '' || channel === '' || sql.trim() === '' || start.isPending || stillRunning}
-        onClick={() => start.mutate({ runner, channel, connection, sql })} data-testid="wsp-describe-go">Describe columns</button>
+        onClick={() => start.mutate({ runner, channel, connection, sql, ...(reader && reader !== 'builtin' ? { reader } : {}) })} data-testid="wsp-describe-go">Describe columns</button>
       {start.isPending && <span className="hint" data-testid="wsp-describe-waiting"> Describing the query in {channel}...</span>}
       {stillRunning && running && (
         <div className="hint" data-testid="wsp-describe-running">
@@ -152,6 +154,7 @@ export function QueryDescribe({ project, connection, runner, channel, sql, onCol
         </div>
       )}
       {start.isError && <div data-testid="wsp-describe-failed"><ErrorBanner error={start.error} /></div>}
+      {needsBuildOf(start.error) && <BuildAndStage project={project} needs={needsBuildOf(start.error)!} canEdit={canEdit} onStaged={() => { if (asked) start.mutate(asked) }} />}
       {follow.isError && <div data-testid="wsp-describe-failed"><ErrorBanner error={follow.error} /></div>}
       {answer?.columns && (
         <div className="callout" style={{ marginTop: 6 }} data-testid="wsp-describe-result" data-run={answer.run_id}>
@@ -165,6 +168,38 @@ export function QueryDescribe({ project, connection, runner, channel, sql, onCol
             : <button type="button" className="btn btn-primary btn-sm" disabled={!canEdit} onClick={() => { onColumns(answer.columns!); setUsed(answer.run_id) }} data-testid="wsp-describe-use">Use these columns</button>)}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * **Build and stage for `<channel>`**: offered where a read by the project's own package found no build of it in the channel (or one made before the package
+ * had the task). It builds the draft as the Builds tab does, and stages the build in that channel of the Runner through the console's deploy, as the Builds
+ * tab's publish panel does; staged is enough for the read, nothing is served. A build reads the saved files, so an unsaved edit is left out, and the panel
+ * says so. In production nothing is offered here: a build goes there from the Builds tab, with its preflight. `onStaged` asks the read again.
+ * Design: docs/authoring-metadata.md#a-sync-project
+ */
+export function BuildAndStage({ project, needs, canEdit, onStaged }: { project: string; needs: NeedsBuild; canEdit: boolean; onStaged?: (answer: DeployAnswer) => void }) {
+  const draft = useDraftOrNull()
+  const workspaceServer = useHostedServer()
+  const [steps, setSteps] = useState<string[]>([])
+  const stage = useMutation<DeployAnswer, Error, void>({
+    mutationFn: () => buildAndStage({ workspaceServer: workspaceServer!, project, draft: draft!.id, runner: needs.runner, channel: needs.channel }, (line) => setSteps((now) => [...now, line])),
+    onMutate: () => setSteps([]),
+    onSuccess: (answer) => onStaged?.(answer),
+  })
+  if (draft === null || workspaceServer === null || needs.production) return null
+  const unsaved = draft.dirtyPaths.length
+  return (
+    <div style={{ marginTop: 6 }} data-testid="wsp-build-stage" data-channel={needs.channel} data-runner={needs.runner}>
+      <button type="button" className="btn btn-sm btn-primary" disabled={!canEdit || !draft.canEdit || stage.isPending} onClick={() => stage.mutate()} data-testid="wsp-build-stage-go">
+        Build and stage for {needs.channel}
+      </button>
+      <span className="hint"> builds this draft and stages the build in {needs.channel} of {needs.runner_name}, where the task {needs.task} of {needs.package} reads {needs.connection}.</span>
+      {unsaved > 0 && <div className="hint" data-testid="wsp-build-stage-unsaved">{unsaved === 1 ? 'One edit is' : `${unsaved} edits are`} not saved, so the build leaves {unsaved === 1 ? 'it' : 'them'} out.</div>}
+      {steps.map((line, i) => <div key={i} className="hint" data-testid="wsp-build-stage-step">{line}</div>)}
+      {stage.isSuccess && <div className="hint" data-testid="wsp-build-stage-done">{stage.data.steps[stage.data.steps.length - 1] ?? `Staged in ${needs.channel}.`}</div>}
+      {stage.isError && <div data-testid="wsp-build-stage-failed"><ErrorBanner error={stage.error} /></div>}
     </div>
   )
 }
