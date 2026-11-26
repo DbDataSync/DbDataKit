@@ -9,9 +9,9 @@ import { scratchDirectory, workspacePublish } from '../playwright.config'
 // Plan 22a GP35 (the done-when of the row): a person makes an app from the template in a workspace, edits one of its spec files, builds it, previews the build, commits, merges and publishes it to a Gateway, and then opens the
 // instance's address on that Gateway and sees the change. The whole workflow is on the console's pages as the signed-in administrator: the Workspace server (`dbdataworkspace`, port 8631) hosts the project `sales`, which is the app
 // template; the build runs Bun from the vendored package store (made here with `app-store/build.mjs`: `npm ci` in Shared/web first) and the server's `apps:` section; the Gateway (identity home 8632, apps host 8633, management 8634) is
-// started by the story and paired with the console, which deploys the build to it as the signed-in person (docs/publishing.md, "Deploying a build from the control service"); it is also paired with the Workspace server on the publisher
-// keys page with a single-use code, for the preview with data, which the Workspace server still sends itself. The instance is made with the Gateway's own command. It also shows what the screens must show on the way: a refused import
-// with its file and line, whether the build was isolated, the preview with no network, a refusal of the preview in the Gateway's words.
+// started by the story and paired with the console, which deploys the build to it as the signed-in person (docs/publishing.md, "Deploying a build from the control service"), and sends the same build as the preview of an instance.
+// The Workspace server's publisher keys page still pairs a key with the Gateway with a single-use code; nothing in the story sends with that key. The instance is made with the Gateway's own command. It also shows what the screens
+// must show on the way: a refused import with its file and line, whether the build was isolated, the preview with no network, a refusal of the preview in the Gateway's words.
 // It invites an administrator, so it sorts after identity-home (`workspace-files` before it, `workspaces` after, the order of the file names). `DBDATAKIT_TEST_E2E_GATEWAY_DLL` names a Gateway build outside its own bin folder.
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
@@ -128,6 +128,9 @@ test.afterAll(async () => {
 })
 
 test('an app is made from the template, a spec edited, built, previewed, committed, merged and published, and the instance on the Gateway shows the change', async ({ page, context, baseURL, browser }) => {
+  // the console sends every build: no call of the page asks the Workspace server to publish or preview one
+  const sentToWorkspace: string[] = []
+  page.on('request', (request) => { if (/\/relay\/[^/]+\/api\/v1\/.*\/builds\/[^/]+\/(publish|preview-data)$/.test(new URL(request.url()).pathname)) sentToWorkspace.push(request.url()) })
   await signInAsAdmin(page, context, baseURL!)
   const project = workspacePublish.project
 
@@ -150,7 +153,7 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await row.getByTestId('instance-open-link').click()
   await expect(page.getByTestId('ws-projects')).toBeVisible()
 
-  // ---- the publisher key: paired with the Gateway with its single-use code; the page shows a reference, never a key (the preview with data is still sent with it)
+  // ---- the publisher key: paired with the Gateway with its single-use code; the page shows a reference, never a key
   const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gateway.directory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
   await page.getByTestId('rail-keys').click()
   await expect(page.getByTestId('wsk-none')).toBeVisible()
@@ -286,17 +289,22 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   gatewayCommand(['apps', 'instance-save', '--name', 'sales', '--app', 'sales'])
   await new Promise((resolve) => setTimeout(resolve, 3000))        // the host reads the group's definitions every second
 
-  // ---- plan 22a GP35d: the same build as a preview of that instance on the Gateway's preview channel (an author's step: nothing goes to production)
-  await done.getByTestId('wsp-preview-data-target').fill('edge')
+  // ---- plan 22a GP35d: the same build as a preview of that instance on the Gateway's preview channel, sent by the console as the signed-in person (nothing goes to production)
+  await done.getByTestId('wsp-preview-data-target').selectOption({ label: gatewayName })
   await done.getByTestId('wsp-preview-data-instance').fill('ghost')
   await done.getByTestId('wsp-preview-data').click()
   await expect(page.getByTestId('wsp-publish-refused').last()).toContainText("no instance 'ghost' in production")     // the Gateway's own words
   await done.getByTestId('wsp-preview-data-instance').fill('sales')
+  const deployed = page.waitForRequest((r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/deploys')
   await done.getByTestId('wsp-preview-data').click()
+  expect((await deployed).postDataJSON()).toMatchObject({ project, workspace: id, build: buildId, previewInstance: 'sales' })
   const sent = page.getByTestId('wsp-preview-data-done')
   await expect(sent).toHaveAttribute('data-instance', 'sales', { timeout: 60_000 })
   await expect(sent.getByTestId('wsp-preview-data-link')).toHaveAttribute('href', `${appsUrl}/apps/sales~preview/`)
-  await expect(done.locator('[data-testid="wsp-publish-record"][data-ok="true"]').last()).toContainText('previewed sales on edge')
+  // the console's record of the preview, newest first; the Workspace server sent nothing from this build
+  await expect(done.locator('[data-testid="wsp-deploy-record"][data-outcome="ok"]').first()).toContainText(`Sent sales to ${gatewayName} as the preview of sales`)
+  await expect(done.getByTestId('wsp-publish-record')).toHaveCount(0)
+  expect(sentToWorkspace).toEqual([])
   await openInstance(browser)
 })
 

@@ -12,10 +12,10 @@ import { useRunnerVersion } from '../deploys'
 interface Call { method: string; path: string; body: unknown }
 
 /**
- * The console with a Workspace server `ws-1` (its relay is `/relay/ws-1`), a Runner `jobs` and a Gateway `edge`, and a Sync project `orders` with one draft and one
- * build that succeeded. `/api/deploys` deploys and lists what was deployed, as the console does; every call is kept, so a test can say which routes the panel used.
+ * The console with a Workspace server `ws-1` (its relay is `/relay/ws-1`), a Runner `jobs` and a Gateway `edge`, and a Sync project `orders` (or, with `kind`, an app) with one draft and one
+ * build that succeeded. `/api/deploys` deploys and lists what was deployed, as the console does; a preview of the instance `ghost` is refused in the Gateway's words. Every call is kept, so a test can say which routes the panel used.
  */
-function fakeConsole() {
+function fakeConsole(kind: 'sync' | 'app' = 'sync') {
   const calls: Call[] = []
   const deploys: Record<string, unknown>[] = []
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -46,16 +46,30 @@ function fakeConsole() {
       if (!body.confirm) return reply({ error: 'The preflight of version 2 found 1 error, so it was not activated in prod.' }, 409)
       return reply({ activation: 'activated', message: 'Version 2 of orders is active in prod.', active: 2, preflight: { ...preflight, activation: 'activated', confirmed_by: 'ana' }, deploy: { ...deploys[0], mode: 'serve' } })
     }
+    if (url.pathname === '/api/deploys' && method === 'POST' && body.previewInstance) {
+      if (body.previewInstance === 'ghost') return reply({ error: "The Gateway refused the preview of the instance ghost (400): There is no instance 'ghost' in production to preview.", steps: ['Read build b1 of orders/d1 from Workspace.'] }, 409)
+      const preview = { instance: body.previewInstance, address: `https://edge:8443/apps/${body.previewInstance}~preview/`, path: `/apps/${body.previewInstance}~preview/` }
+      const record = { id: `d${deploys.length + 1}`, workspace_server: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', item: 'app', kind: 'app', target: 'g-1', target_name: 'edge', product: 'gateway', route: 'app',
+        name: 'orders', channel: 'preview', version: 1, mode: 'preview', signature: null, deployed_by: 'ana', deployed_at: '2026-11-23T10:05:00Z', outcome: 'ok', error: null, preview }
+      deploys.unshift(record)
+      return reply({ steps: ['Read build b1 of orders/d1 from Workspace.', `Saved the preview of ${body.previewInstance} at ${preview.address}.`],
+        deployed: { app: 'orders', channel: 'preview', mode: 'preview', version: 1, instance: body.previewInstance, preview_address: preview.address, preview_path: preview.path, target: 'edge', gateway: 'https://edge:8443' }, deploy: record })
+    }
     if (url.pathname === '/api/deploys' && method === 'POST') {
       const record = { id: `d${deploys.length + 1}`, workspace_server: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', item: 'package', kind: 'sync', target: 'r-1', target_name: 'jobs', product: 'runner', route: 'package',
         name: 'orders', channel: body.channel, version: 1, mode: 'stage', signature: 'verified', deployed_by: 'ana', deployed_at: '2026-11-23T10:05:00Z', outcome: 'ok', error: null }
       deploys.unshift(record)
       return reply({ steps: ['Read build b1 of orders/d1 from Workspace.'], deployed: { package: 'orders', channel: body.channel, mode: 'stage', version: 1, changed: true, target: 'jobs', runner: 'https://jobs:8495', signature: 'verified' }, deploy: record })
     }
-    if (url.pathname === '/relay/ws-1/api/v1/projects') return reply({ projects: [{ id: 'orders', kind: 'sync', title: null, created: '', workspaces: 1 }] })
-    if (url.pathname === '/relay/ws-1/api/v1/project-kinds') return reply({ kinds: [{ name: 'sync', title: 'Sync', description: '', buildable: false, produces: true, publishes: [{ product: 'runner', what: 'package', description: '' }] }] })
+    if (url.pathname === '/relay/ws-1/api/v1/projects') return reply({ projects: [{ id: 'orders', kind, title: null, created: '', workspaces: 1 }] })
+    if (url.pathname === '/relay/ws-1/api/v1/project-kinds') return reply({ kinds: [
+      { name: 'sync', title: 'Sync', description: '', buildable: false, produces: true, publishes: [{ product: 'runner', what: 'package', description: '' }] },
+      { name: 'app', title: 'App', description: '', buildable: true, produces: false, publishes: [{ product: 'gateway', what: 'app', description: '' }] },
+    ] })
     if (url.pathname === ws) return reply({ builds: [build] })
-    if (url.pathname === `${ws}/b1`) return reply({ build, result: { status: 'succeeded', message: 'Made.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, kind: 'sync', info: { package: 'orders' } }, publishes: [] })
+    if (url.pathname === `${ws}/b1`) return reply({ build, result: kind === 'app'
+      ? { status: 'succeeded', message: 'Built.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, app: 'orders', version: '1.0.0', files: 3, bundled: [] }
+      : { status: 'succeeded', message: 'Made.', diagnostics: [], uncommitted_changes: false, commit: null, seconds: 1, kind: 'sync', info: { package: 'orders' } }, publishes: [] })
     return reply({ error: 'There is no such call.' }, 404)
   })
   return { calls, deploys, fetcher }
@@ -145,6 +159,35 @@ describe('publishing a build from the Builds tab', () => {
     expect(q('[data-testid="wsp-preflight-words"]')?.textContent).toContain('the confirmation is kept in the Runner\'s record')
     expect(q('[data-testid="wsp-preflight-activated"]')?.textContent).toBe('Version 2 of orders is active in prod.')
     expect(q('[data-testid="wsp-preflight-activate"]')).toBeNull()
+  })
+
+  it('sends an app build as the preview of an instance through the console\'s deploy, shows the Gateway\'s refusal in its words, and calls no route of the Workspace server that sends', async () => {
+    console_ = fakeConsole('app')
+    vi.stubGlobal('fetch', console_.fetcher)
+    await mount('/?build=b1')
+    // the Gateways the console manages are offered; the one Gateway is chosen without asking, and a Runner is not offered
+    const options = [...host.querySelectorAll('[data-testid="wsp-preview-data-target"] option')].map((o) => (o as HTMLOptionElement).value)
+    expect(options).toEqual(['', 'g-1'])
+    expect((q('[data-testid="wsp-preview-data"]') as HTMLButtonElement).disabled).toBe(true)
+
+    await fill('[data-testid="wsp-preview-data-instance"]', 'ghost')
+    await click('[data-testid="wsp-preview-data"]')
+    expect(q('[data-testid="wsp-publish-refused"]')?.textContent).toContain("no instance 'ghost' in production")
+
+    await fill('[data-testid="wsp-preview-data-instance"]', 'acme')
+    await click('[data-testid="wsp-preview-data"]')
+    const posted = console_.calls.filter((c) => c.method === 'POST')
+    expect(posted.map((c) => [c.path, c.body])).toEqual([
+      ['/api/deploys', { workspaceServer: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', target: 'g-1', previewInstance: 'ghost' }],
+      ['/api/deploys', { workspaceServer: 'ws-1', project: 'orders', workspace: 'd1', build: 'b1', target: 'g-1', previewInstance: 'acme' }],
+    ])
+    expect(console_.calls.filter((c) => /\/builds\/[^/]+\/(publish|preview-data)$/.test(c.path) || c.path.includes('publish-targets'))).toEqual([])
+    const done = q('[data-testid="wsp-preview-data-done"]')
+    expect(done?.dataset.instance).toBe('acme')
+    expect(q('[data-testid="wsp-preview-data-link"]')?.getAttribute('href')).toBe('https://edge:8443/apps/acme~preview/')
+    // the console's record of the preview, which the tab reads back
+    const record = q('[data-testid="wsp-deploy-record"]')
+    expect(record?.textContent).toContain('Sent orders to edge as the preview of acme (version 1 of the preview channel).')
   })
 
   it('opens the build the address names, and puts the build chosen in the address', async () => {
