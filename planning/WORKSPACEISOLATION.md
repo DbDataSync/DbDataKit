@@ -209,7 +209,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - A build has more than one thing to send. A Build build has a Runner package and Gateway models with their views; a Store build has Gateway models and
   one Runner package per model (`ModelPackageFolder`). WORKSPACEISOLATION-3 serves each of them, with the build record.
 - A Runner or a Gateway checks a signed version against its trust store (`DefinitionSignatures`), where an administrator adds the publisher keys a group
-  trusts. The control service's key has to be there for -3's signed deploys to verify; INSTALLER-16 registers publisher keys through the console.
+  trusts. The control service's key has to be there for -3's signed deploys to verify; the console registers its own publisher key in each group (`ConsoleTrust`).
 - The run, run-read, binding-test and contract routes find what a build staged in its `publishes.jsonl` (`StagedOf`). The record of what a build was
   deployed to is kept by the control service, by Workspace server, project, workspace and build; the Builds and Runs tabs read it there, and the
   Workspace stops writing `publishes.jsonl` (WORKSPACEISOLATION-8). The Builds, Runs, Provisioning and Deploy tabs read the console's record now.
