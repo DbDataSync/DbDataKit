@@ -3,7 +3,8 @@
 
   index      planning/README.md links every subject file (planning/<SLUG>.md other than README.md and ROLES.md), and every subject it links exists
              (it carries no task counts, so a subject PR never has to touch it)
-  slug       a subject file's name is its slug: capitals and digits, at least 8 characters, starting with a letter
+  slug       a subject file's name is its slug: capitals and digits, starting with a letter, at most 12 characters (the longer slugs in
+             LONG_SLUGS were named before the limit and stay)
   tasks      a task is a table row whose first cell is `<SLUG>-<n>`; every task id in a subject file starts with that file's slug, and no id is
              used twice anywhere
   proposals  a proposed decision is a heading that starts with `<SLUG>-P<n>`; it starts with its file's slug and is unique
@@ -20,10 +21,23 @@ import os
 import re
 import sys
 
-SLUG = re.compile(r"^[A-Z][A-Z0-9]{7,}$")
-ID = re.compile(r"\b([A-Z][A-Z0-9]{7,})-(P?)(\d+)\b")
-TASK_ROW = re.compile(r"^\|\s*\**([A-Z][A-Z0-9]{7,})-(\d+)\**\s*\|", re.M)
-PROPOSAL_HEADING = re.compile(r"^#{2,6}\s+([A-Z][A-Z0-9]{7,})-P(\d+)\b", re.M)
+SLUG = re.compile(r"^[A-Z][A-Z0-9]*$")
+SLUG_MAX = 12
+# Subjects named before the 12-character limit; they keep their names. Add a slug here only with the owner's word, never remove another's.
+LONG_SLUGS = {
+    "BACKUPRESTORE",
+    "FABRICSERVING",
+    "REPORTCATALOGS",
+    "SUBSCRIPTIONS",
+    "SYNCAUTHORING",
+    "WORKSPACEISOLATION",
+}
+# A word of capitals and digits, a hyphen and a number reads as a task id (`P` before the number: a proposed decision) only when its prefix is the
+# slug of a subject or is 8 characters or longer (`is_id_prefix`), so that `UTF-8`, `SHA-256` or `N-1` are not taken for ids of a short slug.
+ID = re.compile(r"\b([A-Z][A-Z0-9]*)-(P?)(\d+)\b")
+TASK_ROW = re.compile(r"^\|\s*\**([A-Z][A-Z0-9]*)-(\d+)\**\s*\|", re.M)
+PROPOSAL_HEADING = re.compile(r"^#{2,6}\s+([A-Z][A-Z0-9]*)-P(\d+)\b", re.M)
+ID_PREFIX_MIN = 8
 INDEX_LINK = re.compile(r"\[[^\]]*\]\(([^)\s#]+\.md)\)")
 MD_LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 NOT_SUBJECTS = {"README.md", "ROLES.md"}
@@ -33,6 +47,18 @@ SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".claude", "wip"}
 def read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def is_id_prefix(prefix, slugs):
+    return prefix in slugs or len(prefix) >= ID_PREFIX_MIN
+
+
+def slug_problem(slug):
+    if not SLUG.match(slug):
+        return f"the slug '{slug}' must be capitals and digits, starting with a letter"
+    if len(slug) > SLUG_MAX and slug not in LONG_SLUGS:
+        return f"the slug '{slug}' has {len(slug)} characters; a slug has at most {SLUG_MAX}"
+    return None
 
 
 def subject_files(planning):
@@ -56,14 +82,18 @@ def problems(root):
     if not os.path.exists(readme_path):
         return ["planning/README.md does not exist"]
     subjects = subject_files(planning)
+    slugs = {name[:-3] for name in subjects}
     tasks, proposals = {}, {}
 
     for name in subjects:
         slug = name[:-3]
-        if not SLUG.match(slug):
-            out.append(f"planning/{name}: the slug '{slug}' must be capitals and digits, at least 8 characters, starting with a letter")
+        problem = slug_problem(slug)
+        if problem:
+            out.append(f"planning/{name}: {problem}")
         text = read(os.path.join(planning, name))
         for prefix, number in TASK_ROW.findall(text):
+            if not is_id_prefix(prefix, slugs):
+                continue
             ident = f"{prefix}-{number}"
             if prefix != slug:
                 out.append(f"planning/{name}: task {ident} does not start with the slug {slug}")
@@ -71,6 +101,8 @@ def problems(root):
                 out.append(f"planning/{name}: task {ident} is also in planning/{tasks[ident]}")
             tasks[ident] = name
         for prefix, number in PROPOSAL_HEADING.findall(text):
+            if not is_id_prefix(prefix, slugs):
+                continue
             ident = f"{prefix}-P{number}"
             if prefix != slug:
                 out.append(f"planning/{name}: proposed decision {ident} does not start with the slug {slug}")
@@ -96,6 +128,8 @@ def problems(root):
     for name in sorted(n for n in os.listdir(planning) if n.endswith(".md")):
         text = read(os.path.join(planning, name))
         for prefix, p, number in ID.findall(text):
+            if not is_id_prefix(prefix, slugs):
+                continue
             ident = f"{prefix}-{p}{number}"
             known = proposals if p else tasks
             if ident not in known:
@@ -122,15 +156,17 @@ def problems(root):
 def task_dependencies(planning, subjects):
     """{task id: (subject file, [task ids in its "Depends on" cell])}, from the third cell of each task row."""
     deps = {}
+    slugs = {name[:-3] for name in subjects}
     for name in subjects:
         for line in read(os.path.join(planning, name)).splitlines():
-            if not TASK_ROW.match(line + "\n"):
+            row = TASK_ROW.match(line + "\n")
+            if not row or not is_id_prefix(row.group(1), slugs):
                 continue
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cells) < 3:
                 continue
             ident = cells[0].strip("*")
-            deps[ident] = (name, [f"{a}-{n}" for a, p, n in ID.findall(cells[2]) if not p])
+            deps[ident] = (name, [f"{a}-{n}" for a, p, n in ID.findall(cells[2]) if not p and is_id_prefix(a, slugs)])
     return deps
 
 
@@ -140,9 +176,11 @@ FOLLOWS = re.compile(r"\bFollows\b([^(.;:]*)")
 def follows_problems(planning, subjects, deps):
     """A problem for each task named after "Follows" in a row's text that is not in the row's "Depends on" cell."""
     out = []
+    slugs = {name[:-3] for name in subjects}
     for name in subjects:
         for line in read(os.path.join(planning, name)).splitlines():
-            if not TASK_ROW.match(line + "\n"):
+            row = TASK_ROW.match(line + "\n")
+            if not row or not is_id_prefix(row.group(1), slugs):
                 continue
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cells) < 3:
@@ -151,7 +189,7 @@ def follows_problems(planning, subjects, deps):
             for m in FOLLOWS.finditer(cells[1]):
                 for a, p, n in ID.findall(m.group(1)):
                     named = f"{a}-{n}"
-                    if not p and named not in deps.get(ident, ("", []))[1]:
+                    if not p and is_id_prefix(a, slugs) and named not in deps.get(ident, ("", []))[1]:
                         out.append(f"planning/{name}: {ident} follows {named} in its text but does not list it under Depends on")
     return out
 
