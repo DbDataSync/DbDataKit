@@ -37,16 +37,18 @@ public partial class ApplyConformanceTests
             await using var runner = await ProjectPublishOnRunnerTests.Runner.StartAsync(BuildRuntimePackage.Directory());
             Directory.CreateDirectory(Path.Combine(runner.Settings.Directory, "connections"));
             File.WriteAllText(Path.Combine(runner.Settings.Directory, "connections", "wh.yaml"), RunnerConnectionFile(name));
-            // the operations package has a slot only for the connections the project uses (owner, 2026-11-15), here the one it builds on, bound to the runner's `wh`
+            // the operations package has a slot only for the connections the project uses, here the one it builds on, bound to the runner's `wh`; the command line writes the package and the client library the console's deploy uses
+            // binds the slot and stages the version
+            var package = Path.Combine(client, "package");
             var o = new StringWriter(); var e = new StringWriter();
-            var exit = DbDataBuild.Cli.CliApp.Run(["project", "publish", "--to", "runner", "--operations", "--project", run.Dir, "--package", "orders-ops", "--client-dir", client, "--server", runner.Url, "--code", runner.Code(),
-                "--channel", "dev", "--bind", $"{name}=wh", "--format", "json"], o, e, environment: _ => null);
+            var exit = DbDataBuild.Cli.CliApp.Run(["project", "publish", "--to", "runner", "--operations", "--project", run.Dir, "--package", "orders-ops", "--out", package, "--format", "json"], o, e, environment: _ => null);
             Assert.True(exit == 0, o + "\n" + e);
-            var version = System.Text.Json.Nodes.JsonNode.Parse(o.ToString())!["data"]!["version"]!.GetValue<int>();
+            var link = new RunnerPublishClient(new RunnerClientStore(client), _ => null);
+            await link.BindAsync(runner.Url, runner.Code(), "orders-ops", "dev", new Dictionary<string, string> { [name] = "wh" });
+            var version = (await link.PublishAsync(runner.Url, null, Path.Combine(package, "package.yaml"), Path.Combine(package, "files"), "dev", stage: true, expectedVersion: null)).Version;
             await runner.WaitActiveAsync("orders-ops", "dev", version);
 
             // the logins are the runner's: sent to its store, never in the package or the request
-            var link = new RunnerPublishClient(new RunnerClientStore(client), _ => null);
             await link.SendSecretAsync(runner.Url, null, "dbdatakit:build:connection:wh:read", engine.ConnectionString);
             await link.SendSecretAsync(runner.Url, null, "dbdatakit:build:connection:wh:write", engine.ConnectionString);
 

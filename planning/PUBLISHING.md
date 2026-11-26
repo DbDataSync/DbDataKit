@@ -31,7 +31,7 @@ definition that reads a blocked dataset is refused.
 ## Needs from other subjects
 
 - KNOWLEDGE-4: Build publishes `build-metadata`, before PUBLISHING-6 can refuse an unknown rules table.
-- INSTALLER-16: publisher keys registered by the console (the Publishers screens keep showing them).
+- The console registers its own publisher key in each group it manages (`ConsoleTrust`, `docs/install.md`, "The console's publisher key"); the Publishers screens keep showing the keys.
 
 ## Proposed decisions
 

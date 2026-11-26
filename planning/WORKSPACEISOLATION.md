@@ -201,7 +201,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - A build has more than one thing to send. A Build build has a Runner package and Gateway models with their views; a Store build has Gateway models and
   one Runner package per model (`model-package/<model>`). The Workspace serves each of them (`.../builds/{b}/contents`), with the build record.
 - A Runner or a Gateway checks a signed version against its trust store (`DefinitionSignatures`), where an administrator adds the publisher keys a group
-  trusts. The control service's key has to be there for its signed deploys to verify (`ConsoleTrust` puts it there); INSTALLER-16 registers publisher keys through the console.
+  trusts. The control service's key has to be there for its signed deploys to verify; the console registers its own publisher key in each group (`ConsoleTrust`).
 - The record of what a build was deployed to is kept by the control service, by Workspace server, project, workspace and build; the Builds, Runs,
   Provisioning and Deploy tabs read it there. The Workspace no longer writes `publishes.jsonl`, and a build's detail has no `publishes`.
 - A preview with data is the console's deploy with `previewInstance`, which the Builds tab's form calls; the screens run `contract` through
