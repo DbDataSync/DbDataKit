@@ -163,7 +163,7 @@ export function InstancesPage() {
                 </select>
               </Field>
               <Field label="Instance address">
-                <input className="input" placeholder="https://runner-2.example:8480" value={joinUrl} onChange={(e) => setJoinUrl(e.target.value)} data-testid="join-url-input" />
+                <input className="input" placeholder="https://runner-2.example:7840" value={joinUrl} onChange={(e) => setJoinUrl(e.target.value)} data-testid="join-url-input" />
               </Field>
               <Field label="Pairing code">
                 <input className="input mono" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} data-testid="join-code-input" />

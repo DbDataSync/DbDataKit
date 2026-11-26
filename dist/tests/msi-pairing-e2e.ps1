@@ -11,7 +11,7 @@ param(
   [string]$ProductDisplayName = '',                    # DbDataRunner: where -ProductMsi installs it
   [Parameter(Mandatory)][string]$ProductExe,           # the product's executable: the installed one with -ProductMsi (a file name), else a full path
   [int]$ProductPort = 18495,
-  [int]$ConsolePort = 8480,
+  [int]$ConsolePort = 7800,
   [string]$LogDir = $env:RUNNER_TEMP
 )
 $ErrorActionPreference = 'Stop'

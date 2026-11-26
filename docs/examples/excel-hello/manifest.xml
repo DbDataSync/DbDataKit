@@ -16,7 +16,7 @@
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/icon-64.png"/>
   <SupportUrl DefaultValue="https://localhost:3000/taskpane.html"/>
   <AppDomains>
-    <AppDomain>https://localhost:8482</AppDomain>
+    <AppDomain>https://localhost:7819</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Workbook"/>

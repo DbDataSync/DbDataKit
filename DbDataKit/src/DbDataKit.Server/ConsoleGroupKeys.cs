@@ -57,7 +57,7 @@ public sealed class ConsoleGroupKeys(EncryptedFileSecretStore store, ConsoleInst
         var where = (url ?? group.Url).AbsoluteUri.TrimEnd('/');
         if (url is not null && url != group.Url)
         {
-            if (url.Scheme != Uri.UriSchemeHttps) return Record(group, where, new GroupJoin(400, "The address is an https address, such as https://runner-2.example:8480.", where));
+            if (url.Scheme != Uri.UriSchemeHttps) return Record(group, where, new GroupJoin(400, "The address is an https address, such as https://runner-2.example:7840.", where));
             if (string.IsNullOrWhiteSpace(code)) return Record(group, where, new GroupJoin(400, "A pairing code made on that instance is needed (dbdatarunner server pair there): it proves the instance serves the group before the key is sent.", where));
             PairedServer paired;
             try { paired = await PairingClient.PairAsync(url, code.Trim(), await keys.GetOrCreateAsync(ct), ClientKind.Console, ConsoleInstances.ClientName, ct); }

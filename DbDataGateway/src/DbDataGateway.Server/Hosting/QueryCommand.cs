@@ -15,7 +15,7 @@ public static class QueryCommand
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error)
     {
-        string? address = Option(args, "--address") ?? "https://localhost:8815";
+        string? address = Option(args, "--address") ?? "https://localhost:7821";
         string? user = Option(args, "--user");
         string? password = Option(args, "--password") ?? Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD");
         string? sql = Option(args, "--sql");

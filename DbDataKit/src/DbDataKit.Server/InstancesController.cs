@@ -61,7 +61,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
     public async Task<ActionResult<InstanceSummary>> Pair([FromBody] PairRequest request, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(request.Url?.Trim(), UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
-            return BadRequest(new { error = "The address is an https address, such as https://runner.example:8480." });
+            return BadRequest(new { error = "The address is an https address, such as https://runner.example:7840." });
         try
         {
             var paired = await instances.PairAsync(url, request.Code ?? "", request.Name, cancellationToken);
@@ -135,7 +135,7 @@ public sealed class InstancesController(ConsoleInstances instances, ConsoleRelay
         if (!ConsoleGroupKeys.TakesKey((await instances.StatusAsync(group, cancellationToken)).Product))
             return BadRequest(new { error = $"{group.Name} is not a server whose group takes its key from the console (a runner)." });
         Uri? url = null;
-        if (!string.IsNullOrWhiteSpace(request.Url) && !Uri.TryCreate(request.Url.Trim(), UriKind.Absolute, out url)) return BadRequest(new { error = "The address is an https address, such as https://runner-2.example:8480." });
+        if (!string.IsNullOrWhiteSpace(request.Url) && !Uri.TryCreate(request.Url.Trim(), UriKind.Absolute, out url)) return BadRequest(new { error = "The address is an https address, such as https://runner-2.example:7840." });
         var join = await services.GetRequiredService<ConsoleGroupKeys>().JoinAsync(group, url, request.Code, cancellationToken);
         return join.Ok ? Ok(new { server = group.Name, instance = join.Instance, already = join.Already }) : StatusCode(join.Status is >= 400 and < 600 ? join.Status : 502, new { error = join.Error });
     }
