@@ -1,4 +1,5 @@
 import { Field } from '@dbdatakit/shell'
+import type { DriverCapabilities } from '../api/types'
 import type { ReplicationTaskConfig, TrackingConfig } from '../types'
 
 /** What the target's state table keeps when `tracking.retention` says nothing (Sync's `TrackingRetention`). */
@@ -20,6 +21,12 @@ export function withMode(draft: ReplicationTaskConfig, mode: string): Replicatio
   return { ...draft, tracking: { mode: mode as 'target' | 'state', primary: null, retention: mode === 'target' ? retention : null } }
 }
 
+/** Why `target` and `both` are not offered, or null when they are: the target's driver keeps no state table. Unknown capabilities offer them. */
+export function noStateTableReason(target: Pick<DriverCapabilities, 'driverType' | 'keepsStateTable'> | undefined, connection: string | null | undefined): string | null {
+  if (!target || target.keepsStateTable) return null
+  return `The target ${connection ? `connection ${connection} ` : ''}(driver ${target.driverType}) keeps no state table, so this replication keeps its state on the Runner: choose State only or Default.`
+}
+
 /** The task after a retention field changed: an empty field is removed, and a retention with neither left goes. */
 export function withRetention(draft: ReplicationTaskConfig, key: 'entries' | 'days', text: string): ReplicationTaskConfig {
   if (!draft.tracking) return draft
@@ -31,16 +38,20 @@ export function withRetention(draft: ReplicationTaskConfig, key: 'entries' | 'da
 
 /**
  * Where the replication keeps its tracking state: `tracking:` of `task.yaml` (absent is the default), the primary when both are kept, and how much
- * of the state table on the target is kept. Whether the target's engine can keep a state table is said by the draft's check, which refuses
- * `target` and `both` on an engine whose writers do not keep one; what applies on a Runner and the state's copy are the Runner's to show.
+ * of the state table on the target is kept. `target` and `both` are disabled, with the reason, when the target connection's driver keeps no state
+ * table (`keepsStateTable` of `sync/capabilities`), the same rule the draft's check refuses them by; a file that already asks for one keeps it
+ * shown, with the reason. What applies on a Runner and the state's copy are the Runner's to show.
  */
-export function TrackingCard({ draft, onChange, editable = true }: {
+export function TrackingCard({ draft, onChange, editable = true, target }: {
   draft: ReplicationTaskConfig
   onChange: (next: ReplicationTaskConfig) => void
   editable?: boolean
+  /** The target connection's driver capabilities; undefined while they are not known, which offers every mode. */
+  target?: Pick<DriverCapabilities, 'driverType' | 'keepsStateTable'>
 }) {
   const tracking: TrackingConfig | null | undefined = draft.tracking
   const keepsOnTarget = tracking?.mode === 'target' || tracking?.mode === 'both'
+  const refused = noStateTableReason(target, draft.endpoints.target?.connectionName)
   const entries = tracking?.retention?.entries ?? DEFAULT_RETENTION.entries
   const days = tracking?.retention?.days ?? DEFAULT_RETENTION.days
 
@@ -56,8 +67,8 @@ export function TrackingCard({ draft, onChange, editable = true }: {
             <select className="select sm" value={modeOf(draft)} onChange={(e) => onChange(withMode(draft, e.target.value))} data-testid="tracking-mode-select">
               <option value="default">Default</option>
               <option value="state">State only (the Runner's state)</option>
-              <option value="target">Target (a state table on the target)</option>
-              <option value="both">Both (target and state)</option>
+              <option value="target" disabled={!!refused} data-testid="tracking-mode-target">Target (a state table on the target)</option>
+              <option value="both" disabled={!!refused} data-testid="tracking-mode-both">Both (target and state)</option>
             </select>
           </Field>
           {tracking?.mode === 'both' && (
@@ -74,6 +85,9 @@ export function TrackingCard({ draft, onChange, editable = true }: {
             </Field>
           )}
         </div>
+        {refused && (
+          <div className={keepsOnTarget ? 'hint warn' : 'hint'} data-testid="tracking-no-state-table">{refused}</div>
+        )}
         {keepsOnTarget && (
           <>
             <div className="row" style={{ gap: 12 }} data-testid="tracking-retention">
@@ -87,9 +101,11 @@ export function TrackingCard({ draft, onChange, editable = true }: {
               </Field>
             </div>
             <div className="hint" data-testid="tracking-retention-text">{retentionText(entries, days)}</div>
-            <div className="hint" data-testid="tracking-target-note">
-              The draft's check refuses this mode when the target's engine keeps no state table.
-            </div>
+            {!target && (
+              <div className="hint" data-testid="tracking-target-note">
+                The draft's check refuses this mode when the target's engine keeps no state table.
+              </div>
+            )}
           </>
         )}
         {modeOf(draft) === 'default' && (

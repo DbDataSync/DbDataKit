@@ -1,5 +1,6 @@
 import { Link, NotesPanel, SubTabs, type SubTab } from '@dbdatakit/shell'
 import { designerPath } from '@dbdatakit/workspace'
+import { useCapabilities } from '../api/hooks'
 import { ScriptBindingsCard } from '../components/ScriptBindings'
 import { EndpointsCard } from '../replication/EndpointsCard'
 import { PipelineCard } from '../replication/PipelineCard'
@@ -50,6 +51,8 @@ export function OverviewPanel({ project, id, replication, rest, draft, setDraft,
   const base = designerPath(project, id, `replications/${replication}`)
   const tabs: SubTab[] = TABS.map(({ path, label, testId }) => ({ path, label, testId }))
   const source = connections.find((c) => c.name === draft.endpoints.source?.connectionName)
+  // the target's driver says whether tracking can keep a state table there
+  const target = useCapabilities(draft.endpoints.target?.connectionName)
   // a mapping named in the replication's plan opens that mapping's own Provisioning tab, its part of the same plan
   const mappingLink = (mapping: string) => (
     <Link to={designerPath(project, id, `replications/${replication}/mappings/${mapping}/provisioning`)} className="mono" data-testid={`provisioning-mapping-link-${mapping}`}>{mapping}</Link>
@@ -65,7 +68,7 @@ export function OverviewPanel({ project, id, replication, rest, draft, setDraft,
           onChange={(endpoints) => setDraft({ ...draft, endpoints })}
         />
         <ScheduleCard draft={draft} onChange={setDraft} />
-        <TrackingCard draft={draft} onChange={setDraft} editable={editable} />
+        <TrackingCard draft={draft} onChange={setDraft} editable={editable} target={target.data} />
 
         <SubTabs base={base} tabs={tabs} testId="overview-subtabs" />
 

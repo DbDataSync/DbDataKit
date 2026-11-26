@@ -21,7 +21,7 @@ import { DRAFT } from './fixtures'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const SQLSERVER: DriverCapabilities = {
-  driverType: 'MsSql', supportsConnectionTest: true, supportedProvisioningActions: [],
+  driverType: 'MsSql', supportsConnectionTest: true, supportedProvisioningActions: [], keepsStateTable: true,
   readers: [
     { kind: 'MsSqlChangeTracking', parameters: [], supportsSegmentation: false, detectsDeletes: true, supportedIntents: ['Changes'], needsKey: 'SourceKey' },
     { kind: 'Watermark', parameters: [], supportsSegmentation: false, detectsDeletes: false, detectsKeyChanges: false, supportedIntents: ['Changes'] },
@@ -31,7 +31,7 @@ const SQLSERVER: DriverCapabilities = {
   writers: [],
 }
 const POSTGRES: DriverCapabilities = {
-  driverType: 'Postgres', supportsConnectionTest: true, supportedProvisioningActions: [], readers: [],
+  driverType: 'Postgres', supportsConnectionTest: true, supportedProvisioningActions: [], keepsStateTable: true, readers: [],
   stagingProviders: [{ kind: 'PgCopyStaging', parameters: [] }, { kind: 'StagingTable', parameters: [] }],
   writers: [
     { kind: 'ChangeApply', parameters: [], supportsReconciliation: false, needsKey: 'TargetKey' },
