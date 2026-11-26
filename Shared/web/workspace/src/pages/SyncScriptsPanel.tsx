@@ -28,7 +28,7 @@ export function ScriptTestView({ test, run }: { test: ScriptTest; run?: Omit<Scr
   return (
     <div data-testid="wsp-script-result" data-ok={String(test.ok)} data-run={run?.run_id}>
       <div className={test.ok ? 'hint' : 'error'} data-testid="wsp-script-verdict">
-        {test.ok ? `${test.name} compiled and ran: ${test.source}.` : (test.error ?? `${test.name} did not run.`)}
+        {test.ok ? `${test.name} compiled and ran: ${test.source}.` : (test.message ?? `${test.name} did not run.`)}
       </div>
       {run && (
         <div className="hint" data-testid="wsp-script-run">

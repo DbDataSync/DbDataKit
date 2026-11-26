@@ -73,7 +73,7 @@ public sealed class SyncScriptTestOnRunnerTests : IAsyncLifetime
         Directory.CreateDirectory(directory);
         var tool = Path.Combine(root, "dbdatasync");
         File.WriteAllText(tool, $"#!/bin/bash\necho \"$@\" >> \"{Commands}\"\nexec dotnet \"{Programs.Sync}\" \"$@\"\n", new UTF8Encoding(false));
-        File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         workspace = WorkspaceServer.Build(new WorkspaceSettings(directory, new Uri("https://127.0.0.1:0")) { SyncExecutable = tool }, WorkspaceServer.Certificate(directory), _ => { });
         await workspace.StartAsync();
         var pairing = WorkspaceState.Pairing(directory).Codes().Create(ServerRoles.Close(ServerRole.Admin | ServerRole.Author | ServerRole.Approver));
@@ -120,9 +120,9 @@ public sealed class SyncScriptTestOnRunnerTests : IAsyncLifetime
         for (var i = 0; ; i++)
         {
             var read = (await Workspace(HttpMethod.Get, $"/projects/{project}/workspaces/{draft}/builds/{build}")).Body!;
-            var status = (string)read["build"]!["status"]!;
-            if (status == "succeeded") break;
-            Assert.True(status != "failed" && i < 1200, read.ToJsonString());
+            var built = (string)read["build"]!["status"]!;
+            if (built == "succeeded") break;
+            Assert.True(built != "failed" && i < 1200, read.ToJsonString());
             await Task.Delay(250);
         }
 
@@ -173,7 +173,7 @@ public sealed class SyncScriptTestOnRunnerTests : IAsyncLifetime
         Assert.True(put.Status is HttpStatusCode.OK or HttpStatusCode.Created, put.Body?.ToJsonString());
         var broken = (await TestAsync(project, draft, "upper-name"))["answer"]!;
         Assert.False((bool)broken["ok"]!);
-        Assert.Contains("did not compile", (string)broken["error"]!);
+        Assert.Contains("did not compile", (string)broken["message"]!);
 
         // the Workspace server built the draft and ran no script; the route that did answers where a script is tested now
         Assert.Contains(File.ReadAllLines(Commands), c => c.StartsWith("package publish", StringComparison.Ordinal));

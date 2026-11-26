@@ -83,8 +83,8 @@ export interface SampleTable { name: string; kind: string; origin: string | null
 export interface SampleResult { ok: boolean; diagnostics: CheckDiagnostic[]; data: { tables: SampleTable[] } | null }
 /** One case of a script's test: what went in, what came out, and why when that is not obvious. */
 export interface ScriptCase { input: string; output: string | null; note: string | null }
-/** What the set's task `script-test` answered: `ok` is false when the script did not compile, threw or does not exist, and `error` has the words. */
-export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; error: string | null }
+/** What the set's task `script-test` answered: `ok` is false when the script did not compile, threw or does not exist, and `message` has the words. */
+export interface ScriptTest { name: string; kind: string; ok: boolean; source: string; cases: ScriptCase[]; log: string[]; message: string | null }
 /** One script of `config/scripts/`; `error` is why its manifest cannot be read. */
 export interface ScriptEntry { name: string; kind: string; language: string; error: string | null }
 /** The answer of a Sync draft's tool route: `ok` is false when the program did not answer (the findings say why), `data` is its document. */

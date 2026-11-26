@@ -55,7 +55,7 @@ describe('the scripts of a Sync draft', () => {
 })
 
 describe('the result of a script test', () => {
-  const ok: ScriptTest = { name: 'upper-name', kind: 'sqlColumnExpression', ok: true, source: 'generated sample, ANSI quoting', cases: [{ input: 'Name -> Name', output: 'UPPER("Name")', note: null }, { input: 'Id -> Id', output: null, note: 'left as it would have been' }], log: ['hello'], error: null }
+  const ok: ScriptTest = { name: 'upper-name', kind: 'sqlColumnExpression', ok: true, source: 'generated sample, ANSI quoting', cases: [{ input: 'Name -> Name', output: 'UPPER("Name")', note: null }, { input: 'Id -> Id', output: null, note: 'left as it would have been' }], log: ['hello'], message: null }
   const run = { run_id: 'r-7', link: '/servers/r-1/runs/r-7', runner_name: 'jobs', channel: 'dev', build: 'b-3', version: 4 }
   it('shows the verdict, each case with its note, the log, and the run on the Runner', () => {
     const html = renderToStaticMarkup(<MemoryRouter><ScriptTestView test={ok} run={run} /></MemoryRouter>)
@@ -69,7 +69,7 @@ describe('the result of a script test', () => {
     expect(html).toMatch(/href="\/servers\/r-1\/runs\/r-7"[^>]*data-testid="wsp-script-run-link"|data-testid="wsp-script-run-link"[^>]*href="\/servers\/r-1\/runs\/r-7"/)
   })
   it('shows the compiler\'s words when the script did not compile', () => {
-    const html = renderToStaticMarkup(<MemoryRouter><ScriptTestView test={{ ...ok, ok: false, cases: [], log: [], error: "Script 'x' did not compile: (1,1) nope" }} run={run} /></MemoryRouter>)
+    const html = renderToStaticMarkup(<MemoryRouter><ScriptTestView test={{ ...ok, ok: false, cases: [], log: [], message: "Script 'x' did not compile: (1,1) nope" }} run={run} /></MemoryRouter>)
     expect(html).toContain('data-ok="false"')
     expect(html).toContain('did not compile: (1,1) nope')
     expect(html).not.toContain('wsp-script-case')
@@ -78,7 +78,7 @@ describe('the result of a script test', () => {
 
 describe('a script tested on a Runner', () => {
   const place = { workspaceServer: 'ws-1', project: 'orders-set', workspace: 'draft', runner: 'r-1', channel: 'dev' }
-  const answer: ScriptTest = { name: 'upper-name', kind: 'sqlColumnExpression', ok: true, source: 'generated sample', cases: [{ input: 'Name -> Name', output: 'UPPER("Name")', note: null }], log: [], error: null }
+  const answer: ScriptTest = { name: 'upper-name', kind: 'sqlColumnExpression', ok: true, source: 'generated sample', cases: [{ input: 'Name -> Name', output: 'UPPER("Name")', note: null }], log: [], message: null }
   const summary = (status: string, message: string | null = null): BuildSummary => ({ id: 'b-3', workspace: 'draft', status, commit: null, requested_by: 'ana', message, requested: '', started: null, finished: null })
   const runAnswer = (state: RunAnswer<ScriptTest>['state'], extra: Partial<RunAnswer<ScriptTest>> = {}): RunAnswer<ScriptTest> =>
     ({ state, run_id: 'r-7', runner: 'r-1', runner_name: 'jobs', channel: 'dev', production: false, link: '/servers/r-1/runs/r-7', ...extra })

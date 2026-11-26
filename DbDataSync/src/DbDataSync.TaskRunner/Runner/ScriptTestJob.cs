@@ -11,6 +11,12 @@ namespace DbDataSync.TaskRunner.Runner;
 public sealed record ScriptTestInput(string Name = "", string Rows = "", string RepoDir = "repo");
 
 /// <summary>
+/// What <c>script-test</c> answers: the script, its slot, whether it compiled and ran, where its input came from, the cases, the log lines a transform wrote, and in <paramref name="Message"/> the compiler's or the script's
+/// words when it did not (an answer's <c>error</c> is read by the console as a failed run, and a script that does not compile is a test that worked).
+/// </summary>
+public sealed record ScriptTestAnswer(string Name, string Kind, bool Ok, string Source, IReadOnlyList<ScriptSampleCase> Cases, IReadOnlyList<string> Log, string? Message);
+
+/// <summary>
 /// The set's manual task <c>script-test</c> (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner): one script of the version, compiled and run against generated sample input, never a connection; the
 /// cases, the log lines a transform wrote and the compiler's or the script's error are the run's answer, for the person who asked on the Scripts tab, and kept nowhere. A script that does not compile or throws is an
 /// answer, not a failed run: finding that out is what the test is for. Only an input that is not one fails the run.
@@ -45,7 +51,7 @@ public sealed class ScriptTestJob : RunnerJob<ScriptTestInput, NoProgress, NoSlo
         Status($"{TaskName} {name}");
         var outcome = await ScriptSampleTest.RunAsync(config, name, rows, new ScriptCacheDirectory(Path.Combine(scratch, "script-cache")), ct).ConfigureAwait(false);
         // the package's own folder is no business of the screen: the error names the scripts folder as the draft has it
-        var error = outcome.Error?.Replace(repoRoot + Path.DirectorySeparatorChar, "", StringComparison.Ordinal).Replace(repoRoot, ".", StringComparison.Ordinal);
-        await AnswerAsync(outcome with { Error = error }, ct).ConfigureAwait(false);
+        var message = outcome.Error?.Replace(repoRoot + Path.DirectorySeparatorChar, "", StringComparison.Ordinal).Replace(repoRoot, ".", StringComparison.Ordinal);
+        await AnswerAsync(new ScriptTestAnswer(outcome.Name, outcome.Kind, outcome.Ok, outcome.Source, outcome.Cases, outcome.Log, message), ct).ConfigureAwait(false);
     }
 }
