@@ -176,7 +176,8 @@ export function QueryDescribe({ project, connection, runner, channel, sql, onCol
  * **Build and stage for `<channel>`**: offered where a read by the project's own package found no build of it in the channel (or one made before the package
  * had the task). It builds the draft as the Builds tab does, and stages the build in that channel of the Runner through the console's deploy, as the Builds
  * tab's publish panel does; staged is enough for the read, nothing is served. A build reads the saved files, so an unsaved edit is left out, and the panel
- * says so. In production nothing is offered here: a build goes there from the Builds tab, with its preflight. `onStaged` asks the read again.
+ * says so. It is offered in every channel: in production the panel shows the warning the reads show, the build is staged and not served (so no preflight
+ * runs), and the Runner's roles and bindings decide. `onStaged` asks the read again.
  * Design: docs/authoring-metadata.md#a-sync-project
  */
 export function BuildAndStage({ project, needs, canEdit, onStaged }: { project: string; needs: NeedsBuild; canEdit: boolean; onStaged?: (answer: DeployAnswer) => void }) {
@@ -188,7 +189,7 @@ export function BuildAndStage({ project, needs, canEdit, onStaged }: { project: 
     onMutate: () => setSteps([]),
     onSuccess: (answer) => onStaged?.(answer),
   })
-  if (draft === null || workspaceServer === null || needs.production) return null
+  if (draft === null || workspaceServer === null) return null
   const unsaved = draft.dirtyPaths.length
   return (
     <div style={{ marginTop: 6 }} data-testid="wsp-build-stage" data-channel={needs.channel} data-runner={needs.runner}>
@@ -196,6 +197,12 @@ export function BuildAndStage({ project, needs, canEdit, onStaged }: { project: 
         Build and stage for {needs.channel}
       </button>
       <span className="hint"> builds this draft and stages the build in {needs.channel} of {needs.runner_name}, where the task {needs.task} of {needs.package} reads {needs.connection}.</span>
+      {needs.production && (
+        <div className="banner" role="alert" style={{ marginTop: 6 }} data-testid="wsp-build-stage-production">
+          <span className="mark">!</span>
+          <span>{productionWarning(needs.connection, needs.channel, needs.runner_name)} The build is staged in {needs.channel}, not served.</span>
+        </div>
+      )}
       {unsaved > 0 && <div className="hint" data-testid="wsp-build-stage-unsaved">{unsaved === 1 ? 'One edit is' : `${unsaved} edits are`} not saved, so the build leaves {unsaved === 1 ? 'it' : 'them'} out.</div>}
       {steps.map((line, i) => <div key={i} className="hint" data-testid="wsp-build-stage-step">{line}</div>)}
       {stage.isSuccess && <div className="hint" data-testid="wsp-build-stage-done">{stage.data.steps[stage.data.steps.length - 1] ?? `Staged in ${needs.channel}.`}</div>}

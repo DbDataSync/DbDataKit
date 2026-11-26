@@ -179,7 +179,25 @@ public static class ProvisioningCommand
             var existing = table.Columns.Select(c => new ColumnMetadata(c.Name, c.Type, c.Nullable, c.Key, false)).ToList();
             plan = AlterTargetTablePlanner.Plan(targetDialect, target, provisioned, existing);
         }
-        return Describe(plan with { Warnings = [.. warnings, .. plan.Warnings, .. table is null ? [] : (IEnumerable<string>)["The catalog cache holds columns, types and nullability only: no index, foreign key or default is compared."]] });
+        return Describe(plan with { Warnings = [.. warnings, .. plan.Warnings, .. table is null ? [] : (IEnumerable<string>)["The catalog cache holds columns, types and nullability only: no index, foreign key or default is compared."], .. WhoRuns(task, mapping, plan)] });
+    }
+
+    /// <summary>
+    /// Who runs the target's statements, as a pass of the run decides it: with <c>createTargetTableIfMissing</c> (or <c>alterTargetTableColumnsIfMissingOrChanged</c>) on, the first pass runs
+    /// them; with it off, a pass never does and fails until the table is in shape, so the statements are applied by hand (the set's <c>provision</c> task) or the table is made otherwise.
+    /// Design: docs/authoring-metadata.md#checking-before-production-preflight
+    /// </summary>
+    private static IEnumerable<string> WhoRuns(ReplicationTaskConfig task, TableMappingConfig mapping, ProvisioningPlan plan)
+    {
+        if (plan.State != ProvisioningState.Missing || plan.Steps.Count == 0) yield break;
+        if (plan.Action == ProvisioningActions.CreateTargetTable)
+            yield return ProvisioningResolution.CreateTargetTableIfMissing(task, mapping)
+                ? "Create target table if missing is on: the first pass creates the table with this statement, or apply it now."
+                : "Create target table if missing is off: a pass does not create the table and fails until it exists. Apply this statement (the replication's provisioning), create the table yourself, or turn the setting on.";
+        else if (plan.Action == ProvisioningActions.AlterTargetTable)
+            yield return ProvisioningResolution.AlterTargetTableColumns(task, mapping)
+                ? "Alter target columns if missing or changed is on: each pass runs these statements before it writes, or apply them now."
+                : "Alter target columns if missing or changed is off: a pass does not change the table. Apply these statements (the replication's provisioning), change the table yourself, or turn the setting on.";
     }
 
     private static SidePlan Describe(ProvisioningPlan plan) =>

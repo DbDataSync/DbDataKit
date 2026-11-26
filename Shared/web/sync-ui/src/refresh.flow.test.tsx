@@ -36,7 +36,7 @@ function answer(connection: string, tableName: string | undefined): string {
  * The console in memory: the Workspace server through its relay (`/relay/<id>`), which answers the draft's files and records what is written, and the
  * console's own catalog read (`/api/workspace-catalog/...`), which answers at once.
  */
-function fakeConsole(workspace: string, files: Record<string, string>) {
+function fakeConsole(workspace: string, files: Record<string, string>, { onlyProd = false }: { onlyProd?: boolean } = {}) {
   const writes: string[] = []
   const reads: unknown[] = []
   const calls: string[] = []
@@ -51,21 +51,22 @@ function fakeConsole(workspace: string, files: Record<string, string>) {
     if (full === '/api/instances') return reply([{ id: 'r-1', name: 'runners-eu', product: 'dbdatarunner' }, { id: workspace, name: 'Workspace', product: 'dbdataworkspace' }])
     const catalog = `/api/workspace-catalog/${workspace}/plant`
     if (full === `${catalog}/channels`) {
-      return reply({ package: 'plant', connection: url.searchParams.get('connection'), slot: url.searchParams.get('connection'), runner: 'r-1', runner_name: 'runners-eu', default: 'dev',
-        channels: [{ channel: 'dev', production: false, bound: true, bound_to: 'dev_login' }, { channel: 'prod', production: true, bound: true, bound_to: 'prod_login' }] })
+      // a Runner whose only channel is prod has no default: the person picks prod, and the reads say it is production
+      return reply({ package: 'plant', connection: url.searchParams.get('connection'), slot: url.searchParams.get('connection'), runner: 'r-1', runner_name: 'runners-eu', default: onlyProd ? null : 'dev',
+        channels: [...(onlyProd ? [] : [{ channel: 'dev', production: false, bound: true, bound_to: 'dev_login' }]), { channel: 'prod', production: true, bound: true, bound_to: 'prod_login' }] })
     }
     if (full === '/api/deploys' && init?.method === 'POST') {
       deploys.push(JSON.parse(String(init.body)))
       staged = true
-      return reply({ steps: ['Staged plant as version 1 in dev of runners-eu.'], deployed: {}, deploy: { id: 'd-1' } })
+      return reply({ steps: [`Staged plant as version 1 in ${(JSON.parse(String(init.body)) as { channel: string }).channel} of runners-eu.`], deployed: {}, deploy: { id: 'd-1' } })
     }
     if (full === `${catalog}/read`) {
       const body = JSON.parse(String(init!.body)) as { connection: string; table?: string; channel: string; reader?: string }
       reads.push(body)
       if (body.reader === 'package' && !staged) {
-        return reply({ error: 'runners-eu holds no build of plant in \'dev\'.', needs_build: true, package: 'plant', task: 'discover', runner: 'r-1', runner_name: 'runners-eu', channel: 'dev', production: false, connection: body.connection }, 409)
+        return reply({ error: `runners-eu holds no build of plant in '${body.channel}'.`, needs_build: true, package: 'plant', task: 'discover', runner: 'r-1', runner_name: 'runners-eu', channel: body.channel, production: body.channel === 'prod', connection: body.connection }, 409)
       }
-      return reply({ state: 'done', run_id: `run-${reads.length}`, link: '/servers/r-1/runs', runner: 'r-1', runner_name: 'runners-eu', channel: body.channel, production: false, connection: body.connection, cache: answer(body.connection, body.table) })
+      return reply({ state: 'done', run_id: `run-${reads.length}`, link: '/servers/r-1/runs', runner: 'r-1', runner_name: 'runners-eu', channel: body.channel, production: body.channel === 'prod', connection: body.connection, cache: answer(body.connection, body.table) })
     }
     const path = full.replace(new RegExp(`^/relay/${workspace}`), '')
     if (path === '/api/auth/status') return reply({ authenticated: true, role: 'Admin', name: 'ana' })
@@ -173,6 +174,27 @@ describe('the Designer\'s Refresh buttons, through the console\'s catalog read',
     expect(q('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-summary"]')?.textContent).toBe('1 table added')
     await click('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-accept"]')
     expect(all('[data-testid="task-source-database-select"] option').map((o) => o.textContent)).toEqual(['Select…', 'main'])
+  })
+
+  it('on a Runner whose only channel is prod, offers Build and stage for prod with the production warning, and stages there', async () => {
+    server = fakeConsole(workspace, { ...server.files }, { onlyProd: true })
+    vi.stubGlobal('fetch', server.fetcher)
+    server.files['config/connections/lite.yaml'] = 'schema: connection/1\nname: lite\nengine: sqlite.generic\nconnection_string: Mode=ReadOnly\nauth:\n  mode: none\n'
+    await render('/plant/ws-p/designer/replications/orders')
+    await choose('[data-testid="task-source-connection-select"]', 'lite')
+    await click('[data-testid="task-source-refresh-catalog"]')
+    await choose('[data-testid="task-source-refresh"] [data-testid="wsp-channel-channel"]', 'prod')
+    expect(q('[data-testid="task-source-refresh"] [data-testid="wsp-channel-production"]')?.textContent).toContain('This reads production')
+    await click('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-go"]')
+    expect(server.reads).toEqual([{ runner: 'r-1', channel: 'prod', connection: 'lite', reader: 'package' }])
+    expect(q('[data-testid="wsp-build-stage"]')?.dataset.channel).toBe('prod')
+    expect(q('[data-testid="wsp-build-stage-go"]')?.textContent).toBe('Build and stage for prod')
+    expect(q('[data-testid="wsp-build-stage-production"]')?.textContent).toContain('This reads production: the shape of lite as the prod channel of runners-eu binds it')
+
+    await click('[data-testid="wsp-build-stage-go"]')
+    expect(server.deploys).toEqual([{ workspaceServer: workspace, project: 'plant', workspace: 'ws-p', build: 'b-1', target: 'r-1', channel: 'prod' }])
+    expect(server.reads).toHaveLength(2)
+    expect(q('[data-testid="task-source-refresh"] [data-testid="wsp-refresh-summary"]')?.textContent).toBe('1 table added')
   })
 
   it('lists a table the overview\'s Refresh found once it is accepted, before anything is saved', async () => {
