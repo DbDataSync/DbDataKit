@@ -25,7 +25,7 @@ namespace DbDataGateway.Server.Management;
 public sealed partial class GatewayDataSources(
     string configDirectory, GatewayManagement validation, Action reload, Func<DataSourceCatalog> catalog, IAuditLog audit, GitCommitService? git, TimeProvider? clock = null, Func<string, PairedClient?>? findClient = null,
     DbDataGateway.Server.Serving.PublishedDataSources? published = null, DataSourceAdoptions? adoptions = null, Func<DbDataKit.Serving.IServingCatalog>? servingCatalog = null,
-    DefinitionPublisher? registry = null, Func<string, bool>? secretHeld = null)
+    DefinitionPublisher? registry = null, Func<string, bool>? secretHeld = null, Func<string?, string?>? ownerNow = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly WriteGuard _guard = new();
@@ -109,11 +109,11 @@ public sealed partial class GatewayDataSources(
             {
                 var text = File.ReadAllText(file);
                 var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, file);
-                if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
+                if (owner is not null && OwnerNow(loaded.Definition) != owner) continue;
                 items.Add(new JsonObject
                 {
                     ["name"] = Path.GetFileNameWithoutExtension(file), ["version"] = VersionOf(text), ["valid"] = loaded.Ok,
-                    ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = loaded.Definition?.ManagedBy,
+                    ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(), ["managed_by"] = OwnerNow(loaded.Definition),
                     ["grants"] = GrantsView(loaded.Definition, group: false), ["policy"] = PolicyView(loaded.Definition, text, group: false),
                 });
             }
@@ -123,11 +123,11 @@ public sealed partial class GatewayDataSources(
         {
             if (own.Contains(name)) continue;
             var loaded = DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml");
-            if (owner is not null && loaded.Definition?.ManagedBy != owner) continue;
+            if (owner is not null && OwnerNow(loaded.Definition) != owner) continue;
             items.Add(new JsonObject
             {
                 ["name"] = name, ["version"] = VersionOf(text), ["valid"] = loaded.Ok, ["engine"] = loaded.Definition?.Engine, ["access"] = loaded.Definition?.Access.ToString().ToLowerInvariant(),
-                ["managed_by"] = loaded.Definition?.ManagedBy, ["group"] = true, ["grants"] = GrantsView(loaded.Definition, group: true), ["policy"] = PolicyView(loaded.Definition, text, group: true),
+                ["managed_by"] = OwnerNow(loaded.Definition), ["group"] = true, ["grants"] = GrantsView(loaded.Definition, group: true), ["policy"] = PolicyView(loaded.Definition, text, group: true),
             });
         }
         return new JsonObject { ["data_sources"] = items };
@@ -151,7 +151,7 @@ public sealed partial class GatewayDataSources(
         if (!IsAdministrator(caller))
         {
             var client = OwnerScope.Stamp(caller.Token!);
-            var owner = definition?.ManagedBy;
+            var owner = OwnerNow(definition);
             if (owner != client)
             {
                 if (!string.IsNullOrEmpty(owner))
@@ -516,6 +516,9 @@ public sealed partial class GatewayDataSources(
 
     private static bool IsAdministrator(ManagementCaller caller) => caller.Holds(ServerRole.Admin);
 
+    /// <summary>Who owns a data source now: the client its <c>managed_by</c> names, or the client an administrator handed that one to (the group's hand-overs).</summary>
+    private string? OwnerNow(DbDataKit.Connections.ConnectionDefinition? definition) => ownerNow is null ? definition?.ManagedBy : ownerNow(definition?.ManagedBy);
+
     /// <summary>The client whose data sources a call may see: its own id for a publishing client, null (all) for an administrator.</summary>
     private static string? OwnedBy(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
 
@@ -525,7 +528,7 @@ public sealed partial class GatewayDataSources(
         if (IsAdministrator(caller)) return null;
         var text = TextOf(name);
         if (action != ObjectAction.Create && text is null) return ManagementResult.Problem(404, $"There is no data source '{name}'.");
-        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text!, name + ".yaml").Definition?.ManagedBy);
+        ManagedObject? target = action == ObjectAction.Create ? null : new ManagedObject(OwnerNow(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text!, name + ".yaml").Definition));
         var decision = OwnerScope.Authorize(caller.Token!, action, target);
         return decision.Allowed ? null : ManagementResult.Problem(403, decision.Reason ?? "This client may not do this to that data source.");
     }

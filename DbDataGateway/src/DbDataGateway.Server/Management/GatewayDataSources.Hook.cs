@@ -25,7 +25,7 @@ public sealed partial class GatewayDataSources
         new(result.Status, (result.Body as JsonObject)?["error"]?.GetValue<string>() ?? "This call is refused.") { Body = result.Body as JsonObject };
 
     internal string? OwnerOfShared(string name) =>
-        TextOf(name) is { } text ? DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition?.ManagedBy : null;
+        TextOf(name) is { } text ? OwnerNow(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, name + ".yaml").Definition) : null;
 
     /// <summary>The route's checks before anything is stored, for a publish through the shared API.</summary>
     internal void CheckSharedPublish(PublishHookContext context)

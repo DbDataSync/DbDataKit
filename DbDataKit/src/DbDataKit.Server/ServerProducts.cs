@@ -135,6 +135,10 @@ public static class ServerProducts
         new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),
         new("PUT", "api/v1/bindings/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),         // a channel's own bindings, written before a promoted version is published
         new("DELETE", "api/v1/bindings/{name}/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),
+        new("GET", "api/v1/settings/handovers", ServerRole.Viewer),                                         // what one paired client owns, handed to another
+        new("PUT", "api/v1/settings/handovers/{name}", ServerRole.Admin),
+        new("DELETE", "api/v1/settings/handovers/{name}", ServerRole.Admin),
+        new("GET", "api/v1/clients", ServerRole.Admin),                                                      // the paired server clients: the Workspace servers' publisher keys among them
     ];
 
     /// <summary>The row of <see cref="GatewayRoutes"/> that a call matches, or null (a call of a Gateway's screens that is not a publish call).</summary>

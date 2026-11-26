@@ -24,7 +24,7 @@ public sealed partial class GatewayEntityModels
     private static DefinitionsRefusalException Refusal(ManagementResult result) =>
         new(result.Status, (result.Body as JsonObject)?["error"]?.GetValue<string>() ?? "This call is refused.") { Body = result.Body as JsonObject };
 
-    internal string? OwnerOfShared(string name) => models.Current(name) is { } current ? PublishedEntityModels.Parse(current).ManagedBy : null;
+    internal string? OwnerOfShared(string name) => models.Current(name) is { } current ? OwnerNow(PublishedEntityModels.Parse(current).ManagedBy) : null;
 
     private static PublishedEntityModels.Content? ContentOf(string manifest)
     {
