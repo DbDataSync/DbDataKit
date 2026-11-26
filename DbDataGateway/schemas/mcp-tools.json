@@ -511,7 +511,7 @@
     },
     {
       "name": "health_check",
-      "description": "Exit 0 when the running gateway answers /health/live (for a container's HEALTHCHECK). [Offline only] Usage: health check [--url <url>]",
+      "description": "Exit 0 when the running gateway answers /health/live on its pinned listen address (for a container's HEALTHCHECK). [Offline only] Usage: health check [--url <url>] [--repo <data directory>]",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

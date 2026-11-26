@@ -321,16 +321,16 @@ public static class Cli
 
     private static Noun HealthNoun() => new("health", "Is a running gateway answering",
     [
-        new Verb("check", "Exit 0 when the running gateway answers /health/live (for a container's HEALTHCHECK)", EffectClass.OfflineOnly, "[--url <url>]",
+        new Verb("check", "Exit 0 when the running gateway answers /health/live on its pinned listen address (for a container's HEALTHCHECK)", EffectClass.OfflineOnly, "[--url <url>] [--repo <data directory>]",
             async (args, context) =>
             {
-                var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "url" });
+                var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "url", "repo" });
                 if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
                 {
-                    await context.Error.WriteLineAsync("Usage: health check [--url <url>]");
+                    await context.Error.WriteLineAsync("Usage: health check [--url <url>] [--repo <data directory>]");
                     return CliExit.Usage;
                 }
-                var options = HealthCheck.Options(GatewayConfiguration.LoadOptions());
+                var options = HealthCheck.Options(GatewayConfiguration.LoadOptions(parsed.Get("repo") is { Length: > 0 } repo ? Path.GetFullPath(repo) : null));
                 var text = parsed.Get("url") ?? options.DefaultUrl;
                 if (!Uri.TryCreate(text, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
                 {

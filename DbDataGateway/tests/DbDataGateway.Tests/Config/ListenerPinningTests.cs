@@ -222,12 +222,12 @@ public sealed class ListenerPinningTests : IDisposable
         var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "dist", "compose", "quickstart-apps.yml");
         var root = FindRepository();
         var text = File.ReadAllText(Path.Combine(root, "dist", "compose", "quickstart-apps.yml"));
-        Assert.Contains("DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:8817", text);
-        Assert.Contains("DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:8818", text);
+        Assert.Contains("DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:7823", text);
+        Assert.Contains("DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:7824", text);
         Assert.DoesNotContain("__Port", text);
         Assert.DoesNotContain("__Address", text);
-        Assert.Contains("- \"8817:8817\"", text);
-        Assert.Contains("- \"8818:8818\"", text);
+        Assert.Contains("- \"7823:7823\"", text);
+        Assert.Contains("- \"7824:7824\"", text);
         _ = path;
     }
 

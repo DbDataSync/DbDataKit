@@ -1,6 +1,6 @@
 # Arrow Flight SQL gateway for Linux containers.
 #   docker build -f DbDataGateway/Dockerfile -t dbdatagateway .      (run from the repository root: the build needs Shared/ too)
-#   docker run -p 8815:8815 -v ./dbgateway-data:/data dbdatagateway     (/data holds config/ and the generated certificate)
+#   docker run -p 7821:7821 -v ./dbgateway-data:/data dbdatagateway     (/data holds config/ and the generated certificate)
 # ODBC sources need drivers installed in the image (see the commented example below); the 32-bit worker is
 # Windows-only, so "Bitness": "x86" data sources are not available in containers.
 # The runtime that draws an app of views only (plan 26, AP25): the web build of Shared/web/view-app, copied to /app/apps-views below.
@@ -40,15 +40,17 @@ COPY --from=build /app .
 # The Flight port listens on every address of the container (it is what clients connect to) and is the only port the image exposes. A container has
 # ports of its own, so the image sets the two listeners it publishes or keeps private instead of taking free ports of the Gateway's block (a setting of
 # the container, set again by any file or variable that names the listener).
-# The management API (https, port 8816, plan 33 D15) is on by default but bound to the container's loopback address: nothing outside the container
-# reaches it, `-p 8816:8816` publishes nothing, and no console can pair with it until its address is widened. To let a console in another container
-# pair with it, set DBDATAKIT_Gateway__Management__Listen=https://0.0.0.0:8816 on a private network and **never publish 8816** (dist/compose/gateway.yml does
-# exactly that); to pair from the host, publish it on loopback only (-p 127.0.0.1:8816:8816, with the address 0.0.0.0 inside). Every call needs a
+# The management API (https, port 7822, plan 33 D15) is on by default but bound to the container's loopback address: nothing outside the container
+# reaches it, `-p 7822:7822` publishes nothing, and no console can pair with it until its address is widened. To let a console in another container
+# pair with it, set DBDATAKIT_Gateway__Management__Listen=https://0.0.0.0:7822 on a private network and **never publish 7822** (dist/compose/gateway.yml does
+# exactly that); to pair from the host, publish it on loopback only (-p 127.0.0.1:7822:7822, with the address 0.0.0.0 inside). Every call needs a
 # token that `dbdatagateway server pair` issued, but the port itself is a listener of the admin API: keep it off public interfaces.
-# `DBDATAKIT_Gateway__Management__Enabled=false` turns it off. dist/tests checks this block and that no compose file publishes 8816 beyond loopback.
+# `DBDATAKIT_Gateway__Management__Enabled=false` turns it off. dist/tests checks this block and that no compose file publishes 7822 beyond loopback.
 ENV DBDATAKIT_DATA_GATEWAY=/data \
-    DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815 \
-    DBDATAKIT_Gateway__Management__Listen=https://127.0.0.1:8816
+    DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821 \
+    DBDATAKIT_Gateway__Management__Listen=https://127.0.0.1:7822
 VOLUME /data
-EXPOSE 8815
+EXPOSE 7821
+# a bare health check asks the Flight listener the settings above name, on the container's loopback address
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dotnet", "/app/dbdatagateway.dll", "health", "check"]
 ENTRYPOINT ["dotnet", "dbdatagateway.dll", "server", "run"]

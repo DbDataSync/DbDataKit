@@ -563,10 +563,10 @@ class GatewayContainerManagementTests(unittest.TestCase):
         text = (REPO_ROOT / "DbDataGateway/Dockerfile").read_text(encoding="utf-8")
         lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
         code = "\n".join(lines)
-        self.assertIn("DBDATAKIT_Gateway__Management__Listen=https://127.0.0.1:8816", code)
-        self.assertIn("DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815", code)
+        self.assertIn("DBDATAKIT_Gateway__Management__Listen=https://127.0.0.1:7822", code)
+        self.assertIn("DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821", code)
         self.assertNotIn("Management__Enabled=false", code)         # on by default is the owner's decision (D15)
-        self.assertEqual([line for line in lines if line.startswith("EXPOSE")], ["EXPOSE 8815"])
+        self.assertEqual([line for line in lines if line.startswith("EXPOSE")], ["EXPOSE 7821"])
 
     def test_no_compose_file_publishes_the_management_port_beyond_loopback(self):
         import re
@@ -575,24 +575,24 @@ class GatewayContainerManagementTests(unittest.TestCase):
         for path in files:
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 entry = re.match(r'\s*-\s*"?([^"#\s]+)"?', line)
-                if line.lstrip().startswith("-") and entry and re.search(r"(^|:)8816(:|$)", entry.group(1)):
-                    self.assertTrue(entry.group(1).startswith("127.0.0.1:"), f"{path.name}:{number} publishes 8816 on every address: {line.strip()}")
+                if line.lstrip().startswith("-") and entry and re.search(r"(^|:)7822(:|$)", entry.group(1)):
+                    self.assertTrue(entry.group(1).startswith("127.0.0.1:"), f"{path.name}:{number} publishes 7822 on every address: {line.strip()}")
 
     def test_the_apps_quickstart_gives_identity_and_apps_a_listen_each_and_no_port_or_address(self):
         import re
         text = (REPO_ROOT / "dist/compose/quickstart-apps.yml").read_text(encoding="utf-8")
         code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-        self.assertIn("DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:8817", code)
-        self.assertIn("DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:8818", code)
+        self.assertIn("DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:7823", code)
+        self.assertIn("DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:7824", code)
         self.assertIsNone(re.search(r"__(Port|Address)\b", code), "a listener is set by `listen` alone")
         published = sorted(m.group(1) for m in re.finditer(r'^\s*-\s*"(?:127\.0\.0\.1:)?(\d+):\d+"', code, re.MULTILINE))
-        self.assertEqual(published, ["8816", "8817", "8818"])   # the management API on the host's loopback, and the two modules
+        self.assertEqual(published, ["7822", "7823", "7824"])   # the management API on the host's loopback, and the two modules
 
     def test_a_compose_file_that_widens_management_does_not_publish_it(self):
         for path in sorted((REPO_ROOT / "dist/compose").glob("*.yml")):
             text = path.read_text(encoding="utf-8")
-            if "Management__Listen: https://0.0.0.0:8816" in text:
-                self.assertNotIn('- "8816:8816"', text, path.name)
+            if "Management__Listen: https://0.0.0.0:7822" in text:
+                self.assertNotIn('- "7822:7822"', text, path.name)
 
 
 @unittest.skipIf(os.name == "nt", "install.sh is for Linux and macOS")
