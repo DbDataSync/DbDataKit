@@ -125,8 +125,8 @@ class BackupBranches(unittest.TestCase):
 
     def test_task_ids_are_read_from_the_start_of_commit_messages(self):
         messages = ["INSTALLER-3: the start sequence", "INSTALLER-3: its test", "Merge branch 'main' into work/installer",
-                    "ENDPOINTS-12: one port\n\nbody naming INSTALLER-9: not at the start", "see INSTALLER-4: not at the start", "Planning: x", "BAD-1: short slug"]
-        self.assertEqual(backup_branches.task_ids(messages), ["INSTALLER-3", "ENDPOINTS-12"])
+                    "ENDPOINTS-12: one port\n\nbody naming INSTALLER-9: not at the start", "see INSTALLER-4: not at the start", "Planning: x", "SEO4-1: a short slug", "bad-2: lower case"]
+        self.assertEqual(backup_branches.task_ids(messages), ["INSTALLER-3", "ENDPOINTS-12", "SEO4-1"])
         self.assertEqual(backup_branches.task_branch("INSTALLER-3"), "backup/installer-3")
 
     def test_tasks_deletes_the_task_branches_a_squash_merged_work_pull_request_carried(self):
