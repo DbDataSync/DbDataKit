@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, ErrorBanner, Link, useModule } from '@dbdatakit/shell'
+import { ApiError, ErrorBanner, useModule } from '@dbdatakit/shell'
 import { workspaceApi, type BuildDetail, type BuildSummary, type PublishOptions } from '../api'
 import { deployApi, deployBody, deployLine, deployTargets, hostedServer, type ActivateAnswer, type DeployAnswer } from '../deploys'
 import { adoptionRequest, buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
@@ -237,7 +237,7 @@ export function BuildsPanel({ project, id, canWrite, closed = false }: { project
       <div className="row" style={{ gap: 10, margin: '8px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-primary" disabled={!button.enabled} title={button.why ?? undefined} data-testid="wsp-build" onClick={() => ask.mutate()}>{makeLabel(kind)}</button>
         {button.why && (closed || !app || !readiness.data?.problems.length) && <span className="hint" data-testid="wsp-build-why">{button.why}</span>}
-        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not.{app && <> <Link to="/keys" data-testid="wsp-keys-link">Publisher keys</Link> (a preview with data is sent with one)</>}</span>
+        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not.</span>
       </div>
       <ErrorBanner error={ask.error ?? builds.error} />
       {builds.data?.length === 0 && <div className="empty" data-testid="wsp-builds-none">{app ? 'This workspace has not been built.' : 'Nothing has been made from this workspace yet.'}</div>}
