@@ -11,6 +11,7 @@
     <Using Include="Xunit" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\DbDataRunner.Server\DbDataRunner.Server.csproj" />
+    <DbDataKitReference Include="Runner.Client" />   <!-- the publishing client: the API tests pair and publish through it, as a program that publishes for itself does -->
     <ProjectReference Include="..\..\..\Shared\src\DbDataKit.Catalog.Cache\DbDataKit.Catalog.Cache.csproj" />   <!-- the answer of the built-in discover is read as the Workspace reads it -->
     <!-- built, then published by the tests to a directory like a real package -->
     <ProjectReference Include="..\..\..\Shared\tests\DbDataKit.Runner.TestPackage\DbDataKit.Runner.TestPackage.csproj" ReferenceOutputAssembly="false" />

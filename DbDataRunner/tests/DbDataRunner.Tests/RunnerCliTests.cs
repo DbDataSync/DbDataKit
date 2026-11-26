@@ -69,6 +69,18 @@ public sealed class RunnerCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Package_promote_is_gone_with_its_code_and_names_the_console_s_deploy()
+    {
+        var (output, error) = (new StringWriter(), new StringWriter());
+        var exit = await RunnerCli.RunAsync(["package", "promote", "orders", "--from-server", "https://site-a.example:7840", "--server", "https://site-b.example:7840", "--channel", "prod", "--code", "AAAAA-AAAAA"], new CliContext(output, error, TextReader.Null));
+        Assert.Equal(CliExit.Usage, exit);
+        Assert.Equal($"'dbdatarunner package promote' is gone: {RemovedCommands.ConsoleDeploys}", error.ToString().Trim());
+        Assert.Contains("the console deploys", error.ToString());
+        Assert.Empty(output.ToString());
+        Assert.DoesNotContain(RunnerCli.Router(_ => null).Nouns.Single(n => n.Name == "package").Verbs, v => v.Name == "promote");
+    }
+
+    [Fact]
     public async Task Production_s_connection_in_another_channel_is_a_recorded_choice_nothing_changes_without_confirm_and_prod_is_not_a_channel_for_it()
     {
         var (noConfirm, _, noConfirmError) = await Run("package", "allow-production-binding", "orders", "dst", "dev");

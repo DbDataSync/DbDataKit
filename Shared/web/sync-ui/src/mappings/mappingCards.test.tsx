@@ -31,7 +31,7 @@ describe('a mapping\'s pipeline', () => {
 
   it('offers the source driver\'s readers and the target driver\'s writers, never a reconcile-only kind', () => {
     const caps = (readers: string[], writers: string[]): DriverCapabilities => ({
-      driverType: 'x', supportsConnectionTest: true, supportedProvisioningActions: [], stagingProviders: [{ kind: 'StagingTable', parameters: [] }],
+      driverType: 'x', supportsConnectionTest: true, supportedProvisioningActions: [], keepsStateTable: false, stagingProviders: [{ kind: 'StagingTable', parameters: [] }],
       readers: readers.map((kind) => ({ kind, parameters: [], supportsSegmentation: kind === 'BatchReload', detectsDeletes: false, supportedIntents: [] })),
       writers: writers.map((kind) => ({ kind, parameters: [], supportsReconciliation: kind === 'DeleteInsert' })),
     })

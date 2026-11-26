@@ -31,8 +31,7 @@ rules are in [docs/install.md](../docs/install.md).
   the description of `SuiteServices` (also in their systemd units); `dist.py` and `msi.py` read the names from the table (`dist/suite_services.py`),
   and the Scoop e2e reads them back with `sc qc` and `sc qdescription` (`docs/install.md`, "Service names, accounts and descriptions").
 - Ports: the console, Runner and Workspace take their port from `--listen`, else the `listen:` line of their settings file, else the first free port of their sub-block of 7800 to 7899 (defaults 7800, 7840, 7860), which they write as that line once they listen on it (`ListenPorts` in the startup library; `docs/install.md`, "Ports"); the identity home on its own defaults to 7819; the Gateway's public, Flight SQL and management listeners take free ports of 7820 to 7839 and pin them as `listen` settings. `scripts/check_default_ports.py` checks the range, the sub-blocks, the defaults and Windows' default ports.
-- Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatarunner package promote
-  --code` (`RunnerCli.cs`); `dbdatagateway apps instance-save|list|rollback|approve --to --code`
+- Pairing by code, everywhere: `server pair` and `dbdatakit instance add --code` (`ConsoleCli.cs`); `dbdatagateway apps instance-save|list|rollback|approve --to --code`
   (`AppsCommand.cs`); `dbdataworkspace publisher pair --code` (`WorkspaceAdminCommand.cs`); `gateway add --code`
   of the Runner and of `dbdatastore` (`GatewayNoun` in `DbDataKit.Serving.Notify`, `StoreAdminCommand.cs`). Also announcement (`ConsoleAnnouncer`,
   `--announce-listen`, `DBDATAKIT_ANNOUNCE_URL`) and the bundle token (`bundle/1`).
@@ -127,19 +126,6 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-34 | An installed suite as a test fixture (not urgent; manual tests from a snapshot release meanwhile): a CI job on Linux installs the packaged suite with `install.sh`, runs `dbdatakit setup single-server`, enrols the first administrator from the setup link in `FIRST-RUN.txt` with a virtual passkey authenticator (as `tests/people.ts` does) and saves the signed-in browser state, the console's address and the testenv engines' addresses; any later story starts from that state instead of starting services from their build folders. Linux first; Windows (the MSI) later | none | M | the job installs, joins all four services, signs in, and a trivial story reusing the saved state opens the Servers page with four services joined |
 
 ## Proposed decisions
-
-### INSTALLER-P63: `dbdatarunner package promote` still sends a version between runner groups from the command line (default, awaiting the owner)
-
-An administrator who wants the `prod` version of `orders` on the runners of another site runs `dbdatarunner package promote orders --from-server
-site-a --server site-b --channel prod --code <code>`: the command pairs this machine with both runners and sends the version. The console's Promote
-action on the Runner's Packages screen does the same as the signed-in person. `dbdatarunner package publish` is gone, and `package promote` was left
-as it is.
-
-- (a) `package promote` answers `RemovedCommands.ConsoleDeploys` too, its tests move to the client library (`PromoteToGroupAsync`), and the Promote
-  action is the one way to move a version between groups.
-- (b) It stays, as the one command line that still sends to a Runner.
-
-Recommendation: (a), since no other command line publishes to a Runner.
 
 ## Needs from other subjects
 

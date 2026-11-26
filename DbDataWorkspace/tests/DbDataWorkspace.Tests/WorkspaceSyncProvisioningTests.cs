@@ -7,7 +7,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataWorkspace.Tests;
 
 /// <summary>
-/// The provisioning plan of a Sync draft from its catalog cache (plan 33 SC22j): <c>dbdatasync provisioning plan --from-cache --json</c> on a copy of the draft, offline, read only. The stand-in <see cref="FakeSync"/> for the mechanics; the real program
+/// The provisioning plan of a Sync draft from its catalog cache (plan 33 SC22j): <c>dbdatasync provisioning plan --from-cache --json</c> on a copy of the draft with the unsaved edits a question carries, offline, read only. The stand-in <see cref="FakeSync"/> for the mechanics; the real program
 /// when <c>DBDATAKIT_TEST_DBDATASYNC</c> is set.
 /// </summary>
 [Collection(ServerCollection.Name)]
@@ -65,6 +65,32 @@ public sealed class WorkspaceSyncProvisioningTests
         Assert.DoesNotContain("ddw-sync-", planned.Body.ToJsonString());
     }
 
+    [Fact]
+    public async Task The_plan_reads_the_unsaved_edits_the_question_carries_and_the_draft_keeps_its_files()
+    {
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        var id = await DraftAsync(server);
+
+        var body = new JsonObject { ["replication"] = "orders", ["unsaved"] = new JsonObject { ["catalog-cache.yaml"] = Cache } }.ToJsonString();
+        var planned = await Plan(server, id, body);
+        Assert.Equal(HttpStatusCode.OK, planned.Response.StatusCode);
+        Assert.True((bool)planned.Body!["ok"]!, planned.Body.ToJsonString());
+        Assert.Equal(HttpStatusCode.NotFound, (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/orders-set/workspaces/{id}/files/catalog-cache.yaml")).Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("""{"replication":"orders","unsaved":{"../outside.yaml":"x"}}""")]
+    [InlineData("""{"replication":"orders","unsaved":{"scripts/a.cs":"x"}}""")]
+    [InlineData("""{"replication":"orders","unsaved":["catalog-cache.yaml"]}""")]
+    [InlineData("""{"replication":"orders","unsaved":{"catalog-cache.yaml":1}}""")]
+    public async Task Unsaved_edits_are_only_of_the_files_the_plan_reads(string body)
+    {
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: Fake());
+        var id = await DraftAsync(server);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await Plan(server, id, body)).Response.StatusCode);
+    }
+
     [Theory]
     [InlineData("""{"replication":"../x"}""")]
     [InlineData("""{"replication":"-x"}""")]
@@ -107,5 +133,29 @@ public sealed class WorkspaceSyncProvisioningTests
         Assert.Equal("missing", (string)found["target_plan"]!["state"]!);
         Assert.Contains("CREATE TABLE", (string)found["target_plan"]!["steps"]![0]!["command_text"]!);
         Assert.Equal("unknown", (string)found["source_plan"]!["state"]!);
+    }
+
+    [Fact]
+    public async Task The_real_program_plans_a_mapping_and_a_cache_that_are_only_unsaved_edits()
+    {
+        var real = Environment.GetEnvironmentVariable("DBDATAKIT_TEST_DBDATASYNC");
+        Assert.False(string.IsNullOrEmpty(real) && string.Equals(Environment.GetEnvironmentVariable("DBDATAKIT_TEST_REQUIRE_SYNC"), "true", StringComparison.OrdinalIgnoreCase), "dbdatasync is required but DBDATAKIT_TEST_DBDATASYNC is not set.");
+        if (string.IsNullOrEmpty(real) || !File.Exists(real)) Assert.Skip("DBDATAKIT_TEST_DBDATASYNC is not set (a build of DbDataSync/src/DbDataSync.Cli)");
+        await using var server = await WorkspaceHarness.StartAsync(syncExecutable: real);
+        var id = await DraftAsync(server);
+        var path = "config/replications/orders/table-mappings/orders.yaml";
+        var mapping = (string)(await server.AsAda(HttpMethod.Get, $"/api/v1/projects/orders-set/workspaces/{id}/files/{path}")).Body!["content"]!;
+
+        var body = new JsonObject
+        {
+            ["replication"] = "orders",
+            ["unsaved"] = new JsonObject { [path] = mapping.Replace("columnMappings: []", "columnMappings:\n- sourceColumn: id\n  targetColumn: id"), ["catalog-cache.yaml"] = Cache },
+        }.ToJsonString();
+        var planned = await Plan(server, id, body);
+        Assert.True((bool)planned.Body!["ok"]!, planned.Body.ToJsonString());
+        var found = planned.Body["data"]!["mappings"]![0]!;
+        Assert.Equal("missing", (string)found["target_plan"]!["state"]!);
+        Assert.Contains("CREATE TABLE", (string)found["target_plan"]!["steps"]![0]!["command_text"]!);
+        Assert.Equal(mapping, (string)(await server.AsAda(HttpMethod.Get, $"/api/v1/projects/orders-set/workspaces/{id}/files/{path}")).Body!["content"]!);
     }
 }
