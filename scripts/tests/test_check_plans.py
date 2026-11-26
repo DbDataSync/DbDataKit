@@ -73,10 +73,37 @@ class CheckPlans(unittest.TestCase):
         found = self.problems({"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("EPSILONZETA", 0))})
         self.assertTrue(any("links EPSILONZETA.md, which does not exist" in p for p in found), found)
 
-    def test_a_short_or_lower_case_slug_is_refused(self):
-        files = {"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), ("Short", 0)), "planning/Short.md": subject("Short")}
-        found = self.problems(files)
-        self.assertTrue(any("the slug 'Short'" in p for p in found), found)
+    def with_subject(self, slug, tasks=(), proposals=(), needs=""):
+        files = {"planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1), (slug, 0)),
+                 f"planning/{slug}.md": subject(slug, tasks, proposals, needs)}
+        return self.problems(files)
+
+    def test_a_lower_case_or_digit_first_slug_is_refused(self):
+        for slug in ("Short", "9LIVES"):
+            found = self.with_subject(slug)
+            self.assertTrue(any(f"the slug '{slug}' must be capitals and digits, starting with a letter" in p for p in found), found)
+
+    def test_a_short_slug_passes_with_its_tasks_and_proposals(self):
+        found = self.with_subject("SEO4", [(1, "none"), (2, "SEO4-1")], [1], needs="- ALPHABETA-1: the thing; see SEO4-P1.")
+        self.assertEqual([], found)
+
+    def test_a_twelve_character_slug_passes(self):
+        self.assertEqual([], self.with_subject("ABCDEFGHIJ12", [(1, "none")]))
+
+    def test_a_new_slug_longer_than_twelve_characters_is_refused(self):
+        found = self.with_subject("ABCDEFGHIJ123")
+        self.assertIn("planning/ABCDEFGHIJ123.md: the slug 'ABCDEFGHIJ123' has 13 characters; a slug has at most 12", found)
+
+    def test_a_long_slug_named_before_the_limit_passes(self):
+        self.assertEqual([], self.with_subject("WORKSPACEISOLATION", [(1, "none")]))
+
+    def test_a_task_of_a_short_slug_that_does_not_exist_is_named(self):
+        found = self.with_subject("SEO4", [(1, "SEO4-7")])
+        self.assertIn("planning/SEO4.md: names SEO4-7, which is not a task of any subject", found)
+
+    def test_short_words_with_a_number_that_are_not_slugs_are_not_ids(self):
+        found = self.with_subject("SEO4", [(1, "none")], needs="- hashes are SHA-256 in UTF-8, tested on N-1.")
+        self.assertEqual([], found)
 
     def test_a_task_with_another_subjects_prefix_is_refused(self):
         found = self.problems({"planning/GAMMADELTA.md": subject("GAMMADELTA", [(1, "none")]) + "\n| ALPHABETA-9 | x | none | S | t |\n"})
