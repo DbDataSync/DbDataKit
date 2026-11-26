@@ -207,6 +207,45 @@ public sealed class ServerStartupTests : IDisposable
         Assert.Contains($"listen: https://127.0.0.1:{pinned}", File.ReadAllText(Path.Combine(_directory, "server.yaml")));
     }
 
+    [Fact]
+    public async Task A_bare_health_check_asks_the_address_the_server_pinned_and_the_default_one_when_there_is_no_settings_file()
+    {
+        // the sub-block's first port is held by a listener that is not the server (7840 on a free machine), so the server pins the next (7841)
+        // and a check that asked the default address would not be answered
+        var first = ListenPorts.Choose(SuiteServices.Runner.Ports, IPAddress.Loopback, []);
+        Assert.SkipWhen(first is null, "every port of the Runner's sub-block is taken on this machine");
+        using (Hold(first!.Value))
+        {
+            var written = new StringWriter();
+            var output = TextWriter.Synchronized(written);
+            using var stop = new CancellationTokenSource();
+            var run = RunnerCli.Router(_ => null).RunAsync(["server", "run", "--repo", _directory], new CliContext(output, TextWriter.Null, TextReader.Null, stop.Token));
+            await Until(() => Text(output, written).Contains("Serving on", StringComparison.Ordinal) || run.IsCompleted);
+            Assert.False(run.IsCompleted, "the server stopped instead of serving " + (File.Exists(FailureFile) ? File.ReadAllText(FailureFile) : ""));
+            var pinned = ListenPorts.ReadPinned(Path.Combine(_directory, "server.yaml"));
+            Assert.NotNull(pinned);
+            Assert.NotEqual(first.Value, pinned.Port);
+
+            var check = new CliContext(new StringWriter(), new StringWriter(), TextReader.Null);
+            var exit = await RunnerCli.Router(_ => null).RunAsync(["health", "check", "--repo", _directory], check);
+
+            Assert.True(exit == CliExit.Ok, check.Error.ToString());
+            Assert.Equal($"https://127.0.0.1:{pinned.Port}/health/live", check.Data["url"]);
+            stop.Cancel();
+            Assert.Equal(0, await run);
+        }
+
+        // a folder with no settings file: the default address is asked
+        var empty = Directory.CreateTempSubdirectory("dbdr-health-").FullName;
+        try
+        {
+            var check = new CliContext(new StringWriter(), new StringWriter(), TextReader.Null);
+            await RunnerCli.Router(_ => null).RunAsync(["health", "check", "--repo", empty, "--timeout", "2"], check);
+            Assert.Equal(RunnerCli.HealthUrl, check.Data["url"]);
+        }
+        finally { Directory.Delete(empty, recursive: true); }
+    }
+
     /// <summary>Starts <c>server run</c> with no <c>--listen</c>, waits until it serves, stops it and returns the port it said it serves on.</summary>
     private async Task<int> StartAndStop()
     {

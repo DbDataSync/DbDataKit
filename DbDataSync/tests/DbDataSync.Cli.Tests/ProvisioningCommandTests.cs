@@ -92,6 +92,28 @@ public sealed class ProvisioningCommandTests : IDisposable
         Assert.Equal("prod-gateway", document.GetProperty("cache_server").GetString());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AMissingTable_IsPlannedAsACreate_AndCreateTargetTableIfMissingSaysWhoRunsIt_AsAPassDoes(bool create)
+    {
+        // a pass creates a missing table only with the setting on; with it off the pass fails and asks for the setup to be applied, so the plan keeps
+        // the statement to apply either way and says which of the two it is
+        Cache(TargetWithoutTable);
+        var mapping = _config.LoadTableMapping("scan", "t1");
+        mapping.Provisioning = new ProvisioningConfig { CreateTargetTableIfMissing = create };
+        _config.SaveTableMapping("scan", mapping, Author);
+
+        var (exit, document, error) = await PlanAsync("scan");
+
+        Assert.True(exit == 0, error);
+        var target = document.GetProperty("mappings")[0].GetProperty("target_plan");
+        Assert.Equal("missing", target.GetProperty("state").GetString());
+        Assert.Contains("CREATE TABLE", Assert.Single(target.GetProperty("steps").EnumerateArray()).GetProperty("command_text").GetString());
+        var said = Assert.Single(target.GetProperty("warnings").EnumerateArray()).GetString();
+        Assert.Contains(create ? "is on: the first pass creates the table" : "is off: a pass does not create the table and fails until it exists", said);
+    }
+
     [Fact]
     public async Task ATableTheCacheHasWithAColumnMissing_IsPlannedAsAnAlterThatAddsIt_AndSaysWhatTheCacheDoesNotCompare()
     {

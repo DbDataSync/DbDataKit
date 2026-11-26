@@ -162,35 +162,33 @@ Tests: `BuildRuntimePackageTests` (no database: the manifest the script prints i
 
 ## 10. Publishing a project to a runner
 
-`dbdatabuild project publish --to runner` sends the committed files of a project to a `dbdatarunner` as a definition package (plan 28c, E07). It compiles nothing: it reads `rendered/` as committed, so run `project compile` and commit first. The engine is not in the package; the package names the runtime package (section 9) by range, by default the minor line of this tool (`0.4.x`; `--runtime-range` says another).
+`dbdatabuild project publish --to runner --out <folder>` writes the committed files of a project as a runner's definition package: `package.yaml` and `files/`. It compiles nothing: it reads `rendered/` as committed, so run `project compile` and commit first. The engine is not in the package; the package names the runtime package (section 9) by range, by default the minor line of this tool (`0.4.x`; `--runtime-range` says another).
+
+The command line never sends the package to a runner. The console deploys it: the Workspace publishes a build project to a Runner, and "Publish a package from files" on the Runner's Packages screen publishes the folder the command wrote. Files the runner already has are not sent again, and the version is staged or served. `--server`, `--code`, `--promote-from`, `--channel`, `--bind`, `--serve`, `--expected-version` and `--client-dir` belonged to sending: each exits with code 2 and says that the console deploys.
 
 ```
-dbdatabuild project publish --to runner --server <name or https address> --code <pairing code> --channel dev \
-    --bind warehouse=wh_dev          # first time: pairs, pins the runner's certificate, binds the channel's slots, publishes
-dbdatabuild project publish --to runner --server <name> --channel dev       # again: files the runner has are not sent
-dbdatabuild project publish --to runner --server <name> --channel prod --promote-from dev --bind warehouse=wh_prod
-dbdatabuild project publish --to runner --out ./package                     # write package.yaml and files/, send nothing
+dbdatabuild project publish --to runner --out ./package       # write package.yaml and files/
 ```
 
 - **Who schedules it.** The runner, from the first activation (section 11).
 - **One task per refresh plan**, named `<connection>-<plan>` (lower case, `-` and `_`; two plans that come to one name are refused naming both). A plan's `schedule` and `time_zone` become the task's schedule (a plan with none is started by a person, `RunNow`, or a trigger). `Concurrency` is 1; the command's own lock and `on_busy` stay. Inputs `connection` and `plan` default to the plan's. The task's `timeout` is the sum of its loads' `max_runtime` (a load's own, else the plan's) plus the plan's `max_wait` and five minutes, only when every load has one; otherwise no timeout.
 - **One connection slot per connection the plan needs** (its own, and the origins of a copy), named for the connection, of the connection's engine, with `env: build-login`: the runner puts the bound connection's `DBDATAKIT_BUILD_<CONNECTION>_READ` and `_WRITE` logins into the task's environment. Slot names are lower case, digits and `_`.
-- **Files**: `dbdatabuild.yml`, `dialects.lock.yml`, `connections/`, everything under `rendered/`, and the hook scripts `loads.yml` names. Text files are sent with LF line endings, so one commit is one package on every platform.
-- **Refused before anything is sent**: a plan whose `schedule` is not cron (DDB-106, naming the plan file and `schedule`), a script or resolver or hook that is missing or not the one `loads.yml` names by hash (DDB-448), a plan file that does not read or whose members `loads.yml` does not have, a loads file with no `project_hash`, a connection with no file in `connections/`, a manifest the runner's reader would not read back unchanged. The runner checks formats, hashes and the runtime range again when it stages the version.
-- **Bindings are the channel's own.** A version that declares a slot is refused in a channel where the slot is not bound, and that includes the first version of a package, so `--bind slot=connection` binds first (the runner lets a publisher bind a name that has no version yet, and that publisher then owns it). `--promote-from <channel>` publishes nothing: it points `--channel` at the version the other channel serves (the runner's `switch`, which needs an administrator pairing), after binding the new channel's slots.
+- **Files**: `dbdatabuild.yml`, `dialects.lock.yml`, `connections/`, everything under `rendered/`, and the hook scripts `loads.yml` names. Text files are written with LF line endings, so one commit is one package on every platform.
+- **Refused before anything is written**: a plan whose `schedule` is not cron (DDB-106, naming the plan file and `schedule`), a script or resolver or hook that is missing or not the one `loads.yml` names by hash (DDB-448), a plan file that does not read or whose members `loads.yml` does not have, a loads file with no `project_hash`, a connection with no file in `connections/`, a manifest the runner's reader would not read back unchanged. The runner checks formats, hashes and the runtime range again when it stages the version.
+- **Bindings are the channel's own.** A version that declares a slot is refused in a channel where the slot is not bound, and that includes the first version of a package, so the slots are bound first: in the Workspace's publish form, or on the Runner's Packages screen. Moving the version one channel serves to another is the Runner's switch or the console's Promote action.
 - **What it does not do**: it does not create the connections or their secrets on the runner (the logins are bound on the runner; the connection files are the runner's catalog), does not activate by itself (a staged version activates when every runner of the group has it ready),  and has no release of several products (plan 21's releases).
 
 ### The logins on the runner
 
-A refresh or an operation on the runner connects with the runner's own logins: bind each to the package's `build-login` slot of the connection (the runner's Packages page, or `--bind slot=connection` with the connection files of the runner's catalog). No Build program keeps a login: the Build server's secret store and its `secret send --to runner` were deleted with the server (plan 33 SC23).
+A refresh or an operation on the runner connects with the runner's own logins: bind each to the package's `build-login` slot of the connection on the runner's Packages page, with the connection files of the runner's catalog. No Build program keeps a login: the Build server's secret store and its `secret send --to runner` were deleted with the server (plan 33 SC23).
 
 ### A person's writes on the runner (plan 28c E21)
 
 ```
-dbdatabuild project publish --to runner --operations --server <runner> --channel <name> [--package <name>] [--bind slot=connection]
+dbdatabuild project publish --to runner --operations --out <folder> [--package <name>]
 ```
 
-Every write a person starts is a **manual-only task of a runner**, run under the runner's own binding of the connection. `--operations` publishes a package of its own (default name `<project folder>-ops`, kept apart from the refresh package because it carries the project's sources, `models/`, `seeds/`, `macros/`, `hooks/` and `views/`, which `ack definition` and `seed` read) with three tasks, none of them scheduled or triggered, each with a slot for every connection of the project:
+Every write a person starts is a **manual-only task of a runner**, run under the runner's own binding of the connection. `--operations` writes a package of its own (default name `<project folder>-ops`, kept apart from the refresh package because it carries the project's sources, `models/`, `seeds/`, `macros/`, `hooks/` and `views/`, which `ack definition` and `seed` read) with three tasks, none of them scheduled or triggered, each with a slot for every connection of the project:
 
 | Task | Runs | Inputs |
 | --- | --- | --- |

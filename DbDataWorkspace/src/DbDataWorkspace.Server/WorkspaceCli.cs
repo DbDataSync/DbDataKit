@@ -14,7 +14,7 @@ public static class WorkspaceCli
 {
     public const string Program = "dbdataworkspace";
 
-    /// <summary>Where <c>health check</c> asks by default: the server's own address, as a container sees it.</summary>
+    /// <summary>Where <c>health check</c> asks when the server's settings file pins no address: the server's default address, as a container sees it.</summary>
     public const string HealthUrl = "https://localhost:7860/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
@@ -55,7 +55,8 @@ public static class WorkspaceCli
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
         WorkspaceService.Noun(WorkspaceServiceEnvironment.Real()),
-        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
+        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl,
+            repo => ListenPorts.ReadPinned(Path.Combine(Path.GetFullPath(repo ?? WorkspaceSettings.DefaultDirectory(environment)), "server.yaml"))),
     ], WorkspaceServer.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>

@@ -90,6 +90,18 @@ port ranges). No file means a clean start; a leftover "not finished" line means 
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
 
+Where a server keeps its logs and its failure file depends on its data folder:
+
+- The data folder is the service's folder of an install (`C:\ProgramData\DbDataKit\runner`, Linux `/var/lib/dbdatakit/runner`): the shared
+  `logs` folder above (Linux `/var/log/dbdatakit`).
+- The data folder has the service's folder name under another root (`D:\suite\runner`): a `logs` folder beside it (`D:\suite\logs`).
+- Any other data folder, such as a run from a terminal on a folder of its own or a test's folder: a `logs` folder inside it. Such a run never writes
+  to the machine's logs folder.
+
+Example: when `dbdatarunner server run --repo C:\dev\runner-dev` fails at the ports step, it writes
+`C:\dev\runner-dev\logs\startup-failure-dbdatarunner.txt`. On Linux, `--repo /home/ana/runner-dev` writes
+`/home/ana/runner-dev/logs/dbdatarunner/startup-failure-dbdatarunner.txt`.
+
 `<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux systemd creates each service's `/var/log/dbdatakit/<service>/` when it starts the unit (`LogsDirectory=`), owned by the service's user with mode `0700`, and the failure file is `/var/log/dbdatakit/<service>/startup-failure-<service>.txt`, mode `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
 
 ## Service names, accounts and descriptions
@@ -102,7 +114,12 @@ descriptions:
 - `DbDataRunner`: "DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks) on schedule or on demand."
 - `DbDataWorkspace`: "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data."
 
-On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`.
+Each Windows service's display name, the name `services.msc` lists, is its service name (`DbDataRunner`).
+
+On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`. Its systemd
+unit is named as the program too (`dbdatarunner.service`), and the unit's `Description=` is the service's description above. Example: `systemctl
+status dbdatarunner` shows `dbdatarunner.service - DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks)
+on schedule or on demand.`
 
 Each server's `service install` registers its Windows service under that name and account, with that description. The names and descriptions are
 written once, in `SuiteServices` (`Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`), and the MSI, `install.ps1` and the `dbdatakit-full` Scoop
@@ -139,7 +156,26 @@ never takes another one. To move a server, change its `listen:` line and restart
 listen: https://127.0.0.1:7841
 ```
 
-`health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
+Where `health check` asks, with no `--url`:
+
+- The server's settings file has a `listen:` line: that address. A server that listens on `0.0.0.0`, `::` or a host name is asked on `localhost`.
+  `--repo` names the server's folder when it is not the default one.
+- The file or its `listen:` line is not there: the default address (`https://localhost:7800`, `:7840` or `:7860`).
+- The file cannot be read, or its `listen:` line is not an address: the check asks nothing and exits 1. It names the file and `--url`, because
+  another program could answer on the default address and the check would then report the wrong server.
+
+The Gateway's `health check` asks its `listen` address from `config/server.yaml` in its data folder, which `--repo` names in the same way.
+
+Example: on a Runner whose `listen:` line is `https://127.0.0.1:7841`, `dbdatarunner health check` asks `https://127.0.0.1:7841/health/live` and
+prints `healthy: HTTP 200`. On Linux the Runner's folder is closed to every user but the service's, so the same command run by another user
+prints:
+
+```
+The address the server listens on cannot be read: Access to the path '/var/lib/dbdatakit/runner/server.yaml' is denied. Fix the listen: line, or give the address with --url.
+```
+
+Run it with `sudo`, or give the address: `dbdatarunner health check --url https://127.0.0.1:7841/health/live`.
+
 `dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
 own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise.
 
@@ -168,7 +204,8 @@ on 7820, 7821 and 7822, or the next free ports, and on the same three after ever
 has a `listen` of its own only when the administrator writes one (`apps.listen`, `rest.listen` for feeds); without it the module answers on the public listener.
 
 The ports step of the start checks every address of every listener. A port that another program holds, or that Windows excludes, fails the step, and the failure file
-names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815` in the image).
+names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821` in the image). The image does not set the public
+listener, so inside the container it takes 7820 and is not published.
 
 When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
 configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a
@@ -238,7 +275,7 @@ standard input for whoever prefers that. All automation is a subcommand of our p
 ```
 console (CLI or Add a server screen)       remote machine (administrator)                 the service, as itself
  invite: product, role, group  ─────►  dbdatarunner pair --host ... --token ... --console-thumbprint ...
-   keeps the token's hash                   writes join-request.yaml, (re)starts ─────►  startup step "join":
+   keeps a verifier made from the token     writes join-request.yaml, (re)starts ─────►  startup step "join":
                                                                                            POST <host>/api/v1/join, TLS pinned to the thumbprint
                                                                                            {token proof, product, address, certificate fingerprint, public key}
    checks the token (product, group,  ◄────────────────────────────────────────────────
@@ -252,8 +289,9 @@ console (CLI or Add a server screen)       remote machine (administrator)       
 thumbprint, so a machine in the middle neither learns the token nor passes for the console. A wrong thumbprint, an expired or spent token, another product
 or another group is refused, and audited with who made the token and nothing of its value.
 
-**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding the token's hash, its product, role
-ceiling and group, who made it and when it ends. The console's Add a server screen lists the tokens still waiting, never their values, and
+**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding a verifier made from the token, its
+product, role ceiling and group, who made it and when it ends. The verifier is the public half of a key derived from the token. It checks a join's
+signature and cannot make one, so a copy of the console's state is not enough to join a server. The console's Add a server screen lists the tokens still waiting, never their values, and
 cancels them.
 
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);

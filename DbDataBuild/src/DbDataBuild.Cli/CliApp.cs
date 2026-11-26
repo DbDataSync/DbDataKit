@@ -22,6 +22,13 @@ public static class CliApp
             return ExitUsage;
         }
 
+        // command lines do not send a package to a runner, the console deploys: the options of that form answer the sentence that says so
+        if (Runner.ProjectPublishCommand.SendingGone(args) is { } gone)
+        {
+            error.WriteLine(gone);
+            return ExitUsage;
+        }
+
         return Guarded(args, error, () => { DbDataBuild.Execution.DriverSettings.Apply(); return Build(output, error, input ?? TextReader.Null, interactive, environment ?? Environment.GetEnvironmentVariable).Parse(args, new ParserConfiguration { ResponseFileTokenReplacer = null }).Invoke(new InvocationConfiguration { Output = output, Error = error, EnableDefaultExceptionHandler = false }); }, output);
     }
 
@@ -148,23 +155,15 @@ public static class CliApp
                 case "project publish":
                     var ppProject = new Option<DirectoryInfo>("--project") { Description = "Project root", DefaultValueFactory = _ => new DirectoryInfo(".") };
                     var ppTo = new Option<string>("--to") { Description = "Where to publish: `runner` (the default), or `gateway`, which only writes (--out) the semantic models and the data sources they read, with no login, for a server that holds none to publish", DefaultValueFactory = _ => "runner" };
-                    var ppServer = new Option<string?>("--server") { Description = "The runner: the name it was paired under or its https address" };
-                    var ppCode = new Option<string?>("--code") { Description = "The single-use pairing code (from `dbdatarunner server pair --max-role publisher`), when this machine is not paired with the runner yet" };
-                    var ppChannel = new Option<string?>("--channel") { Description = "The channel the version goes to" };
                     var ppPackage = new Option<string?>("--package") { Description = "The package's name on the runner (default: the project folder's name)" };
-                    var ppServe = new Option<bool>("--serve") { Description = "Make the version active at once instead of staging it (staged is the default: runners prepare it, then it activates)" };
-                    var ppExpected = new Option<int?>("--expected-version") { Description = "The highest version the package has, as you saw it (0 for a first publish); a newer one is refused" };
-                    var ppBind = new Option<string[]>("--bind") { Description = "`slot=connection`: bind a connection slot of the package in the channel (the slots are the project's connection names; repeatable). A channel's bindings are its own", AllowMultipleArgumentsPerToken = false, DefaultValueFactory = _ => [] };
-                    var ppPromote = new Option<string?>("--promote-from") { Description = "Do not publish: promote the version this channel serves to --channel (the same version; the runner's `switch`, which needs an administrator pairing)" };
                     var ppRange = new Option<string?>("--runtime-range") { Description = "The engine versions the package accepts, instead of this tool's minor line (`0.4.x`, `>=0.4 <1`)" };
-                    var ppClientDir = new Option<string?>("--client-dir") { Description = "Where this machine's pairings with runners are kept (default: DBDATAKIT_RUNNER_CLIENT_DIR, else a folder under the user's local application data)" };
-                    var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory and send nothing" };
+                    var ppOut = new Option<string?>("--out") { Description = "Write the package (package.yaml and files/; for --to gateway gateway.json, models/ and data-sources/) to this directory; nothing is sent, the console deploys it" };
                     var ppRunnerSchedules = new Option<bool>("--runner-schedules") { Description = "The runner schedules the plans from the first activation; always so since the Build server and its scheduler were deleted (plan 33 SC23), and the option is kept so a script that gives it still runs" };
-                    var ppOperations = new Option<bool>("--operations") { Description = "Publish the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). A person starts them on the runner (or through the console), and the run is recorded under their name; the write login is the runner's binding" };
+                    var ppOperations = new Option<bool>("--operations") { Description = "Write the package of the project's person-driven writes instead of its refresh plans (plan 28c E21): the manual-only tasks `apply_plan`, `ack` and `seed`, with the project's sources and a slot for every connection the project uses (the connections its models build on, a copy's origins and their tracking connections; a built-in connection no model builds on is no slot), as the package `<project>-ops` (or --package). A person starts them on the runner (or through the console), and the run is recorded under their name; the write login is the runner's binding" };
                     cmd.Options.Add(ppOperations);
-                    cmd.Options.Add(ppProject); cmd.Options.Add(ppTo); cmd.Options.Add(ppServer); cmd.Options.Add(ppCode); cmd.Options.Add(ppChannel); cmd.Options.Add(ppPackage); cmd.Options.Add(ppServe); cmd.Options.Add(ppExpected); cmd.Options.Add(ppBind); cmd.Options.Add(ppPromote); cmd.Options.Add(ppRange); cmd.Options.Add(ppClientDir); cmd.Options.Add(ppRunnerSchedules); cmd.Options.Add(ppOut);
+                    cmd.Options.Add(ppProject); cmd.Options.Add(ppTo); cmd.Options.Add(ppPackage); cmd.Options.Add(ppRange); cmd.Options.Add(ppRunnerSchedules); cmd.Options.Add(ppOut);
                     cmd.SetAction(pr => Reported(pr, spec, (o, e) => Runner.ProjectPublishCommand.Run(spec, pr.GetValue(ppProject)!.FullName,
-                        new Runner.PublishOptions(pr.GetValue(ppTo)!, pr.GetValue(ppServer), pr.GetValue(ppCode), pr.GetValue(ppChannel), pr.GetValue(ppPackage), pr.GetValue(ppServe), pr.GetValue(ppExpected), pr.GetValue(ppBind) ?? [], pr.GetValue(ppPromote), pr.GetValue(ppRange), pr.GetValue(ppClientDir), pr.GetValue(ppOut), pr.GetValue(ppRunnerSchedules), pr.GetValue(ppOperations)),
+                        new Runner.PublishOptions(pr.GetValue(ppTo)!, pr.GetValue(ppPackage), pr.GetValue(ppRange), pr.GetValue(ppOut), pr.GetValue(ppRunnerSchedules), pr.GetValue(ppOperations)),
                         o, e, environment ?? Environment.GetEnvironmentVariable)));
                     break;
                 case "project agent-kit":

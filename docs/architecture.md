@@ -141,10 +141,6 @@ Each service's program only runs and configures its service. Everything else is 
 
 ## Planned architecture changes
 
-- **In progress.** The Workspace service stops calling Runners and Gateways. The control service now deploys builds, starts and reads runs, tests
-  connections and reads catalogs as the person, pulling the built package from the Workspace service. Still to go: app previews, which the Workspace
-  service still sends to a Gateway with its own publisher key, and then the publisher keys and the Workspace service's clients of the Runner and the
-  Gateway.
 - **Planned.** The Workspace service runs with an outbound allow-list of package sources and git remotes only.
 - **Planned.** DDL (creating, altering or dropping tables) runs as a Runner task that a person starts from the console. The control service starts it
   on the Runner after the person approves the exact statements. Today the Runner accepts these tasks only when the Workspace service starts them; that

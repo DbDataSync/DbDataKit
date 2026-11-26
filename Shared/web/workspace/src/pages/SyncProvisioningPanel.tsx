@@ -3,6 +3,8 @@ import { useMutation } from '@tanstack/react-query'
 import { ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi, type CheckDiagnostic, type ProvisioningPlan, type ProvisioningSide, type StagedRun, type ToolAnswer } from '../api'
 import { useProvisioningApply } from '../designerData'
+import { useDraftOrNull } from '../draft'
+import { unsavedOf } from '../unsaved'
 import { replicationsOf } from '../syncSchemas'
 
 export { AppliedStep, followStagedRun } from '../designerData'
@@ -83,12 +85,19 @@ export function SyncProvisioningPanel({ project, id, paths }: { project: string;
   const replications = replicationsOf(paths)
   const [chosen, setChosen] = useState('')
   const replication = chosen !== '' && replications.includes(chosen) ? chosen : (replications[0] ?? '')
-  const plan = useMutation({ mutationFn: (name: string) => workspaceApi.provisioningPlan(project, id, name) })
+  // the plan reads the draft as the person sees it: the unsaved edits of the frame (both areas share them) go with the question, as the Designer's tabs send them
+  const draft = useDraftOrNull()
+  const plan = useMutation({
+    mutationFn: async (name: string) => {
+      const unsaved = draft ? unsavedOf(draft.dirtyPaths, draft.textOf) : {}
+      return { answer: await workspaceApi.provisioningPlan(project, id, name, unsaved), included: Object.keys(unsaved).length }
+    },
+  })
   // the version the console's newest deploy of a build of this draft put on a Runner, and the task provision of it
   const { staged, apply } = useProvisioningApply(project, id)
   return (
     <div data-testid="wsp-prov">
-      <div className="hint" style={{ marginBottom: 6 }}>The plan of a replication's tables, made offline from the catalog cache of this draft. Applying it runs DDL on a Runner, as the task provision of the version a build of this draft staged there.</div>
+      <div className="hint" style={{ marginBottom: 6 }}>The plan of a replication's tables, made offline from the catalog cache of this draft and its unsaved edits. Applying it runs DDL on a Runner, as the task provision of the version a build of this draft staged there.</div>
       <div className="hint" data-testid="wsp-prov-staged">{staged.data ? `${staged.data.mode === 'serve' ? 'Published' : 'Staged'}: ${staged.data.package} version ${staged.data.version} on ${staged.data.channel} of ${staged.data.targetName}.` : staged.isLoading ? '' : 'No build of this draft is staged on a Runner yet, so nothing can be applied.'}</div>
       {replications.length === 0
         ? <div className="hint" data-testid="wsp-prov-no-replication">No replication yet.</div>
@@ -101,7 +110,8 @@ export function SyncProvisioningPanel({ project, id, paths }: { project: string;
           </div>
         )}
       <ErrorBanner error={plan.error} />
-      {plan.data && <ProvisioningPlanView answer={plan.data} onApply={staged.data && !apply.isPending ? (mapping, action) => apply.mutate({ replication, mapping, action }) : undefined} />}
+      {plan.data && <div className="hint" data-testid="wsp-prov-basis" data-unsaved={plan.data.included}>{plan.data.included === 0 ? 'Planned from the saved files.' : `Planned with ${plan.data.included === 1 ? 'its one unsaved edit' : `its ${plan.data.included} unsaved edits`} included. Apply runs the version on the Runner, so a statement that comes from an unsaved edit is applied only after the edit is saved, built and published.`}</div>}
+      {plan.data && <ProvisioningPlanView answer={plan.data.answer} onApply={staged.data && !apply.isPending ? (mapping, action) => apply.mutate({ replication, mapping, action }) : undefined} />}
       {apply.isPending && <div className="hint" data-testid="wsp-prov-applying">Applying on the Runner...</div>}
       <ErrorBanner error={apply.error} />
       {apply.data && <RunResult run={apply.data} />}

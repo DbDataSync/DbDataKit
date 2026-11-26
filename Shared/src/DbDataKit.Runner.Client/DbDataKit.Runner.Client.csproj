@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>DbDataKit.Runner.Client</RootNamespace>
-    <Description>The publishing client of a runner (plan 28a R16, moved here by plan 28c E07): pairing as a Publisher, the pinned certificate, upload of the files a runner does not have (by hash), publish or stage of a package version, and the bindings of a channel's connection slots. dbdatarunner package publish and dbdatabuild project publish are clients of it.</Description>
+    <Description>The publishing client of a runner (plan 28a R16, moved here by plan 28c E07): pairing as a Publisher, the pinned certificate, upload of the files a runner does not have (by hash), publish or stage of a package version, and the bindings of a channel's connection slots. The console's deploy is a client of it.</Description>
     <IsPackable>true</IsPackable>
     <NoWarn>$(NoWarn);CS1573;CS1572</NoWarn>
   </PropertyGroup>

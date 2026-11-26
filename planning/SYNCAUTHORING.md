@@ -35,9 +35,9 @@ cards of `SyncSetPanel.tsx` (whose `.grid-row` rows overlap), each file in `Stru
 `MappingColumns.tsx` for a mapping's columns, and the tabs Changes, Check, Scripts (`SyncScriptsPanel.tsx`), Provisioning (`SyncProvisioningPanel.tsx`),
 Catalog, Runs, Builds, History. That page becomes the **Files** area unchanged.
 
-The Workspace server already answers, for a sync draft (`SyncDraftTools.cs`, running `dbdatasync` on a copy of the draft): the check, the scripts list
-(`GET .../scripts`), a script's test against generated input (`POST .../script-test`), the provisioning plan from the catalog cache
-(`POST .../provisioning-plan`), the catalog refresh through a paired Gateway (`POST .../catalog/refresh`), and the build, publish and run routes.
+The Workspace server answers, for a sync draft (`SyncDraftTools.cs`, running `dbdatasync` on a copy of the draft): the check, the scripts list
+(`GET .../scripts`), the provisioning plan from the catalog cache (`POST .../provisioning-plan`) and the build. A script's test, the catalog's reads,
+deploys and runs go through the console to a Runner or a Gateway as the person (`docs/authoring-metadata.md`, `docs/publishing.md`).
 
 ### What is ported (authoring)
 
@@ -162,9 +162,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-20 | The three rules the offline check copies from Sync's engine become public methods both call: the Flight SQL driver's reading of a type (`FlightSqlTypes` in `DbDataKit.Sync.Core`), `Scd2Writer.RequireNaturalKey` and `KeyReconcileDeleteWriter.RequireKey` | none | S | `SyncOfflineCheck` holds no copied rule, and its tests and the writers' tests pass |
 | SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
-| SYNCAUTHORING-25 | The set's `discover` asks a bound `metadataProvider` script for the connection's configured database (`address.database`, or `extensions.sync.database`), and `""` only when the file names none; the driver path keeps `""`, so a driver that cannot switch database (SQLite) still reads (`MetadataService.ReadCatalogAsync`) | none | S | a test: a script that reads `[{database}].INFORMATION_SCHEMA.TABLES` lists the tables of `sales` for a connection whose `address.database` is `sales`; a SQLite YAML driver still reads with `""` |
-| SYNCAUTHORING-26 | The provisioning plan honours **Create target table if missing**: `dbdatasync provisioning plan` reads the mapping's `createTargetTableIfMissing` and plans `CREATE TABLE` for a missing target only when it is on (today it plans it whether the setting is on or off); the Files area's Provisioning tab plans unsaved edits as the Designer's tabs do | none | S | a test: a missing target table gets `CREATE TABLE` in the plan with the setting on and none with it off; a story turns the setting off and the badge clears |
-| SYNCAUTHORING-27 | **Build and stage** (the set's own `discover` and `describe`) is offered in every channel, `prod` included, with the production warning the reads show; the target's roles decide | none | S | a vitest: on a Runner whose only channel is `prod`, Build and stage is offered with the warning; a console test stages in `prod` |
 
 ## Needs from other subjects
 

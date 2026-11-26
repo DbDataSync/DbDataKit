@@ -211,6 +211,47 @@ public sealed class ScriptedMetadataTests : IDisposable
     }
 
     [Fact]
+    public void AWholeCatalogRead_AsksABoundScriptForTheDatabaseTheFileNames_AndTheDriverForTheOneTheConnectionOpens()
+    {
+        SaveScript("named", "Named", """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using DbDataSync.Drivers.Abstractions;
+            using DbDataSync.Scripting.Abstractions;
+
+            public sealed class Named : IMetadataProvider
+            {
+                public Task<IReadOnlyList<string>> ListDatabasesAsync(MetadataContext c, CancellationToken ct) => c.DriverDatabases(ct);
+                public Task<IReadOnlyList<TableMetadata>> ListTablesAsync(MetadataContext c, string database, CancellationToken ct) => c.DriverTables(database, ct);
+                public Task<IReadOnlyList<ColumnMetadata>> ListColumnsAsync(MetadataContext c, string database, string schema, string table, CancellationToken ct) =>
+                    c.DriverColumns(database, schema, table, ct);
+            }
+            """);
+        var author = new DbDataKit.Config.Git.GitAuthor("t", "t@t");
+        void Save(string name, string? host, string? connectionString, string? database, string? script)
+        {
+            var input = new ConnectionInput
+            {
+                Name = name, DriverType = DriverIds.MsSql, Host = host, ConnectionString = connectionString, Database = database, AuthMode = AuthMode.IntegratedAuth,
+            };
+            if (script is not null) input.Scripts[ScriptSlots.MetadataProvider] = new ScriptBinding { ScriptName = script };
+            _configRepository.SaveConnection(input, author);
+        }
+
+        Save("by-address", "h", null, "sales", "named");                         // address.database
+        Save("by-string", null, "Server=h;Encrypt=false", "sales", "named");      // extensions.sync.database
+        Save("no-database", "h", null, null, "named");
+        Save("no-script", "h", null, "sales", null);
+
+        Assert.Equal("sales", _metadata.CatalogDatabase("by-address"));
+        Assert.Equal("sales", _metadata.CatalogDatabase("by-string"));
+        Assert.Equal("", _metadata.CatalogDatabase("no-database"));
+        Assert.Equal("", _metadata.CatalogDatabase("no-script"));
+        Assert.Equal("", _metadata.CatalogDatabase("never-saved"));
+    }
+
+    [Fact]
     public void MetadataProvider_BindsOnlyAtTheConnection()
     {
         Assert.True(ScriptSlots.IsBindableAt(ScriptSlots.MetadataProvider, BindingLevels.Connection));
