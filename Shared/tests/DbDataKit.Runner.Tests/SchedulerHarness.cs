@@ -118,9 +118,12 @@ internal sealed class SchedulerHarness : IDisposable
     /// <summary>Marks a task's scheduled times as handled up to now, so its first tick is not the "never ran" one.</summary>
     public void SeedHandled(string task, string package = Package, string channel = Channel) => Jobs.SaveHandled($"{package}/{channel}", task, Clock.GetUtcNow());
 
+    private readonly List<RunnerScheduler> _made = [];
+
     public RunnerScheduler NewScheduler(
-        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null, Func<Guid?>? instance = null, string? platform = null) =>
-        new(database ?? Database, runner, Cache, Versions, new RunnerSchedulerOptions
+        ITaskRunner runner, string? worker = null, StateDatabase? database = null, TimeSpan? heartbeat = null, int maxRuns = 4, double jitter = 0.5, TimeSpan? tick = null, string[]? channels = null, Func<Guid?>? instance = null, string? platform = null)
+    {
+        var made = new RunnerScheduler(database ?? Database, runner, Cache, Versions, new RunnerSchedulerOptions
         {
             Channels = channels ?? [Channel],
             WorkerId = worker ?? "loop-" + Guid.NewGuid().ToString("N"),
@@ -132,6 +135,30 @@ internal sealed class SchedulerHarness : IDisposable
             // the tests publish runtime packages for linux-x64 unless they say otherwise, so the scheduler is a linux-x64 runner on every OS (the default is the platform of the process: win-x64 on the Windows job)
             Platform = platform ?? RuntimePlatforms.LinuxX64,
         });
+        lock (_made) _made.Add(made);
+        return made;
+    }
+
+    /// <summary>
+    /// What the loops of this harness have to say when a wait gives up: the items in flight on the queue and the problems each loop reported. A run that never started is
+    /// either still waiting (an item claimed and not running) or was given up on by the loop, whose problem names why (an exception in the start, a held lock, a deferral).
+    /// </summary>
+    public string Explain()
+    {
+        var lines = new List<string>();
+        try { lines.AddRange(Queue.ListInFlight($"{Package}/{Channel}").Select(i => $"in flight: item {i.Item.Id} {i.Item.Subject} {i.Item.Status}, lease until {i.LeaseExpiresAt:O}")); }
+        catch (Exception ex) { lines.Add($"the queue could not be read: {ex.GetType().Name}: {ex.Message}"); }
+        RunnerScheduler[] made;
+        lock (_made) made = [.. _made];
+        foreach (var scheduler in made)
+        {
+            var status = scheduler.Status();
+            lines.Add($"loop {status.WorkerId}: {status.RunningHere} running here");
+            lines.AddRange(status.Problems.Select(p => $"  problem: {p.Subject}: {p.Message}"));
+        }
+
+        return lines.Count == 0 ? "nothing in flight and no loop" : string.Join(Environment.NewLine, lines);
+    }
 
     public static async Task<TickReport> Tick(RunnerScheduler scheduler)
     {
@@ -140,12 +167,12 @@ internal sealed class SchedulerHarness : IDisposable
         return report;
     }
 
-    public static async Task Until(Func<bool> condition, string what, int seconds = 20)
+    public static async Task Until(Func<bool> condition, string what, int seconds = 20, Func<string>? explain = null)
     {
         var until = DateTime.UtcNow.AddSeconds(seconds);
         while (!condition())
         {
-            if (DateTime.UtcNow > until) throw new TimeoutException($"Gave up waiting for {what}.");
+            if (DateTime.UtcNow > until) throw new TimeoutException($"Gave up waiting for {what}.{(explain is null ? "" : Environment.NewLine + explain())}");
             await System.Threading.Tasks.Task.Delay(20);
         }
     }

@@ -28,6 +28,10 @@ vi.mock('@dbdatakit/shell', async (importOriginal) => {
  * network, so the page draws the new file list before the editor is closed, as it does in a browser.
  */
 function fakeServer() {
+  // the check of the draft answers when the test lets it (`hold`), as a check that is slow on a loaded machine
+  let held: Promise<void> | null = null
+  let release = () => {}
+  const hold = () => { held = new Promise<void>((done) => { release = () => { held = null; done() } }) }
   const files: Record<string, string> = { 'views/orders.yaml': 'title: Orders\n', 'notes.txt': 'n\n' }
   const reply = (body: unknown, status = 200) => new Promise<Response>((done) => setTimeout(() => done(new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })), 3))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -52,19 +56,20 @@ function fakeServer() {
       if (init?.method === 'DELETE') { delete files[p]; return reply(null, 204) }
       return p in files ? reply({ path: p, content: files[p] }) : reply({ error: 'none' }, 404)
     }
-    if (rest === 'check') return reply({ kind: 'x', ok: true, diagnostics: [] })
+    if (rest === 'check') return (held ?? Promise.resolve()).then(() => reply({ kind: 'x', ok: true, diagnostics: [] }))
     if (rest === 'changes') return reply({ changes: [], uncommitted: false })
     if (rest === 'history') return reply({ commits: [] })
     if (rest === 'events') return reply({ events: [] })
     return reply({ error: 'no' }, 404)
   })
-  return { files, fetcher }
+  return { files, fetcher, hold, release: () => release() }
 }
 
 let root: Root
 let host: HTMLDivElement
 let where = ''
-function Where() { where = useLocation().pathname; return null }
+let query = ''
+function Where() { const at = useLocation(); where = at.pathname; query = at.search; return null }
 
 async function mount(at: string) {
   host = document.createElement('div')
@@ -118,5 +123,21 @@ describe('a file moved or deleted in the Files area', () => {
     expect(server.files).toEqual({ 'notes.txt': 'n\n' })
     expect(tree()).toEqual(['notes.txt'])
     expect(q('[data-testid="wsp-unsaved"]')).toBeNull()
+  })
+
+  it('keeps the tab picked while a Delete was still refreshing', async () => {
+    await mount('/site/ws-a/files/views/orders.yaml?tab=changes')
+    server.hold()
+    await click('[data-testid="wsp-delete"]')
+    await click('[data-testid="wsp-delete-confirm"]')
+    // the file has left the tree, the refresh of the check has not come back: the person goes to Builds
+    await vi.waitFor(() => expect(tree()).toEqual(['notes.txt']))
+    await click('[data-testid="wsp-tab-builds"]')
+    expect(query).toBe('?tab=builds')
+    server.release()
+    await vi.waitFor(() => expect(where).toBe('/site/ws-a/files'))
+    await settle()
+    expect(query).toBe('?tab=builds')
+    expect(q('[data-testid="wsp-builds"]')).not.toBeNull()
   })
 })
