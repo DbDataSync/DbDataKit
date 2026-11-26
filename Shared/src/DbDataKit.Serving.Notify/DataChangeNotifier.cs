@@ -129,17 +129,22 @@ public sealed class DataChangeNotifier : IDataChangeNotifier, IAsyncDisposable
 
     private void Start(GatewayPairing pairing, DataChange change)
     {
-        Task? task = null;
-        task = Task.Run(async () =>
+        // the task is started and added under the lock its own end takes to remove itself: a delivery that ends at once (an identity that fails, a call refused
+        // before it leaves) would otherwise remove itself before it was added, and stay in the set for the life of the server
+        lock (_gate)
         {
-            try { await DeliverAsync(pairing, change).ConfigureAwait(false); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { Fail($"{pairing.Name}: the change of '{change.Dataset}' could not be sent ({ex.GetType().Name})."); }
-            finally
+            Task? task = null;
+            task = Task.Run(async () =>
             {
-                lock (_gate) _running.Remove(task!);
-            }
-        });
-        lock (_gate) _running.Add(task);
+                try { await DeliverAsync(pairing, change).ConfigureAwait(false); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { Fail($"{pairing.Name}: the change of '{change.Dataset}' could not be sent ({ex.GetType().Name})."); }
+                finally
+                {
+                    lock (_gate) _running.Remove(task!);
+                }
+            });
+            _running.Add(task);
+        }
     }
 
     /// <summary>Waits until every message started so far has been delivered or given up on (a test, a clean stop). Never throws.</summary>
