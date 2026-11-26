@@ -129,6 +129,9 @@ How the work is run is [planning/ROLES.md](planning/ROLES.md): the owner, the se
   subjects) and refuses any document that links to the old plans folder or to a subject that is gone.
 - **Code comments describe the code** (what it does and why), never a plan, task id, proposal or subject; a comment may point at a finished doc as
   `Design: docs/<path>.md#<anchor>` ([docs/code-comments.md](docs/code-comments.md)).
+- **Never lose an exception's details** ([docs/error-handling.md](docs/error-handling.md)): code that throws its own error in place of one it caught
+  passes the original as the inner exception, logs it, or both; a `Dispose`, `finally` or cleanup step never replaces the error already on its way
+  out. This holds in product code, tests and scripts.
 - Before anything is pushed, read `docs/ci-lessons.md` and run its "before you push" list. A new CI problem and its fix are added to that file in the same
   commit that fixes it.
 - Shared files (`docs/ci-lessons.md`, `docs/formats.json`, `docs/ui-editors.md`, `Directory.Packages.props`, `DbDataKit.slnx`, the check baselines) are
