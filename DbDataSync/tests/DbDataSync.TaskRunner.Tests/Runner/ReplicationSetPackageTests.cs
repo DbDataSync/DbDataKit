@@ -74,8 +74,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var built = Build(out var problems);
 
         Assert.Empty(problems);
-        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask, PreviewTasks.Preview, PreviewTasks.TryStrategy], built.Manifest.Tasks.Select(t => t.Name));
-        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask or PreviewTasks.Preview or PreviewTasks.TryStrategy)).ToList();
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask, PreviewTasks.Preview, PreviewTasks.TryStrategy, ReplicationSetPackage.ScriptTestTask], built.Manifest.Tasks.Select(t => t.Name));
+        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask or PreviewTasks.Preview or PreviewTasks.TryStrategy or ReplicationSetPackage.ScriptTestTask)).ToList();
         var orders = built.Manifest.Tasks.Single(t => t.Name == "orders");
         Assert.Equal("*/15 * * * *", orders.Schedule.Cron);
         Assert.Equal(TimeSpan.FromSeconds(30), built.Manifest.Tasks.Single(t => t.Name == "events").Schedule.Every);
@@ -128,6 +128,15 @@ public sealed class ReplicationSetPackageTests : IDisposable
 
         Assert.Equal(["replication", "mapping", "rows", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.Preview).Inputs.Select(i => i.Name));
         Assert.Equal(["replication", "mapping", "strategy", "name", "column", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.TryStrategy).Inputs.Select(i => i.Name));
+
+        // the test of a script: by hand, one attempt, overlapping itself, recording no step, and over no connection (it compiles and runs the script against generated input)
+        var scriptTest = built.Manifest.Tasks.Single(t => t.Name == ReplicationSetPackage.ScriptTestTask);
+        Assert.Null(scriptTest.Schedule.Cron);
+        Assert.Null(scriptTest.Schedule.Every);
+        Assert.Equal((1, true), (scriptTest.Limits.Attempts, scriptTest.AllowOverlap));
+        Assert.Empty(scriptTest.Connections);
+        Assert.Empty(scriptTest.StepList);
+        Assert.Equal([("name", ""), ("rows", "5"), ("repo_dir", ReplicationSetPackage.RepoDir)], scriptTest.Inputs.Select(i => (i.Name, i.Default)));
 
         var load = PackageManifestReader.Load(built.ManifestText, "package.yaml");
         Assert.True(load.Ok, string.Join("\n", load.Diagnostics));
@@ -255,6 +264,17 @@ public sealed class ReplicationSetPackageTests : IDisposable
 
         Assert.Null(built);
         Assert.Contains(problems, p => p.Contains(Path.Combine(name, "task.yaml")) && p.Contains("the name of a task the set has for its screens"));
+    }
+
+    [Fact]
+    public void AReplicationNamedForTheScriptTestIsRefused()
+    {
+        Replication("script-test", ScheduleMode.Periodic, cron: "0 1 * * *");
+
+        var built = Build(out var problems);
+
+        Assert.Null(built);
+        Assert.Contains(problems, p => p.Contains(Path.Combine("script-test", "task.yaml")) && p.Contains("the name of the set's test of a script"));
     }
 
     [Fact]
