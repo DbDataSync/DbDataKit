@@ -154,8 +154,16 @@ public sealed class PostgresStateDialect : StateDialect
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Releases the session's advisory lock. On a connection that is no longer open there is nothing to release: a session lock ends with its session. Running the release there
+    /// would throw from the <c>using</c> that holds the lock and replace the error that ended the session.
+    /// </summary>
     private sealed class Release(DbConnection connection) : IDisposable
     {
-        public void Dispose() => Run(connection, "SELECT pg_advisory_unlock(7270034281);");
+        public void Dispose()
+        {
+            if (connection.State != System.Data.ConnectionState.Open) return;
+            Run(connection, "SELECT pg_advisory_unlock(7270034281);");
+        }
     }
 }
