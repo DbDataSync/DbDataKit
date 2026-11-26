@@ -36,6 +36,30 @@ public sealed class ScriptedMetadata(ScriptHost scriptHost, ConfigRepository con
             ScriptSlots.MetadataProvider, connection, task: null, mapping: null);
     }
 
+    /// <summary>
+    /// The database a read of a whole catalog names in its calls. A bound script is asked for the database the connection file names
+    /// (<c>address.database</c>, or <c>extensions.sync.database</c>), so a script that writes <c>[{database}].INFORMATION_SCHEMA.TABLES</c> reads that
+    /// database; it gets <c>""</c> when the file names none. With nothing bound the driver is asked with <c>""</c>, the database the connection opens,
+    /// because a driver that cannot switch database (SQLite) refuses any other name.
+    /// Design: docs/authoring-metadata.md#syncs-own-drivers-the-sets-discover-and-describe
+    /// </summary>
+    public string CatalogDatabase(string connectionName)
+    {
+        ConnectionConfig connection;
+        try
+        {
+            connection = configRepository.LoadConnection(connectionName);
+        }
+        catch (FileNotFoundException)
+        {
+            return "";
+        }
+
+        return scriptHost.ResolveBinding<IMetadataProvider>(ScriptSlots.MetadataProvider, connection, task: null, mapping: null) is null
+            ? ""
+            : connection.Database ?? "";
+    }
+
     public Task<IReadOnlyList<string>> ListDatabasesAsync(
         string connectionName,
         DbConnection connection,
