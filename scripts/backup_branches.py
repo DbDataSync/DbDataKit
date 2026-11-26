@@ -20,8 +20,9 @@ import sys
 import time
 
 PREFIX = "backup/"
-# A task id at the start of a commit message: `INSTALLER-3: ...` (the slug rule of scripts/check_plans.py).
-TASK_ID = re.compile(r"^([A-Z][A-Z0-9]{7,})-(\d+):")
+# A task id at the start of a commit message: `INSTALLER-3: ...` or `SEO-3: ...` (a slug is capitals and digits starting with a letter,
+# scripts/check_plans.py).
+TASK_ID = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+):")
 
 
 def git(*args, check=True):
