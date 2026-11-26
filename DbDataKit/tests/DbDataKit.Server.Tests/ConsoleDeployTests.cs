@@ -607,6 +607,23 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_build_is_staged_in_prod_as_Build_and_stage_asks_like_in_any_channel_and_nothing_is_served_or_checked()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+
+        // Build and stage sends the channel and no serve, in prod as anywhere: the version is staged for a read of the set's own tasks, and stays unserved
+        var staged = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "prod", ["bind"] = new JsonObject { ["source"] = "erp" } });
+
+        Assert.True(staged.Status == HttpStatusCode.OK, staged.Body?.ToJsonString());
+        Assert.Equal(("prod", "stage", 1), ((string?)staged.Body!["deployed"]!["channel"], (string?)staged.Body["deployed"]!["mode"], (int)staged.Body["deployed"]!["version"]!));
+        var head = runner.Publishing.Publisher.Head("integration", "orders", "prod")!;
+        Assert.Equal((null, 1), (head.Active, head.Staged));
+        Assert.Contains(runner.Publishing.Publisher.EventsOf("integration", "orders"), e => e.Action == "stage" && e.Version == 1);
+        Assert.DoesNotContain(tasks.Requests, r => r.Task.Task == DbDataKit.Runner.Preflight.TaskName);
+    }
+
+    [Fact]
     public async Task A_run_is_refused_in_words_for_a_deploy_that_put_nothing_on_a_runner_and_by_the_runner_for_a_person_who_may_not_operate_there()
     {
         if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
