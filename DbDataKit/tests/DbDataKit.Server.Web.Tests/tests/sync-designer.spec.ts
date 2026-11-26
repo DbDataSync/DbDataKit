@@ -199,6 +199,39 @@ test('a replication from New replication to its endpoints and schedule, Enabled 
   await expect(page.getByTestId('sd-replication')).toHaveAttribute('data-name', 'invoices')
 })
 
+/** A MySQL connection beside the template's two: a target of its driver keeps no state table. */
+const MART = 'schema: connection/1\nname: mart-db\nengine: mysql\naddress:\n  host: mart.example.com\n  database: mart\nauth:\n  mode: sql\n  user: sync\n  password_secret: secret:dbdatakit:sync:connection:mart-db\n'
+
+test('the tracking modes follow the target: a MySQL target disables Target and Both with the reason, a PostgreSQL target offers them', async ({ page, context, baseURL }) => {
+  await signInNewAdmin(page, context, baseURL!, 'Sync Tracking', `sync-tracking-${Date.now()}@example.com`)
+  await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE, 'config/connections/mart-db.yaml': MART } })
+  await makeDraft(page, 'plant', 'sync', 'tracking-edit')
+  await expect(page).toHaveURL(/\/designer\/replications\/orders$/)
+
+  // the MySQL target: its driver keeps no state table, so the two modes that keep one there are disabled and the card says why
+  await page.getByTestId('task-target-connection-select').selectOption('mart-db')
+  const card = page.getByTestId('tracking-card')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveText('The target connection mart-db (driver MySql) keeps no state table, so this replication keeps its state on the Runner: choose State only or Default.')
+  await expect(card.getByTestId('tracking-mode-target')).toBeDisabled()
+  await expect(card.getByTestId('tracking-mode-both')).toBeDisabled()
+  await expect(card.locator('option[value="state"]')).toBeEnabled()
+  await card.getByTestId('tracking-mode-select').selectOption('state')
+  await expect(card.getByTestId('tracking-mode-select')).toHaveValue('state')
+  await shot(page, '03b-tracking-mysql-target')
+
+  // the PostgreSQL target keeps one: both modes are offered and the reason is gone
+  await page.getByTestId('task-target-connection-select').selectOption('target-db')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveCount(0)
+  await expect(card.getByTestId('tracking-mode-target')).toBeEnabled()
+  await card.getByTestId('tracking-mode-select').selectOption('both')
+  await expect(card.getByTestId('tracking-primary-select')).toHaveValue('target')
+
+  // back to MySQL with both chosen: the file's mode stays shown, and the reason says why the check will refuse it
+  await page.getByTestId('task-target-connection-select').selectOption('mart-db')
+  await expect(card.getByTestId('tracking-mode-select')).toHaveValue('both')
+  await expect(card.getByTestId('tracking-no-state-table')).toHaveClass(/warn/)
+})
+
 test('table mappings: Create mappings from two ticked tables, then Auto-map, the key and an overridden target schema on one, the same changes in Files', async ({ page, context, baseURL }) => {
   await signInNewAdmin(page, context, baseURL!, 'Sync Mappings', `sync-mappings-${Date.now()}@example.com`)
   const workspace = await mockWorkspace(page, { syncFiles: { 'catalog-cache.yaml': CACHE_WITH_TARGET } })
@@ -346,17 +379,27 @@ test('the rest of a mapping: Create mappings with what is inferred, a verificati
   await page.getByTestId('default-segmenting-custom-column').fill('shipped_on')
   await shot(page, '09-mapping-segmenting')
 
-  // saved, the replication's plan has the mapping: its target table is missing, so the Provisioning tab's badge counts the one step
-  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveCount(0)
+  // not saved yet, the replication's plan is asked with the mapping as it is here: Create target table if missing turned on, the target table is
+  // missing, so the plan shows its statement and the Provisioning tab's badge counts the one step
+  await page.getByTestId('mapping-tab-provisioning').click()
+  await page.getByTestId('provisioning-create-override').click()
+  await page.getByTestId('provisioning-create-checkbox').check()
+  await expect(page.getByTestId('mapping-dirty')).toBeVisible()
+  await expect(page.getByTestId('mapping-provisioning-plan-basis')).toContainText('its unsaved edits included')
+  await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
+  await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')
+  await expect(page.getByTestId('provisioning-plan-target-sql')).toContainText('CREATE TABLE dbo.Lines')
+  expect(workspace.files('plant', 'mapping-rest')?.has(mappingFile('dbo.Lines'))).toBe(false)
+
+  // saved, the plan of the saved file is the same
   await page.getByTestId('save-mapping-button').click()
   await expect(page.getByTestId('mapping-dirty')).toHaveCount(0)
   await expect(page.getByTestId('mapping-tab-provisioning-badge')).toHaveText('1')
-  await page.getByTestId('mapping-tab-provisioning').click()
-  await expect(page.getByTestId('provisioning-plan-target')).toHaveAttribute('data-state', 'missing')
   await expect(page.getByTestId('provisioning-plan-target-sql')).toContainText('CREATE TABLE dbo.Lines')
   const lines = saved(workspace, 'mapping-rest', mappingFile('dbo.Lines'))
   expect(lines.verification).toEqual([expect.objectContaining({ name: 'rows', kind: 'RowCount' })])
   expect(lines.defaultSegmenting).toEqual([{ mode: 'custom', strategyName: 'by-month', column: 'shipped_on' }])
+  expect(lines.provisioning?.createTargetTableIfMissing).toBe(true)
   expect(lines.columnMappings.some((c: Record<string, unknown>) => 'targetType' in c)).toBe(false)
   expect(lines.primaryKey).toBeUndefined()
   expect(JSON.stringify(lines)).not.toContain('naturalKey')

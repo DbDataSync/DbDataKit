@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { setApiBase } from '@dbdatakit/shell'
-import { authoringReadApi, describedLine, newestPerChannel, previewLine, previewValue, setUpChannels, setUpOffered, testLine, trialLine, type DraftTestAnswer, type MappingPreviewAnswer, type StrategyTrialAnswer } from './authoringReads'
+import { ApiError, setApiBase } from '@dbdatakit/shell'
+import { catalogReadApi } from './catalogRefresh'
+import { authoringReadApi, buildAndStage, describedLine, needsBuildOf, type StageCalls, newestPerChannel, previewLine, previewValue, setUpChannels, setUpOffered, testLine, trialLine, type DraftTestAnswer, type MappingPreviewAnswer, type StrategyTrialAnswer } from './authoringReads'
 import type { ChannelList } from './catalogRefresh'
 import type { DeployRecord } from './deploys'
 
@@ -77,11 +78,18 @@ describe('the console routes', () => {
     await authoringReadApi.describe('ws-1', 'crm-to-dw', { runner: 'r-1', channel: 'dev', connection: 'crm', sql: 'SELECT 1 AS one' })
     await authoringReadApi.followDescribe('ws-1', 'crm-to-dw', 'run-1', { runner: 'r-1', channel: 'dev', connection: 'crm' })
     await authoringReadApi.newest('d-1', 'preflight', 'preflight-findings')
+    // a read or a description by the project's own package names it, and its follow says so too
+    await authoringReadApi.followDescribe('ws-1', 'crm-to-dw', 'run-2', { runner: 'r-1', channel: 'dev', connection: 'crm', reader: 'package' })
+    await catalogReadApi.follow('ws-1', 'crm-to-dw', 'run-3', { runner: 'r-1', channel: 'dev', connection: 'crm', reader: 'package' })
+    await catalogReadApi.follow('ws-1', 'crm-to-dw', 'run-4', { runner: 'r-1', channel: 'dev', connection: 'crm', reader: 'builtin' })
     expect(asked).toEqual([
       'POST /api/workspace-catalog/ws-1/crm-to-dw/binding-test {"runner":"r-1","channel":"dev","connection":"crm"}',
       'POST /api/workspace-catalog/ws-1/crm-to-dw/describe {"runner":"r-1","channel":"dev","connection":"crm","sql":"SELECT 1 AS one"}',
       'GET /api/workspace-catalog/ws-1/crm-to-dw/describe/run-1?runner=r-1&channel=dev&connection=crm',
       'GET /api/deploys/d-1/runs?task=preflight&step=preflight-findings',
+      'GET /api/workspace-catalog/ws-1/crm-to-dw/describe/run-2?runner=r-1&channel=dev&connection=crm&reader=package',
+      'GET /api/workspace-catalog/ws-1/crm-to-dw/read/run-3?runner=r-1&channel=dev&connection=crm&reader=package',
+      'GET /api/workspace-catalog/ws-1/crm-to-dw/read/run-4?runner=r-1&channel=dev&connection=crm',
     ])
   })
 })
@@ -111,5 +119,39 @@ describe('the words of a preview and a trial', () => {
     await authoringReadApi.answer('d-1', 'preview', { replication: 'orders' })
     expect(fetcher).toHaveBeenCalledWith('/api/deploys/d-1/runs', expect.objectContaining({ method: 'POST', body: JSON.stringify({ task: 'preview', inputs: { replication: 'orders' }, answer: true }) }))
     vi.unstubAllGlobals()
+  })
+})
+
+describe('a read by the project\'s own package that needs a build', () => {
+  const needs = { error: 'runners-eu holds no build of crm-to-dw in \'dev\'.', needs_build: true, package: 'crm-to-dw', task: 'discover', runner: 'r-1', runner_name: 'runners-eu', channel: 'dev', production: false, connection: 'crm' }
+
+  it('is told apart from any other refusal', () => {
+    expect(needsBuildOf(new ApiError(409, needs.error, needs))?.channel).toBe('dev')
+    expect(needsBuildOf(new ApiError(409, 'held', { error: 'held' }))).toBeNull()
+    expect(needsBuildOf(new ApiError(422, 'failed', { ...needs }))).toBeNull()
+    expect(needsBuildOf(new Error('x'))).toBeNull()
+  })
+
+  it('builds the draft, waits for the build, and stages it in the channel through the console\'s deploy', async () => {
+    const asked: string[] = []
+    let looks = 0
+    const calls: StageCalls = {
+      requestBuild: async (project, id) => { asked.push(`build ${project}/${id}`); return { id: 'b-7', workspace: id, status: 'queued', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null } },
+      build: async (_p, _i, build) => { looks++; asked.push(`look ${build}`); return { build: { id: build, workspace: 'ws', status: looks < 2 ? 'running' : 'succeeded', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null }, result: null, publishes: [] } },
+      deploy: async (body) => { asked.push(`deploy ${JSON.stringify(body)}`); return { steps: ['Staged.'], deployed: {} as never, deploy: {} as never } },
+    }
+    const steps: string[] = []
+    await buildAndStage({ workspaceServer: 'ws-1', project: 'crm-to-dw', draft: 'ana-crm', runner: 'r-1', channel: 'dev' }, (l) => steps.push(l), calls, async () => {})
+    expect(asked).toEqual([
+      'build crm-to-dw/ana-crm', 'look b-7', 'look b-7',
+      'deploy {"workspaceServer":"ws-1","project":"crm-to-dw","workspace":"ana-crm","build":"b-7","target":"r-1","channel":"dev"}',
+    ])
+    expect(steps).toEqual(['Building the draft...', 'Built as b-7. Staging it in dev...'])
+
+    // a build that fails stops it before anything is deployed
+    const failing: StageCalls = { ...calls, requestBuild: async () => ({ id: 'b-8', workspace: 'ana-crm', status: 'failed', commit: null, requested_by: 'ana', message: null, requested: '', started: null, finished: null }) }
+    asked.length = 0
+    await expect(buildAndStage({ workspaceServer: 'ws-1', project: 'crm-to-dw', draft: 'ana-crm', runner: 'r-1', channel: 'dev' }, undefined, failing, async () => {})).rejects.toThrow('The build b-8 of the draft failed')
+    expect(asked).toEqual([])
   })
 })

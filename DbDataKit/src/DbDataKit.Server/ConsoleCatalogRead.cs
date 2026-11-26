@@ -7,11 +7,14 @@ using DbDataKit.Web.Trust;
 
 namespace DbDataKit.Server;
 
-/// <summary>What a screen asks to read: the Runner (a registered server's id or name), the channel, the project's connection, and optionally one schema or one table of it.</summary>
-public sealed record CatalogReadBody(string? Runner, string? Channel, string? Connection, string? Schema = null, string? Table = null);
+/// <summary>
+/// What a screen asks to read: the Runner (a registered server's id or name), the channel, the project's connection, optionally one schema or one table of it, and who reads it (<see cref="ConsoleCatalogRead.Reader"/>): the Runner's
+/// built-in package (absent, or <c>builtin</c>) or the project's own package (<c>package</c>).
+/// </summary>
+public sealed record CatalogReadBody(string? Runner, string? Channel, string? Connection, string? Schema = null, string? Table = null, string? Reader = null);
 
-/// <summary>What a screen asks to describe: the Runner (a registered server's id or name), the channel, the project's connection, and the query whose columns it wants.</summary>
-public sealed record DescribeBody(string? Runner, string? Channel, string? Connection, string? Sql);
+/// <summary>What a screen asks to describe: the Runner (a registered server's id or name), the channel, the project's connection, the query whose columns it wants, and who describes it, as for a read.</summary>
+public sealed record DescribeBody(string? Runner, string? Channel, string? Connection, string? Sql, string? Reader = null);
 
 /// <summary>What a screen asks to read from a Gateway: the Gateway (a registered server's id or name), the project's connection, the Gateway's data source for it (the connection's name when none is given), and whether the person confirmed reading a data source made by hand.</summary>
 public sealed record GatewayReadBody(string? Gateway, string? Connection, [property: JsonPropertyName("data_source")] string? DataSource = null, bool Adopt = false);
@@ -27,6 +30,8 @@ public sealed record CatalogReadAnswer(int Status, JsonObject Body)
 /// becomes on a Runner, and the console starts the Runner's built-in task <c>discover</c> for that package, the connection's slot and the channel (<c>POST /api/v1/metadata/{channel}/discover</c> with the person named). The Workspace
 /// server is never in the path of the read: it holds no login and calls no Runner. The console waits up to <see cref="Wait"/> for the run; after that it answers the run, and the screen asks again with the run's id until it ends.
 /// The answer of a finished read is the connection as a file of <c>catalog-cache/2</c> holding that one connection, recorded as read from the Runner and the channel; the screen compares it with the cache it holds and replaces the entry.
+/// A connection whose driver the built-in package cannot run is read by the project's own package instead (<see cref="PackageReader"/>): its tasks <c>discover</c> and <c>describe</c>, in the newest build the channel holds, answer the
+/// same shape in steps of the same names.
 /// <para>
 /// A connection that is a data source of a Gateway is read from that Gateway instead (<see cref="GatewayAsync"/>): the console asks the Gateway's schema call as the person, and the Gateway reads with its own login. The Workspace server is
 /// not in that path either.
@@ -39,6 +44,22 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     private const string BuiltIn = "dbdatakit-metadata";
     private const string Discover = "discover";
     private const string Describe = "describe";
+
+    /// <summary>
+    /// Who reads a connection: the Runner's built-in package (<see cref="BuiltInReader"/>, the default), or the project's own package (<see cref="PackageReader"/>), whose tasks of the same names read a connection whose driver the
+    /// built-in package cannot run (a Sync set's YAML driver, a connection whose <c>metadataProvider</c> script answers its catalog). The project's own tasks run in the newest build the channel holds, staged or served.
+    /// Design: docs/authoring-metadata.md#a-sync-project
+    /// </summary>
+    public const string BuiltInReader = "builtin";
+
+    /// <inheritdoc cref="BuiltInReader"/>
+    public const string PackageReader = "package";
+
+    /// <summary>The reader a request names, or why it names none the console knows.</summary>
+    internal static (string Reader, string? Problem) Reader(string? reader) =>
+        string.IsNullOrWhiteSpace(reader) || reader.Trim() == BuiltInReader ? (BuiltInReader, null)
+        : reader.Trim() == PackageReader ? (PackageReader, null)
+        : (BuiltInReader, $"`reader` is {BuiltInReader} (the Runner's built-in package, the default) or {PackageReader} (the project's own package), not '{reader}'.");
 
     /// <summary>The longest query the console sends to be described.</summary>
     public const int MaxSqlChars = 100_000;
@@ -123,16 +144,68 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         var (target, problem) = await RunnerAsync(body.Runner, ct);
         if (problem is not null) return problem;
 
+        var (reader, badReader) = Reader(body.Reader);
+        if (badReader is not null) return CatalogReadAnswer.Error(400, badReader);
+
         var inputs = new JsonObject();
         if (!string.IsNullOrWhiteSpace(body.Schema)) inputs["schemas"] = new JsonArray(body.Schema.Trim()).ToJsonString();
         if (!string.IsNullOrWhiteSpace(body.Table)) inputs["table"] = body.Table.Trim();
-        var (status, started) = await relay.CallAsync(target!, HttpMethod.Post, $"/api/v1/metadata/{Uri.EscapeDataString(body.Channel!)}/{Discover}",
-            new JsonObject { ["package"] = package, ["slot"] = ConnectionSlots.NameOf(body.Connection!), ["inputs"] = inputs, ["on_behalf_of"] = person }, ct);
-        if (status != 202 || (string?)started?["run_id"] is not { } runText || !Guid.TryParse(runText, out var run))
-            return Passed(status, started, $"{target!.Name} did not start the read.");
-
-        return await WaitAsync(() => OutcomeAsync(target!, body.Channel!, body.Connection!, run, ct), ct);
+        var (run, refusal) = await StartTaskAsync(target!, package!, reader, body.Channel!, body.Connection!, Discover, inputs, person, "the read", ct);
+        if (refusal is not null) return refusal;
+        return await WaitAsync(() => OutcomeAsync(target!, ReadingPackage(package!, reader), body.Channel!, body.Connection!, run, ct), ct);
     }
+
+    /// <summary>The package whose run answers: the built-in one, or the project's own.</summary>
+    private static string ReadingPackage(string package, string reader) => reader == PackageReader ? package : BuiltIn;
+
+    /// <summary>
+    /// Starts <paramref name="task"/> (<c>discover</c> or <c>describe</c>) for the person: the built-in package's through the Runner's metadata route, which checks the slot, or the project's own task of that name in the newest build the
+    /// channel holds (staged, else served), with the connection named. A channel that holds no build of the package, or a build that has no such task (made before it had one), is refused with 409 and <c>needs_build</c>, so the screen
+    /// offers to build and stage the draft there.
+    /// </summary>
+    private async Task<(Guid Run, CatalogReadAnswer? Refusal)> StartTaskAsync(RegisteredInstance target, string package, string reader, string channel, string connection, string task, JsonObject inputs, string person, string what, CancellationToken ct)
+    {
+        int status;
+        JsonNode? started;
+        if (reader == PackageReader)
+        {
+            var (version, missing) = await HeldVersionAsync(target, package, channel, connection, task, ct);
+            if (missing is not null) return (Guid.Empty, missing);
+            inputs["connection"] = connection;
+            (status, started) = await relay.CallAsync(target, HttpMethod.Post, $"/api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{task}/run",
+                new JsonObject { ["inputs"] = inputs, ["version"] = version, ["on_behalf_of"] = person }, ct);
+            if (status == 404)
+                return (Guid.Empty, NeedsBuild(target, package, channel, connection, task, $"The build of {package} that '{channel}' holds on {target.Name} (version {version}) has no task {task}: it was made before the set had one. Build the draft and stage it in '{channel}' again."));
+        }
+        else
+        {
+            (status, started) = await relay.CallAsync(target, HttpMethod.Post, $"/api/v1/metadata/{Uri.EscapeDataString(channel)}/{task}",
+                new JsonObject { ["package"] = package, ["slot"] = ConnectionSlots.NameOf(connection), ["inputs"] = inputs, ["on_behalf_of"] = person }, ct);
+        }
+
+        if (status != 202 || (string?)started?["run_id"] is not { } runText || !Guid.TryParse(runText, out var run))
+            return (Guid.Empty, Passed(status, started, $"{target.Name} did not start {what}."));
+        return (run, null);
+    }
+
+    /// <summary>The newest version of the package the channel holds (the one staged, else the one served), or the refusal that says a build is needed there first.</summary>
+    private async Task<(string Version, CatalogReadAnswer? Missing)> HeldVersionAsync(RegisteredInstance target, string package, string channel, string connection, string task, CancellationToken ct)
+    {
+        var (status, body) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/definitions/integration/{Uri.EscapeDataString(package)}", null, ct);
+        if (status != 200 && status != 404) return ("", Passed(status, body, $"{target.Name} did not say which builds of {package} it holds."));
+        var head = (body?["channels"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(c => (string?)c["channel"] == channel);
+        var version = (int?)head?["staged"] ?? (int?)head?["active"];
+        return version is { } held
+            ? (held.ToString(System.Globalization.CultureInfo.InvariantCulture), null)
+            : ("", NeedsBuild(target, package, channel, connection, task, $"{target.Name} holds no build of {package} in '{channel}'. The connection '{connection}' is read by the project's own task {task}, which runs in a build staged or served there: build the draft and stage it in '{channel}' first."));
+    }
+
+    /// <summary>A read of the project's own package that needs a build in the channel first: 409 with <c>needs_build</c>, the package and the channel, for the screen to offer it.</summary>
+    private static CatalogReadAnswer NeedsBuild(RegisteredInstance target, string package, string channel, string connection, string task, string message) => new(409, new JsonObject
+    {
+        ["error"] = message, ["needs_build"] = true, ["package"] = package, ["task"] = task, ["runner"] = target.InstanceId, ["runner_name"] = target.Name, ["channel"] = channel,
+        ["production"] = channel == Production, ["connection"] = connection,
+    });
 
     /// <summary>Asks how a run stands until it is no longer running or <see cref="Wait"/> has passed, and answers the last look.</summary>
     private async Task<CatalogReadAnswer> WaitAsync(Func<Task<CatalogReadAnswer>> look, CancellationToken ct)
@@ -158,40 +231,44 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         if (!PackageManifestValidator.NameRule.IsMatch(body.Channel ?? "")) return CatalogReadAnswer.Error(400, "Name the channel to describe the query in: `channel` (lower-case letters, digits, - and _).");
         if (string.IsNullOrWhiteSpace(body.Sql)) return CatalogReadAnswer.Error(400, "Give the query to describe: `sql`.");
         if (body.Sql.Length > MaxSqlChars) return CatalogReadAnswer.Error(400, $"The query is longer than {MaxSqlChars} characters.");
+        var (reader, badReader) = Reader(body.Reader);
+        if (badReader is not null) return CatalogReadAnswer.Error(400, badReader);
         var (target, problem) = await RunnerAsync(body.Runner, ct);
         if (problem is not null) return problem;
 
-        var (status, started) = await relay.CallAsync(target!, HttpMethod.Post, $"/api/v1/metadata/{Uri.EscapeDataString(body.Channel!)}/{Describe}",
-            new JsonObject { ["package"] = package, ["slot"] = ConnectionSlots.NameOf(body.Connection!), ["inputs"] = new JsonObject { ["sql"] = body.Sql }, ["on_behalf_of"] = person }, ct);
-        if (status != 202 || (string?)started?["run_id"] is not { } runText || !Guid.TryParse(runText, out var run))
-            return Passed(status, started, $"{target!.Name} did not start describing the query.");
-        return await WaitAsync(() => DescribedAsync(target!, body.Channel!, body.Connection!, run, ct), ct);
+        var (run, refusal) = await StartTaskAsync(target!, package!, reader, body.Channel!, body.Connection!, Describe, new JsonObject { ["sql"] = body.Sql }, person, "describing the query", ct);
+        if (refusal is not null) return refusal;
+        return await WaitAsync(() => DescribedAsync(target!, ReadingPackage(package!, reader), body.Channel!, body.Connection!, run, ct), ct);
     }
 
     /// <summary>The description the screen follows after the console stopped waiting: as <see cref="StartDescribeAsync"/> answers, for the run <paramref name="run"/>. The person must still have access to the project.</summary>
-    public async Task<CatalogReadAnswer> FollowDescribeAsync(string workspace, string project, string? runner, string? channel, string? connection, string run, CancellationToken ct)
+    public async Task<CatalogReadAnswer> FollowDescribeAsync(string workspace, string project, string? runner, string? channel, string? connection, string run, CancellationToken ct, string? readerName = null)
     {
-        var (_, refused) = await PackageAsync(workspace, project, ct);
+        var (package, refused) = await PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
+        var (reader, badReader) = Reader(readerName);
+        if (badReader is not null) return CatalogReadAnswer.Error(400, badReader);
         if (SlotProblem(connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
         if (!PackageManifestValidator.NameRule.IsMatch(channel ?? "")) return CatalogReadAnswer.Error(400, "Name the channel the query was described in: `channel`.");
         if (!Guid.TryParse(run, out var id)) return CatalogReadAnswer.Error(400, $"'{run}' is not a run's id.");
         var (target, problem) = await RunnerAsync(runner, ct);
         if (problem is not null) return problem;
-        return await DescribedAsync(target!, channel!, connection!, id, ct);
+        return await DescribedAsync(target!, ReadingPackage(package!, reader), channel!, connection!, id, ct);
     }
 
     /// <summary>The read the screen follows after the console stopped waiting: as <see cref="StartAsync"/> answers, for the run <paramref name="run"/>. The person must still have access to the project.</summary>
-    public async Task<CatalogReadAnswer> FollowAsync(string workspace, string project, string? runner, string? channel, string? connection, string run, CancellationToken ct)
+    public async Task<CatalogReadAnswer> FollowAsync(string workspace, string project, string? runner, string? channel, string? connection, string run, CancellationToken ct, string? readerName = null)
     {
-        var (_, refused) = await PackageAsync(workspace, project, ct);
+        var (package, refused) = await PackageAsync(workspace, project, ct);
         if (refused is not null) return refused;
+        var (reader, badReader) = Reader(readerName);
+        if (badReader is not null) return CatalogReadAnswer.Error(400, badReader);
         if (SlotProblem(connection) is { } bad) return CatalogReadAnswer.Error(400, bad);
         if (!PackageManifestValidator.NameRule.IsMatch(channel ?? "")) return CatalogReadAnswer.Error(400, "Name the channel the read was started in: `channel`.");
         if (!Guid.TryParse(run, out var id)) return CatalogReadAnswer.Error(400, $"'{run}' is not a run's id.");
         var (target, problem) = await RunnerAsync(runner, ct);
         if (problem is not null) return problem;
-        return await OutcomeAsync(target!, channel!, connection!, id, ct);
+        return await OutcomeAsync(target!, ReadingPackage(package!, reader), channel!, connection!, id, ct);
     }
 
     /// <summary>Where the run is: still going (202), failed (422, with the Runner's reason), or finished, with the connection's entry read from the step <c>discover</c> the run kept (200).</summary>
@@ -205,14 +282,14 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     /// How a run of the built-in task <paramref name="task"/> stands: null when it succeeded (the caller reads its step), else the answer to give: still going (202, also while it is queued and has no record yet), failed (422, with
     /// the Runner's reason), or a refusal.
     /// </summary>
-    private async Task<CatalogReadAnswer?> RunStateAsync(RegisteredInstance target, string channel, string connection, Guid run, string task, string what, CancellationToken ct)
+    private async Task<CatalogReadAnswer?> RunStateAsync(RegisteredInstance target, string package, string channel, string connection, Guid run, string task, string what, CancellationToken ct)
     {
         var id = run.ToString("D");
         var (status, record) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/runs/{id}", null, ct);
         // a run that is queued has no record yet
         if (status == 404) return new(202, BaseOf(target, channel, connection, id, "running"));
         if (status != 200 || record is not JsonObject found) return Passed(status, record, $"{target.Name} did not say how the {what} {id} went.");
-        if ((string?)found["package"] != BuiltIn || (string?)found["channel"] != channel || (string?)found["task"] != task)
+        if ((string?)found["package"] != package || (string?)found["channel"] != channel || (string?)found["task"] != task)
             return CatalogReadAnswer.Error(404, task == Discover
                 ? $"The run {id} is not a read of a database's shape in channel '{channel}'."
                 : $"The run {id} is not a description of a query in channel '{channel}'.");
@@ -225,11 +302,11 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
     }
 
     /// <summary>Where a description of a query is: still going (202), failed (422), or finished, with the columns the step <c>describe</c> of the run kept (200): each column's name, its type as the engine names it, and its nullability.</summary>
-    private async Task<CatalogReadAnswer> DescribedAsync(RegisteredInstance target, string channel, string connection, Guid run, CancellationToken ct)
+    private async Task<CatalogReadAnswer> DescribedAsync(RegisteredInstance target, string package, string channel, string connection, Guid run, CancellationToken ct)
     {
-        if (await RunStateAsync(target, channel, connection, run, Describe, "description of the query", ct) is { } notDone) return notDone;
+        if (await RunStateAsync(target, package, channel, connection, run, Describe, "description of the query", ct) is { } notDone) return notDone;
         var id = run.ToString("D");
-        var (stepStatus, steps) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{BuiltIn}/{Uri.EscapeDataString(channel)}/{Describe}/steps/{Describe}?limit=1&key={id}", null, ct);
+        var (stepStatus, steps) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{Describe}/steps/{Describe}?limit=1&key={id}", null, ct);
         if (stepStatus != 200) return Passed(stepStatus, steps, $"{target.Name} did not give the columns of the query {id}.");
         if ((steps?["steps"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault()?["result"] is not JsonObject result || result["columns"] is not JsonArray described)
             return CatalogReadAnswer.Error(502, $"The description {id} finished on {target.Name} without the query's columns.");
@@ -249,17 +326,17 @@ public sealed class ConsoleCatalogRead(ConsoleInstances instances, ConsoleRelay 
         return new(200, done);
     }
 
-    private async Task<CatalogReadAnswer> OutcomeAsync(RegisteredInstance target, string channel, string connection, Guid run, CancellationToken ct)
+    private async Task<CatalogReadAnswer> OutcomeAsync(RegisteredInstance target, string package, string channel, string connection, Guid run, CancellationToken ct)
     {
         var id = run.ToString("D");
         JsonObject Base(string state) => BaseOf(target, channel, connection, id, state);
-        if (await RunStateAsync(target, channel, connection, run, Discover, "read", ct) is { } notDone) return notDone;
+        if (await RunStateAsync(target, package, channel, connection, run, Discover, "read", ct) is { } notDone) return notDone;
 
-        var (stepStatus, steps) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{BuiltIn}/{Uri.EscapeDataString(channel)}/{Discover}/steps/{Discover}?limit=1&key={id}", null, ct);
+        var (stepStatus, steps) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{Discover}/steps/{Discover}?limit=1&key={id}", null, ct);
         if (stepStatus != 200) return Passed(stepStatus, steps, $"{target.Name} did not give the result of the read {id}.");
         if ((steps?["steps"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault() is not { } step || (string?)step["payload"] is not { } payload)
             return CatalogReadAnswer.Error(502, $"The read {id} finished on {target.Name} without a result.");
-        var (payloadStatus, answer) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{BuiltIn}/{Uri.EscapeDataString(channel)}/{Discover}/steps/{Discover}/payloads/{Uri.EscapeDataString(payload)}", null, ct);
+        var (payloadStatus, answer) = await relay.CallAsync(target, HttpMethod.Get, $"/api/v1/tasks/{Uri.EscapeDataString(package)}/{Uri.EscapeDataString(channel)}/{Discover}/steps/{Discover}/payloads/{Uri.EscapeDataString(payload)}", null, ct);
         if (payloadStatus != 200) return Passed(payloadStatus, answer, $"{target.Name} did not give the result of the read {id}.");
         if (answer is not JsonObject shape) return CatalogReadAnswer.Error(502, $"The result of the read {id} is not a description of a connection.");
 

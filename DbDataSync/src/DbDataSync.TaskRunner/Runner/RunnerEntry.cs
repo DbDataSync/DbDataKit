@@ -6,7 +6,7 @@ namespace DbDataSync.TaskRunner.Runner;
 
 /// <summary>
 /// What the engine does when a runner starts it (<c>DbDataSync.TaskRunner --runner</c>, the executable launch of the package, plan 28c ED3): connect to the runner with the token and endpoint in the environment, run
-/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain; the set's manual task <c>provision</c> runs <see cref="ProvisionJob"/> (E21), its manual task <c>preflight</c> runs <see cref="SetPreflightJob"/>, and its manual tasks <c>preview</c> and <c>try-strategy</c> run <see cref="PreviewJob"/> and <see cref="TryStrategyJob"/>, and its manual task <c>script-test</c> runs <see cref="ScriptTestJob"/>.
+/// the one task it was started for, and say how it ended. The task is named by the runner (<c>DBDATAKIT_TASK_NAME</c>): a published replication set has one task per replication, each named for its replication (<see cref="ReplicationSetPackage"/>, plan 28c E08), and every one runs the drain; the set's manual task <c>provision</c> runs <see cref="ProvisionJob"/> (E21), its manual task <c>preflight</c> runs <see cref="SetPreflightJob"/>, its manual tasks <c>preview</c> and <c>try-strategy</c> run <see cref="PreviewJob"/> and <see cref="TryStrategyJob"/>, its manual task <c>script-test</c> runs <see cref="ScriptTestJob"/>, and its manual tasks <c>discover</c> and <c>describe</c> run <see cref="SetDiscoverJob"/> and <see cref="SetDescribeJob"/>.
 /// </summary>
 public static class RunnerEntry
 {
@@ -43,6 +43,8 @@ public static class RunnerEntry
             PreviewTasks.Preview => await RemoteJobHost.RunAsync<PreviewJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
             PreviewTasks.TryStrategy => await RemoteJobHost.RunAsync<TryStrategyJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
             ScriptTestJob.TaskName => await RemoteJobHost.RunAsync<ScriptTestJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
+            SetCatalogSteps.Discover => await RemoteJobHost.RunAsync<SetDiscoverJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
+            SetCatalogSteps.Describe => await RemoteJobHost.RunAsync<SetDescribeJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync" }).ConfigureAwait(false),
             _ => await RemoteJobHost.RunAsync<DrainJob>(cts.Token, new RemoteRunOptions { Client = "DbDataSync", AnyTaskName = true }).ConfigureAwait(false),
         };
         Console.Out.WriteLine($"{TrafficPrefix}sent {RunnerSocketTraffic.BytesSent} bytes, received {RunnerSocketTraffic.BytesReceived} bytes.");

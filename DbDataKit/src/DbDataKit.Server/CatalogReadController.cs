@@ -9,10 +9,11 @@ namespace DbDataKit.Server;
 /// The read of a database's shape for a project of a Workspace server, from a channel of a Runner (<see cref="ConsoleCatalogRead"/>):
 /// <list type="bullet">
 /// <item><c>GET api/workspace-catalog/{workspace}/{project}/channels?runner=&amp;connection=</c>: the channels of the project's package on the Runner, whether each binds the connection's slot, and the one to offer first.</item>
-/// <item><c>POST api/workspace-catalog/{workspace}/{project}/read</c> with <c>{"runner", "channel", "connection", "schema"?, "table"?}</c>: starts the read as the signed-in person and waits for it up to ten seconds.</item>
-/// <item><c>GET api/workspace-catalog/{workspace}/{project}/read/{run}?runner=&amp;channel=&amp;connection=</c>: the read after the console stopped waiting.</item>
-/// <item><c>POST api/workspace-catalog/{workspace}/{project}/describe</c> with <c>{"runner", "channel", "connection", "sql"}</c>: the columns of a query, described (never run) by the Runner's built-in task as the signed-in person; it waits
-/// up to ten seconds, and <c>GET .../describe/{run}?runner=&amp;channel=&amp;connection=</c> answers it after that.</item>
+/// <item><c>POST api/workspace-catalog/{workspace}/{project}/read</c> with <c>{"runner", "channel", "connection", "schema"?, "table"?, "reader"?}</c>: starts the read as the signed-in person and waits for it up to ten seconds; <c>reader</c>
+/// <c>package</c> reads with the project's own package instead of the Runner's built-in one.</item>
+/// <item><c>GET api/workspace-catalog/{workspace}/{project}/read/{run}?runner=&amp;channel=&amp;connection=&amp;reader=</c>: the read after the console stopped waiting.</item>
+/// <item><c>POST api/workspace-catalog/{workspace}/{project}/describe</c> with <c>{"runner", "channel", "connection", "sql", "reader"?}</c>: the columns of a query, described (never run) by the Runner's built-in task, or the project's own, as the
+/// signed-in person; it waits up to ten seconds, and <c>GET .../describe/{run}?runner=&amp;channel=&amp;connection=&amp;reader=</c> answers it after that.</item>
 /// <item><c>POST api/workspace-catalog/{workspace}/{project}/gateway-read</c> with <c>{"gateway", "connection", "data_source"?, "adopt"?}</c>: the shape of a Gateway's data source, read by the Gateway with its own login, asked as the
 /// signed-in person (<see cref="ConsoleCatalogRead.GatewayAsync"/>).</item>
 /// <item><c>POST api/workspace-catalog/{workspace}/{project}/binding-test</c> with <c>{"runner", "channel", "connection", "role"?}</c>: the Runner's test of the connection's slot in the channel, with no version needed, asked as the
@@ -38,8 +39,8 @@ public sealed class CatalogReadController(ConsoleCatalogRead reads, ConsoleDraft
     }
 
     [HttpGet("read/{run}")]
-    public async Task<IActionResult> Follow(string workspace, string project, string run, [FromQuery] string? runner, [FromQuery] string? channel, [FromQuery] string? connection, CancellationToken ct) =>
-        Answer(await reads.FollowAsync(workspace, project, runner, channel, connection, run, ct));
+    public async Task<IActionResult> Follow(string workspace, string project, string run, [FromQuery] string? runner, [FromQuery] string? channel, [FromQuery] string? connection, [FromQuery] string? reader, CancellationToken ct) =>
+        Answer(await reads.FollowAsync(workspace, project, runner, channel, connection, run, ct, reader));
 
     [HttpPost("describe")]
     public async Task<IActionResult> Describe(string workspace, string project, [FromBody] DescribeBody body, CancellationToken ct)
@@ -49,8 +50,8 @@ public sealed class CatalogReadController(ConsoleCatalogRead reads, ConsoleDraft
     }
 
     [HttpGet("describe/{run}")]
-    public async Task<IActionResult> FollowDescribe(string workspace, string project, string run, [FromQuery] string? runner, [FromQuery] string? channel, [FromQuery] string? connection, CancellationToken ct) =>
-        Answer(await reads.FollowDescribeAsync(workspace, project, runner, channel, connection, run, ct));
+    public async Task<IActionResult> FollowDescribe(string workspace, string project, string run, [FromQuery] string? runner, [FromQuery] string? channel, [FromQuery] string? connection, [FromQuery] string? reader, CancellationToken ct) =>
+        Answer(await reads.FollowDescribeAsync(workspace, project, runner, channel, connection, run, ct, reader));
 
     [HttpPost("gateway-read")]
     public async Task<IActionResult> GatewayRead(string workspace, string project, [FromBody] GatewayReadBody body, CancellationToken ct)

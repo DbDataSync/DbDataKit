@@ -335,18 +335,34 @@ public static class WorkspaceManagement
         // (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner); a caller of the old route is told so
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/script-test", () => Results.Json(new { error = ScriptTestMoved }, statusCode: StatusCodes.Status410Gone));
 
-        // the plan of a Sync draft's provisioning from its catalog cache (plan 33 SC22j): offline, read only, the draft untouched; applying it is the Sync server's
+        // the person's unsaved edits a question carries ("unsaved": path to text, null for a file deleted), so the answer reads the draft as they see it
+        static Dictionary<string, string?> UnsavedOf(JsonObject? body)
+        {
+            var unsaved = new Dictionary<string, string?>(StringComparer.Ordinal);
+            if (body?["unsaved"] is JsonObject edits) foreach (var (path, text) in edits) unsaved[path] = text?.GetValue<string>();
+            else if (body?["unsaved"] is not null) throw new SyncDesignerRefusal("\"unsaved\" is an object of paths and texts.", 400);
+            return unsaved;
+        }
+
+        // the plan of a Sync draft's provisioning from its catalog cache: offline, read only, the draft untouched; applying is the set's task provision on a Runner.
+        // It reads the draft with the unsaved edits the question carries, as the sync Designer's questions do.
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/provisioning-plan", async (string project, string id, HttpContext context) =>
         {
             if (SyncToolsOf(project, id, context, ServerRole.Viewer, out var tools, out var root) is { } refused) return refused;
             var body = await Body(context);
-            const string Shape = "The body is a JSON object with the \"replication\" of the project to plan.";
+            const string Shape = "The body is a JSON object with the \"replication\" of the project to plan and optional \"unsaved\" edits.";
             string? replication;
             try { replication = body?["replication"]?.GetValue<string>(); }
             catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
             if (!SyncProjectKind.IsName(replication)) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
-            try { return Results.Json(ToolJson(await tools.ProvisioningPlanAsync(root, replication!, context.RequestAborted))); }
+            try
+            {
+                using var view = SyncDesigner.DraftView.Open(root, UnsavedOf(body));
+                return Results.Json(ToolJson(await tools.ProvisioningPlanAsync(view.Root, replication!, context.RequestAborted)));
+            }
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
+            catch (SyncDesignerRefusal ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
+            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
         });
 
         // the sync Designer's questions, answered in this process by Sync's libraries over the draft's files and catalog cache (SyncDesigner): no database, no child
@@ -361,10 +377,7 @@ public static class WorkspaceManagement
             if (body is null) return Results.Json(new { error = "The body is a JSON object." }, statusCode: StatusCodes.Status400BadRequest);
             try
             {
-                var unsaved = new Dictionary<string, string?>(StringComparer.Ordinal);
-                if (body["unsaved"] is JsonObject edits) foreach (var (path, text) in edits) unsaved[path] = text?.GetValue<string>();
-                else if (body["unsaved"] is not null) throw new SyncDesignerRefusal("\"unsaved\" is an object of paths and texts.", 400);
-                using var view = SyncDesigner.DraftView.Open(root, unsaved);
+                using var view = SyncDesigner.DraftView.Open(root, UnsavedOf(body));
                 return Results.Json(await answer(view.Root, body));
             }
             catch (SyncDesignerRefusal ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
