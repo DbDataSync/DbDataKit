@@ -7,8 +7,8 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 
 ## What exists today
 
-- Build, sync, store and integration projects in the Workspace (`DbDataKit.Authoring.Server`), built with the products' tools, published to a Runner
-  and a Gateway through plan 30's shared route (`WorkspaceGatewayPublish`, `DefinitionsClient`).
+- Build, sync, store and integration projects in the Workspace (`DbDataKit.Authoring.Server`), built with the products' tools; the console deploys
+  their builds to a Runner and a Gateway as the person (`ConsoleDeploys`, `DbDataKit.Deploy`; `docs/publishing.md`).
 - Build's `tests`, `status` and `compare` are manual tasks of the refresh package (`ViewJobs.cs`) on the Runs tab. The operations package
   (`project publish --operations`: `init`, `seed`, `apply_plan`, `ack`) is not built by the Workspace, so those run from the Runner's screens only.
 - Sync publish: the platform comes from `WorkspaceSettings.SyncPlatform`, not from the target Runner.

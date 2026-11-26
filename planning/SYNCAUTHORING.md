@@ -35,9 +35,9 @@ cards of `SyncSetPanel.tsx` (whose `.grid-row` rows overlap), each file in `Stru
 `MappingColumns.tsx` for a mapping's columns, and the tabs Changes, Check, Scripts (`SyncScriptsPanel.tsx`), Provisioning (`SyncProvisioningPanel.tsx`),
 Catalog, Runs, Builds, History. That page becomes the **Files** area unchanged.
 
-The Workspace server already answers, for a sync draft (`SyncDraftTools.cs`, running `dbdatasync` on a copy of the draft): the check, the scripts list
-(`GET .../scripts`), a script's test against generated input (`POST .../script-test`), the provisioning plan from the catalog cache
-(`POST .../provisioning-plan`), the catalog refresh through a paired Gateway (`POST .../catalog/refresh`), and the build, publish and run routes.
+The Workspace server answers, for a sync draft (`SyncDraftTools.cs`, running `dbdatasync` on a copy of the draft): the check, the scripts list
+(`GET .../scripts`), the provisioning plan from the catalog cache (`POST .../provisioning-plan`) and the build. A script's test, the catalog's reads,
+deploys and runs go through the console to a Runner or a Gateway as the person (`docs/authoring-metadata.md`, `docs/publishing.md`).
 
 ### What is ported (authoring)
 
