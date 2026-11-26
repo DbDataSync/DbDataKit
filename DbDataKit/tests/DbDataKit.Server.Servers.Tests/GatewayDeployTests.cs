@@ -100,7 +100,7 @@ public sealed class GatewayDeployTests : IAsyncLifetime
         Directory.CreateDirectory(root);
         tool = Path.Combine(root, "dbdatabuild");
         File.WriteAllText(tool, BuildTool.ReplaceLineEndings("\n") + "\n", new UTF8Encoding(false));
-        File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
         // the Gateway, with its management listener, paired with the console only
         var gatewayDirectory = Path.Combine(root, "gateway");
