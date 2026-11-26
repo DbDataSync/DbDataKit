@@ -240,8 +240,9 @@ on the Runner.
 ### WORKSPACEISOLATION-P32: where a Test is staged (default, awaiting the owner)
 
 Beside the Test buttons the tab offers the console's Runners and a channel. It starts on the Runner and channel of the draft's newest deploy to a
-Runner when that channel is not `prod`; on that Runner in `dev` when it is `prod`; and on the first Runner the console lists, in `dev`, when the draft
-was never deployed. `prod` is refused before anything is sent. Example: Ana last staged the draft in `test` on `runners-eu`; Test stages there again.
+Runner, whatever the channel, and on the first Runner the console lists, in `dev`, when the draft was never deployed. `prod` is a channel like any
+other: picking it shows the production warning, and the Runner's roles decide. Example: Ana last staged the draft in `test` on `runners-eu`; Test
+stages there again.
 
 Each Test stages a new version in that channel (the same content makes no new version), so it replaces what was staged there before: a version Ben
 staged in `dev` for a review is no longer the staged one after Ana's Test.

@@ -1,5 +1,5 @@
 // The test of a Sync draft's script, on a Runner (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner): the Workspace server builds the draft, the console stages the build
-// in a channel that is not production as the signed-in person, and runs the set's task `script-test` there; the answer comes back through the console and is kept nowhere. The
+// in the channel the person picks as the signed-in person (production as any other, with a warning), and runs the set's task `script-test` there; the answer comes back through the console and is kept nowhere. The
 // Workspace server runs no script: it only builds.
 import type { BuildDetail, BuildSummary, ScriptTest } from './api'
 import type { RunAnswer } from './authoringReads'
@@ -9,11 +9,15 @@ import { buildBusy } from './model'
 /** The set's task that compiles a script and runs it against generated input. */
 export const SCRIPT_TEST_TASK = 'script-test'
 
-/** The channel a test stages in when the draft has no version in a channel that is not production. */
+/** The channel a test stages in when the draft was never deployed to a Runner. */
 export const SCRIPT_TEST_CHANNEL = 'dev'
 
-/** The channel a script is never tested in. */
+/** The production channel: a test is staged there as in any other, after a warning. */
 export const PRODUCTION = 'prod'
+
+/** The sentence shown when the person picks production: the test goes ahead after it, and the Runner's roles decide whether it may. */
+export const scriptTestProductionWarning = (channel: string, runner: string) =>
+  `This stages the draft in production (${channel} on ${runner}): it replaces the version staged there, not the one production serves. The script runs against generated input and opens no connection.`
 
 /** Where a test runs: the Workspace server (the console's id), the draft, and the Runner (the console's id) and channel it is staged in. */
 export interface ScriptTestPlace { workspaceServer: string; project: string; workspace: string; runner: string; channel: string }
@@ -40,17 +44,16 @@ const BUILD_LIMIT_MS = 10 * 60_000
 const RUN_LIMIT_MS = 6 * 60_000
 
 /**
- * The Runner and channel a test is staged in, unless the person chose: the Runner and channel of the draft's newest deploy to a Runner when that channel is not production, the same Runner in
- * `dev` when it is, and otherwise the first Runner the console has, in `dev`. Null when the console has no Runner.
+ * The Runner and channel a test is staged in, unless the person chose: the Runner and channel of the draft's newest deploy to a Runner, whatever the channel, and otherwise the first
+ * Runner the console has, in `dev`. Null when the console has no Runner.
  */
 export function defaultScriptTestPlace(newest: RunnerVersion | null, runners: readonly { id: string }[]): { runner: string; channel: string } | null {
-  if (newest) return { runner: newest.target, channel: newest.channel === PRODUCTION ? SCRIPT_TEST_CHANNEL : newest.channel }
+  if (newest) return { runner: newest.target, channel: newest.channel }
   return runners[0] ? { runner: runners[0].id, channel: SCRIPT_TEST_CHANNEL } : null
 }
 
 /** Why a channel cannot take a test, or null when it can. */
 export function channelProblem(channel: string): string | null {
-  if (channel === PRODUCTION) return 'A script is never tested in production: choose another channel, such as dev.'
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(channel)) return 'A channel is lower-case letters, digits, - and _.'
   return null
 }

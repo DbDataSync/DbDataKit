@@ -5,7 +5,7 @@ import { ErrorBanner } from '@dbdatakit/shell'
 import { workspaceApi, type CheckDiagnostic, type ScriptTest } from '../api'
 import { authoringReadApi } from '../authoringReads'
 import { deployApi, useHostedServer, useRunnerVersion } from '../deploys'
-import { channelProblem, defaultScriptTestPlace, testScriptOnRunner, type ScriptTestCalls, type ScriptTestPhase, type ScriptTestRun } from '../scriptTestOnRunner'
+import { channelProblem, defaultScriptTestPlace, PRODUCTION, scriptTestProductionWarning, testScriptOnRunner, type ScriptTestCalls, type ScriptTestPhase, type ScriptTestRun } from '../scriptTestOnRunner'
 import { syncNameProblem } from '../syncSchemas'
 import { SCRIPT_KINDS, newScriptFiles, scriptCodePath, scriptManifestPath, scriptsOf, type ScriptKind } from '../syncScripts'
 
@@ -58,7 +58,7 @@ export function ScriptTestView({ test, run }: { test: ScriptTest; run?: Omit<Scr
 
 /**
  * The Scripts tab of a Sync project's workspace: the scripts of `config/scripts/` with the slot each fills, a new script from the skeleton of a slot, and the test of one on the saved draft
- * on a Runner: the draft is built, the build is staged in a channel that is not production through the console, and the set's task `script-test` compiles the script and runs it against
+ * on a Runner: the draft is built, the build is staged in the channel the person picks through the console (production shows a warning first), and the set's task `script-test` compiles the script and runs it against
  * generated sample input there. Nothing in the draft changes; the files are edited like any other.
  * Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner
  */
@@ -90,7 +90,7 @@ export function SyncScriptsPanel({ project, id, paths, canWrite, busy, onOpen, o
   const problem = syncNameProblem(name, paths, scriptManifestPath)
   return (
     <div data-testid="wsp-scripts">
-      <div className="hint" style={{ marginBottom: 6 }}>Scripts (C#, in <span className="mono">config/scripts/</span>): a test builds the saved draft, stages it on a Runner in a channel that is not production, and compiles and runs the script there against generated sample input. It opens no connection.</div>
+      <div className="hint" style={{ marginBottom: 6 }}>Scripts (C#, in <span className="mono">config/scripts/</span>): a test builds the saved draft, stages it on a Runner in the channel you pick, and compiles and runs the script there against generated sample input. It opens no connection.</div>
       {names.length === 0 && <div className="hint" data-testid="wsp-scripts-none">No script yet.</div>}
       {names.map((n) => {
         const entry = kindOf(n)
@@ -118,6 +118,9 @@ export function SyncScriptsPanel({ project, id, paths, canWrite, busy, onOpen, o
         {phase && <span className="hint" data-testid="wsp-script-phase">{PHASE_WORDS[phase]}</span>}
       </div>
       {where && <div className="hint" data-testid="wsp-script-where">{where}</div>}
+      {where === null && channel === PRODUCTION && (
+        <div className="banner" role="alert" data-testid="wsp-script-production"><span className="mark">!</span><span>{scriptTestProductionWarning(channel, runners.find((r) => r.id === runner)?.name ?? runner)}</span></div>
+      )}
       <ErrorBanner error={test.error ?? (kinds.data && !kinds.data.ok ? new Error(kinds.data.diagnostics.map(findingLine).join(' ')) : null)} />
       {test.data && <ScriptTestView test={test.data.test} run={test.data} />}
       {canWrite && (
