@@ -182,23 +182,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
-## Proposed decisions
-
-### SYNCAUTHORING-P90: a missing target table with Create target table if missing off
-
-Awaiting the owner (default, awaiting the owner). The plan was to plan `CREATE TABLE` for a missing target only with the setting on. The run does
-otherwise: with the setting off a pass does not create the table and fails (`TargetTableMissing`), telling the person to apply the replication's
-database setup, and the set's `provision` task and the preflight then create it from the plan. So the plan follows the run: it keeps the
-`CREATE TABLE` either way and says who runs it.
-
-Example: Ana maps `dbo.Lines` to `dw`, which has no such table, and leaves **Create target table if missing** off. Today the mapping's Provisioning tab
-reads **Provisioning 1**, shows the `CREATE TABLE` and says "a pass does not create the table and fails until it exists. Apply this statement, create
-the table yourself, or turn the setting on". She applies it from the replication's Provisioning tab, and the first pass runs.
-
-- A (built, recommended): keep it. The setting decides whether a pass creates the table; the plan always shows what the person can apply.
-- B: with the setting off, the plan drops the `CREATE TABLE` and the badge clears. Then nothing in the suite creates the table: the pass's message,
-  the preflight's and the `provision` task would change to "create the table yourself", and Ana creates it outside the suite or turns the setting on.
-
 ## Open designs
 
 ### One connection, several databases
