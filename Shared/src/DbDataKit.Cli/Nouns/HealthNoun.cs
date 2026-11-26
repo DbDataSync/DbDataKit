@@ -35,7 +35,7 @@ public static class HealthNoun
     public static Noun Create(IHealthProbe probe, string defaultUrl) => new("health", "Is a running server answering",
     [
         new Verb("check", "Ask the server's health address; exit 0 when it answers, 1 when it does not", EffectClass.OfflineOnly, "[--url <url>] [--timeout <seconds>]",
-            (args, context) => CheckAsync(probe, defaultUrl, null, args, context),
+            (args, context) => CheckAsync(probe, defaultUrl, null, "[--url <url>] [--timeout <seconds>]", args, context),
             Schema),
     ]);
 
@@ -44,6 +44,8 @@ public static class HealthNoun
     /// <c>listen:</c> line of the settings file in <c>--repo</c> (or the server's default folder) is asked, with the path of
     /// <paramref name="defaultUrl"/>; with no such line, or no file, <paramref name="defaultUrl"/> is.
     /// </summary>
+    /// <param name="probe">How the address is asked.</param>
+    /// <param name="defaultUrl">The product's health URL on its default address, asked when nothing is pinned; its path is asked on a pinned address.</param>
     /// <param name="pinned">
     /// The address the server pinned, given the <c>--repo</c> value (null when it was not given), or null when its settings file or line is not there.
     /// It throws <see cref="InvalidOperationException"/> (a line that is not an address), <see cref="IOException"/> or
@@ -55,7 +57,7 @@ public static class HealthNoun
     [
         new Verb("check", "Ask the server's health address (its settings file's listen: line, else its default address); exit 0 when it answers, 1 when it does not", EffectClass.OfflineOnly,
             $"[--url <url>] [{repoUsage}] [--timeout <seconds>]",
-            (args, context) => CheckAsync(probe, defaultUrl, pinned, args, context),
+            (args, context) => CheckAsync(probe, defaultUrl, pinned, $"[--url <url>] [{repoUsage}] [--timeout <seconds>]", args, context),
             Schema),
     ]);
 
@@ -79,26 +81,26 @@ public static class HealthNoun
         return new UriBuilder(listen.Scheme, host, listen.Port, path).Uri;
     }
 
-    private static async Task<int> CheckAsync(IHealthProbe probe, string defaultUrl, Func<string?, Uri?>? pinned, string[] args, CliContext context)
+    private static async Task<int> CheckAsync(IHealthProbe probe, string defaultUrl, Func<string?, Uri?>? pinned, string usage, string[] args, CliContext context)
     {
         var options = pinned is null ? new HashSet<string> { "url", "timeout" } : new HashSet<string> { "url", "repo", "timeout" };
         var parsed = CliArgs.Parse(args, new HashSet<string>(), options);
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync(pinned is null ? "Usage: health check [--url <url>] [--timeout <seconds>]" : "Usage: health check [--url <url>] [--repo <server directory>] [--timeout <seconds>]");
+            await context.Error.WriteLineAsync($"Usage: health check {usage}");
             return CliExit.Usage;
         }
-        var text = parsed.Get("url");
-        if (text is null && pinned is not null)
+        var address = parsed.Get("url");
+        if (address is null && pinned is not null)
         {
-            try { text = pinned(parsed.Get("repo")) is { } listen ? HealthUrlOn(listen, defaultUrl).ToString() : null; }
+            try { address = pinned(parsed.Get("repo")) is { } listen ? HealthUrlOn(listen, defaultUrl).ToString() : null; }
             catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
             {
                 await context.Error.WriteLineAsync($"The address the server listens on cannot be read: {e.Message} Fix the listen: line, or give the address with --url.");
                 return CliExit.Failure;
             }
         }
-        if (!Uri.TryCreate(text ?? defaultUrl, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(address ?? defaultUrl, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
         {
             await context.Error.WriteLineAsync("The address must be an http or https URL.");
             return CliExit.Usage;
