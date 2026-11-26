@@ -128,19 +128,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P63: `dbdatarunner package promote` still sends a version between runner groups from the command line (default, awaiting the owner)
-
-An administrator who wants the `prod` version of `orders` on the runners of another site runs `dbdatarunner package promote orders --from-server
-site-a --server site-b --channel prod --code <code>`: the command pairs this machine with both runners and sends the version. The console's Promote
-action on the Runner's Packages screen does the same as the signed-in person. `dbdatarunner package publish` is gone, and `package promote` was left
-as it is.
-
-- (a) `package promote` answers `RemovedCommands.ConsoleDeploys` too, its tests move to the client library (`PromoteToGroupAsync`), and the Promote
-  action is the one way to move a version between groups.
-- (b) It stays, as the one command line that still sends to a Runner.
-
-Recommendation: (a), since no other command line publishes to a Runner.
-
 ## Needs from other subjects
 
 - INSTALLER-21 writes each service's `state:` section by `state init --topology install` (`docs/state-logins.md`): the login `dbdatakit_<service>[_<group>]`, its schemas and registry, and the statements `state grants` prints exist.
