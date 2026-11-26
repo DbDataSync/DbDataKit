@@ -89,7 +89,7 @@ public static class ConsoleCli
             announceText = new UriBuilder(Uri.UriSchemeHttp, "0.0.0.0", shared.Port).Uri.AbsoluteUri;
         if (announceText is { Length: > 0 } && (!Uri.TryCreate(announceText, UriKind.Absolute, out announce) || announce.Scheme != Uri.UriSchemeHttp || listenFlag?.Any(l => l.Port == announce.Port) == true))
         {
-            await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:8481, and is reachable only on the network the servers share with the console.");
+            await context.Error.WriteLineAsync("--announce-listen is a plain http address on a port of its own, such as http://0.0.0.0:7801, and is reachable only on the network the servers share with the console.");
             return CliExit.Usage;
         }
 

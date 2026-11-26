@@ -498,7 +498,7 @@ public static class CliApp
                         var smSearch = verb == "members" ? new Option<string?>("--search") { Description = "Only the values that contain this text" } : null;
                         var smLimit = verb == "members" ? new Option<int?>("--limit") { Description = "At most this many values (default: the Gateway's)" } : null;
                         var smGateway = new Option<string?>("--gateway") { Description = "Gone with the Build server (plan 33 SC23): answers that --address is given instead" };
-                        var smAddress = new Option<string?>("--address") { Description = "The Gateway's Flight SQL address, https://host:8815" };
+                        var smAddress = new Option<string?>("--address") { Description = "The Gateway's Flight SQL address, https://host:7821" };
                         var smPort = new Option<int?>("--flight-port") { Description = "Gone with the Build server (plan 33 SC23): the port is part of --address" };
                         var smCa = new Option<string?>("--ca-file") { Description = "A PEM file with the certificate authority the Gateway's certificate is checked against" };
                         var smInsecure = new Option<bool>("--insecure") { Description = "Do not check the Gateway's certificate (a test Gateway only)" };

@@ -112,7 +112,7 @@ runs `preflight` on a version it stages in `prod` before it serves it (`docs/pub
 
 ## Publishing to the serving layer
 
-The Workspace publishes a store project's models to a Gateway (the four-service way). The command line also publishes a model from a folder, over the Gateway's per-kind routes (until plan 30 PB02 retires them; it is what the apps stories and the compose quickstart use). Pair the folder once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:8815 --code <code>`.
+The Workspace publishes a store project's models to a Gateway (the four-service way). The command line also publishes a model from a folder, over the Gateway's per-kind routes (until plan 30 PB02 retires them; it is what the apps stories and the compose quickstart use). Pair the folder once with the serving group as a publishing client, with a code its administrator made (`dbdatagateway server pair --max-role publisher`): `dbdatastore gateway add edge --url https://serving.example:7822 --code <code>`.
 
 **Publishing is the one act that makes the model you are working on available** (plan 20 O10b). Editing a model's file changes nothing for anyone; `dbdatastore model publish <model>` (the first time with `--proxy <name>`; after that, to every group the model is published to):
 

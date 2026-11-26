@@ -591,7 +591,7 @@ What the gateway enforces and where the responsibility stays with the database (
 C# (`DbDataGateway.Client`, in `DbDataGateway.Core`):
 
 ```csharp
-using var client = new GatewayFlightClient("https://gateway:8815");
+using var client = new GatewayFlightClient("https://gateway:7821");
 await client.AuthenticateAsync("me", "ddk_...");   // a home user name and its personal access token
 var result = await client.QueryAsync("SELECT * FROM sales",
     new QueryOptions { DataSource = "erp", Compression = "zstd" });
@@ -605,7 +605,7 @@ languages):
 import adbc_driver_flightsql.dbapi as fsql
 from adbc_driver_flightsql import DatabaseOptions
 
-conn = fsql.connect("grpc+tls://gateway:8815", db_kwargs={
+conn = fsql.connect("grpc+tls://gateway:7821", db_kwargs={
     "username": "me", "password": "...",
     DatabaseOptions.RPC_CALL_HEADER_PREFIX.value + "x-datasource": "erp",
     DatabaseOptions.RPC_CALL_HEADER_PREFIX.value + "x-compression": "zstd",   # optional

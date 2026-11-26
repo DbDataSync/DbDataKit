@@ -11,8 +11,8 @@ param(
   [Parameter(Mandatory)][string]$ProductExe,           # built from this commit
   [string]$ProductProduct = 'dbdatarunner',
   [int]$ProductPort = 18495,
-  [int]$ConsolePort = 8480,
-  [int]$AnnouncePort = 8481,
+  [int]$ConsolePort = 7800,
+  [int]$AnnouncePort = 7801,
   [string]$LogDir = $env:RUNNER_TEMP
 )
 $ErrorActionPreference = 'Stop'

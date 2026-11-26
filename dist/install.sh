@@ -47,7 +47,7 @@ Usage: install.sh [options]
                       user; start it with 'systemctl enable --now <program>'. Running it again changes nothing that is already in place
   --install-dir <d>   install into <d>
   --no-link           do not put the program on the PATH
-  --announce-url <u>  the console's announce address (http://console:8481). With --system (root) it writes the systemd drop-in that sets DBDATAKIT_ANNOUNCE_URL for the
+  --announce-url <u>  the console's announce address (http://console:7801). With --system (root) it writes the systemd drop-in that sets DBDATAKIT_ANNOUNCE_URL for the
                       unit named for the product (/etc/systemd/system/<product>.service.d/announce.conf); otherwise it prints the line the service needs
   --bundle-token-file <f>  with --announce-url, for a console on this machine: the bundle token file (made by `dbdatakit bundle init`); the drop-in also sets
                       DBDATAKIT_BUNDLE_TOKEN_FILE, and the console pairs with this server by itself when it announces. Give the service's account read access to the file (it is mode 600)
@@ -83,7 +83,7 @@ done
 
 if [ -n "$ANNOUNCE_URL" ]; then
   # the address goes into a unit file: an http(s) address with nothing that systemd would read as syntax (white space, quotes, backslash, % and $)
-  case "$ANNOUNCE_URL" in http://?*|https://?*) ;; *) die "--announce-url is the console's http or https announce address, such as http://console:8481." ;; esac
+  case "$ANNOUNCE_URL" in http://?*|https://?*) ;; *) die "--announce-url is the console's http or https announce address, such as http://console:7801." ;; esac
   case "$ANNOUNCE_URL" in *[[:space:]\"\'\\%\$]*) die "--announce-url must not contain white space, quotes, backslash, % or \$." ;; esac
 fi
 

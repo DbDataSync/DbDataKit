@@ -60,11 +60,11 @@ compression: { mode: arrow, codec: zstd, level: 3, allowClientOverride: true }
 # mcp: { path: /mcp }
 # public: { listen: https://0.0.0.0:7820 }   # the public listener: identity, apps, store, views, feeds and mcp answer here, each under its path (/identity, /apps, /store, /views, /feeds, /mcp), unless a module has a `listen` of its own; `/` answers 404
 # apps:                                 # the apps host (module "apps"): published apps at https://<host>:<public port>/apps/<instance>/; https only
-#   listen: https://0.0.0.0:8818       # a listener of its own; leave it out to be served on the public listener
+#   listen: https://0.0.0.0:7824       # a listener of its own; leave it out to be served on the public listener
 #   rolesRefreshSeconds: 300           # how old the home's answer about a person may be before the host asks again (a role taken away stops working within this)
 #   storageCapMb: 50                   # the most storage one app instance may keep in the host (1 to 1024); a manifest's storage.quota_mb is limited to it
 #   home: { clientId: <id from identity client-add> }   # signs people in through the identity home (this instance's, or home.authority); redirect URI <public url>/apps/-/callback
-# identity: { enabled: true, listen: https://0.0.0.0:8817, publicUrl: https://identity.example.com }
+# identity: { enabled: true, listen: https://0.0.0.0:7823, publicUrl: https://identity.example.com }
 # People may also sign in at the home through an Entra ID tenant (an app registered there with the redirect URI <publicUrl>/identity/upstream/entra/callback and the groups claim), and with Windows (Negotiate):
 #   entra: { authority: https://login.microsoftonline.com/<tenant id>/v2.0, clientId: <app id>, clientSecret: secret:dbdatakit:gateway:identity:entra }
 #   windows: { enabled: true }

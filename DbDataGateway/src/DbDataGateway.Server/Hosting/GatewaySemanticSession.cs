@@ -24,13 +24,13 @@ internal sealed class GatewaySemanticSession(GatewayFlightClient client) : ISema
         {
             var token = Environment.GetEnvironmentVariable(TokenVariable);
             if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException($"Name the person to run as: the token in the {TokenVariable} environment variable, or --user and the password in DBDATAKIT_GATEWAY_PASSWORD.");
-            return ForToken(arguments.Get("address") ?? "https://localhost:8815", token.Trim(), arguments.Has("insecure"));
+            return ForToken(arguments.Get("address") ?? "https://localhost:7821", token.Trim(), arguments.Has("insecure"));
         }
         var user = arguments.Get("user")!;
         var password = arguments.Get("password") ?? Environment.GetEnvironmentVariable("DBDATAKIT_GATEWAY_PASSWORD") ?? throw new InvalidOperationException("The password is the DBDATAKIT_GATEWAY_PASSWORD environment variable.");
         var handler = new SocketsHttpHandler();
         if (arguments.Has("insecure")) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
-        var client = new GatewayFlightClient(arguments.Get("address") ?? "https://localhost:8815", new GrpcChannelOptions { HttpHandler = handler });
+        var client = new GatewayFlightClient(arguments.Get("address") ?? "https://localhost:7821", new GrpcChannelOptions { HttpHandler = handler });
         try { await client.AuthenticateAsync(user, password, context.Cancellation); }
         catch { client.Dispose(); throw; }
         return new GatewaySemanticSession(client);
