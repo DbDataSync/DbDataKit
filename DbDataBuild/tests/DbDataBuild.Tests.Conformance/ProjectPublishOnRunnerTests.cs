@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using DbDataBuild.Cli;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Api;
+using DbDataKit.Runner.Client;
 using DbDataKit.Scheduling;
 using DbDataKit.State;
 using DbDataKit.Web.Trust;
@@ -12,7 +13,8 @@ using Xunit;
 namespace DbDataBuild.Tests.Conformance;
 
 /// <summary>
-/// Plan 28c, E07: `dbdatabuild project publish --to runner` against real runners (in process, SQLite state, the runtime package a stand-in file: staging only materializes it). No database engine and no published tool are needed, so it runs on
+/// The package `dbdatabuild project publish --to runner --out` writes, sent to real runners with the client library the console's deploy uses (the command line no longer sends it; see <see cref="Publish"/>). The runners run in
+/// process, with SQLite state and a stand-in file as the runtime package (staging only materializes it). No database engine and no published tool are needed, so it runs on
 /// Windows as well. Publishing the same project twice sends no file the second time, two runners both end with the version, a channel's slots are bound before the first version is published and promotion moves one stored version to another
 /// channel with that channel's own bindings.
 /// </summary>
@@ -121,11 +123,61 @@ public class ProjectPublishOnRunnerTests
         }
     }
 
+    /// <summary>
+    /// What the console's deploy does with a Build project's package, in two steps: `project publish --to runner --out` writes the package (the command line sends nothing), and the runner client library the deploy uses
+    /// (<see cref="RunnerPublishClient"/>) binds the channel's slots and stages the version. With `--promote-from` nothing is written: the client binds the target channel and promotes the version the source channel serves. The answer is
+    /// the command's `data` with what the runner said added (`version`, `mode`, `changed`, `uploaded`, `skipped`, `promoted_from`); a refusal of the runner is exit code 1 with its words.
+    /// </summary>
     internal static (int Exit, JsonNode Doc, string Text) Publish(string project, string clientDir, params string[] args)
     {
-        var o = new StringWriter(); var e = new StringWriter();
-        var exit = CliApp.Run(["project", "publish", "--to", "runner", "--project", project, "--package", "sales", "--client-dir", clientDir, "--format", "json", .. args], o, e, environment: _ => null);
-        return (exit, JsonNode.Parse(o.ToString())!, o + "\n" + e);
+        string? server = null, code = null, channel = null, from = null;
+        var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rest = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--server": server = args[++i]; break;
+                case "--code": code = args[++i]; break;
+                case "--channel": channel = args[++i]; break;
+                case "--promote-from": from = args[++i]; break;
+                case "--bind": var eq = args[++i].IndexOf('='); bindings[args[i][..eq]] = args[i][(eq + 1)..]; break;
+                default: rest.Add(args[i]); break;
+            }
+        }
+
+        Assert.True(server is not null && channel is not null, "a publish names the runner and the channel");
+        var client = new RunnerPublishClient(new RunnerClientStore(clientDir), _ => null);
+        try
+        {
+            if (from is not null)
+            {
+                if (bindings.Count > 0) client.BindAsync(server!, code, "sales", channel!, bindings).GetAwaiter().GetResult();
+                var promoted = client.PromoteAsync(server!, bindings.Count > 0 ? null : code, "sales", from, channel!).GetAwaiter().GetResult();
+                return (0, new JsonObject { ["data"] = new JsonObject { ["package"] = "sales", ["channel"] = channel, ["version"] = promoted.Version, ["promoted_from"] = from } }, $"{promoted.State}. {promoted.Message}");
+            }
+
+            var folder = Directory.CreateTempSubdirectory("ddb-e07-out-").FullName;
+            try
+            {
+                var o = new StringWriter(); var e = new StringWriter();
+                var exit = CliApp.Run(["project", "publish", "--to", "runner", "--project", project, "--package", "sales", "--out", folder, "--format", "json", .. rest], o, e, environment: _ => null);
+                if (exit != 0) return (exit, JsonNode.Parse(o.ToString())!, o + "\n" + e);
+                var doc = JsonNode.Parse(o.ToString())!;
+                if (bindings.Count > 0) client.BindAsync(server!, code, "sales", channel!, bindings).GetAwaiter().GetResult();
+                var published = client.PublishAsync(server!, bindings.Count > 0 ? null : code, Path.Combine(folder, "package.yaml"), Path.Combine(folder, "files"), channel!, stage: true, expectedVersion: null).GetAwaiter().GetResult();
+                var data = doc["data"]!;
+                data["channel"] = published.Channel;
+                data["version"] = published.Version;
+                data["mode"] = published.Mode;
+                data["changed"] = published.Changed;
+                data["uploaded"] = published.Uploaded;
+                data["skipped"] = published.Skipped;
+                return (0, doc, o + "\n" + e);
+            }
+            finally { try { Directory.Delete(folder, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temp */ } }
+        }
+        catch (RunnerClientException ex) { return (1, new JsonObject(), ex.Message); }
     }
 
     internal static JsonNode Data((int Exit, JsonNode Doc, string Text) result)
@@ -185,7 +237,7 @@ public class ProjectPublishOnRunnerTests
 
         var refused = Publish(project, client, "--server", runner.Url, "--code", runner.Code(), "--channel", "dev");
 
-        Assert.Equal(CliApp.ExitFindings, refused.Exit);
+        Assert.Equal(1, refused.Exit);
         Assert.Contains("'sqlserver'", refused.Text);
         Assert.Contains("channel 'dev'", refused.Text);
         Assert.Null(runner.Head("sales", "dev"));
@@ -202,7 +254,7 @@ public class ProjectPublishOnRunnerTests
 
         // without the channel's own binding the runner refuses, naming the slot and the channel
         var unbound = Publish(project, client, "--server", runner.Url, "--channel", "test", "--promote-from", "dev");
-        Assert.Equal(CliApp.ExitFindings, unbound.Exit);
+        Assert.Equal(1, unbound.Exit);
         Assert.Contains("'sqlserver'", unbound.Text);
         Assert.Contains("channel 'test'", unbound.Text);
 
@@ -215,7 +267,7 @@ public class ProjectPublishOnRunnerTests
 
         // nothing to promote from a channel that serves nothing (bound first, so it is the missing version the runner-side check names)
         var none = Publish(project, client, "--server", runner.Url, "--channel", "test", "--promote-from", "nowhere", "--bind", "sqlserver=wh_test");
-        Assert.Equal(CliApp.ExitFindings, none.Exit);
+        Assert.Equal(1, none.Exit);
         Assert.Contains("no active version in channel 'nowhere'", none.Text);
     }
 
