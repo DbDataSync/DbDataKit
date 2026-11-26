@@ -24,7 +24,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
     public const string ModelKind = "semantic-model";
 
     /// <summary>The folders of a Build project's views under its models folder, and the definition kind each holds.</summary>
-    public static readonly IReadOnlyList<(string Folder, string Kind)> ViewFolders = [("dashboards", "dashboard"), ("reports", "report")];
+    public static IReadOnlyList<(string Folder, string Kind)> ViewFolders => BuildContents.ViewFolders;
 
     public const string EntityModelKind = "entity-model";
     public const string DataSourceKind = "data-source";
