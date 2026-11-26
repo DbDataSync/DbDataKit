@@ -69,4 +69,5 @@ docker compose -f dist/compose/quickstart.yml down -v     # starts from nothing 
 * `docker compose -f dist/compose/quickstart.yml ps` shows which service is not healthy; `logs <service>` says why.
 * A server missing from the waiting list: it announces every half minute, so wait a little, then check its log.
 * Ports 7800, 7821 and 15434 must be free on the machine. Change the left-hand number of the `ports:` entry in `dist/compose/quickstart.yml` to move one.
+* The test engines of this repository use 15434 for `postgres16`: run `testenv/testenv.sh down` before you start the quickstart, or move the demo database's port.
 * `dist/compose/check.sh dist/compose/quickstart.yml dbdatagateway` starts a fresh copy, confirms every server and checks the console lists them as ready, then removes it; CI runs the same.

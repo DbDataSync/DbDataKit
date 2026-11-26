@@ -123,20 +123,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P65: the ports the container images and the compose files use (default, awaiting the owner)
-
-`docker compose -f dist/compose/quickstart.yml up` now publishes `7800:7800` (the console) and `7821:7821` (the Gateway's Flight SQL); a Flight client
-connects to `localhost:7821`. Inside the containers: the console 7800, its announce port 7801, the Gateway's Flight SQL 7821 and management 7822 (the
-order a Gateway with no settings takes: public 7820, Flight SQL 7821, management 7822), and in `quickstart-apps.yml` the identity home 7823 and the
-apps host 7824. The host side of each `ports:` entry moved too, so the address a person opens is the one an install uses.
-
-- A (built): these ports.
-- B: other ports of the sub-blocks, or the host side kept on the old ports (`"8480:7800"`), so a compose user's bookmarks keep working.
-
-Recommendation: A. Two related points the change left as they were: the Gateway image's public listener has no setting, so inside the container it
-takes the first free port of the block (7820) and is not published; and the demo PostgreSQL keeps `15434` on the host, which is also the port
-`testenv` gives `postgres16`, so the quickstart and `testenv up postgres16` cannot run at once on one machine.
-
 ## Needs from other subjects
 
 - INSTALLER-21 writes each service's `state:` section by `state init --topology install` (`docs/state-logins.md`): the login `dbdatakit_<service>[_<group>]`, its schemas and registry, and the statements `state grants` prints exist.
