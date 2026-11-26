@@ -40,7 +40,7 @@ export function PublishFromFilesView(p: PublishFromFilesViewProps) {
       <div className="card-body">
         <div className="card-title">Publish a package from files</div>
         <div className="hint" style={{ marginBottom: 10 }} data-testid="runner-pub-about">
-          Choose the folder of a package (its <span className="mono">package.yaml</span> and the files it launches) as <span className="mono">dbdatarunner package publish</span> would send it. Files the runner already has are not sent again. The version is{' '}
+          Choose the folder of a package: its <span className="mono">package.yaml</span> and the files it launches. Files the runner already has are not sent again. The version is{' '}
           <strong>staged</strong>: the runners prepare it and an administrator activates it below; or serve it at once.
         </div>
         <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>

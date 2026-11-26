@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { publishRunner, runnerServer, scratchDirectory } from '../playwright.config'
 import { signInNewAdmin } from './people'
+import { publishThroughConsole } from './runner-publish'
 
 // Plan 33, UE06: who schedules a task, on the runner's own screens. The sample package of the runner's tests is published to the runner of `runner-publish.spec.ts` (the same fixture); its task `ok` is scheduled every hour. The story reads the owner of
 // the task (the runner, as nothing moved it), moves it to the publishing product (`old`: the runner stops queueing it), to `observe` (the runner records what it would queue) and back to the runner, which takes a position and a reason; it sees the
@@ -34,8 +34,7 @@ test('a task is moved between its publishing product, observation and the runner
   const id = (await instanceId(request))!
 
   // the sample package, served at once on the channel `dev`
-  execFileSync('dotnet', ['exec', publishRunner.dll, 'package', 'publish', path.join(runnerServer.manifests, 'v1.yaml'), runnerServer.package,
-    '--server', publishRunner.url, '--channel', 'dev', '--client-dir', publishRunner.clientDirectory, '--code', code('publish-runner-sample-code.txt')], { stdio: 'ignore' })
+  await publishThroughConsole(request, id, path.join(runnerServer.manifests, 'v1.yaml'), runnerServer.package, 'dev', 'serve')
 
   await page.goto(`/servers/${id}`)
   await expect(page.getByTestId('runner-tasks-page')).toBeVisible()

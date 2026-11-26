@@ -1,10 +1,10 @@
 using DbDataKit.Runner.Api;
+using DbDataKit.Runner.Client;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using DbDataKit.Cli;
 using DbDataKit.Monitoring;
 using DbDataKit.Runner;
 using DbDataKit.State;
@@ -100,13 +100,6 @@ public sealed class PublishApiTests
 
     private static string Text(JsonNode? node, string key) => (string)node![key]!;
 
-    private static async Task<(int Exit, string Out, string Error)> Cli(params string[] args)
-    {
-        var (output, error) = (new StringWriter(), new StringWriter());
-        var exit = await RunnerCli.Router(_ => null).RunAsync(args, new CliContext(output, error, TextReader.Null));
-        return (exit, output.ToString(), error.ToString());
-    }
-
     private static IReadOnlyList<AuditRecord> Audited(RunnerHarness h, string verb, string? outcome = null) =>
         [.. h.Audit.Read(new AuditQuery(Verb: verb, Limit: 200)).Where(r => outcome is null || r.Entry.Outcome == outcome)];
 
@@ -126,10 +119,10 @@ public sealed class PublishApiTests
         try
         {
             // the first publish pairs with the code, uploads every file and stages
-            var first = await Cli("package", "publish", manifest, copy.Path, "--server", h.Url.ToString().TrimEnd('/'), "--code", h.NewCode(ServerRole.Publisher), "--channel", "dev", "--stage", "--client-dir", clientDir);
-            Assert.True(first.Exit == 0, first.Error + first.Out);
-            Assert.Contains($"{files} file(s) uploaded, 0 already there", first.Out);
-            Assert.Contains("Staged sample on dev: version 1", first.Out);
+            var client = new RunnerPublishClient(new RunnerClientStore(clientDir), _ => null);
+            var first = await client.PublishAsync(h.Url.ToString().TrimEnd('/'), h.NewCode(ServerRole.Publisher), manifest, copy.Path, "dev", stage: true, expectedVersion: null);
+            Assert.Equal((files, 0), (first.Uploaded, first.Skipped));
+            Assert.Equal(("sample", "dev", "stage", 1), (first.Package, first.Channel, first.Mode, first.Version));
 
             // staged is not served: nothing is projected and nothing runs
             Assert.Equal("", TaskVersions(h, "sample"));
@@ -147,10 +140,9 @@ public sealed class PublishApiTests
 
             // one file changes: the second publish (the stored pairing, no code) sends that one file and is served at once
             File.WriteAllText(Path.Combine(copy.Path, "notes.txt"), "notes 2");
-            var second = await Cli("package", "publish", manifest, copy.Path, "--server", h.Url.ToString().TrimEnd('/'), "--channel", "dev", "--expected-version", "1", "--client-dir", clientDir);
-            Assert.True(second.Exit == 0, second.Error + second.Out);
-            Assert.Contains($"1 file(s) uploaded, {files - 1} already there", second.Out);
-            Assert.Contains("Published sample on dev: version 2", second.Out);
+            var second = await client.PublishAsync(h.Url.ToString().TrimEnd('/'), null, manifest, copy.Path, "dev", stage: false, expectedVersion: 1);
+            Assert.Equal((1, files - 1), (second.Uploaded, second.Skipped));
+            Assert.Equal(("serve", 2), (second.Mode, second.Version));
             Assert.Equal("2", TaskVersions(h, "sample"));
             await h.WaitAsync(async () => await h.RunsAsync("?package=sample&outcome=succeeded") is { } r && r.Any(x => Text(x, "package_version") == "2") ? r : null, "a run of version 2");
 
@@ -468,7 +460,7 @@ public sealed class PublishApiTests
     }
 
     [Fact]
-    public async Task The_client_command_refuses_with_the_servers_reason_and_an_unpaired_server_needs_a_code()
+    public async Task The_publishing_client_refuses_with_the_servers_reason_and_an_unpaired_server_needs_a_code()
     {
         await using var h = new RunnerHarness(StateEngineIds.Sqlite);
         await h.StartAsync();
@@ -476,15 +468,14 @@ public sealed class PublishApiTests
         var clientDir = Directory.CreateTempSubdirectory("dbdr-client-").FullName;
         try
         {
-            var unpaired = await Cli("package", "publish", manifest, SamplePackage.Directory, "--server", h.Url.ToString().TrimEnd('/'), "--channel", "dev", "--client-dir", clientDir);
-            Assert.Equal(CliExit.Failure, unpaired.Exit);
-            Assert.Contains("not paired", unpaired.Error);
+            var client = new RunnerPublishClient(new RunnerClientStore(clientDir), _ => null);
+            var unpaired = await Assert.ThrowsAsync<RunnerClientException>(() => client.PublishAsync(h.Url.ToString().TrimEnd('/'), null, manifest, SamplePackage.Directory, "dev", stage: false, expectedVersion: null));
+            Assert.Contains("not paired", unpaired.Message);
 
             // a client paired as a viewer only cannot publish: the runner says so
             var viewerCode = h.NewCode(ServerRole.Viewer);
-            var refused = await Cli("package", "publish", manifest, SamplePackage.Directory, "--server", h.Url.ToString().TrimEnd('/'), "--code", viewerCode, "--channel", "dev", "--client-dir", clientDir);
-            Assert.Equal(CliExit.Failure, refused.Exit);
-            Assert.Contains("403", refused.Error);
+            var refused = await Assert.ThrowsAsync<RunnerClientException>(() => client.PublishAsync(h.Url.ToString().TrimEnd('/'), viewerCode, manifest, SamplePackage.Directory, "dev", stage: false, expectedVersion: null));
+            Assert.Contains("403", refused.Message);
         }
         finally { Directory.Delete(clientDir, recursive: true); }
     }

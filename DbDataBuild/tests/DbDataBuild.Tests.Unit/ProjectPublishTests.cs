@@ -11,9 +11,10 @@ using Json.Schema;
 namespace DbDataBuild.Tests.Unit;
 
 /// <summary>
-/// `project publish --to runner` (plan 28c E07), the part that needs no runner: the committed files become a `package/1` manifest (one task per refresh plan) and a file set, the checks the project would meet at run time are made before
-/// anything is sent (DDB-106 for a schedule, DDB-448 for a script that is not the one `loads.yml` was compiled from), and the manifest comes back from the runner's own reader as the same manifest. Sending, staging on two runners and promotion
-/// are in <c>ProjectPublishOnRunnerTests</c> (conformance project, real runners).
+/// `project publish --to runner --out`: the committed files become a `package/1` manifest (one task per refresh plan) and a file set, the checks the project would meet at run time are made before
+/// anything is written (DDB-106 for a schedule, DDB-448 for a script that is not the one `loads.yml` was compiled from), and the manifest comes back from the runner's own reader as the same manifest. The command sends nothing: the
+/// options that sent the package answer the sentence naming the console's deploy. Sending the written package, staging on two runners and promotion, with the client library the deploy uses, are in <c>ProjectPublishOnRunnerTests</c>
+/// (conformance project, real runners).
 /// </summary>
 public class ProjectPublishTests
 {
@@ -225,7 +226,7 @@ public class ProjectPublishTests
     }
 
     [Fact]
-    public void The_command_writes_the_package_and_sends_nothing_with_out_and_refuses_what_it_cannot_send_with_a_usage_message()
+    public void The_command_writes_the_package_with_out_and_refuses_with_a_usage_message_without_it()
     {
         var dir = CompiledProject();
         var target = Path.Combine(dir, "package-out");
@@ -238,25 +239,33 @@ public class ProjectPublishTests
         Assert.Null(written.Doc["data"]!["version"]);                      // nothing was sent
 
         Assert.Equal(CliApp.ExitUsage, Cli("project", "publish", "--to", "somewhere", "--project", dir).Exit);
-        Assert.Equal(CliApp.ExitUsage, Cli("project", "publish", "--to", "runner", "--project", dir).Exit);          // no runner and no channel
-        Assert.Equal(CliApp.ExitUsage, Cli("project", "publish", "--to", "runner", "--project", dir, "--server", "x", "--channel", "dev", "--bind", "nonsense").Exit);
+        var bare = Cli("project", "publish", "--to", "runner", "--project", dir);                                   // no --out: nothing to do
+        Assert.Equal(CliApp.ExitUsage, bare.Exit);
+        Assert.Contains("--out", bare.Doc + bare.Err);
 
-        // a project that disagrees with itself is refused before the runner is looked for, with the diagnostic in the document
+        // a project that disagrees with itself is refused before anything is written, with the diagnostic in the document
         File.AppendAllText(Directory.EnumerateFiles(Path.Combine(dir, "rendered/sqlserver"), "*.sql", SearchOption.AllDirectories).First(), "-- x\n");
-        var refused = Cli("project", "publish", "--to", "runner", "--project", dir, "--server", "unpaired", "--channel", "dev", "--client-dir", Path.Combine(dir, "client"));
+        var refused = Cli("project", "publish", "--to", "runner", "--project", dir, "--out", Path.Combine(dir, "refused-out"));
         Assert.Equal(CliApp.ExitFindings, refused.Exit);
         Assert.Contains(refused.Doc["diagnostics"]!.AsArray(), d => d!["code"]!.GetValue<string>() == "DDB-448");
+        Assert.False(Directory.Exists(Path.Combine(dir, "refused-out")));
     }
 
-    [Fact]
-    public void A_runner_this_machine_is_not_paired_with_is_refused_with_how_to_pair()
+    [Theory]
+    [InlineData("--server", new[] { "--server", "https://runner.example:7840", "--channel", "dev" })]
+    [InlineData("--code", new[] { "--code", "AAAAA-AAAAA" })]
+    [InlineData("--channel", new[] { "--channel", "test", "--promote-from", "dev" })]
+    [InlineData("--promote-from", new[] { "--promote-from=dev" })]
+    [InlineData("--bind", new[] { "--out", "folder", "--bind", "sqlserver=wh" })]
+    public void Sending_to_a_runner_is_gone_and_names_the_consoles_deploy(string named, string[] options)
     {
         var dir = CompiledProject();
         var o = new StringWriter(); var e = new StringWriter();
-        var exit = CliApp.Run(["project", "publish", "--to", "runner", "--project", dir, "--server", "nowhere", "--channel", "dev", "--client-dir", Path.Combine(dir, "client")], o, e, environment: _ => null);
-        var result = (Exit: exit, Err: e.ToString());
-        Assert.Equal(CliApp.ExitFindings, result.Exit);
-        Assert.Contains("not paired with a runner called or at 'nowhere'", result.Err);
-        Assert.Contains("--code", result.Err);
+        var exit = CliApp.Run(["project", "publish", "--to", "runner", "--project", dir, .. options], o, e, environment: _ => null);     // the first option of the form that sent is the one named
+        Assert.Equal(CliApp.ExitUsage, exit);
+        Assert.Equal(DbDataKit.Cli.RemovedCommands.PublishingGone($"dbdatabuild project publish --to runner {named}"), e.ToString().Trim());
+        Assert.Contains("the console deploys", e.ToString());
+        Assert.Empty(o.ToString());
+        Assert.False(Directory.Exists(Path.Combine(dir, "folder")));
     }
 }

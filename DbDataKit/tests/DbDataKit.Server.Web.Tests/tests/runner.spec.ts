@@ -5,9 +5,10 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { runnerServer, scratchDirectory } from '../playwright.config'
+import { publishThroughConsole } from './runner-publish'
 
 // Plan 28a, R19: the console and a real runner. The console pairs with a `dbdatarunner` that serves the sample package, lists its instances (one of them gone) and tasks, runs a task from the browser, pauses and resumes it,
-// lists the runs and shows one, shows the runner in the Monitoring page, and, when a publisher stages version 2 of the package (which resets a progress value the task has moved: a loss), shows the staging with its loss list and activates it
+// lists the runs and shows one, shows the runner in the Monitoring page, and, when the administrator stages version 2 of the package through the console (which resets a progress value the task has moved: a loss), shows the staging with its loss list and activates it
 // after the loss is confirmed. Everything is asked of the runner through the console's relay, as the signed-in administrator.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const consoleDll = path.join(repoRoot, 'DbDataKit/src/DbDataKit.Server/bin/Debug/net10.0/dbdatakit.dll')
@@ -47,11 +48,6 @@ test('the console pairs with a runner, runs, pauses and resumes a task, shows a 
       .run('2d1f0f7a-0000-4000-8000-000000000001', 'dbdatarunner', goneHost, '0.1.0.0', now, now, 'Gone')
   } finally { db.close() }
 
-  // a publisher puts version 1 on the dev channel and serves it at once (a package is owned by the client that created it, so the same publisher stages version 2 below)
-  const publish = (version: string, ...more: string[]) => execFileSync('dotnet', ['exec', runnerServer.dll, 'package', 'publish', path.join(runnerServer.manifests, version), runnerServer.package,
-    '--server', runnerServer.url, '--channel', 'dev', '--client-dir', runnerServer.clientDirectory, ...more], { encoding: 'utf8' })
-  publish('v1.yaml', '--code', fs.readFileSync(path.join(scratchDirectory, 'runner-publisher-code.txt'), 'utf8').trim())
-
   // ---- pair it like any server
   await page.goto('/instances')
   await page.getByTestId('pair-url-input').fill(runnerServer.url)
@@ -62,6 +58,10 @@ test('the console pairs with a runner, runs, pauses and resumes a task, shows a 
   await expect(row.getByTestId('instance-status')).toHaveText('Ready', { timeout: 30_000 })
   const id = await instanceId(request)
   expect(((await (await request.get('/api/instances')).json()) as { id: string; product: string }[]).find((i) => i.id === id)!.product).toBe('dbdatarunner')
+
+  // the administrator puts version 1 on the dev channel through the console and serves it at once (a package is owned by the client that created it: the console, which stages version 2 below)
+  const publish = (version: string, mode: 'serve' | 'stage') => publishThroughConsole(request, id, path.join(runnerServer.manifests, version), runnerServer.package, 'dev', mode)
+  expect((await publish('v1.yaml', 'serve')).version).toBe(1)
   await row.getByTestId('instance-open-link').click()
 
   // ---- the screen: the group's instances, live and gone
@@ -121,9 +121,9 @@ test('the console pairs with a runner, runs, pauses and resumes a task, shows a 
   await expect(page.locator('[data-testid="monitoring-row"][data-state="gone"]')).toContainText(`runner on ${goneHost}`, { timeout: 30_000 })
   await expect(page.getByTestId('monitoring-rows')).toContainText('sample/dev/tally')
 
-  // ---- a publisher stages version 2: the package page shows it ready, with the loss, and activates it once the loss is confirmed
-  const published = publish('v2.yaml', '--stage')
-  expect(published).toContain('sample')
+  // ---- the administrator stages version 2: the package page shows it ready, with the loss, and activates it once the loss is confirmed
+  const published = await publish('v2.yaml', 'stage')
+  expect([published.name, published.mode, published.version]).toEqual(['sample', 'stage', 2])
   await page.goto(`/servers/${id}/packages`)
   await page.getByTestId('runner-package-link').click()
   const staging = page.getByTestId('runner-staging')

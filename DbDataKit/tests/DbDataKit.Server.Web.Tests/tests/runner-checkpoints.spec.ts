@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { publishRunner, runnerServer, scratchDirectory } from '../playwright.config'
 import { signInNewAdmin } from './people'
+import { publishThroughConsole } from './runner-publish'
 
 // Plan 29a Q20 (28a R25): a task's checkpoints on the runner's own screens, with their history and the rewind to before one version. The sample package of the runner's tests is published to the runner of `runner-publish.spec.ts` (the same
 // fixture as `runner-schedule.spec.ts`), and the details of its task `ok` are opened. The sample task keeps no checkpoint of its own, so the three checkpoint calls of the runner are answered in the page (`page.route`): the list, the history and
@@ -32,8 +32,7 @@ test('an operator reads a checkpoint, its history, and goes back before a versio
     await expect(page.getByTestId(`instance-row-${runnerName}`).getByTestId('instance-status')).toHaveText('Ready', { timeout: 30_000 })
   }
   const id = (await instanceId(request))!
-  execFileSync('dotnet', ['exec', publishRunner.dll, 'package', 'publish', path.join(runnerServer.manifests, 'v1.yaml'), runnerServer.package,
-    '--server', publishRunner.url, '--channel', 'dev', '--client-dir', publishRunner.clientDirectory, '--code', code('publish-runner-sample-code.txt')], { stdio: 'ignore' })
+  await publishThroughConsole(request, id, path.join(runnerServer.manifests, 'v1.yaml'), runnerServer.package, 'dev', 'serve')
 
   // the three calls, answered here: the list, the history of the whole-task item, and the rewind (whose body is kept to be checked)
   const sent: unknown[] = []
