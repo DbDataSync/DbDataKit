@@ -90,6 +90,18 @@ port ranges). No file means a clean start; a leftover "not finished" line means 
 service account creates and owns only its own subfolder and its own failure file; no service reads another's. Installers and `setup` print the file, so
 "Cannot start service" always comes with its reason.
 
+Where a server keeps its logs and its failure file depends on its data folder:
+
+- The data folder is the service's folder of an install (`C:\ProgramData\DbDataKit\runner`, Linux `/var/lib/dbdatakit/runner`): the shared
+  `logs` folder above (Linux `/var/log/dbdatakit`).
+- The data folder has the service's folder name under another root (`D:\suite\runner`): a `logs` folder beside it (`D:\suite\logs`).
+- Any other data folder, such as a run from a terminal on a folder of its own or a test's folder: a `logs` folder inside it. Such a run never writes
+  to the machine's logs folder.
+
+Example: when `dbdatarunner server run --repo C:\dev\runner-dev` fails at the ports step, it writes
+`C:\dev\runner-dev\logs\startup-failure-dbdatarunner.txt`. On Linux, `--repo /home/ana/runner-dev` writes
+`/home/ana/runner-dev/logs/dbdatarunner/startup-failure-dbdatarunner.txt`.
+
 `<service>` in these names is the program in lower case (`dbdatagateway`), the same as its systemd unit. On Windows the `logs` folder gives Administrators and SYSTEM full control, each service account "create files" and "create folders" on that folder only, and CREATOR OWNER full control, so each service owns what it creates there and nothing else; on Linux systemd creates each service's `/var/log/dbdatakit/<service>/` when it starts the unit (`LogsDirectory=`), owned by the service's user with mode `0700`, and the failure file is `/var/log/dbdatakit/<service>/startup-failure-<service>.txt`, mode `0600`. A service that finds its own subfolder or failure file owned by another account writes nothing there and says so in the event log.
 
 ## Service names, accounts and descriptions
@@ -102,7 +114,12 @@ descriptions:
 - `DbDataRunner`: "DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks) on schedule or on demand."
 - `DbDataWorkspace`: "DbDataKit workspace: where people and agents author, test and publish apps, data models, replications and master data."
 
-On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`.
+Each Windows service's display name, the name `services.msc` lists, is its service name (`DbDataRunner`).
+
+On Linux each service has a system user named as the program (`dbdatagateway`) in the group `dbdatakit`, made by `install.sh --system`. Its systemd
+unit is named as the program too (`dbdatarunner.service`), and the unit's `Description=` is the service's description above. Example: `systemctl
+status dbdatarunner` shows `dbdatarunner.service - DbDataKit runner: runs published tasks (data loads, replication, deployments and quality checks)
+on schedule or on demand.`
 
 Each server's `service install` registers its Windows service under that name and account, with that description. The names and descriptions are
 written once, in `SuiteServices` (`Shared/src/DbDataKit.Hosting.Startup/SuiteServices.cs`), and the MSI, `install.ps1` and the `dbdatakit-full` Scoop
@@ -250,7 +267,7 @@ standard input for whoever prefers that. All automation is a subcommand of our p
 ```
 console (CLI or Add a server screen)       remote machine (administrator)                 the service, as itself
  invite: product, role, group  ─────►  dbdatarunner pair --host ... --token ... --console-thumbprint ...
-   keeps the token's hash                   writes join-request.yaml, (re)starts ─────►  startup step "join":
+   keeps a verifier made from the token     writes join-request.yaml, (re)starts ─────►  startup step "join":
                                                                                            POST <host>/api/v1/join, TLS pinned to the thumbprint
                                                                                            {token proof, product, address, certificate fingerprint, public key}
    checks the token (product, group,  ◄────────────────────────────────────────────────
@@ -264,8 +281,9 @@ console (CLI or Add a server screen)       remote machine (administrator)       
 thumbprint, so a machine in the middle neither learns the token nor passes for the console. A wrong thumbprint, an expired or spent token, another product
 or another group is refused, and audited with who made the token and nothing of its value.
 
-**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding the token's hash, its product, role
-ceiling and group, who made it and when it ends. The console's Add a server screen lists the tokens still waiting, never their values, and
+**Join tokens are rows of the console's state**: a table of the `trust` module, added by its own migration, holding a verifier made from the token, its
+product, role ceiling and group, who made it and when it ends. The verifier is the public half of a key derived from the token. It checks a join's
+signature and cannot make one, so a copy of the console's state is not enough to join a server. The console's Add a server screen lists the tokens still waiting, never their values, and
 cancels them.
 
 **Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);

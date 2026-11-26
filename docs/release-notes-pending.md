@@ -127,6 +127,10 @@ release moves the entries into its notes and empties this file.
   | `secret list` with no prefix lists `dbdata:` | it lists `dbdatakit:` |
 <!-- secret-names:end -->
 - **Changed: the Gateway's Windows service is `DbDataGateway`, and the four services have new descriptions.** `dbdatagateway service install` registers `DbDataGateway`, running as `NT SERVICE\DbDataGateway` (it was `dbdatagateway`). Windows compares service names without case and makes the account's SID from the upper-case name, so a Gateway registered by an earlier release is the same service with the same account, and `Start-Service dbdatagateway` still works. An MSI upgrade keeps the registration as it is; `dbdatagateway service install` from an elevated prompt updates its description, and `dbdatakit-full` registers it again under the new spelling on `scoop update`. The console, Gateway, Runner and Workspace services carry the descriptions listed in `docs/install.md`, "Service names, accounts and descriptions"; run each product's `service install` again to update an existing service. `dist.json` gives no service name for these four products any more: the installers read it from the suite's table.
+- **Changed: each service's systemd unit carries the same description as its Windows service, and each Windows service's display name is its
+  service name (`DbDataGateway`, where an earlier Gateway showed `dbdatagateway`).** `systemctl status dbdatarunner` shows `DbDataKit runner: runs
+  published tasks ...`. What to do: run `install.sh --system` of the new release again, which rewrites a unit that differs, and on Windows run each
+  product's `service install` again from an elevated prompt.
 
 - **New: `service check`.** In `dbdatakit`, `dbdatagateway`, `dbdatarunner` and `dbdataworkspace`, `service check` checks the service's registration, its account and the permissions of its folders, then prints the startup-failure file of its last start (or that there is none). Its last line is `Check: OK (<n> warning(s)).` or `Check: <n> failure(s).`; it exits with code 1 when a check fails, so a script can run it after `service install`.
 
