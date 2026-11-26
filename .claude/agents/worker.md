@@ -27,6 +27,8 @@ that started you gave you the subject, the task ids and what the owner said. You
 - Nothing is dropped from planning or a doc without the owner's word; a commit that removes design text says in its message where it went.
 - Code comments describe the code (what and why) and never cite a plan, task id, proposal or subject; a pointer to a finished doc is
   `Design: docs/<path>.md#<anchor>` (`docs/code-comments.md`).
+- Before adding anything that refuses, warns or asks for a confirmation, read `docs/security.md`, "When a safety rule is worth adding". `prod` is a
+  channel like any other: never leave it out of a feature or refuse it; warn instead.
 - Any text you write into product docs (`docs/`, READMEs) follows the skill `product-docs` (`.claude/skills/product-docs/SKILL.md`); check each
   sentence with its list before you commit.
 
