@@ -54,7 +54,7 @@ public static partial class StateGrants
         }
 
         // a namespace without a schema (an empty one, so the engine's own default schema) is granted table by table
-        var tables = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.Tables.Values).ToList();
+        var tables = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.ExistingTables.Values).ToList();
         if (tables.Count > 0) statements.Add($"GRANT SELECT, INSERT, UPDATE, DELETE ON {string.Join(", ", tables)} TO {principal};");
 
         // a namespace that is new to the database needs its schema made, which takes the right to create schemas in it
@@ -85,7 +85,7 @@ public static partial class StateGrants
             if (level == GrantLevel.Migrate) statements.Add($"GRANT ALTER, REFERENCES ON SCHEMA::{schema} TO [{principal}];");
         }
 
-        var tables = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.Tables.Values).ToList();
+        var tables = layout.Namespaces.Where(n => n.Schema is null).SelectMany(n => n.ExistingTables.Values).ToList();
         foreach (var table in tables) statements.Add($"GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::{table} TO [{principal}];");
 
         if (layout.RegistrySchema is { } registrySchema)

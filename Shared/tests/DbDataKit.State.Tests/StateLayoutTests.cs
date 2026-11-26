@@ -19,6 +19,22 @@ public sealed class StateLayoutTests
     }
 
     [Fact]
+    public void A_table_a_later_migration_drops_keeps_its_name_and_is_not_among_the_tables_the_database_has()
+    {
+        var module = Module("keys", StateScopeKind.Install, null,
+            "CREATE TABLE {table:key_ref} (id {{key}} PRIMARY KEY);\nCREATE TABLE {table:audit} (id {{key}} PRIMARY KEY);\nCREATE TABLE {table:old} (id {{key}} PRIMARY KEY);",
+            "-- DROP TABLE {table:audit} is only a comment here\nDROP TABLE {table:key_ref};\nDROP TABLE IF EXISTS {table:old};",
+            "CREATE TABLE {table:old} (id {{key}} PRIMARY KEY, name {{key}} NULL);");
+
+        var ns = StateLayout.Create(StateEngineIds.Postgres, [module]).Namespace("keys");
+
+        Assert.Equal(["audit", "key_ref", "old"], ns.Tables.Keys.Order());                 // the migrations that make and drop a table still resolve its name
+        Assert.Equal(["key_ref"], ns.DroppedTables.Order());                                  // a table made again after its drop exists
+        Assert.Equal(["audit", "old"], ns.ExistingTables.Keys.Order());
+        Assert.Equal(["build", "project", "workspace", "workspace_event"], StateLayout.Create(StateEngineIds.Sqlite, [WorkspaceModule.Module], StateScope.Standalone).Namespace("workspace").ExistingTables.Keys.Order());
+    }
+
+    [Fact]
     public void A_service_that_names_only_what_it_needs_gets_its_dependencies_too()
     {
         var identity = Module("identity");
