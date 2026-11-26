@@ -10,7 +10,7 @@ import { scratchDirectory, workspacePublish } from '../playwright.config'
 // instance's address on that Gateway and sees the change. The whole workflow is on the console's pages as the signed-in administrator: the Workspace server (`dbdataworkspace`, port 8631) hosts the project `sales`, which is the app
 // template; the build runs Bun from the vendored package store (made here with `app-store/build.mjs`: `npm ci` in Shared/web first) and the server's `apps:` section; the Gateway (identity home 8632, apps host 8633, management 8634) is
 // started by the story and paired with the console, which deploys the build to it as the signed-in person (docs/publishing.md, "Deploying a build from the control service"), and sends the same build as the preview of an instance.
-// The Workspace server's publisher keys page still pairs a key with the Gateway with a single-use code; nothing in the story sends with that key. The instance is made with the Gateway's own command. It also shows what the screens
+// The Workspace server has no publisher key and calls no Gateway. The instance is made with the Gateway's own command. It also shows what the screens
 // must show on the way: a refused import with its file and line, whether the build was isolated, the preview with no network, a refusal of the preview in the Gateway's words.
 // It invites an administrator, so it sorts after identity-home (`workspace-files` before it, `workspaces` after, the order of the file names). `DBDATAKIT_TEST_E2E_GATEWAY_DLL` names a Gateway build outside its own bin folder.
 
@@ -153,27 +153,9 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await row.getByTestId('instance-open-link').click()
   await expect(page.getByTestId('ws-projects')).toBeVisible()
 
-  // ---- the publisher key: paired with the Gateway with its single-use code; the page shows a reference, never a key
-  const code = /Pairing code: (\S+)/.exec(execFileSync('dotnet', ['exec', gatewayDll, 'server', 'pair', '--repo', gateway.directory, '--max-role', 'publisher'], { encoding: 'utf8' }))![1]
-  await page.getByTestId('rail-keys').click()
-  await expect(page.getByTestId('wsk-none')).toBeVisible()
-  await page.getByTestId('wsk-pair-name').fill('edge')
-  await page.getByTestId('wsk-pair-url').fill('http://not-https')
-  await expect(page.getByTestId('wsk-pair-why')).toContainText('https://')
-  await expect(page.getByTestId('wsk-pair')).toBeDisabled()
-  await page.getByTestId('wsk-pair-url').fill(managementUrl)
-  await page.getByTestId('wsk-pair-code').fill(code)
-  await page.getByTestId('wsk-pair').click()
-  await expect(page.getByTestId('wsk-paired')).toContainText('Paired edge')
-  const key = page.locator('[data-testid="wsk-key"][data-key="edge"]')
-  await expect(key.getByTestId('wsk-ref')).toHaveText('secret:dbdatakit:workspace:publisher-key:edge')
-  await expect(key.getByTestId('wsk-gateway')).toHaveText(managementUrl)
-  // a key typed where a reference goes is refused as it is typed
-  await page.getByTestId('wsk-ref-name').fill('other')
-  await page.getByTestId('wsk-ref-value').fill('workspace-1a2b3c:c2VlZA')
-  await expect(page.getByTestId('wsk-ref-why')).toContainText('"secret:"')
-  await expect(page.getByTestId('wsk-ref-set')).toBeDisabled()
-  expect(fs.readFileSync(path.join(workspacePublish.directory, 'publish-targets.json'), 'utf8')).not.toContain('seed')
+  // ---- the Workspace server holds no publisher key: its rail has no Publisher keys page, and its folder no list of targets
+  await expect(page.getByTestId('rail-keys')).toHaveCount(0)
+  expect(fs.existsSync(path.join(workspacePublish.directory, 'publish-targets.json'))).toBe(false)
   await page.getByTestId('rail-workspaces').click()
 
   // ---- a workspace in the app project (the template), open
@@ -303,7 +285,6 @@ test('an app is made from the template, a spec edited, built, previewed, committ
   await expect(sent.getByTestId('wsp-preview-data-link')).toHaveAttribute('href', `${appsUrl}/apps/sales~preview/`)
   // the console's record of the preview, newest first; the Workspace server sent nothing from this build
   await expect(done.locator('[data-testid="wsp-deploy-record"][data-outcome="ok"]').first()).toContainText(`Sent sales to ${gatewayName} as the preview of sales`)
-  await expect(done.getByTestId('wsp-publish-record')).toHaveCount(0)
   expect(sentToWorkspace).toEqual([])
   await openInstance(browser)
 })
