@@ -47,7 +47,7 @@ The Workspace server does not hold a publisher key. The calls it had for sending
 | `GET /api/v1/publish-targets` | `GET /api/instances`: the Runners and Gateways the console manages |
 | `GET`, `PUT`, `DELETE /api/v1/publisher-keys/{name}`, `POST .../pair` | none: the console signs with its own publisher key ([install.md](install.md#the-consoles-publisher-key)) |
 
-`dbdataworkspace publisher pair` and `publisher list` answer the same way and exit with code 2.
+The Workspace server's former command `publisher` (its verbs `pair` and `list`) answers the same way and exits with code 2.
 
 Example: a script sends `POST /api/v1/projects/orders/workspaces/ana-draft/builds/4f1c.../publish` to the Workspace server. It answers 410 with
 "The Workspace server never calls a Runner or a Gateway and does not hold a publisher key; the console does this, as the signed-in person: deploy
