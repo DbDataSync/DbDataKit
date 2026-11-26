@@ -636,12 +636,23 @@ Every Sync package carries two more manual, read-only tasks for this, over every
 
 | Task | Inputs | What it answers |
 | --- | --- | --- |
-| `discover` | `connection` (the set's connection), and `schemas` (a JSON list), `pattern` (SQL `LIKE` over table names) or `table` (one table of the one schema given) | one connection of `catalog-cache/2`, as the built-in `discover` answers: the database the connection opens, the schemas of its tables, and each table with its columns, type text, nullability and primary key |
+| `discover` | `connection` (the set's connection), and `schemas` (a JSON list), `pattern` (SQL `LIKE` over table names) or `table` (one table of the one schema given) | one connection of `catalog-cache/2`, as the built-in `discover` answers: the database it reads (below), the schemas of its tables, and each table with its columns, type text, nullability and primary key |
 | `describe` | `connection` and `sql` | `{"engine", "strategy", "columns"}`, as the built-in `describe` answers: the read-only policy first, then `SELECT * FROM (<query>) t WHERE 1 = 0` asked for its columns (the provider's schema-only describe when the query cannot be a derived table) |
 
 Each task reads with the login the channel binds to the connection's slot, and keeps its answer in a step named after the task, keyed by the run's id,
 as the built-in package does. A driver's catalog lists no unique key, no foreign key, no view apart from the tables, and no schema without a table, so
 the cache entry has none of them. A replication may not be named `discover` or `describe`.
+
+Which database `discover` reads:
+
+- The connection binds a `metadataProvider` script: the script is asked for the database the connection file names (`address.database`, or
+  `extensions.sync.database` beside a `connection_string`), and for `""` when the file names none. A script that hands the name on to the
+  driver's catalog (`c.DriverTables(database, ct)`) then reads that database on SQL Server, whichever database the login opens.
+- No script is bound: Sync's driver is asked for `""`, the database the connection opens. A driver that cannot switch database, such as SQLite through a
+  YAML driver, reads the file the connection opens.
+
+Example: the connection `erp` has `address: {host: sql01, database: sales}` and binds the script `by-database`. `discover` asks the script for the
+tables of `sales`, and the answer lists `sales` as the connection's database.
 
 **Which version runs them.** The console runs the task of the newest build the channel holds: the version staged there, else the version it serves
 (`POST /api/v1/tasks/<package>/<channel>/<task>/run` with that `version`). Two cases answer 409 with `"needs_build": true`, the package, the task, the
