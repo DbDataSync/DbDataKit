@@ -20,15 +20,28 @@ public sealed class DataChangeNotifierTests : IDisposable
 
     private sealed record Seen(string Path, string Body, string Token);
 
+    /// <summary>A Gateway that records each call. The notifier sends each message from a task of its own, so two calls can arrive at once: the list is written under a lock (a bare
+    /// <see cref="List{T}.Add"/> from two threads can lose one of them) and read as a copy.</summary>
     private sealed class FakeGateway(Func<int, HttpResponseMessage> answer) : HttpMessageHandler
     {
-        public List<Seen> Calls { get; } = [];
+        private readonly List<Seen> _calls = [];
+
+        public IReadOnlyList<Seen> Calls
+        {
+            get { lock (_calls) return [.. _calls]; }
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
-            Calls.Add(new Seen(request.RequestUri!.AbsolutePath, body, request.Headers.GetValues(ManagementAuthentication.TokenHeader).Single()));
-            return answer(Calls.Count);
+            int count;
+            lock (_calls)
+            {
+                _calls.Add(new Seen(request.RequestUri!.AbsolutePath, body, request.Headers.GetValues(ManagementAuthentication.TokenHeader).Single()));
+                count = _calls.Count;
+            }
+
+            return answer(count);
         }
     }
 
@@ -86,6 +99,7 @@ public sealed class DataChangeNotifierTests : IDisposable
 
         var clients = new Clients(new PairedClient(_self.Id, "Sync server", _self.Key.PublicKey, ServerRole.Publisher, ClientKind.Server));
         var validator = new ConsoleTokenValidator(Audience, clients, new MemoryReplayCache());
+        Assert.Equal(2, gateway.Calls.Count);                                           // one call per dataset, sent at the same time
         var first = validator.Validate(gateway.Calls[0].Token);
         Assert.True(first.Ok, first.Detail);
         Assert.Equal((_self.Id, "sync server", ServerRole.Publisher, false), (first.Token!.SubjectId, first.Token.SubjectName, first.Token.Roles, first.Token.IsConsole));
