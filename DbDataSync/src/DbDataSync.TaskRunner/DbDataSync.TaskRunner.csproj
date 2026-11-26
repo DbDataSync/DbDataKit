@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <DbDataKitReference Include="Runner.Kit" />   <!-- the kit a drain is written against, and the protocol client it speaks; plan 28c, E03 -->
+    <DbDataKitReference Include="Catalog.Cache" />   <!-- the answer of the set's `discover`: one connection of catalog-cache/2 -->
     <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
     <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />

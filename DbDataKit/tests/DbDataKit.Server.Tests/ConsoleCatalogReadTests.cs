@@ -87,7 +87,8 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
     {
         server.MapGet("/api/v1/definitions/integration/{name}", (string name) => name != "crm-to-dw" ? Results.NotFound(new { error = "no such package" }) : Results.Json(new JsonObject
         {
-            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "test" }, new JsonObject { ["channel"] = "prod" }, new JsonObject { ["channel"] = "dev" }),
+            // dev serves version 3 and has version 4 staged; prod serves version 2; test holds none
+            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "test" }, new JsonObject { ["channel"] = "prod", ["active"] = 2 }, new JsonObject { ["channel"] = "dev", ["active"] = 3, ["staged"] = 4 }),
             ["bindings"] = new JsonArray(
                 new JsonObject { ["channel"] = "dev", ["slot"] = "crm_db", ["bound_to"] = "crm_dev" },
                 new JsonObject { ["channel"] = "prod", ["slot"] = "crm_db", ["bound_to"] = "crm" },
@@ -113,23 +114,36 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
             var run = Guid.NewGuid().ToString("D");
             return Results.Json(new { run_id = run, key = run, step = task }, statusCode: 202);
         });
+        // a task of the project's own package, in a version the channel holds; version 2 was built before the set had its own discover and describe
+        server.MapPost("/api/v1/tasks/{package}/{channel}/{task}/run", async (string package, string channel, string task, HttpContext c) =>
+        {
+            var body = (await JsonNode.ParseAsync(c.Request.Body))!.AsObject();
+            body["package"] = package;
+            body["channel"] = channel;
+            body["task"] = task;
+            body["token_subject"] = c.ManagementToken().SubjectName;
+            started.Enqueue(body);
+            if ((string?)body["version"] == "2") return Results.NotFound(new { error = $"The version 2 of '{package}' has no task '{task}'." });
+            return Results.Json(new { task = $"{package}/{channel}/{task}", version = (string?)body["version"], run_id = Guid.NewGuid().ToString("D") }, statusCode: 202);
+        });
         server.MapGet("/api/v1/runs/{id}", (string id) =>
         {
             var seen = looks.AddOrUpdate(id, 1, (_, n) => n + 1);
             var channel = started.LastOrDefault()?["channel"]?.GetValue<string>() ?? "dev";
             var outcome = seen <= runningLooks ? "running" : failure is null ? "succeeded" : "failed";
             var task = started.LastOrDefault()?["task"]?.GetValue<string>() ?? "discover";
+            var package = started.LastOrDefault()?["version"] is null ? "dbdatakit-metadata" : started.Last()["package"]!.GetValue<string>();
             return Results.Json(new JsonObject
             {
-                ["id"] = id, ["package"] = "dbdatakit-metadata", ["channel"] = channel, ["task"] = task, ["outcome"] = outcome,
+                ["id"] = id, ["package"] = package, ["channel"] = channel, ["task"] = task, ["outcome"] = outcome,
                 ["failure"] = outcome == "failed" ? new JsonObject { ["kind"] = "error", ["message"] = failure } : null,
             });
         });
-        server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/discover/steps/discover", (string channel, string key) => Results.Json(new JsonObject
+        server.MapGet("/api/v1/tasks/{package}/{channel}/discover/steps/discover", (string package, string channel, string key) => Results.Json(new JsonObject
         {
             ["steps"] = new JsonArray(new JsonObject { ["key"] = key, ["completed"] = "2026-11-22T10:00:04Z", ["payload"] = "6f1c2c8e-0000-4000-8000-000000000001" }),
         }));
-        server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/describe/steps/describe", (string channel, string key) => Results.Json(new JsonObject
+        server.MapGet("/api/v1/tasks/{package}/{channel}/describe/steps/describe", (string package, string channel, string key) => Results.Json(new JsonObject
         {
             ["steps"] = new JsonArray(new JsonObject
             {
@@ -141,7 +155,7 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
                 },
             }),
         }));
-        server.MapGet("/api/v1/tasks/dbdatakit-metadata/{channel}/discover/steps/discover/payloads/{id}", () => Results.Json(new JsonObject
+        server.MapGet("/api/v1/tasks/{package}/{channel}/discover/steps/discover/payloads/{id}", (string package) => Results.Json(new JsonObject
         {
             ["engine"] = "sqlserver",
             ["databases"] = new JsonArray(new JsonObject { ["name"] = "crm", ["schemas"] = new JsonArray("dbo", "staging") }),
@@ -316,6 +330,69 @@ public sealed class ConsoleCatalogReadTests : IAsyncLifetime
 
         var (noSql, _) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql = " " });
         Assert.Equal(HttpStatusCode.BadRequest, noSql);
+    }
+
+    [Fact]
+    public async Task A_read_by_the_projects_own_package_runs_its_discover_in_the_newest_build_the_channel_holds_and_answers_the_same_cache()
+    {
+        var (status, body) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "dev", connection = "CRM-db", schema = "dbo", table = "accounts", reader = "package" });
+        Assert.True(status == HttpStatusCode.OK, body.ToJsonString());
+        Assert.Equal("done", (string?)body["state"]);
+
+        // the staged version 4, not the served 3; the set's own task, with the connection named, for the person
+        var asked = Assert.Single(started);
+        Assert.Equal(("crm-to-dw", "dev", "discover", "4", "Ada Admin"), ((string)asked["package"]!, (string)asked["channel"]!, (string)asked["task"]!, (string)asked["version"]!, (string)asked["on_behalf_of"]!));
+        Assert.Equal(("CRM-db", "accounts", """["dbo"]"""), ((string)asked["inputs"]!["connection"]!, (string)asked["inputs"]!["table"]!, (string)asked["inputs"]!["schemas"]!));
+        Assert.Equal("Ada Admin", (string?)asked["token_subject"]);
+        var load = CatalogCache.Load((string)body["cache"]!);
+        Assert.True(load.Ok, string.Join("\n", load.Diagnostics.Select(d => d.Message)));
+        Assert.Equal(new CacheRead("Runners", "runner", "dev", "2026-11-22T10:00:04Z"), load.Cache!.Connections["CRM-db"].Read);
+
+        // following the run reads the project's package's run and step
+        app.Services.GetRequiredService<ConsoleCatalogRead>().Wait = TimeSpan.FromMilliseconds(100);
+        runningLooks = 1_000;
+        // prod serves version 2, built before the set had its own discover: a build is needed there
+        var (older, olderBody) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "prod", connection = "CRM-db", reader = "package" });
+        Assert.Equal(HttpStatusCode.Conflict, older);
+        Assert.Equal("2", (string?)started.Last()["version"]);
+        Assert.True((bool)olderBody["needs_build"]!);
+        Assert.Contains("version 2", (string)olderBody["error"]!);
+
+        var (_, devRunning) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "dev", connection = "CRM-db", reader = "package" });
+        Assert.Equal("running", (string?)devRunning["state"]);
+        runningLooks = 0;
+        var (ended, done) = await Call(HttpMethod.Get, $"{Base}/read/{(string)devRunning["run_id"]!}?runner={RunnerId}&channel=dev&connection=CRM-db&reader=package");
+        Assert.True(ended == HttpStatusCode.OK, done.ToJsonString());
+        // the same run followed as a read of the built-in package is not one
+        var (wrong, said) = await Call(HttpMethod.Get, $"{Base}/read/{(string)devRunning["run_id"]!}?runner={RunnerId}&channel=dev&connection=CRM-db");
+        Assert.Equal(HttpStatusCode.NotFound, wrong);
+        Assert.Contains("not a read", (string)said["error"]!);
+    }
+
+    [Fact]
+    public async Task A_read_by_the_projects_own_package_in_a_channel_that_holds_no_build_says_a_build_is_needed_there_and_starts_nothing()
+    {
+        var (status, body) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "test", connection = "CRM-db", sql = "SELECT 1 AS one", reader = "package" });
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.True((bool)body["needs_build"]!);
+        Assert.Equal(("crm-to-dw", "test", "describe", "CRM-db"), ((string)body["package"]!, (string)body["channel"]!, (string)body["task"]!, (string)body["connection"]!));
+        Assert.Contains("holds no build of crm-to-dw in 'test'", (string)body["error"]!);
+        Assert.Empty(started);
+
+        // a project the Runner holds nothing of says the same
+        var (none, why) = await Call(HttpMethod.Post, $"/api/workspace-catalog/{WorkspaceId}/sales-dw/read", new { runner = RunnerId, channel = "dev", connection = "warehouse", reader = "package" });
+        Assert.Equal(HttpStatusCode.Conflict, none);
+        Assert.True((bool)why["needs_build"]!);
+
+        // the description runs in the build the channel holds and answers the columns
+        var (described, columns) = await Call(HttpMethod.Post, $"{Base}/describe", new { runner = RunnerId, channel = "dev", connection = "CRM-db", sql = "SELECT 1 AS one", reader = "package" });
+        Assert.True(described == HttpStatusCode.OK, columns.ToJsonString());
+        Assert.Equal(("describe", "4", "CRM-db", "SELECT 1 AS one"), ((string)started.Last()["task"]!, (string)started.Last()["version"]!, (string)started.Last()["inputs"]!["connection"]!, (string)started.Last()["inputs"]!["sql"]!));
+        Assert.Equal(2, columns["columns"]!.AsArray().Count);
+
+        var (bad, said) = await Call(HttpMethod.Post, $"{Base}/read", new { runner = RunnerId, channel = "dev", connection = "CRM-db", reader = "someone" });
+        Assert.Equal(HttpStatusCode.BadRequest, bad);
+        Assert.Contains("`reader`", (string)said["error"]!);
     }
 
     [Fact]

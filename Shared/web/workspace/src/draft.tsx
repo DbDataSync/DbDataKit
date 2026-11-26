@@ -132,7 +132,9 @@ export function DraftProvider({ project, id, kind, canEdit, enabled = true, chil
     await client.invalidateQueries({ queryKey: findingsKey(project, id) })
     await client.invalidateQueries({ queryKey: ['workspace', 'changes', project, id] })
     await client.invalidateQueries({ queryKey: ['workspace', 'catalog', project, id] })
-    // a replication's provisioning plan is made from the saved files
+    // a replication's provisioning plan reads the saved files under the unsaved edits, so what a save wrote is planned again; a plan kept from
+    // before the edits is dropped, so it is never shown as the plan of the saved files
+    client.removeQueries({ queryKey: ['workspace', 'provisioning-plan', project, id], type: 'inactive' })
     await client.invalidateQueries({ queryKey: ['workspace', 'provisioning-plan', project, id] })
   }, [client, project, id])
 
