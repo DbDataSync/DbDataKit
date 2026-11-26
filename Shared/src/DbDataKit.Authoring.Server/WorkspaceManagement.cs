@@ -28,6 +28,9 @@ namespace DbDataKit.Authoring.Server;
 /// </summary>
 public static class WorkspaceManagement
 {
+    /// <summary>What the route that tested a script on this server answers now: where a script is tested.</summary>
+    public const string ScriptTestMoved = "A script is tested on a Runner, not on the Workspace server: Test on the Scripts tab builds the draft, stages it in a channel that is not production through the console, and runs the task script-test there.";
+
     public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, WorkspacePublishing publishing)
     {
         app.MapGet("/api/v1/info", () => Results.Json(new JsonObject
@@ -307,8 +310,7 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
-        // a Sync draft's scripts and the test of one (plan 33 SC22k): the product's own program on a copy, offline, the draft untouched. Testing a script RUNS the draft's C# in the child process (a cleared environment, a time limit, no secret store), which is more than a
-        // compile reads, so it needs the Author role; listing only reads the manifests.
+        // a Sync draft's scripts (plan 33 SC22k): the product's own program on a copy, offline, the draft untouched; listing only reads the manifests
         IResult? SyncToolsOf(string project, string id, HttpContext context, ServerRole needed, out ISyncDraftTools tools, out string root)
         {
             (tools, root) = (null!, null!);
@@ -329,19 +331,9 @@ public static class WorkspaceManagement
             catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
         });
 
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/script-test", async (string project, string id, HttpContext context) =>
-        {
-            if (SyncToolsOf(project, id, context, ServerRole.Author, out var tools, out var root) is { } refused) return refused;
-            var body = await Body(context);
-            const string Shape = "The body is a JSON object with the \"name\" of a script of the project and an optional \"rows\" (1 to 50, default 5).";
-            string? name;
-            int rows;
-            try { (name, rows) = (body?["name"]?.GetValue<string>(), body?["rows"]?.GetValue<int>() ?? 5); }
-            catch (Exception ex) when (ex is InvalidOperationException or FormatException) { return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest); }
-            if (!SyncProjectKind.IsName(name) || rows is < 1 or > 50) return Results.Json(new { error = Shape }, statusCode: StatusCodes.Status400BadRequest);
-            try { return Results.Json(ToolJson(await tools.ScriptTestAsync(root, name!, rows, context.RequestAborted))); }
-            catch (ProjectKindUnavailableException ex) { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict); }
-        });
+        // the test of a script runs the author's C#, which this server never runs: it is the set's task `script-test` on a Runner, which the Scripts tab stages and runs through the console
+        // (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner); a caller of the old route is told so
+        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/script-test", () => Results.Json(new { error = ScriptTestMoved }, statusCode: StatusCodes.Status410Gone));
 
         // the plan of a Sync draft's provisioning from its catalog cache (plan 33 SC22j): offline, read only, the draft untouched; applying it is the Sync server's
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/provisioning-plan", async (string project, string id, HttpContext context) =>
