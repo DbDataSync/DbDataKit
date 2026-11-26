@@ -59,6 +59,18 @@ class CheckUiEditors(unittest.TestCase):
                 self.assertEqual(1, len(found))
                 self.assertIn("PAGEFORMAT-99, which is not a task", found[0])
 
+    def test_a_task_of_a_short_slug_closes_a_gap_and_must_exist(self):
+        extra = {"planning/SEO4.md": "| SEO4-1 | a screen |\n"}
+        self.assertEqual([], check.problems(tree(["| A | x | `alpha` | none | planned | SEO4-1 |"], counts=c(planned=1), extra=extra)))
+        found = check.problems(tree(["| A | x | `alpha` | none | planned | SEO4-9 |"], counts=c(planned=1), extra=extra))
+        self.assertEqual(1, len(found))
+        self.assertIn("SEO4-9, which is not a task", found[0])
+
+    def test_a_short_word_with_a_number_that_is_no_slug_is_not_a_task(self):
+        found = check.problems(tree(["| A | x | `alpha` | none | partial | hashed with SHA-256 |"], counts=c(partial=1)))
+        self.assertEqual(1, len(found))
+        self.assertIn("neither which task", found[0])
+
     def test_a_row_whose_subject_was_deleted_fails(self):
         found = check.problems(tree(["| A | x | `alpha` | none | planned | PAGEFORMAT-3 |"], counts=c(planned=1), plan=""))
         self.assertEqual(1, len(found))
