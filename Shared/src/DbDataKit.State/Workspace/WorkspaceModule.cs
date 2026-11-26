@@ -3,10 +3,10 @@ namespace DbDataKit.State;
 /// <summary>
 /// The <c>workspace</c> module (plan 22a GP31, decision D8): what the Workspace server (DbDataWorkspace) keeps in its state database. The git worktrees themselves are folders on the server's disk; this is the record of them and of what was done.
 /// <para>
-/// <b>Five tables.</b> <c>project</c> is each project the server hosts (an id, its kind, where its repository is); a project of any kind (an app today, an agent, an integration, a skill or a knowledge base when plan 27 adds them) is a row,
+/// <b>Four tables.</b> <c>project</c> is each project the server hosts (an id, its kind, where its repository is); a project of any kind (an app today, an agent, an integration, a skill or a knowledge base when plan 27 adds them) is a row,
 /// so the kinds need no second break. <c>workspace</c> is the drafts that exist now, one row each, removed when a draft is abandoned or merged. <c>workspace_event</c> is the history of what happened to them (created, committed, pushed,
 /// merged, abandoned), kept for <see cref="EventDays"/> days and then removed by the shared retention job. <c>build</c> is each build a workspace asked for (none are made yet; the table and its store are what the build slices write to), kept for
-/// <see cref="BuildDays"/> days. <c>publisher_key</c> names, for each target a version is published to, the <b>reference</b> to the secret that holds the publisher's key: the key itself is in the server's secret store, never in a row.
+/// <see cref="BuildDays"/> days. The second migration drops <c>publisher_key</c>, which named the secret of each publisher key when the server published itself.
 /// </para>
 /// <para>
 /// <b>Scope.</b> Kept per service: the folders belong to one server's disk, so two Workspace servers on one database each have their own copy.
@@ -97,6 +97,11 @@ public static class WorkspaceModule
             created_by  {{key}} NOT NULL,
             updated_at  {{time}} NOT NULL
         );
+        """,
+        """
+        -- The publisher's key references go: the server calls no Runner or Gateway and holds no publisher key, and the console signs what it deploys with its
+        -- own key. The server deletes the keys themselves from its secret store when it starts.
+        DROP TABLE {table:publisher_key};
         """,
     ];
 

@@ -17,7 +17,7 @@ namespace DbDataWorkspace.Server;
 /// <summary>
 /// The DbDataWorkspace server (plan 22a GP31, decision D8): Kestrel over HTTPS with the shared trust code of <c>DbDataKit.Web</c> (pairing, key rotation, the version header, the token check) and a management API a console is the client of.
 /// It has no web page of its own. The certificate is self-signed and kept in the server's directory, and a client pins its fingerprint at pairing, so nothing else about it needs to be trusted. It hosts projects and the git workspaces
-/// people author them in (<see cref="WorkspaceManagement"/>); builds, previews and publishing arrive in the slices after this one.
+/// people author them in (<see cref="WorkspaceManagement"/>), their builds and previews; the console deploys a build, and this server calls no Runner or Gateway.
 /// </summary>
 public static class WorkspaceServer
 {
@@ -50,6 +50,12 @@ public static class WorkspaceServer
     {
         if (settings.Listen.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("A DbDataWorkspace server listens on HTTPS only.", nameof(settings));
         var state = WorkspaceState.Open(settings.Directory, settings.State);
+        // the publisher keys of an earlier version, which nothing reads now: a key left in the store is a secret this server has no use for
+        try { WorkspaceSecrets.ForgetPublisherKeysAsync(settings.Directory, log).GetAwaiter().GetResult(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Security.Cryptography.CryptographicException)
+        {
+            log($"The publisher keys of an earlier version could not be deleted from the secret store ({ex.Message}); delete them with `dbdataworkspace secret delete <name>`.");
+        }
         var instanceId = InstanceId(new GroupSettings(state));
         var files = new PairingFiles(settings.ServerYaml, Group: state);
         var clients = files.Clients();
@@ -99,7 +105,7 @@ public static class WorkspaceServer
             new RunnerTool(settings.RunnerExecutable, sources: settings.IntegrationSources, cache: settings.IntegrationCache ?? Path.Combine(settings.Directory, "integration-cache")), new DotnetTool(settings.DotnetExecutable));
         var builds = new WorkspaceBuilds(settings.Directory, store, workspaces, () => settings.Apps ?? WorkspaceAppSettings.Load(settings.Directory), log, kinds);
         app.Lifetime.ApplicationStopping.Register(builds.Dispose);
-        WorkspaceManagement.Map(app, instanceId, WorkspaceSettings.Product, Version, store, new WorkspaceProjects(settings.Directory, store, kinds), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log, workspaces, builds, new WorkspacePublishing(settings.Directory, store, () => WorkspaceSecrets.Open(settings.Directory), () => WorkspaceState.Secrets(settings.Directory)));
+        WorkspaceManagement.Map(app, instanceId, WorkspaceSettings.Product, Version, store, new WorkspaceProjects(settings.Directory, store, kinds), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log, workspaces, builds);
         return app;
     }
 

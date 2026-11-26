@@ -20,9 +20,10 @@ namespace DbDataKit.Authoring.Server;
 /// <item><c>GET /api/v1/projects</c> (viewer) and <c>POST /api/v1/projects</c> (admin, <c>{"id", "title"?, "kind"?}</c>): the projects hosted, and a new one. <c>GET /api/v1/projects/{project}</c> (viewer of that project): one project and the
 /// package it becomes on a Runner (<c>package</c>, null for a kind that makes none).</item>
 /// <item>the workspace calls of <see cref="DbDataKit.Authoring.WorkspaceApi"/> (list, create, abandon, the files of a draft: list, read, write, move, delete; changes, history, commit, push, merge), the same as every kind of project has, and <c>GET /api/v1/projects/{project}/workspaces/{id}/events</c> (viewer): what happened to a draft, from the state module.</item>
-/// <item><c>GET /api/v1/app-build</c> (viewer): whether this server can build an app, and what it lacks. <c>POST .../workspaces/{id}/builds</c> (author) asks for a build of a draft; <c>GET .../builds</c>, <c>.../builds/{build}</c> and <c>.../builds/{build}/preview[/{path}]</c> (viewer) read them and show the built app, read only; <c>POST .../builds/{build}/publish</c> (approver, <c>{"target","note"?}</c>) sends a succeeded build to a paired Gateway (<see cref="WorkspaceBuilds"/>, <see cref="WorkspacePreview"/>, <see cref="WorkspacePublishing"/>).</item>
+/// <item><c>GET /api/v1/app-build</c> (viewer): whether this server can build an app, and what it lacks. <c>POST .../workspaces/{id}/builds</c> (author) asks for a build of a draft; <c>GET .../builds</c>, <c>.../builds/{build}</c> and <c>.../builds/{build}/preview[/{path}]</c> (viewer) read them and show the built app, read only
+/// (<see cref="WorkspaceBuilds"/>, <see cref="WorkspacePreview"/>). This server sends a build nowhere: the console reads it and deploys it.</item>
 /// <item><c>GET .../builds/{build}/contents</c> and <c>.../builds/{build}/files/{sha256}</c> (viewer): what a build holds to send and its record (<see cref="BuildContents"/>, <see cref="BuildRecord"/>), and each file by hash, which the control service reads to deploy the build.</item>
-/// <item><c>GET /api/v1/publisher-keys</c>, <c>PUT|DELETE /api/v1/publisher-keys/{name}</c> (admin, <c>{"secret_ref"}</c>): the reference to the secret that holds the publisher's key for a target. A key itself is refused. <c>POST /api/v1/publisher-keys/{name}/pair</c> (admin, <c>{"url","code"}</c>) makes the key and pairs it with a Gateway. <c>GET /api/v1/publish-targets</c> (approver): the targets a publish may name, with no reference.</item>
+/// <item>the routes that sent a build, ran its tasks, read a Gateway's catalog or kept publisher keys answer 410 naming the console's call (<see cref="RemovedRoutes"/>).</item>
 /// </list>
 /// What happens to a draft is recorded in the state module as it happens; a record that cannot be written is logged and never turns a finished git operation into an error.
 /// </summary>
@@ -31,7 +32,33 @@ public static class WorkspaceManagement
     /// <summary>What the route that tested a script on this server answers now: where a script is tested.</summary>
     public const string ScriptTestMoved = "A script is tested on a Runner, not on the Workspace server: Test on the Scripts tab builds the draft, stages it in a channel that is not production through the console, and runs the task script-test there.";
 
-    public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, WorkspacePublishing publishing)
+    /// <summary>How each removed answer starts: this server calls no Runner or Gateway and holds no publisher key, and the console does the work as the signed-in person.</summary>
+    public const string ConsoleDoesIt = "The Workspace server calls no Runner or Gateway and holds no publisher key; the console does this, as the signed-in person: ";
+
+    /// <summary>What the console deploys with, in place of a publisher key of this server.</summary>
+    private const string ConsoleSigns = "the console signs each version it deploys with its own publisher key, which every Runner and Gateway group it manages trusts.";
+
+    /// <summary>
+    /// The routes this server had for sending a build to a Runner or a Gateway, running its tasks there, reading a Gateway's catalog and keeping publisher keys. Each answers
+    /// 410 with <see cref="ConsoleDoesIt"/> and the console's call that took its place, so a caller of the old route learns where it went.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Method, string Route, string Answer)> RemovedRoutes =
+    [
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", ConsoleDoesIt + "deploy the build from the Builds tab, or with the console's POST /api/deploys."),
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview-data", ConsoleDoesIt + "Preview with data on the Builds tab, or the console's POST /api/deploys with \"previewInstance\"."),
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/run", ConsoleDoesIt + "run a task of what the console deployed with POST /api/deploys/{id}/runs (the Runs, Provisioning and Deploy tabs)."),
+        ("GET", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/runs/{run}", ConsoleDoesIt + "read a run with GET /api/deploys/{id}/runs/{run}."),
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/binding-test", ConsoleDoesIt + "test a binding with POST /api/deploys/{id}/binding-test."),
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/builds/{build}/contract", ConsoleDoesIt + "approve a model's contract with POST /api/deploys/{id}/contract (the Deploy tab)."),
+        ("POST", "/api/v1/projects/{project}/workspaces/{id}/catalog/refresh", ConsoleDoesIt + "refresh the catalog from a Gateway on the Catalog tab, or with the console's POST /api/workspace-catalog/{workspace}/{project}/gateway-read."),
+        ("GET", "/api/v1/publish-targets", ConsoleDoesIt + "it lists the Runners and Gateways it manages (GET /api/instances)."),
+        ("GET", "/api/v1/publisher-keys", ConsoleDoesIt + ConsoleSigns),
+        ("PUT", "/api/v1/publisher-keys/{name}", ConsoleDoesIt + ConsoleSigns),
+        ("DELETE", "/api/v1/publisher-keys/{name}", ConsoleDoesIt + ConsoleSigns),
+        ("POST", "/api/v1/publisher-keys/{name}/pair", ConsoleDoesIt + ConsoleSigns),
+    ];
+
+    public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds)
     {
         app.MapGet("/api/v1/info", () => Results.Json(new JsonObject
         {
@@ -436,7 +463,6 @@ public static class WorkspaceManagement
             {
                 ["build"] = JsonSerializer.SerializeToNode(DescribeBuild(found.Row)),
                 ["result"] = found.Result,
-                ["publishes"] = builds.Publishes(hosted.Id, buildId),
             });
         });
 
@@ -474,422 +500,9 @@ public static class WorkspaceManagement
                 return WorkspacePreview.Serve(found.Row, builds.AppFolderOf(hosted.Id, buildId), path);
             });
 
-        // a preview with data (plan 22a GP35d): the build goes to the Gateway's preview channel and a preview of an instance runs it, signed in as the person at the Gateway, reading the data and writing nothing; an author may, because nothing goes to production
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/preview-data", async (string project, string id, string build, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
-            var token = context.ManagementToken();
-            var body = await Body(context);
-            string? target, instance;
-            try { (target, instance) = (body?["target"]?.GetValue<string>(), body?["instance"]?.GetValue<string>()); }
-            catch (InvalidOperationException) { target = instance = null; }
-            if (target is null || string.IsNullOrWhiteSpace(instance)) return Results.Json(new { error = "The body is a JSON object with the \"target\" (the name of a publisher key) and the \"instance\" (the instance of the Gateway the preview is of)." }, statusCode: StatusCodes.Status400BadRequest);
-            if (projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is not { Produces: false }) return Results.Json(new { error = "Only an app has a preview with data." }, statusCode: StatusCodes.Status409Conflict);
-            if (found.Row.Status != "succeeded") return Results.Json(new { error = $"This build is {found.Row.Status}, so there is nothing to preview. Only a build that succeeded is sent." }, statusCode: StatusCodes.Status409Conflict);
-            var steps = new List<string>();
-            var where = $"{hosted.Id}/{id}/{buildId} -> {target}/{instance}";
-            try
-            {
-                if (publishing.Find(target) is { } paired) WorkspacePublishing.RouteFor(projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind)!, paired);
-                var note = $"Preview of workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") + $", sent by {Actor(token)}.";
-                var answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), note, Actor(token), steps.Add, context.RequestAborted, previewInstance: instance);
-                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = true, ["preview"] = instance, ["answer"] = answer.DeepClone() });
-                Audit(token, "build.preview-data", where, "ok");
-                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["preview"] = answer });
-            }
-            catch (WorkspacePublishException ex)
-            {
-                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = false, ["preview"] = instance, ["error"] = ex.Message });
-                Audit(token, "build.preview-data", where, "refused: " + ex.Message);
-                return Results.Json(new { error = ex.Message, steps }, statusCode: ex.Status);
-            }
-        });
-
-        // plan 33 SC20j (D20): the catalog cache's producer. A paired Gateway, which holds the data source's login, answers a read-only schema call (tables, columns, keys: never a row or a secret) and the answer is written into the draft as
-        // `catalog-cache.yaml` (the format `catalog-cache/2`, read back by the strict reader before anything is written). The Workspace holds no login. The other connections of an existing cache stay as they were.
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/catalog/refresh", async (string project, string id, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Author, out var hosted) is { } refused) return refused;
-            var token = context.ManagementToken();
-            if (workspaces.Find(hosted.Id, id) is not { } workspace) return Results.NotFound();
-            if (workspace.Owner != token.SubjectId) return Results.Json(new { error = "Only the owner of a workspace changes its files." }, statusCode: StatusCodes.Status403Forbidden);
-            if (store.FindProject(hosted.Id)!.Kind == "app") return Results.Json(new { error = "An app has no connections, so it has no catalog to cache." }, statusCode: StatusCodes.Status409Conflict);
-            var body = await Body(context);
-            string? target, connection, dataSource;
-            var adopt = false;
-            try
-            {
-                (target, connection, dataSource) = (body?["target"]?.GetValue<string>(), body?["connection"]?.GetValue<string>(), body?["data_source"]?.GetValue<string>());
-                adopt = body?["adopt"] is JsonValue a && (a.TryGetValue<bool>(out var yes) ? yes : a.TryGetValue<string>(out var named) && !string.IsNullOrWhiteSpace(named));
-            }
-            catch (InvalidOperationException) { target = connection = dataSource = null; }
-            if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(connection))
-                return Results.Json(new { error = "The body is a JSON object with the \"target\" (a publisher key paired with a Gateway), the \"connection\" of the project the catalog is for, and optionally the Gateway's \"data_source\" for it (the connection's own name by default) and \"adopt\" (true once the person confirmed a data source made by hand)." }, statusCode: StatusCodes.Status400BadRequest);
-            if (!SecretNameLike(connection!)) return Results.Json(new { error = $"'{connection}' is not a connection name (letters, digits, '.', '_' and '-')." }, statusCode: StatusCodes.Status400BadRequest);
-            var steps = new List<string>();
-            var named2 = string.IsNullOrWhiteSpace(dataSource) ? connection! : dataSource!.Trim();
-            try
-            {
-                var (schema, paired) = await publishing.ReadSchemaAsync(target!, named2, adopt, steps.Add, context.RequestAborted);
-                var root = workspaces.RootOf(workspace);
-                CatalogCacheFile? existing = null;
-                var path = Path.Combine(root, CatalogCache.FileName);
-                if (File.Exists(path))
-                {
-                    var load = CatalogCache.Load(File.ReadAllText(path), CatalogCache.FileName);
-                    if (!load.Ok) return Results.Json(new { error = $"{CatalogCache.FileName} of this draft is damaged ({load.Diagnostics.FirstOrDefault(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error)?.Message}); fix or delete it, then refresh again.", steps }, statusCode: StatusCodes.Status409Conflict);
-                    existing = load.Cache;
-                }
-                string text;
-                CatalogCacheFile refreshed;
-                try
-                {
-                    refreshed = CatalogCache.Refreshed(existing, connection!, schema, paired.Name, paired.Product, TimeProvider.System.GetUtcNow());
-                    text = CatalogCache.Write(refreshed);
-                }
-                catch (InvalidDataException ex) { return Results.Json(new { error = ex.Message, steps }, statusCode: StatusCodes.Status409Conflict); }
-                // the strict reader has the last word, before a file is written: a name that looks like a login, a table with no columns, a cache too large
-                var check = CatalogCache.Load(text, CatalogCache.FileName);
-                if (!check.Ok) return Results.Json(new { error = $"The catalog the Gateway answered cannot be cached: {check.Diagnostics.First(d => d.Severity == DbDataKit.Config.Yaml.ConfigSeverity.Error).Message}", steps }, statusCode: StatusCodes.Status409Conflict);
-                var created = DbDataKit.Authoring.WorkspaceFiles.Write(root, CatalogCache.FileName, text);
-                var tables = refreshed.Connections[connection!].Tables;
-                Audit(token, "catalog.refresh", $"{hosted.Id}/{id}: {connection} <- {paired.Name}/{named2}", "ok");
-                steps.Add($"Wrote {CatalogCache.FileName}: {tables.Count} table(s) of {connection}.");
-                return Results.Json(new JsonObject
-                {
-                    ["connection"] = connection, ["data_source"] = named2, ["target"] = paired.Name, ["file"] = CatalogCache.FileName, ["created"] = created, ["generated_at"] = refreshed.GeneratedAt,
-                    ["tables"] = tables.Count, ["columns"] = tables.Sum(t => t.Columns.Count), ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]),
-                });
-            }
-            catch (WorkspacePublishException ex)
-            {
-                Audit(token, "catalog.refresh", $"{hosted.Id}/{id}: {connection} <- {target}/{named2}", "refused: " + ex.Message);
-                var failure = new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) };
-                if (ex.Adopt is not null) failure["adopt"] = ex.Adopt.DeepClone();
-                return Results.Json(failure, statusCode: ex.Status);
-            }
-        });
-
-        static bool SecretNameLike(string name) => name.Length is > 0 and <= 64 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
-
-        // the data sources a person confirmed adopting (plan 33 SC21f): the body's "adopt" is one name or a list of names
-        static IReadOnlyList<string>? AdoptNames(JsonNode? node) => node switch
-        {
-            JsonValue v when v.TryGetValue<string>(out var one) && !string.IsNullOrWhiteSpace(one) => [one.Trim()],
-            JsonArray list => [.. list.OfType<JsonValue>().Select(x => x.TryGetValue<string>(out var s) ? s.Trim() : "").Where(s => s.Length > 0)],
-            _ => null,
-        };
-
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/publish", async (string project, string id, string build, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is not { } found) return Results.NotFound();
-            var token = context.ManagementToken();
-            var body = await Body(context);
-            string? target, note;
-            try { (target, note) = (body?["target"]?.GetValue<string>(), body?["note"]?.GetValue<string>()); }
-            catch (InvalidOperationException) { target = note = null; }
-            if (target is null) return Results.Json(new { error = "The body is a JSON object with the \"target\": the name of a publisher key (and optionally a \"note\")." }, statusCode: StatusCodes.Status400BadRequest);
-            if (found.Row.Status != "succeeded") return Results.Json(new { error = $"This build is {found.Row.Status}, so there is nothing to publish. Only a build that succeeded is published." }, statusCode: StatusCodes.Status409Conflict);
-            var steps = new List<string>();
-            var target1 = $"{hosted.Id}/{id}/{buildId}";
-            try
-            {
-                // the product the target is must be one the project's kind publishes to (plan 33 SC20b); a target nobody paired falls through to the publisher's own sentence
-                if (publishing.Find(target) is { } paired && projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is { } projectKind) WorkspacePublishing.RouteFor(projectKind, paired);
-                var provenance = $"From workspace {id} of project {hosted.Id}, build {buildId:D}" + (found.Row.CommitSha is { } sha ? $", commit {sha[..Math.Min(12, sha.Length)]}" : "") +
-                    (found.Result?["uncommitted_changes"]?.GetValue<bool>() == true ? " (with changes not yet committed)" : "") + $", published by {Actor(token)}.";
-                var fullNote = string.IsNullOrWhiteSpace(note) ? provenance : note.Trim() + " | " + provenance;
-                JsonObject answer;
-                if (projects.Kinds.Find(store.FindProject(hosted.Id)!.Kind) is { Produces: true } producing)
-                {
-                    // a package for a Runner or models for a Gateway (plan 33 SC20d, SC21b, SC22b): what the kind made is sent with the key of the target, and what the Runner or Gateway said is the answer
-                    var bind = new Dictionary<string, string>(StringComparer.Ordinal);
-                    if (body?["bind"] is JsonObject slots)
-                        foreach (var slot in slots)
-                            if (slot.Value is JsonValue v && v.TryGetValue<string>(out var connection)) bind[slot.Key] = connection;
-                    // the version keeps where it came from, with the token the Runner's screens make a link back to this workspace of (plan 33 SC20o, SC22l)
-                    var options = new ArtifactPublishOptions(body?["channel"]?.GetValue<string>(), body?["serve"]?.GetValue<bool>() ?? false, body?["expected_version"]?.GetValue<int>(), bind, body?["data_source"]?.GetValue<string>(), AdoptNames(body?["adopt"]), body?["model"]?.GetValue<string>(),
-                        $"{fullNote} {WorkspaceOrigin.Token(instanceId, project, id)}");
-                    answer = await publishing.PublishArtifactAsync(producing, target, builds.ArtifactFolderOf(hosted.Id, buildId), options, Actor(token), steps.Add, context.RequestAborted);
-                    answer["note"] = fullNote;
-                    if (options.Adopt is { Count: > 0 }) Audit(token, "build.adopt", $"{target1} -> {target}", "confirmed adoption of " + string.Join(", ", options.Adopt));
-                }
-                else
-                    answer = await publishing.PublishAsync(target, builds.AppFolderOf(hosted.Id, buildId), fullNote, Actor(token), steps.Add, context.RequestAborted);
-                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = true, ["answer"] = answer.DeepClone() });
-                Audit(token, "build.publish", $"{target1} -> {target}", "ok");
-                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["published"] = answer });
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or FormatException)
-            {
-                return Results.Json(new { error = "The body's \"channel\", \"data_source\" and \"model\" are text, \"serve\" is true or false, \"expected_version\" a number and \"bind\" an object of slot to connection name." }, statusCode: StatusCodes.Status400BadRequest);
-            }
-            catch (WorkspacePublishException ex)
-            {
-                builds.RecordPublish(hosted.Id, buildId, new JsonObject { ["at"] = DateTimeOffset.UtcNow, ["by"] = Actor(token), ["target"] = target, ["ok"] = false, ["error"] = ex.Message });
-                Audit(token, "build.publish", $"{target1} -> {target}", "refused: " + ex.Message);
-                var failure = new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) };
-                if (ex.Adopt is not null) failure["adopt"] = ex.Adopt.DeepClone();       // the data source and who made it: the screen asks the person, then publishes again with "adopt"
-                return Results.Json(failure, statusCode: ex.Status);
-            }
-        });
-
-        // ---- a manual task of the version a build staged on a Runner (plan 28c E21, step e: a draft's database setup applied before the set is published) ----
-
-        // the newest package this build staged or published on a Runner (of the package named, when one is: a Store project's build stages one package per model, plan 33 SC24): its target, package, channel and version
-        (string Target, string Package, string Channel, string Version)? StagedOf(string project, Guid buildId, string? package = null)
-        {
-            foreach (var entry in builds.Publishes(project, buildId).OfType<JsonObject>().Reverse())
-                if (entry["ok"]?.GetValue<bool>() == true && entry["answer"] is JsonObject a && a["package"] is JsonValue && a["channel"] is JsonValue && a["version"] is JsonValue
-                    && (string.IsNullOrWhiteSpace(package) || (string?)a["package"] == package.Trim()))
-                    return ((string)entry["target"]!, (string)a["package"]!, (string)a["channel"]!, a["version"]!.ToJsonString().Trim('"'));
-            return null;
-        }
-
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/run", async (string project, string id, string build, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
-            var token = context.ManagementToken();
-            var body = await Body(context);
-            string? task, package = null;
-            var served = false;
-            var inputs = new Dictionary<string, string>(StringComparer.Ordinal);
-            try
-            {
-                task = body?["task"]?.GetValue<string>();
-                package = body?["package"]?.GetValue<string>();
-                served = body?["served"]?.GetValue<bool>() ?? false;
-                if (body?["inputs"] is JsonObject given)
-                    foreach (var (name, value) in given) inputs[name] = value?.GetValue<string>() ?? "";
-                else if (body?["inputs"] is not null) task = null;
-            }
-            catch (InvalidOperationException) { task = null; }
-            if (string.IsNullOrWhiteSpace(task))
-                return Results.Json(new { error = "The body is a JSON object with the \"task\" to run (a manual-only task of the package, or any task with \"served\": true), optionally its \"inputs\", an object of names and text values, and the \"package\" when the build staged more than one." }, statusCode: StatusCodes.Status400BadRequest);
-            // a Store model's contract with an approval drops columns: it goes through .../contract, which asks the paired Gateways who reads them first (plan 21 CH06, plan 33 SC24)
-            if (task == ModelDeployPackage.ContractTask && inputs.TryGetValue("approve", out var approval) && approval.Trim().Length > 0)
-                return Results.Json(new { error = "An approved contract is run through .../contract, which checks with the paired Gateways that no published consumer reads what it drops. Run contract here without \"approve\" to read its plan." }, statusCode: StatusCodes.Status409Conflict);
-            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
-                return Results.Json(new { error = "This build has not been staged on a Runner. Publish it to a Runner first (it is staged, not served, unless you say so); then its manual tasks can be run." }, statusCode: StatusCodes.Status409Conflict);
-            var steps = new List<string>();
-            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{task} {(served ? "as served" : "v" + staged.Version)} on {staged.Target}";
-            try
-            {
-                // "served": the version the channel serves now runs the task (a drain or a refresh, which have a schedule: plan 33 SC20o, SC22l); otherwise the version this build staged runs a manual-only task (plan 28c E21)
-                var answer = served
-                    ? await publishing.RunServedTaskAsync(staged.Target, staged.Package, staged.Channel, task, inputs, Actor(token), steps.Add, context.RequestAborted)
-                    : await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, task, inputs, Actor(token), steps.Add, context.RequestAborted);
-                Audit(token, "build.run", what, "queued " + (string)answer["run_id"]!);
-                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer }, statusCode: StatusCodes.Status202Accepted);
-            }
-            catch (WorkspacePublishException ex)
-            {
-                Audit(token, "build.run", what, "refused: " + ex.Message);
-                return Results.Json(new JsonObject { ["error"] = ex.Message, ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]) }, statusCode: ex.Status);
-            }
-        });
-
-        // a run started from a build, read back from the Runner it ran on (?step=<name>: the steps of that name the run recorded, such as provision-applied; ?package=<name>: the staged package it is of, when the build staged more than one)
-        app.MapGet("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/runs/{run}", async (string project, string id, string build, string run, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Viewer, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null || !Guid.TryParse(run, out var runId)) return Results.NotFound();
-            if (StagedOf(hosted.Id, buildId, context.Request.Query["package"].FirstOrDefault()) is not { } staged) return Results.NotFound();
-            var step = context.Request.Query["step"].FirstOrDefault();
-            try
-            {
-                return await publishing.RunOfAsync(staged.Target, staged.Package, staged.Channel, runId, string.IsNullOrWhiteSpace(step) ? null : step, Actor(context.ManagementToken()), context.RequestAborted) is { } found
-                    ? Results.Json(new JsonObject { ["run"] = found })
-                    : Results.NotFound(new { error = $"{staged.Target} has no run {runId}." });
-            }
-            catch (WorkspacePublishException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
-        });
-
-        // a connection of what a build published, tried on the Runner (plan 33 SC22h, owner 2026-11-14: through the Runner, after publish only): the Runner's slot binding test of the login the channel binds to the slot, relayed with the
-        // publisher key; before the build is published there is nothing to try, and that is said. Nothing is tried here: this server holds no login.
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/binding-test", async (string project, string id, string build, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
-            var token = context.ManagementToken();
-            var body = await Body(context);
-            string? slot, role, package;
-            try { (slot, role, package) = (body?["slot"]?.GetValue<string>()?.Trim(), body?["role"]?.GetValue<string>()?.Trim() ?? "default", body?["package"]?.GetValue<string>()); }
-            catch (InvalidOperationException) { slot = role = package = null; }
-            if (string.IsNullOrWhiteSpace(slot) || slot.Length > 64 || role is not ("default" or "read" or "write"))
-                return Results.Json(new { error = "The body is a JSON object with the \"slot\" to try (the connection's slot in the published package), optionally the \"role\" of its login (default, read or write) and the \"package\" when the build published more than one." }, statusCode: StatusCodes.Status400BadRequest);
-            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
-                return Results.Json(new { error = "This build has not been published to a Runner, so there is no bound login to try. Publish it to a Runner and bind its connections there; then Test tries the login the Runner would use." }, statusCode: StatusCodes.Status409Conflict);
-            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/{slot} on {staged.Target}";
-            try
-            {
-                var answer = await publishing.TestBindingAsync(staged.Target, staged.Package, staged.Channel, slot, role, Actor(token), context.RequestAborted);
-                Audit(token, "build.binding-test", what, (bool)answer["ok"]! ? "ok" : "failed: " + (string?)answer["step"]);
-                return Results.Json(new JsonObject { ["test"] = answer });
-            }
-            catch (WorkspacePublishException ex)
-            {
-                Audit(token, "build.binding-test", what, "refused: " + ex.Message);
-                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
-            }
-        });
-
-        // ---- a Store model's contract step (plan 33 SC24; plan 26 Z13b, plan 21 CH06) ----
-
-        // runs the contract plan a person read and approved: "plan_run" is the run of contract without an approval whose report has the hash "approve"; the columns that report drops are checked against the lineage of every Gateway this server
-        // is paired with (a consumer that reads one, in any channel, refuses the step by name until it is published without it, or a person allows it as <name>@<channel>, recorded in the audit; a Gateway that does not answer refuses it too,
-        // gateway:<name> allows that); then contract runs with that hash on the Runner, which runs exactly that plan or nothing
-        app.MapPost("/api/v1/projects/{project}/workspaces/{id}/builds/{build}/contract", async (string project, string id, string build, HttpContext context) =>
-        {
-            if (InProject(project, context, ServerRole.Approver, out var hosted) is { } refused) return refused;
-            if (!Guid.TryParse(build, out var buildId) || builds.Find(hosted.Id, id, buildId) is null) return Results.NotFound();
-            var token = context.ManagementToken();
-            var body = await Body(context);
-            string? package, approve, planRun;
-            var allowed = new List<string>();
-            try
-            {
-                (package, approve, planRun) = (body?["package"]?.GetValue<string>(), body?["approve"]?.GetValue<string>()?.Trim(), body?["plan_run"]?.GetValue<string>());
-                if (body?["allow_consumer"] is JsonArray given) allowed.AddRange(given.Select(a => a?.GetValue<string>()?.Trim()).OfType<string>().Where(a => a.Length > 0));
-            }
-            catch (InvalidOperationException) { package = approve = planRun = null; }
-            if (string.IsNullOrWhiteSpace(package) || string.IsNullOrWhiteSpace(approve) || !Guid.TryParse(planRun, out var planId))
-                return Results.Json(new { error = "The body is a JSON object with the \"package\" (the model's package this build staged), \"plan_run\" (the run of contract that read the plan), \"approve\" (that plan's hash) and optionally \"allow_consumer\", a list of <name>@<channel> or gateway:<name>." }, statusCode: StatusCodes.Status400BadRequest);
-            if (StagedOf(hosted.Id, buildId, package) is not { } staged)
-                return Results.Json(new { error = $"This build has not staged {package} on a Runner. Stage it and read the contract's plan first." }, statusCode: StatusCodes.Status409Conflict);
-            var what = $"{hosted.Id}/{id}/{buildId}: {staged.Package}/{staged.Channel}/contract v{staged.Version} on {staged.Target}";
-            try
-            {
-                // the plan the person read, from the Runner: its run of contract, its report, the hash it approved
-                if (await publishing.RunOfAsync(staged.Target, staged.Package, staged.Channel, planId, "contract-report", Actor(token), context.RequestAborted) is not { } read || (string?)read["task"] != ModelDeployPackage.ContractTask)
-                    return Results.Json(new { error = $"{staged.Target} has no run {planId} of contract of {staged.Package}. Read the plan again." }, statusCode: StatusCodes.Status409Conflict);
-                // the checks of the plan and of its consumers are the shared deploy library's (ContractPlans)
-                var reading = ContractPlans.Read(read, planId, approve!);
-                if (reading.Plan is not { } plan)
-                    return reading.Blocked
-                        ? Results.Json(new { error = reading.Refusal, hash = approve }, statusCode: StatusCodes.Status409Conflict)
-                        : Results.Json(new { error = reading.Refusal }, statusCode: StatusCodes.Status409Conflict);
-                var changes = plan.Dropped;
-                var (graphs, unreachable) = changes.Count == 0 ? ([], []) : await publishing.GatewayLineageAsync(context.RequestAborted);
-                var verdict = ContractPlans.CheckConsumers(plan, graphs, unreachable, allowed);
-                if (verdict.Refusals.Count > 0)
-                {
-                    Audit(token, "build.contract", what, "refused: consumers");
-                    return Results.Json(new JsonObject { ["error"] = string.Join(" ", verdict.Refusals), ["consumers_refused"] = new JsonArray([.. verdict.Refusals.Select(r => (JsonNode?)r)]), ["hash"] = approve }, statusCode: StatusCodes.Status409Conflict);
-                }
-                foreach (var used in verdict.AllowancesUsed) Audit(token, "build.contract.allow-consumer", what, used);
-                var steps = new List<string>();
-                var inputs = ContractPlans.Inputs(plan, approve!);
-                var answer = await publishing.RunStagedTaskAsync(staged.Target, staged.Package, staged.Channel, staged.Version, ModelDeployPackage.ContractTask, inputs, Actor(token), steps.Add, context.RequestAborted);
-                Audit(token, "build.contract", what, $"queued {(string)answer["run_id"]!} for {approve![..Math.Min(12, approve.Length)]}");
-                return Results.Json(new JsonObject { ["steps"] = new JsonArray([.. steps.Select(x => (JsonNode?)x)]), ["run"] = answer, ["checked"] = changes.Count, ["gateways"] = graphs.Count }, statusCode: StatusCodes.Status202Accepted);
-            }
-            catch (WorkspacePublishException ex)
-            {
-                Audit(token, "build.contract", what, "refused: " + ex.Message);
-                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
-            }
-        });
-
-        // ---- the publisher's key reference ----
-
-        JsonObject DescribeKey(PublisherKeyRow k)
-        {
-            var target = publishing.Find(k.Name);
-            return new JsonObject
-            {
-                ["name"] = k.Name, ["secret_ref"] = k.SecretRef, ["updated"] = k.UpdatedAt,
-                ["product"] = target?.Product, ["gateway"] = target is null ? null : new JsonObject { ["url"] = target.Url, ["product"] = target.Product, ["roles"] = new JsonArray([.. target.Roles.Select(x => (JsonNode?)x)]), ["client_name"] = target.ClientName, ["paired"] = target.PairedAt },
-            };
-        }
-
-        app.MapGet("/api/v1/publisher-keys", (HttpContext context) =>
-        {
-            if (ManagementAuthorization.Authorize(context.ManagementToken(), ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
-            return Results.Json(new JsonObject { ["keys"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)DescribeKey(k))]) });
-        });
-
-        // the targets a publish may name (their names and Gateways; no reference): for whoever publishes, who need not be an administrator
-        // with ?project=<id>: whether a project of that kind may be published to the target (its kind's Publishes lists the target's product); without it, null
-        bool? AcceptsFor(HttpContext context, PublishTarget? target)
-        {
-            if (target is null || context.Request.Query["project"].ToString() is not { Length: > 0 } id || store.FindProject(id) is not { } row || projects.Kinds.Find(row.Kind) is not { } kind) return null;
-            return kind.Publishes.Any(r => r.Product == target.Product);
-        }
-
-        app.MapGet("/api/v1/publish-targets", (HttpContext context) =>
-        {
-            var token = context.ManagementToken();
-            var decision = ManagementAuthorization.Authorize(token, ServerRole.Approver);
-            if (!decision.Allowed && !token.Projects.Keys.Any(p => ManagementAuthorization.Authorize(token, ServerRole.Approver, p).Allowed)) return Refused(decision);
-            return Results.Json(new JsonObject
-            {
-                ["targets"] = new JsonArray([.. store.PublisherKeys().Select(k => (JsonNode?)new JsonObject
-                {
-                    ["name"] = k.Name,
-                    ["gateway"] = publishing.Find(k.Name)?.Url, ["product"] = publishing.Find(k.Name)?.Product, ["instance"] = publishing.Find(k.Name)?.InstanceId,
-                    ["accepts"] = AcceptsFor(context, publishing.Find(k.Name)),
-                    ["can_publish"] = publishing.Find(k.Name) is { } t && ServerRoles.TryParse(t.Roles, out var held) && (ServerRoles.Allows(held, ServerRole.Publisher) || ServerRoles.Allows(held, ServerRole.Admin)),
-                })]),
-            });
-        });
-
-        app.MapPut("/api/v1/publisher-keys/{name}", async (string name, HttpContext context) =>
-        {
-            var token = context.ManagementToken();
-            if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
-            if (!WorkspaceProjects.IsValidId(name)) return Results.Json(new { error = $"'{name}' is not a name: lower-case letters, digits, '-' and '_', at most 32." }, statusCode: StatusCodes.Status400BadRequest);
-            string? reference;
-            try { reference = (await Body(context))?["secret_ref"]?.GetValue<string>(); }
-            catch (InvalidOperationException) { reference = null; }
-            if (reference is null) return Results.Json(new { error = "The body is a JSON object with the \"secret_ref\": the reference to the secret that holds the key." }, statusCode: StatusCodes.Status400BadRequest);
-            try
-            {
-                var row = store.SetPublisherKey(name, reference, token.SubjectId);
-                Audit(token, "publisher-key.set", name, "ok");     // the reference is not a secret, but the audit names only the target
-                return Results.Json(DescribeKey(row));
-            }
-            catch (ArgumentException ex)
-            {
-                Audit(token, "publisher-key.set", name, "refused");
-                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
-            }
-        });
-
-        // makes the key and pairs it with a Gateway with the single-use code made there (the code is not a secret that stays: it is used up); the key never leaves the secret store
-        app.MapPost("/api/v1/publisher-keys/{name}/pair", async (string name, HttpContext context) =>
-        {
-            var token = context.ManagementToken();
-            if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
-            var body = await Body(context);
-            string? url, code, clientName, targetProduct;
-            try { (url, code, clientName, targetProduct) = (body?["url"]?.GetValue<string>(), body?["code"]?.GetValue<string>(), body?["client_name"]?.GetValue<string>(), body?["product"]?.GetValue<string>()); }
-            catch (InvalidOperationException) { url = code = clientName = targetProduct = null; }
-            if (url is null || code is null || !Uri.TryCreate(url, UriKind.Absolute, out var address))
-                return Results.Json(new { error = "The body is a JSON object with the Gateway's \"url\" (https://...) and the \"code\" its administrator made (server pair --max-role publisher)." }, statusCode: StatusCodes.Status400BadRequest);
-            try
-            {
-                var made = await publishing.PairAsync(name, address, code, clientName, token.SubjectId, context.RequestAborted, targetProduct);
-                Audit(token, "publisher-key.pair", $"{name} -> {made.Url}", "ok");
-                return Results.Json(DescribeKey(store.PublisherKeys().First(k => k.Name == name)), statusCode: StatusCodes.Status201Created);
-            }
-            catch (WorkspacePublishException ex)
-            {
-                Audit(token, "publisher-key.pair", name, "refused: " + ex.Message);
-                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
-            }
-        });
-
-        app.MapDelete("/api/v1/publisher-keys/{name}", (string name, HttpContext context) =>
-        {
-            var token = context.ManagementToken();
-            if (ManagementAuthorization.Authorize(token, ServerRole.Admin) is { Allowed: false } refused) return Refused(refused);
-            if (!store.RemovePublisherKey(name)) return Results.NotFound();
-            Audit(token, "publisher-key.remove", name, "ok");
-            return Results.NoContent();
-        });
+        // the calls that sent a build to a Runner or a Gateway, ran its tasks there, read a Gateway's catalog or kept a publisher key: this server calls no other
+        // service and holds no key, so each answers with the sentence naming the console's call that does it as the person (Design: docs/publishing.md#deploying-a-build-from-the-control-service)
+        foreach (var (method, route, answer) in RemovedRoutes)
+            app.MapMethods(route, [method], () => Results.Json(new { error = answer }, statusCode: StatusCodes.Status410Gone));
     }
 }

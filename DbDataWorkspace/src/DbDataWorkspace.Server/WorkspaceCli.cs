@@ -26,9 +26,18 @@ public static class WorkspaceCli
         ConsoleCancelEventHandler onCancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
         Console.CancelKeyPress += onCancel;
         using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, c => { c.Cancel = true; stop.Cancel(); });
-        try { return await Router(invocation: args).RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
+        try { return await Removed.TryAnswerAsync(args, context.Error) ?? await Router(invocation: args).RunAsync(args, context with { Cancellation = context.Cancellation.CanBeCanceled ? context.Cancellation : stop.Token }); }
         finally { Console.CancelKeyPress -= onCancel; }
     }
+
+    /// <summary>
+    /// The commands that are gone, each answering the sentence that names what replaced it (exit code 2): the server's publisher keys went with its
+    /// publishing, since the console deploys a build and signs it with its own key.
+    /// </summary>
+    public static RemovedCommands Removed { get; } = new(Program, new Dictionary<string, string>
+    {
+        ["publisher"] = "this server publishes nothing and holds no publisher key; the console deploys a build from the Workspace and signs each version with its own publisher key, which every Runner and Gateway group it manages trusts.",
+    });
 
     public static NounRouter Router(Func<string, string?>? environment = null, string[]? invocation = null) => new(Program,
     [
@@ -42,7 +51,6 @@ public static class WorkspaceCli
             })),
         WorkspaceAdminCommand.Project(environment),
         WorkspaceAdminCommand.Workspace(environment),
-        WorkspaceAdminCommand.Publisher(environment),
         StateNoun(environment),
         // the store is opened (and its key made on first use) only for the secret verbs
         .. invocation is ["secret", ..] ? new[] { SecretVerbs(invocation) } : Array.Empty<Noun>(),
