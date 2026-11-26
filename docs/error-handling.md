@@ -17,7 +17,22 @@ Throwing `new StateMigrationException("Migration failed.")` without `ex` loses t
 
 Repository checks run `scripts/check_caught_exceptions.py` on every pull request. It fails on a `throw new` inside a `catch` that does not pass the
 caught exception, and names the file and the line. Passing only `ex.Message` does not count. A `catch` with no variable (`catch (IOException)`) that
-throws a new exception fails too: name the exception and pass it.
+throws a new exception fails too: name the exception and pass it. A bare `throw;` rethrows the original and passes.
+
+The check is a Python script that reads the C# text, skipping strings and comments. It needs no build and reads the whole repository in a few
+seconds.
+
+A cancellation or a deadline passes the original like any other error. The new exception still reads as a cancellation, and the original's stack
+shows where the wait was:
+
+```csharp
+catch (OdbcException ex) when (cancellationToken.IsCancellationRequested)
+{
+    throw new OperationCanceledException("The catalog read was cancelled.", ex, cancellationToken);
+}
+```
+
+A `catch` that must replace an error without the original goes on the `REVIEWED` list in the script, with the reason the original must not be kept.
 
 The files that held such catches when the check was added are listed in `scripts/caught_exceptions_baseline.txt`, each with its count, for example
 `Shared/src/DbDataKit.State/UserStore.cs: 3`. A listed file may hold up to that many. The list only shrinks:
