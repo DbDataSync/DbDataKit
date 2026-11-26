@@ -159,6 +159,6 @@ $ dbdatarunner health help
 dbdatarunner health: Is a running server answering
 
 Verbs:
-  health check [--url <url>] [--timeout <seconds>]
-      Ask the server's health address; exit 0 when it answers, 1 when it does not [Offline only]
+  health check [--url <url>] [--repo <server directory>] [--timeout <seconds>]
+      Ask the server's health address (its settings file's listen: line, else its default address); exit 0 when it answers, 1 when it does not [Offline only]
 

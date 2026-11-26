@@ -1,11 +1,11 @@
 # The dbdatakit console for Linux containers.
 #   docker build -f DbDataKit/Dockerfile -t dbdatakit .        (run from the repository root: the build needs Shared/ too)
-#   docker run -p 8480:8480 -v ./console-data:/data dbdatakit        (/data holds the users, sessions, invitations, the servers it manages, its signing key and its certificate)
+#   docker run -p 7800:7800 -v ./console-data:/data dbdatakit        (/data holds the users, sessions, invitations, the servers it manages, its signing key and its certificate)
 # The first administrator redeems the invitation the console prints in its log and writes to /data/FIRST-RUN.txt; one more can be made at any time:
 #   docker exec <container> dbdatakit user invite --email <their address> --url https://<the address people use>
 # Pair a server with it (the code is made on the server with 'server pair'):
 #   docker exec <container> dbdatakit instance add https://build.example:8470 --code <code>
-# A passkey is bound to the address people open the console at, so tell it that address: add  --public-url https://<name>:8480  to the run command (the image says https://localhost:8480).
+# A passkey is bound to the address people open the console at, so tell it that address: add  --public-url https://<name>:7800  to the run command (the image says https://localhost:7800).
 FROM node:24 AS web
 WORKDIR /src/Shared/web
 COPY Shared/web/package.json Shared/web/package-lock.json ./
@@ -37,7 +37,7 @@ ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/.net \
     DBDATAKIT_DATA_SERVER=/data \
     ASPNETCORE_HTTP_PORTS=
 VOLUME /data
-EXPOSE 8480
-# health check asks the default address of a console on its own; the image listens on 8480, so the check names it
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dotnet", "/app/dbdatakit.dll", "health", "check", "--url", "https://localhost:8480/health/live"]
-ENTRYPOINT ["dotnet", "/app/dbdatakit.dll", "server", "run", "--listen", "https://0.0.0.0:8480", "--public-url", "https://localhost:8480"]
+EXPOSE 7800
+# the image listens on the console's default port, which a bare health check asks when the settings file pins no other
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["dotnet", "/app/dbdatakit.dll", "health", "check"]
+ENTRYPOINT ["dotnet", "/app/dbdatakit.dll", "server", "run", "--listen", "https://0.0.0.0:7800", "--public-url", "https://localhost:7800"]

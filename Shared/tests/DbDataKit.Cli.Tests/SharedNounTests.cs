@@ -179,6 +179,57 @@ public sealed class SharedNounTests
         Assert.Contains("no answer in 1 s", io.Error.ToString());
     }
 
+    private static NounRouter PinnedRouter(IHealthProbe probe, Func<string?, Uri?> pinned) => new("dbdatademo",
+    [
+        HealthNoun.Create(probe, "https://localhost:7840/health/live", pinned),
+    ]);
+
+    [Theory]
+    [InlineData("https://127.0.0.1:7841", "https://127.0.0.1:7841/health/live")]
+    [InlineData("https://0.0.0.0:7841", "https://localhost:7841/health/live")]
+    [InlineData("https://[::]:7841", "https://localhost:7841/health/live")]
+    [InlineData("https://[::1]:7841", "https://[::1]:7841/health/live")]
+    [InlineData("https://runner.example:7841", "https://localhost:7841/health/live")]
+    public async Task A_bare_health_check_asks_the_pinned_address_with_the_health_path(string listen, string asked)
+    {
+        var probe = new FakeProbe((_, _) => Task.FromResult(new HealthResult(true, "HTTP 200")));
+        string? repo = "unset";
+
+        var exit = await PinnedRouter(probe, r => { repo = r; return new Uri(listen); }).RunAsync(["health", "check", "--repo", "/srv/runner"], new Io().Context());
+
+        Assert.Equal(CliExit.Ok, exit);
+        Assert.Equal("/srv/runner", repo);
+        Assert.Equal(asked, probe.Asked!.ToString());
+    }
+
+    [Fact]
+    public async Task A_bare_health_check_asks_the_default_address_when_nothing_is_pinned_and_url_wins_over_the_pin()
+    {
+        var probe = new FakeProbe((_, _) => Task.FromResult(new HealthResult(true, "HTTP 200")));
+        string? repo = "unset";
+
+        await PinnedRouter(probe, r => { repo = r; return null; }).RunAsync(["health", "check"], new Io().Context());
+        Assert.Null(repo);
+        Assert.Equal("https://localhost:7840/health/live", probe.Asked!.ToString());
+
+        await PinnedRouter(probe, _ => new Uri("https://127.0.0.1:7841")).RunAsync(["health", "check", "--url", "https://srv:8443/health"], new Io().Context());
+        Assert.Equal("https://srv:8443/health", probe.Asked!.ToString());
+    }
+
+    [Fact]
+    public async Task A_settings_file_that_cannot_be_read_fails_the_check_naming_why_and_url_without_asking_another_address()
+    {
+        var probe = new FakeProbe((_, _) => Task.FromResult(new HealthResult(true, "HTTP 200")));
+        var io = new Io();
+
+        var exit = await PinnedRouter(probe, _ => throw new InvalidOperationException("/srv/runner/server.yaml: listen is 'soon'.")).RunAsync(["health", "check"], io.Context());
+
+        Assert.Equal(CliExit.Failure, exit);
+        Assert.Null(probe.Asked);
+        Assert.Contains("/srv/runner/server.yaml", io.Error.ToString());
+        Assert.Contains("--url", io.Error.ToString());
+    }
+
     [Theory]
     [InlineData("--url", "not a url")]
     [InlineData("--url", "ftp://host/")]

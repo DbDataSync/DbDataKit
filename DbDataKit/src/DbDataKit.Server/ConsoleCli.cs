@@ -18,7 +18,7 @@ public static class ConsoleCli
 {
     public const string Program = "dbdatakit";
 
-    /// <summary>Where <c>health check</c> asks by default: the console's own address, as a container sees it.</summary>
+    /// <summary>Where <c>health check</c> asks when the console's settings file pins no address: the console's default address, as a container sees it.</summary>
     public const string HealthUrl = "https://localhost:7800/health/live";
 
     public static Task<int> RunAsync(string[] args) => RunAsync(args, CliContext.Console());
@@ -43,7 +43,8 @@ public static class ConsoleCli
         IdentityCli.Noun(environment),
         KnowledgeCli(environment),
         ConsoleService.Noun(ConsoleServiceEnvironment.Real()),
-        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
+        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl,
+            repo => ListenPorts.ReadPinned(ConsoleState.SettingsFileIn(Path.GetFullPath(repo ?? ConsoleSettings.DefaultDirectory(environment)))), "--repo <console directory>"),
     ], ConsoleHost.Version, () => DbDataKit.State.SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>The console's certificate is self-signed, so a probe of its own address cannot validate it; it is accepted for a loopback address only, where the answer is this machine and the probe reads a status code and no body.</summary>

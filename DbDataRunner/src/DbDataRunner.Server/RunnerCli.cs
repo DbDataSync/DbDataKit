@@ -21,7 +21,7 @@ public static class RunnerCli
 {
     public const string Program = "dbdatarunner";
 
-    /// <summary>Where <c>health check</c> asks by default: the server's own address.</summary>
+    /// <summary>Where <c>health check</c> asks when the server's settings file pins no address: the server's default address.</summary>
     public const string HealthUrl = "https://localhost:7840/health/live";
 
     private const string Where = "[--repo <server directory>]";
@@ -71,7 +71,8 @@ public static class RunnerCli
         StateNoun(environment),
         RunnerService.Noun(RunnerServiceEnvironment.Real()),
         RunnerService.CertNoun(environment),
-        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl),
+        HealthNoun.Create(new HttpHealthProbe(LoopbackTolerantClient()), HealthUrl,
+            repo => ListenPorts.ReadPinned(Path.Combine(Path.GetFullPath(repo ?? RunnerSettings.DefaultDirectory(environment)), "server.yaml"))),
     ], RunnerServer.Version, () => SuiteEnvironment.OldNameProblem(environment));
 
     /// <summary>The shared <c>state show|test|grants</c> verbs over the runner's state: SQLite in <c>state.db</c> in its directory unless the environment names a server engine (<c>--engine</c> overrides the engine), built from <see cref="RunnerState.Modules"/>.</summary>

@@ -24,7 +24,7 @@ dbdatakit state import --from <directory> [--migrate-after true|false] [--engine
 dbdatakit state verify --snapshot <directory> [--db] [--rehash-payloads] [--engine mssql|postgres] [--repo <console directory>]   # the snapshot against itself, or the state against it; also --other-engine ... or --against <settings file>
 dbdatakit state move --to-engine mssql|postgres --to-connection "<connection string with secret references>" [--yes] [--keep-snapshot] [--repo <console directory>]   # export, import, verify, then write settings.yaml; the old database is untouched
 dbdatakit service install|uninstall|status|start|stop|restart|check|unit
-dbdatakit health check [--url <url>]
+dbdatakit health check [--url <url>] [--repo <console directory>]
 ```
 
 The console's directory is `--repo`, or `DBDATAKIT_DATA_SERVER`, or a folder under the user's local application data (`%ProgramData%\DbDataKit\server` for the Windows service, `/var/lib/dbdatakit/server` for the Linux one; `DBDATAKIT_DATA_SERVER` names this folder, or `DBDATAKIT_DATA` names the root and the folder is `server` in it). It holds `state.db`
