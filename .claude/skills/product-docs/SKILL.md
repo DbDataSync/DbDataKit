@@ -58,6 +58,14 @@ done. Every sentence has to help with that.
 - **Notes instead of sentences.** Every sentence has a subject, a verb and the small words ("the", "a", "is") a person would say. Wrong: "Groups
   through the token; pins both ways; a Runner joined to its group." Right: "When a service joins, the console hands it the group's key. The service
   and the console then each remember the other's certificate."
+- **A list of names packed into a sentence.** The reader has to unpack the list before reaching the point. Name the group, and list the members only
+  if the reader needs them. Wrong: "Set up for development, Test, Describe, Preview rows and Try, Build and stage, and a script's Test all work in
+  `prod` as in any other channel." Right: "Every feature of the Workspace screens works in `prod` as in any other channel."
+- **A fragment where a sentence belongs.** A list item, a table cell or a heading's first line is still a sentence when it states something. Wrong:
+  "Refusing a feature in `prod`, or hiding it there." Right: "The suite does not refuse or hide a feature in `prod`."
+- **A rule written so it reads as its opposite.** Under a heading such as "Rules the suite does not add", an item that opens by describing the rule
+  reads as if the suite had it. Say what the suite does first. Wrong: "Leaving `prod` out of a feature, or refusing it there: ..." Right: "The suite
+  does not refuse or hide a feature in `prod`. ..."
 - **The writer's reasoning or the doc talking about itself.** No "this section explains", "note that", "it is important to", "in other words".
 - **Agent-speak.** No sentence a person would not say out loud to a colleague. Read it aloud; if it sounds like a model talking to itself, it is wrong.
 
