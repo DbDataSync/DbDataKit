@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseYaml } from '@dbdatakit/shell'
 import { DraftProvider, WorkspaceModule, registerDesigner, useDraft } from '@dbdatakit/workspace'
 import { syncDesigner } from './designer'
+import { PLAN_SETTLE_MS } from './api/hooks'
 import { unsavedNote } from './replication/PublishCard'
 import { useTables } from './metadata'
 import { CATALOG, DRAFT } from './fixtures'
@@ -14,11 +15,12 @@ import { CATALOG, DRAFT } from './fixtures'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 /** A Workspace server in memory with one sync project and its draft; it answers the frame's file calls and records what is written. */
-function fakeServer(files: Record<string, string>, options: { planSaved?: boolean; slowList?: boolean } = {}) {
+function fakeServer(files: Record<string, string>, options: { planOthers?: boolean; slowList?: boolean } = {}) {
   const writes: string[] = []
   const deletes: string[] = []
   const calls: string[] = []
   const bulkCreates: string[] = []
+  const plans: { replication: string; unsaved?: Record<string, string | null> }[] = []
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -60,16 +62,20 @@ function fakeServer(files: Record<string, string>, options: { planSaved?: boolea
       const asked = JSON.parse(String(init?.body)) as { replication: string; mapping: string }
       return reply({ ...asked, problem: null, columns: [{ sourceColumn: 'id', sourceType: 'int', targetType: 'integer', fidelity: null, problem: null }], naturalKey: { columns: ['id'], problem: null } })
     }
-    // the plan is made from the saved files: with planSaved, every other saved mapping of orders is planned too, its target table to create
+    // the plan is made from the saved files with the unsaved edits the question carries over them: with planOthers, every other mapping of orders
+    // the question sees is planned too, its target table to create
     const folder = 'config/replications/orders/table-mappings/'
-    const others = options.planSaved ? Object.keys(files).filter((p) => p.startsWith(folder) && p !== `${folder}dbo.orders.yaml`).map((p) => p.slice(folder.length, -'.yaml'.length)) : []
+    const asked = rest === 'provisioning-plan' ? JSON.parse(String(init?.body)) as { replication: string; unsaved?: Record<string, string | null> } : null
+    if (asked) plans.push(asked)
+    const seen = { ...files, ...asked?.unsaved }
+    const others = options.planOthers ? Object.keys(seen).filter((p) => seen[p] !== null && p.startsWith(folder) && p !== `${folder}dbo.orders.yaml`).sort().map((p) => p.slice(folder.length, -'.yaml'.length)) : []
     if (rest === 'provisioning-plan') return reply({ ok: true, diagnostics: [], data: { replication: 'orders', cache_generated_at: null, cache_server: null, mappings: ['dbo.orders', ...others].map((name) => ({
       mapping: name, source: null, target: { connection: 'dw', table: name }, excluded: null, source_plan: null,
       target_plan: { action: 'createTargetTable', state: 'missing', steps: [{ title: 'Create the table', command_text: `CREATE TABLE ${name} (id integer)`, rationale: null, scope: 'table' }], warnings: [] },
     })) } })
     return reply({ error: 'no' }, 404)
   })
-  return { files, writes, deletes, calls, bulkCreates, fetcher }
+  return { files, writes, deletes, calls, bulkCreates, plans, fetcher }
 }
 
 let root: Root
@@ -80,6 +86,8 @@ function Where() { const at = useLocation(); where = at.pathname; query = at.sea
 const settle = async () => { for (let i = 0; i < 12; i++) await act(async () => { await new Promise((r) => setTimeout(r, 5)) }) }
 const q = (sel: string) => host.querySelector(sel) as HTMLElement | null
 const all = (sel: string) => [...host.querySelectorAll(sel)] as HTMLElement[]
+/** Waits for the edits to settle, so the replication's plan is asked with them, and for its answer. */
+const planSettles = async () => { await act(async () => { await new Promise((r) => setTimeout(r, PLAN_SETTLE_MS + 20)) }); await settle() }
 const click = async (sel: string) => { const el = q(sel); if (!el) throw new Error(`no ${sel} in ${host.innerHTML.slice(0, 3000)}`); await act(async () => { el.click() }); await settle() }
 
 async function render(node: React.ReactNode, at: string) {
@@ -145,14 +153,16 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(q(`[data-testid="wsp-file"][data-path="${made}"]`)?.dataset.dirty).toBe('true')
   })
 
-  it('stays on a mapping Create mappings made when it is saved, and asks for the plan again, so its Provisioning tab counts the table to create', async () => {
-    server = fakeServer({ ...DRAFT }, { planSaved: true, slowList: true })
+  it('counts the table to create on the Provisioning tab of a mapping Create mappings made, before it is saved and after, staying on the mapping', async () => {
+    server = fakeServer({ ...DRAFT }, { planOthers: true, slowList: true })
     vi.stubGlobal('fetch', server.fetcher)
     await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings')
     await click('[data-testid="select-table-dbo.customers"]')
     await click('[data-testid="create-mappings-button"]')
     await click('[data-testid="mapping-item-dbo.customers"]')
-    expect(q('[data-testid="mapping-tab-provisioning-badge"]')).toBeNull()
+    await planSettles()
+    expect(q('[data-testid="mapping-tab-provisioning-badge"]')?.textContent).toBe('1')
+    expect(server.writes).toEqual([])
     await click('[data-testid="mapping-tab-verify"]')
     await click('[data-testid="add-check-button"]')
     const name = q('[data-testid="check-name-input"]') as HTMLInputElement
@@ -172,7 +182,29 @@ describe('the sync Designer in the Workspace frame', () => {
     expect(server.writes).toEqual(['config/replications/orders/table-mappings/dbo.customers.yaml'])
     expect(q('[data-testid="mapping-dirty"]')).toBeNull()
     expect(where).toBe('/plant/ws-p/designer/replications/orders/mappings/dbo.customers/segmenting')
+    await planSettles()
     expect(q('[data-testid="mapping-tab-provisioning-badge"]')?.textContent).toBe('1')
+    expect(server.plans.at(-1)?.unsaved).toBeUndefined()
+  })
+
+  it('plans a mapping with its unsaved edits: Create target table if missing turned on and not saved, the plan and the count show the statement', async () => {
+    server = fakeServer({ ...DRAFT }, { planOthers: true })
+    vi.stubGlobal('fetch', server.fetcher)
+    await render(<WorkspaceModule />, '/plant/ws-p/designer/replications/orders/mappings')
+    await click('[data-testid="select-table-dbo.customers"]')
+    await click('[data-testid="create-mappings-button"]')
+    await click('[data-testid="mapping-item-dbo.customers"]')
+    await click('[data-testid="mapping-tab-provisioning"]')
+    await click('[data-testid="provisioning-create"] button.toggle')
+    await click('[data-testid="provisioning-create-checkbox"]')
+    await planSettles()
+    const path = 'config/replications/orders/table-mappings/dbo.customers.yaml'
+    const asked = server.plans.at(-1)!
+    expect(yamlOf(asked.unsaved?.[path] ?? undefined).provisioning?.createTargetTableIfMissing).toBe(true)
+    expect(server.writes).toEqual([])
+    expect(q('[data-testid="mapping-tab-provisioning-badge"]')?.textContent).toBe('1')
+    expect(q('[data-testid="provisioning-plan-target-sql"]')?.textContent).toContain('CREATE TABLE dbo.customers')
+    expect(q('[data-testid="mapping-provisioning-plan-basis"]')?.textContent).toContain('its unsaved edits included')
   })
 
   it('overrides the target side of a mapping Create mappings made, leaving its source as it was', async () => {
@@ -221,7 +253,7 @@ describe('the sync Designer in the Workspace frame', () => {
     }
     await click('[data-testid="mapping-tab-provisioning"]')
     expect(q('[data-testid="provisioning-plan-target"]')?.dataset.state).toBe('missing')
-    expect(q('[data-testid="mapping-provisioning-saved-only"]')?.textContent).toContain('applied from the replication\'s Provisioning tab')
+    expect(q('[data-testid="mapping-provisioning-plan-basis"]')?.textContent).toContain('applied from the replication\'s Provisioning tab')
   })
 
   it('writes Diagnostics, a verification check and a default segmenting into the mapping, as edits Save mapping writes', async () => {

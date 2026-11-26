@@ -1,4 +1,5 @@
 import { BindingTest, CATALOG_CACHE_FILE, ChannelPicker, QueryDescribe, useChannelChoice, useDraft, useDraftFile, type DescribedColumn } from '@dbdatakit/workspace'
+import { useConnectionReader } from './connectionReader'
 
 /** A channel choice for a connection of the draft, offered first where the draft's catalog cache says the connection was read (unsaved edits included). */
 function useDraftChannel(connection: string) {
@@ -39,17 +40,20 @@ export function ConnectionTestPanel({ connection, onClose, testId }: { connectio
 
 /**
  * **Describe columns** of a mapping's source query: the channel picker, then the Runner's built-in `describe` of the query in the channel picked, with the
- * login that channel binds. The query is described, never run. **Use these columns** hands the columns to `onColumns`, which writes them into the mapping.
+ * login that channel binds; for a connection whose driver is Sync's own, the set's own `describe`, in the build the channel holds. The query is described,
+ * never run. **Use these columns** hands the columns to `onColumns`, which writes them into the mapping.
  * Design: docs/authoring-metadata.md#a-sync-project
  */
 export function QueryDescribePanel({ connection, sql, onColumns, testId }: { connection: string; sql: string; onColumns: (columns: DescribedColumn[]) => void; testId: string }) {
   const { draft, choice, bound } = useDraftChannel(connection)
+  const reading = useConnectionReader(connection)
   if (choice.workspace === null) return unhosted(testId)
   return (
     <div className="stack" style={{ gap: 6 }} data-testid={testId} data-connection={connection}>
       <ChannelPicker {...choice.picker} canEdit={draft.canEdit} />
+      {reading.why && <span className="hint" data-testid={`${testId}-own-package`}>{reading.why}</span>}
       {bound
-        ? <QueryDescribe project={draft.project} connection={connection} runner={choice.runner} channel={choice.channel} sql={sql} onColumns={onColumns} canEdit={draft.canEdit} />
+        ? <QueryDescribe project={draft.project} connection={connection} runner={choice.runner} channel={choice.channel} sql={sql} onColumns={onColumns} canEdit={draft.canEdit} reader={reading.reader} />
         : <span className="hint" data-testid={`${testId}-pick`}>Pick a channel that binds the slot of {connection} to describe the query there.</span>}
     </div>
   )
