@@ -112,9 +112,8 @@ public sealed class ConsoleCatalogGatewayReadTests : IAsyncLifetime
     [Fact]
     public async Task A_refresh_from_a_gateway_reads_the_data_source_as_the_person_through_the_console_while_the_workspace_server_can_reach_no_gateway()
     {
-        // the Workspace server holds no publisher key and is paired with no Gateway or Runner
-        var (_, targets) = await As(HttpMethod.Get, $"/relay/{workspaceId}/api/v1/publish-targets");
-        Assert.Empty(targets["targets"]!.AsArray());
+        // the Workspace server holds no publisher key and lists no target: the relay passes no such call
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(HttpMethod.Get, $"/relay/{workspaceId}/api/v1/publish-targets")).Status);
 
         var (status, body) = await As(HttpMethod.Post, Route, new { gateway = GatewayId, connection = "dw", data_source = "warehouse" });
         Assert.True(status == HttpStatusCode.OK, $"{status} {body}");

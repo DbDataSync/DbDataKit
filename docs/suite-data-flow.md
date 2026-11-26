@@ -114,6 +114,6 @@ flowchart LR
 ```
 
 - **Monitoring and lineage are pulled.** Each server keeps its own runs, audit and lineage, and the console joins them (plans 13 W10 and 18).
-- **Publishers.** The Workspace's publisher key pairs with the serving group and with the Runner as a Publisher (plan 13 W12, plan 20 section 6); a Runner pairs with the serving group to tell its cache that data changed.
+- **Publishers.** The console deploys to the serving group and to the Runner as the signed-in person and signs each version with its own publisher key, which each group trusts; a Runner pairs with the serving group to tell its cache that data changed.
 - **Identity faces users.** The identity home is a module of the serving group, so end users sign in without reaching the console. It can
   also run on its own behind the firewall, with the serving layer forwarding its endpoints.

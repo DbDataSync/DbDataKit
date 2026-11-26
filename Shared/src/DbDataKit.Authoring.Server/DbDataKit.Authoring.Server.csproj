@@ -2,7 +2,7 @@
   <PropertyGroup>
     <PackageId>DbDataKit.Authoring.Server</PackageId>
     <RootNamespace>DbDataKit.Authoring.Server</RootNamespace>
-    <Description>The Workspace's engine, hosted by the DbDataKit console and by the standalone Workspace server (plan 33 SC05): the projects people author in git workspaces, the builds of an app from a vendored package store in a child process with no network and no environment of the host's, the read-only preview, publishing to a paired Gateway with a key kept as a reference, and the management API over them.</Description>
+    <Description>The Workspace's engine, hosted by the DbDataKit console and by the standalone Workspace server (plan 33 SC05): the projects people author in git workspaces, the builds of an app from a vendored package store in a child process with no network and no environment of the host's, the read-only preview, what a build holds for the console to deploy, and the management API over them. It calls no Runner or Gateway.</Description>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
@@ -25,12 +25,7 @@
     <ProjectReference Include="..\DbDataKit.DataModel\DbDataKit.DataModel.csproj" />
     <ProjectReference Include="..\DbDataKit.DataModel.Runner\DbDataKit.DataModel.Runner.csproj" />   <!-- a Store model's deploy package for a Runner (plan 33 SC24) -->
     <ProjectReference Include="..\DbDataKit.State\DbDataKit.State.csproj" />
-    <ProjectReference Include="..\DbDataKit.State.Api\DbDataKit.State.Api.csproj" />
-    <ProjectReference Include="..\DbDataKit.Views\DbDataKit.Views.csproj" />   <!-- the dashboards and reports of a Build project, published with its models (plan 33 SC20n): their depends_on -->   <!-- DefinitionsClient: the Workspace publishes over the shared publish API (plan 33 SW01) -->
-    <ProjectReference Include="..\DbDataKit.Secrets.Abstractions\DbDataKit.Secrets.Abstractions.csproj" />
-    <ProjectReference Include="..\DbDataKit.Secrets\DbDataKit.Secrets.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
-    <ProjectReference Include="..\DbDataKit.Runner.Client\DbDataKit.Runner.Client.csproj" />
-    <ProjectReference Include="..\DbDataKit.Deploy\DbDataKit.Deploy.csproj" />   <!-- the deploy to a Runner or Gateway and the calls around it, which this server reaches through an adapter that signs with its publisher keys -->
+    <ProjectReference Include="..\DbDataKit.Deploy\DbDataKit.Deploy.csproj" />   <!-- BuildContents and BuildRecord: what a build holds for the control service to deploy; this server calls none of its clients -->
   </ItemGroup>
 </Project>

@@ -122,6 +122,9 @@ public static class GatewayManagementHost
         // one for every kind of change, in the state every instance of a group shares (plan 20 O02); the file it used to be is read in once
         var audit = new DbDataGateway.Server.State.StateAuditLog(app.Services.GetRequiredService<DbDataKit.State.StateDatabase>());
         var adoptions = new DataSourceAdoptions(configDirectory);
+        // what one paired client owns, an administrator may hand to another (the group's hand-overs): every owner check below reads the owner through it
+        var handovers = new DbDataKit.State.Api.OwnerHandovers(new GroupSettings(state));
+        Func<string?, string?> ownerNow = handovers.Resolve;
         dataSources = new GatewayDataSources(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, git, findClient: clients.Find, published: app.Services.GetRequiredService<Serving.PublishedDataSources>(), adoptions: adoptions,
             servingCatalog: () => app.Services.GetRequiredService<DbDataKit.Serving.IServingServices>().Catalog,
             // plan 30 PB02: the bindings of the data sources' secret slots, and whether the Gateway holds a secret a slot is bound to (resolved here, never returned)
@@ -130,10 +133,10 @@ public static class GatewayManagementHost
             {
                 try { return app.Services.GetRequiredService<Secrets.SecretsRuntime>().ResolveSecret("Gateway:DataSources:SecretSlot", reference) is { Length: > 0 }; }
                 catch (Secrets.SecretConfigurationException) { return false; }
-            });
+            }, ownerNow: ownerNow);
         // the semantic models' route, which the shared publish API's hook for the kind also uses (plan 30 PB02)
         var semanticModels = new GatewaySemanticModels(app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(),
-            () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, adoptions: adoptions, ruled: () => app.Services.GetRequiredService<Serving.RuledTables>());
+            () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, configDirectory, () => app.Services.GetRequiredService<DataSourceCatalog>(), audit, adoptions: adoptions, ruled: () => app.Services.GetRequiredService<Serving.RuledTables>(), ownerNow: ownerNow);
         // the entity models' route, which the shared publish API's hook for the kind also uses (plan 30 PB02)
         var entityModels = new GatewayEntityModels(app.Services.GetRequiredService<Serving.PublishedEntityModels>(),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue,
@@ -142,8 +145,8 @@ public static class GatewayManagementHost
                     // who made a data source: its file in this instance's configuration, else the group's published one (O04b)
                     var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
                     var text = File.Exists(file) ? File.ReadAllText(file) : app.Services.GetRequiredService<Serving.PublishedDataSources>().Text(dataSource);
-                    return text is null ? null : DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy;
-                }, audit, adoptions: adoptions, ruled: () => app.Services.GetRequiredService<Serving.RuledTables>());
+                    return text is null ? null : ownerNow(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(text, dataSource + ".yaml").Definition?.ManagedBy);
+                }, audit, adoptions: adoptions, ruled: () => app.Services.GetRequiredService<Serving.RuledTables>(), ownerNow: ownerNow);
         var identities = new GatewayIdentities(configDirectory, management, provider.ReloadNow, () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit, git);
         var activity = new GatewayActivity(app.Services.GetRequiredService<SessionStore>(), app.Services.GetRequiredService<ActiveQueries>(), app.Services.GetRequiredService<QueryLimits>(),
             app.Services.GetRequiredService<LoginThrottle>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, audit,
@@ -204,7 +207,7 @@ public static class GatewayManagementHost
             accessKeys: new GatewayAccessManagement(app.Services.GetRequiredService<DbDataGateway.Server.State.GroupMaskKey>(), servingCache, audit, inspector: new Serving.GatewayAccessInspector(
                 app.Services.GetRequiredService<Serving.GatewayAccess>(), () => app.Services.GetRequiredService<DbDataKit.Serving.Semantic.SemanticModels>(), app.Services.GetRequiredService<Serving.PublishedEntityModels>(), state,
                 app.Services.GetRequiredService<Secrets.SecretsRuntime>(), () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue)),
-            definitions: new GatewayDefinitionsManagement(state, audit, hooks: GatewayDefinitionsManagement.HooksOf(state, semanticModels, app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), dataSources, entityModels)),
+            definitions: new GatewayDefinitionsManagement(state, audit, handovers: handovers, isClient: id => clients.Find(id) is not null, hooks: GatewayDefinitionsManagement.HooksOf(state, semanticModels, app.Services.GetRequiredService<Serving.PublishedSemanticModels>(), dataSources, entityModels)),
             serverSettings: serverSettings,
             export: new GatewayExportManagement(new Export.ExportInstaller(Export.ExportInstaller.DefaultFetcher(), dataDirectory, GatewayHost.Version),
                 () => app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue, dataDirectory, serverSettings, audit),

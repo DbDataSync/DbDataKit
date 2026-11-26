@@ -20,5 +20,7 @@
     <ProjectReference Include="..\..\..\DbDataGateway\src\DbDataGateway.Core\DbDataGateway.Core.csproj" />   <!-- the Flight client (a library; the Gateway itself is still the program) -->
     <DbDataKitReference Include="Secrets" />
     <DbDataKitReference Include="Runner.Client" />   <!-- the client that sends the replication set and asks a runner what only a paired client may (plan 33 SC23d2) -->
+    <!-- the vendored package store an app build uses (made from the web workspace once per run, or DBDATAKIT_TEST_APP_STORE), as the Gateway's and the Workspace's tests take it -->
+    <Compile Include="..\..\..\DbDataGateway\tests\DbDataGateway.Tests\Support\AppStoreSupport.cs" Link="Support\AppStoreSupport.cs" />
   </ItemGroup>
 </Project>

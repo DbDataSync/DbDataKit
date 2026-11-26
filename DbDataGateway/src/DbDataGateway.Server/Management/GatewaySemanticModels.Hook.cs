@@ -124,7 +124,7 @@ public sealed class SemanticModelKindHook(GatewaySemanticModels models, Publishe
 
     public void BeforeBind(BindingHookContext context) => models.CheckSharedBind(context);
 
-    public string? OwnerOf(string name) => store.OwnerOf(name.ToLowerInvariant());
+    public string? OwnerOf(string name) => models.OwnerNow(store.OwnerOf(name.ToLowerInvariant()));
 
     public void BeforeRead(string name, DefinitionsCaller caller) => models.CheckSharedRead(name, caller);
 }

@@ -200,9 +200,9 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeploys.AuditVerb));
         Assert.Contains(audited, a => a.Entry.ActorId == personId && a.Entry.Outcome == AuditEvent.Ok && a.Entry.TargetId == runnerId);
 
-        // the Workspace server sent nothing: it holds no publisher key and no target, and knows nothing of the deploy
-        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
-        Assert.Empty((await Workspace(HttpMethod.Get, $"/projects/orders/workspaces/{draft}/builds/{build}")).Body!["publishes"]!.AsArray());
+        // the Workspace server sent nothing: it has no targets to list (the relay passes no such call) and knows nothing of the deploy
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Get, "/publish-targets")).Status);
+        Assert.Null((await Workspace(HttpMethod.Get, $"/projects/orders/workspaces/{draft}/builds/{build}")).Body!["publishes"]);
     }
 
     [Fact]
@@ -224,6 +224,20 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
 
         var listed = (await As(HttpMethod.Get, $"/api/deploys?workspace_server=Workspace")).Body!["deploys"]!.AsArray();
         Assert.Equal(["model-package/territories", "package"], listed.Select(d => (string?)d!["item"]));
+    }
+
+    [Fact]
+    public async Task A_preview_of_a_build_that_is_not_an_app_is_refused_before_anything_is_sent_and_recorded()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+
+        var refused = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["previewInstance"] = "orders" });
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.Status);
+        Assert.Equal("Only an app has a preview with data.", (string?)refused.Body!["error"]);
+        Assert.Empty(new DefinitionStore(runner.State).Versions("integration", "orders"));
+        Assert.Equal(("refused", "Only an app has a preview with data."), ((string?)refused.Body["deploy"]!["outcome"], (string?)refused.Body["deploy"]!["error"]));
     }
 
     [Fact]
@@ -457,11 +471,9 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.Equal(2, audited.Count(a => a.Entry.ActorId == personId && a.Entry.Outcome == AuditEvent.Ok && a.Entry.TargetId == runnerId));
         Assert.NotEmpty(console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.BindingTestVerb)));
 
-        // the Workspace server knows nothing of where the build went: it has no target, and its own run route cannot find a staged version
-        Assert.Empty((await Workspace(HttpMethod.Get, "/publish-targets")).Body!["targets"]!.AsArray());
-        var own = await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" });
-        Assert.Equal(HttpStatusCode.Conflict, own.Status);
-        Assert.Contains("has not been staged on a Runner", (string?)own.Body!["error"]);
+        // the Workspace server knows nothing of where the build went: it lists no target and runs no task (the relay passes neither call)
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Get, "/publish-targets")).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Workspace(HttpMethod.Post, $"/projects/orders/workspaces/{draft}/builds/{build}/run", new JsonObject { ["task"] = "provision" })).Status);
     }
 
     [Fact]
@@ -670,5 +682,22 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         Assert.Equal(("c0ffee11", "mdm_territories"), (asked.Inputs["approve"], asked.Inputs["schema"]));
         var allowances = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.AllowConsumerVerb));
         Assert.Contains(allowances, a => a.Entry.ActorId == personId && a.Entry.Detail!.Contains("gateway:Gateway gone"));
+    }
+
+    [Fact]
+    public async Task What_a_workspace_key_published_is_handed_over_on_a_gateway_only_and_a_refused_step_is_audited()
+    {
+        var unnamed = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject());
+        Assert.Equal(HttpStatusCode.BadRequest, unnamed.Status);
+        Assert.Contains("Name the Gateway (\"gateway\")", (string?)unnamed.Body!["error"]);
+
+        var unknown = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject { ["gateway"] = "nowhere" });
+        Assert.Equal((HttpStatusCode.NotFound, "No server 'nowhere' is registered."), (unknown.Status, (string?)unknown.Body!["error"]));
+
+        var onRunner = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject { ["gateway"] = runnerId });
+        Assert.Equal(HttpStatusCode.BadRequest, onRunner.Status);
+        Assert.Contains("what a publisher key published is handed over on a Gateway", (string?)onRunner.Body!["error"]);
+        var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeploys.HandoverVerb));
+        Assert.Contains(audited, a => a.Entry.ActorId == personId && a.Entry.Outcome == "refused" && a.Entry.TargetId == runnerId);
     }
 }
