@@ -38,8 +38,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-3 | The control service's deploy of a build is built: the Workspace serves a build's items and record (`.../builds/{b}/contents`, `.../files/{sha256}`), the console deploys an item as the person (`POST /api/deploys`, `ConsoleDeploys`), signs each version with its publisher key over the build record, and keeps the deploy record (`GET /api/deploys`; `docs/publishing.md`, "Deploying a build from the control service"). Left: an app build sent to an instance's preview (`preview-data`) through the console, which the Workspace still sends with its key; the deploy to a Gateway tested end to end through the console (an app build, which needs Bun and the vendored store; a Build project's semantic models; a Store project's models), so far tested against a stand-in Gateway in `DbDataKit.Deploy.Tests`; an app version is sent over the Gateway's app calls, with no signature and no build record on the Gateway, until PUBLISHING-1 puts apps on the shared publish API; for trusted code, the approver's signature once PUBLISHING-3 is built | none | M | a test through the console deploys an app build, a Build project's semantic models and a Store project's models to a Gateway; the Gateway records the person, and for the models the signature and the build record; the deploy record lists each |
-| WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). The Store project's Deploy tab stages its model package through the console's deploy too (`docs/publishing.md`, "Runs of a deployed build"). Left: the preview form of an app build calls it too, once WORKSPACEISOLATION-3 deploys a preview through the console | WORKSPACEISOLATION-3 | S | Playwright: Preview with data sends the build through the console and the preview opens |
+| WORKSPACEISOLATION-4 | The Builds tab's publish panel calls the control service's deploy (built: `docs/publishing.md`, "Publishing from the Builds tab"; `buildsPath` gives the address the Designer's **Build and publish…** opens). The Store project's Deploy tab stages its model package through the console's deploy too (`docs/publishing.md`, "Runs of a deployed build"). Left: the preview form of an app build calls it too, once the console deploys a preview (built: `POST /api/deploys` with `previewInstance`) | none | S | Playwright: Preview with data sends the build through the console and the preview opens |
 | WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-4 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
@@ -78,8 +77,8 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `GET {ws}/builds` | viewer | the builds of a draft | **Stays** |
 | `GET {ws}/builds/{b}` | viewer | a build's record and result, and `publishes`: the lines of the build's `publishes.jsonl` | **Stays**; nothing new is written to `publishes` once the Workspace stops publishing; the control service keeps the deploy record |
 | `GET {ws}/builds/{b}/preview[/{path}]` | viewer | the built app, read only, in a sandbox | **Stays** |
-| `POST {ws}/builds/{b}/publish` | approver | sends a build to a target with the target's publisher key: an app; a Runner package (bind, then stage or serve); Store models, or Build semantic models and views, to a Gateway | **Removed**: WORKSPACEISOLATION-3 moves its work to the control service, WORKSPACEISOLATION-4 the screen; the code it calls **Moves** (below) |
-| `POST {ws}/builds/{b}/preview-data` | author | sends an app build to a Gateway's `preview` channel and points an instance's preview at it | **Removed**; it is a deploy to the `preview` channel by the control service (WORKSPACEISOLATION-3) |
+| `POST {ws}/builds/{b}/publish` | approver | sends a build to a target with the target's publisher key: an app; a Runner package (bind, then stage or serve); Store models, or Build semantic models and views, to a Gateway | **Removed**: its work is the console's `POST /api/deploys` (`ConsoleDeploys`), which the Builds tab calls; the code it calls **Moves** (below) |
+| `POST {ws}/builds/{b}/preview-data` | author | sends an app build to a Gateway's `preview` channel and points an instance's preview at it | **Removed**; it is the console's `POST /api/deploys` with `previewInstance`, a deploy to the `preview` channel |
 | `GET /api/v1/publish-targets` | approver | the paired targets, whether the project's kind may go to each (`accepts`) and whether the pairing may publish | **Removed** (WORKSPACEISOLATION-8): the control service lists the Runners and Gateways it manages; the `accepts` test moves with `RouteFor` |
 | `GET /api/v1/publisher-keys` | admin | each target's key reference and pairing | **Removed** (WORKSPACEISOLATION-8) |
 | `PUT /api/v1/publisher-keys/{name}` | admin | records a reference to a key in the server's secret store | **Removed** (WORKSPACEISOLATION-8) |
@@ -183,7 +182,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - Child programs: 5 (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, and the external `dotnet` and `bun`). All stay until COMMANDLINES replaces ours;
   `script test` left the Workspace service for a Runner, and `package test` leaves it.
 
-### What bears on WORKSPACEISOLATION-3
+### What the control service's deploy uses
 
 - What moved is in `DbDataKit.Deploy` (`Shared/src`, tests in `Shared/tests/DbDataKit.Deploy.Tests`). It composes the libraries that were already
   shared: `DefinitionsClient` and `DefinitionSigning` (`DbDataKit.State.Api`), `RunnerPublishClient` (`DbDataKit.Runner.Client`, which takes a given
@@ -206,17 +205,17 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   certificate until WORKSPACEISOLATION-8; the control service passes a link as the person (`ConsolePromotions.LinkFor`, as `ConsoleBindingCompare`
   does) and its own key.
 - A build has more than one thing to send. A Build build has a Runner package and Gateway models with their views; a Store build has Gateway models and
-  one Runner package per model (`ModelPackageFolder`). WORKSPACEISOLATION-3 serves each of them, with the build record.
+  one Runner package per model (`ModelPackageFolder`). The Workspace serves each of them (`.../builds/{b}/contents`), with the build record.
 - A Runner or a Gateway checks a signed version against its trust store (`DefinitionSignatures`), where an administrator adds the publisher keys a group
-  trusts. The control service's key has to be there for -3's signed deploys to verify; INSTALLER-16 registers publisher keys through the console.
+  trusts. The control service's key has to be there for its signed deploys to verify (`ConsoleTrust` puts it there); INSTALLER-16 registers publisher keys through the console.
 - The run, run-read, binding-test and contract routes find what a build staged in its `publishes.jsonl` (`StagedOf`). The record of what a build was
   deployed to is kept by the control service, by Workspace server, project, workspace and build; the Builds and Runs tabs read it there, and the
   Workspace stops writing `publishes.jsonl` (WORKSPACEISOLATION-8). The Builds, Runs, Provisioning and Deploy tabs read the console's record now.
-- `preview-data` goes with WORKSPACEISOLATION-3 and its form with WORKSPACEISOLATION-4; the screens run `contract` through the console's
-  `POST /api/deploys/{id}/contract`.
+- A preview with data is the console's deploy with `previewInstance`, and its form goes with WORKSPACEISOLATION-4; the screens run `contract` through
+  the console's `POST /api/deploys/{id}/contract`.
 - What the Workspace's keys published on a Gateway is owned by the key's client until an administrator hands it to the console
-  (`POST /api/deploys/handover`); -3's test of a publish over a model published before does that first.
-- Not for -2 or -3: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
+  (`POST /api/deploys/handover`); a deploy by the console over a model a Workspace key published needs that hand-over first.
+- Not for the deploy: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
 ## Proposed decisions

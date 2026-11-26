@@ -86,7 +86,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.build == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-product
@@ -103,12 +103,27 @@ jobs:
         working-directory: DbDataRunner
         run: dotnet build src/DbDataRunner.Server -c Debug
       - run: dotnet build tests/DbDataKit.Server.Servers.Tests -c Debug
+      # The deploy of an app build to a real Gateway builds the app in the Workspace server with the pinned Bun, from the package store made out of the web workspace's packages.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install the web workspace's packages
+        working-directory: Shared/web
+        run: npm ci
+      - name: Fetch the pinned Bun
+        working-directory: .
+        run: |
+          scripts/fetch-bun.sh
+          echo "$GITHUB_WORKSPACE/.bun/linux-x64" >> "$GITHUB_PATH"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Start the test SQL Server and PostgreSQL
         working-directory: .
         run: |
           testenv/testenv.sh up mssql postgres
           testenv/testenv.sh env dbdatakit --dotenv >> "$GITHUB_ENV"
       - run: dotnet test --project tests/DbDataKit.Server.Servers.Tests -c Debug --no-build --minimum-expected-tests 4
+        env:
+          DBDATAKIT_TEST_REQUIRE_APP_STORE: 'true'
 
   # The web app in a real browser against a real console: the first-run invitation, a passkey made in a virtual authenticator, signing out and back in with it, the users list,
   # pairing a real runner, and (M12) the Monitoring page with a Gateway that locked a user out.

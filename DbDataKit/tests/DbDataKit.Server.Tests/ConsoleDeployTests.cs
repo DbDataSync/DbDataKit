@@ -227,6 +227,20 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_preview_of_a_build_that_is_not_an_app_is_refused_before_anything_is_sent_and_recorded()
+    {
+        if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
+        var (draft, build) = await BuildAsync("orders", "sync");
+
+        var refused = await DeployAsync("orders", draft, build, new JsonObject { ["channel"] = "dev", ["previewInstance"] = "orders" });
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.Status);
+        Assert.Equal("Only an app has a preview with data.", (string?)refused.Body!["error"]);
+        Assert.Empty(new DefinitionStore(runner.State).Versions("integration", "orders"));
+        Assert.Equal(("refused", "Only an app has a preview with data."), ((string?)refused.Body["deploy"]!["outcome"], (string?)refused.Body["deploy"]!["error"]));
+    }
+
+    [Fact]
     public async Task A_failed_build_and_a_package_the_runner_cannot_take_are_refused_with_the_same_words_as_before_and_recorded()
     {
         if (tools is null) Assert.Skip("the stand-in dbdatasync is a shell script");
