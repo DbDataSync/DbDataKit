@@ -180,7 +180,7 @@ on 7820, 7821 and 7822, or the next free ports, and on the same three after ever
 has a `listen` of its own only when the administrator writes one (`apps.listen`, `rest.listen` for feeds); without it the module answers on the public listener.
 
 The ports step of the start checks every address of every listener. A port that another program holds, or that Windows excludes, fails the step, and the failure file
-names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:8815` in the image).
+names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821` in the image).
 
 When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
 configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a

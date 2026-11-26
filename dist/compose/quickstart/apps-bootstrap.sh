@@ -5,4 +5,4 @@
 set -euo pipefail
 files=(-f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml)
 docker compose "${files[@]}" exec -T -e DBDATAGATEWAY="dotnet /app/dbdatagateway.dll" gateway bash /samples/apps/publish-samples.sh
-echo "Done. Sign in at https://localhost:8817 (first administrator: docker compose ... exec gateway cat /data/identity/FIRST-RUN.txt), then see docs/apps-testing.md."
+echo "Done. Sign in at https://localhost:7823 (first administrator: docker compose ... exec gateway cat /data/identity/FIRST-RUN.txt), then see docs/apps-testing.md."

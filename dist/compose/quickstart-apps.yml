@@ -1,7 +1,7 @@
 # The quickstart's Gateway also serving the identity home and the apps host, with the sample apps mounted (docs/apps-testing.md). Add it to the quickstart's file:
 #   docker compose -f dist/compose/quickstart.yml -f dist/compose/quickstart-apps.yml up -d --build --wait
 #   dist/compose/quickstart/apps-bootstrap.sh        # publishes the sample apps (run from the repository root)
-# People sign in at https://localhost:8817 (the identity home), apps are at https://localhost:8818/apps/<instance>/. Self-signed certificates; not for production.
+# People sign in at https://localhost:7823 (the identity home), apps are at https://localhost:7824/apps/<instance>/. Self-signed certificates; not for production.
 # The apps host signs in through a public client registered at the home: apps-gateway.sh makes it the first time the container starts and keeps its id in /data.
 services:
   gateway:
@@ -10,14 +10,14 @@ services:
       DBDATAKIT_Gateway__Modules__0: flightsql
       DBDATAKIT_Gateway__Modules__1: identity
       DBDATAKIT_Gateway__Modules__2: apps
-      DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:8817
-      DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:8818
-      DBDATAKIT_Gateway__Identity__PublicUrl: https://localhost:8817
-      DBDATAKIT_Gateway__Apps__PublicUrl: https://localhost:8818
+      DBDATAKIT_Gateway__Identity__Listen: https://0.0.0.0:7823
+      DBDATAKIT_Gateway__Apps__Listen: https://0.0.0.0:7824
+      DBDATAKIT_Gateway__Identity__PublicUrl: https://localhost:7823
+      DBDATAKIT_Gateway__Apps__PublicUrl: https://localhost:7824
     ports:
-      - "127.0.0.1:8816:8816"   # the management API (on loopback of the host only: it is the admin API), so `apps publish --to https://localhost:8816` can be tried from the host as from another machine (docs/apps-testing.md, step 9a)
-      - "8817:8817"
-      - "8818:8818"
+      - "127.0.0.1:7822:7822"   # the management API (on loopback of the host only: it is the admin API), so `apps publish --to https://localhost:7822` can be tried from the host as from another machine (docs/apps-testing.md, step 9a)
+      - "7823:7823"
+      - "7824:7824"
     volumes:
       - ./quickstart/apps-gateway.sh:/quickstart/apps-gateway.sh:ro
       - ../../DbDataGateway/templates/apps:/samples/apps:ro

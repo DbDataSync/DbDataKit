@@ -71,6 +71,21 @@ release moves the entries into its notes and empties this file.
   again on the new address), a firewall rule. To keep an old port, add `listen: https://127.0.0.1:8495` (with the server's own host and port) to the
   server's settings file before you start the new release. `health check` asks the new default address; give `--url` for a server on another port.
   The Gateway's listeners keep 8815 to 8822 for now.
+- **Changed: the console's and the Gateway's container images and the compose files of `dist/compose` use the suite's ports.** The old and the new
+  ports inside the container:
+
+  | Listener | Old | New |
+  | --- | --- | --- |
+  | the console (`DbDataKit/Dockerfile`) | 8480 | 7800 |
+  | the console's announce port (the compose files' `DBDATAKIT_ANNOUNCE_URL`) | 8481 | 7801 |
+  | the Gateway's Flight SQL (`DbDataGateway/Dockerfile`) | 8815 | 7821 |
+  | the Gateway's management API (on the container's loopback address unless a compose file widens it) | 8816 | 7822 |
+  | the identity home and the apps host of `quickstart-apps.yml` | 8817, 8818 | 7823, 7824 |
+
+  Both images check their health with a bare `health check`; the Gateway's image has a health check now. What to do: in your own compose file or
+  `docker run`, change the right-hand number of each `ports:` entry to the new port, and change `DBDATAKIT_ADVERTISE_URL` and the console's
+  `--public-url` if you set them. To keep the old address on the host, map it to the new port (`"8480:7800"`) and start the console with
+  `--public-url https://localhost:8480`, because a passkey is bound to the address people open.
 - **The catalog cache of a draft is `catalog-cache/2`.** `catalog-cache.yaml` now records, per connection, where and when it was read (`read`), its databases
   and schemas (the empty ones too) and foreign and unique keys. A draft's `catalog-cache.yaml` of format 1 is refused by the draft's check, the Catalog tab,
   `dbdatasync provisioning plan --from-cache` and `dbdatabuild project import --from-cache`, naming the file: delete it and refresh the catalog of each
