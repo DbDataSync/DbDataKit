@@ -22,7 +22,7 @@ dbdataworkspace state import --from <directory> [--migrate-after true|false] [--
 dbdataworkspace state verify --snapshot <directory> [--db] [--rehash-payloads] [--repo <server directory>]   # the snapshot against itself, or the state against it
 dbdataworkspace state move --to-engine sqlite|mssql|postgres [--to-connection <string with secret references>] [--yes] [--repo <server directory>]   # offline: export, import into the empty target, verify, then write the new settings
 dbdataworkspace secret set|list|delete|... [--repo <server directory>]   # the server's own secret store (the shared secret verbs)
-dbdataworkspace health check [--url <url>]
+dbdataworkspace health check [--url <url>] [--repo <server directory>]
 ```
 
 Merging a draft of a project that has a git remote pushes the draft's branch there, and the person opens the pull request where the remote is hosted;

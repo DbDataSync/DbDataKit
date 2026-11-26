@@ -35,19 +35,70 @@ public static class HealthNoun
     public static Noun Create(IHealthProbe probe, string defaultUrl) => new("health", "Is a running server answering",
     [
         new Verb("check", "Ask the server's health address; exit 0 when it answers, 1 when it does not", EffectClass.OfflineOnly, "[--url <url>] [--timeout <seconds>]",
-            (args, context) => CheckAsync(probe, defaultUrl, args, context),
-            DataSchemas.Object([("healthy", DataSchemas.Boolean), ("detail", DataSchemas.String), ("url", DataSchemas.String)], "healthy", "detail")),
+            (args, context) => CheckAsync(probe, defaultUrl, null, args, context),
+            Schema),
     ]);
 
-    private static async Task<int> CheckAsync(IHealthProbe probe, string defaultUrl, string[] args, CliContext context)
+    /// <summary>
+    /// <c>health check</c> of a server that pins the address it listens on in its settings file: with no <c>--url</c>, the address of the
+    /// <c>listen:</c> line of the settings file in <c>--repo</c> (or the server's default folder) is asked, with the path of
+    /// <paramref name="defaultUrl"/>; with no such line, or no file, <paramref name="defaultUrl"/> is.
+    /// </summary>
+    /// <param name="pinned">
+    /// The address the server pinned, given the <c>--repo</c> value (null when it was not given), or null when its settings file or line is not there.
+    /// It throws <see cref="InvalidOperationException"/> (a line that is not an address), <see cref="IOException"/> or
+    /// <see cref="UnauthorizedAccessException"/> when the file cannot be read; the check then fails naming why and <c>--url</c>, rather than ask
+    /// another address that could be another server's.
+    /// </param>
+    /// <param name="repoUsage">How <c>--repo</c> is shown in the usage (<c>--repo &lt;server directory&gt;</c>).</param>
+    public static Noun Create(IHealthProbe probe, string defaultUrl, Func<string?, Uri?> pinned, string repoUsage = "--repo <server directory>") => new("health", "Is a running server answering",
+    [
+        new Verb("check", "Ask the server's health address (its settings file's listen: line, else its default address); exit 0 when it answers, 1 when it does not", EffectClass.OfflineOnly,
+            $"[--url <url>] [{repoUsage}] [--timeout <seconds>]",
+            (args, context) => CheckAsync(probe, defaultUrl, pinned, args, context),
+            Schema),
+    ]);
+
+    private static readonly string Schema = DataSchemas.Object([("healthy", DataSchemas.Boolean), ("detail", DataSchemas.String), ("url", DataSchemas.String)], "healthy", "detail");
+
+    /// <summary>
+    /// The health URL on <paramref name="listen"/>, the address a server listens on: its scheme and port with the path of <paramref name="defaultUrl"/>.
+    /// A server that listens on every address (<c>0.0.0.0</c>, <c>::</c>) or on a host name other than an address is asked on <c>localhost</c>,
+    /// which reaches it on this machine; one that listens on one address is asked there.
+    /// </summary>
+    public static Uri HealthUrlOn(Uri listen, string defaultUrl)
     {
-        var parsed = CliArgs.Parse(args, new HashSet<string>(), new HashSet<string> { "url", "timeout" });
+        var path = new Uri(defaultUrl, UriKind.Absolute).PathAndQuery;
+        var host = listen.HostNameType switch
+        {
+            UriHostNameType.IPv4 when listen.Host == "0.0.0.0" => "localhost",
+            UriHostNameType.IPv6 when System.Net.IPAddress.Parse(listen.Host.Trim('[', ']')).Equals(System.Net.IPAddress.IPv6Any) => "localhost",
+            UriHostNameType.IPv4 or UriHostNameType.IPv6 => listen.Host,
+            _ => "localhost",
+        };
+        return new UriBuilder(listen.Scheme, host, listen.Port, path).Uri;
+    }
+
+    private static async Task<int> CheckAsync(IHealthProbe probe, string defaultUrl, Func<string?, Uri?>? pinned, string[] args, CliContext context)
+    {
+        var options = pinned is null ? new HashSet<string> { "url", "timeout" } : new HashSet<string> { "url", "repo", "timeout" };
+        var parsed = CliArgs.Parse(args, new HashSet<string>(), options);
         if (parsed.Unknown.Count > 0 || parsed.Words.Count > 0)
         {
-            await context.Error.WriteLineAsync("Usage: health check [--url <url>] [--timeout <seconds>]");
+            await context.Error.WriteLineAsync(pinned is null ? "Usage: health check [--url <url>] [--timeout <seconds>]" : "Usage: health check [--url <url>] [--repo <server directory>] [--timeout <seconds>]");
             return CliExit.Usage;
         }
-        if (!Uri.TryCreate(parsed.Get("url") ?? defaultUrl, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
+        var text = parsed.Get("url");
+        if (text is null && pinned is not null)
+        {
+            try { text = pinned(parsed.Get("repo")) is { } listen ? HealthUrlOn(listen, defaultUrl).ToString() : null; }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
+            {
+                await context.Error.WriteLineAsync($"The address the server listens on cannot be read: {e.Message} Fix the listen: line, or give the address with --url.");
+                return CliExit.Failure;
+            }
+        }
+        if (!Uri.TryCreate(text ?? defaultUrl, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
         {
             await context.Error.WriteLineAsync("The address must be an http or https URL.");
             return CliExit.Usage;

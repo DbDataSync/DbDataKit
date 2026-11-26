@@ -96,7 +96,7 @@ removes it ([docs/install.md](../docs/install.md), "Logs and the startup-failure
 
 The gateway answers `GET /health`, `/health/live`, `/health/ready` and `/version` on its HTTP/2 listener, and on stop waits for
 running queries (`Gateway:Hosting:DrainSeconds`, default 30) before shutting down. `Gateway:Hosting:MaxConcurrentRequests`
-(default 1000) caps in-flight requests; further ones get 503. `dbdatagateway health check` probes the local gateway (HTTP/2, TLS
+(default 1000) caps in-flight requests; further ones get 503. `dbdatagateway health check` probes the local gateway on the `listen` address of its settings (`--repo` names its data folder; HTTP/2, TLS
 certificate accepted for loopback only) and exits 0 or 1, for a container HEALTHCHECK.
 
 ## Server info (GetSqlInfo)

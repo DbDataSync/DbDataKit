@@ -139,7 +139,19 @@ never takes another one. To move a server, change its `listen:` line and restart
 listen: https://127.0.0.1:7841
 ```
 
-`health check` asks the default address (`https://localhost:7800`, `:7840` or `:7860`); for a server on another port, give its address with `--url`.
+Where `health check` asks, with no `--url`:
+
+- The server's settings file has a `listen:` line: that address. A server that listens on `0.0.0.0`, `::` or a host name is asked on `localhost`.
+  `--repo` names the server's folder when it is not the default one.
+- The file or its `listen:` line is not there: the default address (`https://localhost:7800`, `:7840` or `:7860`).
+- The file cannot be read, or its `listen:` line is not an address: the check fails, naming the file. It does not ask the default address, because
+  another server could answer there. Fix the line, or give the address with `--url`.
+
+The Gateway's `health check` asks its `listen` address from `config/server.yaml` in its data folder, which `--repo` names in the same way.
+
+Example: on a Runner whose `listen:` line is `https://127.0.0.1:7841`, `dbdatarunner health check` asks `https://127.0.0.1:7841/health/live` and
+prints `healthy: HTTP 200`.
+
 `dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
 own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise.
 

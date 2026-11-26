@@ -38,7 +38,7 @@ dbdatarunner state grants [--login <database role or user>] [--migrate] [--engin
 dbdatarunner state init|export|import|verify|move ...   # the shared verbs over the `state:` section of `server.yaml` (plan 29b C07); `move` also takes `--to-sqlite <file>`
 dbdatarunner service install|uninstall|status|start|stop|restart|check|unit
 dbdatarunner cert show|ensure|check|renew [--repo <server directory>]
-dbdatarunner health check [--url <url>]
+dbdatarunner health check [--url <url>] [--repo <server directory>]
 ```
 
 ## The server's directory
