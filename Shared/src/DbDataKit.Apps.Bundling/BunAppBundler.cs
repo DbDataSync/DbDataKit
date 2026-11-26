@@ -72,9 +72,12 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         {
             return AppBundleResult.Failed(started.Elapsed, $"The build took longer than {(request.Timeout ?? DefaultTimeout).TotalSeconds:N0} seconds and was stopped.");
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (System.ComponentModel.Win32Exception ex)
         {
-            return AppBundleResult.Failed(started.Elapsed, $"The bundler '{bunPath}' could not be started: it is not installed or not on the path.");
+            // a missing program is the usual case; any other cause (no execute permission, a file still open for writing: "Text file busy") is told in the system's own words
+            return AppBundleResult.Failed(started.Elapsed, ex.NativeErrorCode == 2
+                ? $"The bundler '{bunPath}' could not be started: it is not installed or not on the path."
+                : $"The bundler '{bunPath}' could not be started: {ex.Message}");
         }
         finally
         {
