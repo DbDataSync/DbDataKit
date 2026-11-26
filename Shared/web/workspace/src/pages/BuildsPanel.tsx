@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, ErrorBanner, Link, useModule } from '@dbdatakit/shell'
-import { workspaceApi, type BuildDetail, type BuildSummary, type PreviewDataAnswer, type PublishOptions } from '../api'
+import { ApiError, ErrorBanner, useModule } from '@dbdatakit/shell'
+import { workspaceApi, type BuildDetail, type BuildSummary, type PublishOptions } from '../api'
 import { deployApi, deployBody, deployLine, deployTargets, hostedServer, type ActivateAnswer, type DeployAnswer } from '../deploys'
 import { adoptionRequest, buildBusy, buildButton, buildWord, diagnosticLine, makeLabel, notIsolated, publishedLine } from '../model'
 import { PreflightCard, type DeployPreflight } from './PreflightCard'
@@ -62,8 +62,6 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
     queryFn: () => workspaceApi.build(project, id, buildId),
     refetchInterval: (q) => (q.state.data && buildBusy(q.state.data.build.status) ? 1200 : false),
   })
-  // the preview with data still goes from the Workspace server with its publisher key, to the targets it is paired with
-  const targets = useQuery({ queryKey: ['workspace', 'targets', project], queryFn: () => workspaceApi.publishTargets(project), retry: false, enabled: app })
   const servers = useQuery({ queryKey: ['console', 'servers'], queryFn: deployApi.servers, enabled: server !== null, staleTime: 10_000 })
   const kinds = useQuery({ queryKey: ['workspace', 'kinds'], queryFn: workspaceApi.projectKinds, staleTime: 60_000 })
   const deployTo = deployTargets(servers.data ?? [], kinds.data?.find((k) => k.name === kind))
@@ -81,11 +79,12 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
   })
   const preflight = preflightOfPublish(publish.isSuccess ? publish.data : null, publish.isError ? publish.error : null)
   const shownPreflight = activate.data ? { deploy: activate.data.deploy.id, preflight: activate.data.preflight } : preflight
-  // what the Workspace server sent from this build itself: the previews with data, and what it published before publishing went through the console
+  // what the Workspace server sent from this build itself, before publishing and previews went through the console
   const sentByServer = detail.data?.publishes ?? []
-  const previewData = useMutation<PreviewDataAnswer, Error, { target: string; instance: string }>({
-    mutationFn: (p) => workspaceApi.previewWithData(project, id, buildId, p.target, p.instance),
-    onSettled: () => client.invalidateQueries({ queryKey: ['workspace', 'build', project, id, buildId] }),
+  // a preview with data is a deploy too: the console sends the app build to the Gateway's preview channel as the person, and keeps it in its record
+  const previewData = useMutation<DeployAnswer, Error, { target: string; instance: string }>({
+    mutationFn: (p) => deployApi.deploy({ workspaceServer: server!, project, workspace: id, build: buildId, target: p.target, previewInstance: p.instance }),
+    onSettled: () => client.invalidateQueries({ queryKey: ['console', 'deploys', server, project, id] }),
   })
   const build = detail.data?.build
   const result = detail.data?.result ?? null
@@ -133,16 +132,16 @@ function BuildDetailView({ project, id, buildId, canWrite, kind }: { project: st
                   <iframe title="Preview of the built app" data-testid="wsp-preview-frame" sandbox="allow-scripts" src={workspaceApi.previewUrl(project, id, build.id)}
                     style={{ width: '100%', height: 420, border: '1px solid var(--border, #ccc)', background: '#fff' }} />
                 )}
-                <PreviewDataForm canWrite={canWrite} status={build.status} targets={targets.data ?? []} busy={previewData.isPending} onSend={(target, instance) => previewData.mutate({ target, instance })} />
+                {server !== null && <PreviewDataForm canWrite={canWrite} status={build.status} targets={deployTo} busy={previewData.isPending} onSend={(target, instance) => previewData.mutate({ target, instance })} />}
                 {previewData.isPending && <div className="hint" data-testid="wsp-preview-data-progress">Sending the build to the Gateway's preview channel...</div>}
                 {previewData.isError && <PublishFailure error={previewData.error} />}
                 {previewData.isSuccess && (
-                  <div data-testid="wsp-preview-data-done" data-instance={previewData.data.preview.instance ?? ''}>
+                  <div data-testid="wsp-preview-data-done" data-instance={previewData.data.deployed.instance ?? ''}>
                     <div className="empty">
-                      The preview of {previewData.data.preview.instance} runs this build.{' '}
-                      {previewData.data.preview.preview_address
-                        ? <a href={previewData.data.preview.preview_address} target="_blank" rel="noopener noreferrer" data-testid="wsp-preview-data-link">Open the preview</a>
-                        : <span className="mono" data-testid="wsp-preview-data-path">{previewData.data.preview.preview_path}</span>}
+                      The preview of {previewData.data.deployed.instance} runs this build.{' '}
+                      {previewData.data.deployed.preview_address
+                        ? <a href={previewData.data.deployed.preview_address} target="_blank" rel="noopener noreferrer" data-testid="wsp-preview-data-link">Open the preview</a>
+                        : <span className="mono" data-testid="wsp-preview-data-path">{previewData.data.deployed.preview_path}</span>}
                       {' '}It is signed in as you, reads the instance's data and keeps no change.
                     </div>
                     <ol className="hint">{previewData.data.steps.map((s, i) => <li key={i} data-testid="wsp-preview-data-step">{s}</li>)}</ol>
@@ -238,7 +237,7 @@ export function BuildsPanel({ project, id, canWrite, closed = false }: { project
       <div className="row" style={{ gap: 10, margin: '8px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-primary" disabled={!button.enabled} title={button.why ?? undefined} data-testid="wsp-build" onClick={() => ask.mutate()}>{makeLabel(kind)}</button>
         {button.why && (closed || !app || !readiness.data?.problems.length) && <span className="hint" data-testid="wsp-build-why">{button.why}</span>}
-        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not.{app && <> <Link to="/keys" data-testid="wsp-keys-link">Publisher keys</Link> (a preview with data is sent with one)</>}</span>
+        <span className="hint">{app ? 'Builds' : 'Checks and makes'} what is in this workspace now, committed or not.</span>
       </div>
       <ErrorBanner error={ask.error ?? builds.error} />
       {builds.data?.length === 0 && <div className="empty" data-testid="wsp-builds-none">{app ? 'This workspace has not been built.' : 'Nothing has been made from this workspace yet.'}</div>}

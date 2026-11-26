@@ -64,8 +64,6 @@ export interface BindingTestAnswer { slot: string; ok: boolean; step: string; me
 export interface StagedRunStarted { run_id: string; task: string; package: string; channel: string; version: string; target: string; runner: string; instance?: string; on_behalf_of: string }
 /** A run read back from the Runner through the console (`GET /api/deploys/{id}/runs/{run}`): its outcome, its failure and, with `step`, the steps of that name it recorded (their results). */
 export interface StagedRun { id: string; task: string; outcome: string; started: string; finished: string | null; version: string | null; failure: { kind: string | null; message: string } | null; steps?: { key: string; started: string; completed: string | null; result: unknown }[] }
-/** What sending a build to the Gateway's preview channel answered (`POST .../builds/{b}/preview-data`). */
-export interface PreviewDataAnswer { steps: string[]; preview: PublishedAnswer }
 /** What a publish says besides the target and the note: for a Runner the channel (and whether it serves at once, the slots to bind), for a Gateway the data source of the models and, once the person confirmed it (plan 33 SC21f), the data sources made by hand the models may go on (`adopt`). */
 export interface PublishOptions { channel?: string; serve?: boolean; bind?: Record<string, string>; data_source?: string; adopt?: string[]; model?: string }
 /** The Gateway refused a publish for want of an adoption (SC21f): the data source a model would go on and who made it (`hand`: by hand or by an administrator). A screen asks the person, then publishes again with `adopt`. */
@@ -153,7 +151,6 @@ export const workspaceApi = {
   /** Where a build's preview is served from (through the relay): a page for a frame, with no network and no data. */
   previewUrl: (project: string, id: string, build: string) => apiUrl(`${builds(project, id)}/${enc(build)}/preview/`),
   publishTargets: (project?: string) => request<{ targets: PublishTarget[] }>(project ? `/api/v1/publish-targets?project=${enc(project)}` : '/api/v1/publish-targets').then((r) => r.targets),
-  previewWithData: (project: string, id: string, build: string, target: string, instance: string) => request<PreviewDataAnswer>(`${builds(project, id)}/${enc(build)}/preview-data`, json({ target, instance })),
   publisherKeys: () => request<{ keys: PublisherKey[] }>('/api/v1/publisher-keys').then((r) => r.keys),
   pairKey: (name: string, url: string, code: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}/pair`, json({ url, code })),
   setKey: (name: string, secretRef: string) => request<PublisherKey>(`/api/v1/publisher-keys/${enc(name)}`, { method: 'PUT', body: JSON.stringify({ secret_ref: secretRef }), headers: { 'Content-Type': 'application/json' } }),
