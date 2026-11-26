@@ -243,10 +243,15 @@ public sealed class MsSqlStateDialect : StateDialect
         return $"the table SchemaVersion holds version {read.ExecuteScalar()}";
     }
 
+    /// <summary>
+    /// Releases the session's lock. On a connection that is no longer open there is nothing to release: a session lock ends with its session. Running the release there would
+    /// throw from the <c>using</c> that holds the lock and replace the error that ended the session.
+    /// </summary>
     private sealed class Release(DbConnection connection) : IDisposable
     {
         public void Dispose()
         {
+            if (connection.State != System.Data.ConnectionState.Open) return;
             using var cmd = connection.CreateCommand();
             cmd.CommandText = "EXEC sp_releaseapplock @Resource = 'dbdatakit_state_migration', @LockOwner = 'Session';";
             cmd.ExecuteNonQuery();
