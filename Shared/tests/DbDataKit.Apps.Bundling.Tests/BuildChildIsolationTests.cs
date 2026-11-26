@@ -10,7 +10,13 @@ public sealed class BuildChildIsolationTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "child-" + Guid.NewGuid().ToString("N")[..8]);
 
-    public BuildChildIsolationTests() => Directory.CreateDirectory(Path.Combine(root, "src", "src"));
+    private readonly FakeBundlerFixture fakeBundler;
+
+    public BuildChildIsolationTests(FakeBundlerFixture fakeBundler)
+    {
+        this.fakeBundler = fakeBundler;
+        Directory.CreateDirectory(Path.Combine(root, "src", "src"));
+    }
 
     public void Dispose() { try { Directory.Delete(root, true); } catch (IOException) { } }
 
@@ -54,10 +60,9 @@ public sealed class BuildChildIsolationTests : IDisposable
         try
         {
             File.WriteAllText(Path.Combine(root, "src", "src", "main.ts"), "console.log(1);\n");
-            // a bundler that prints its environment and then fails, so the lines come back as the diagnostics
-            var bun = Path.Combine(root, "fake-bun");
-            File.WriteAllText(bun, "#!/bin/sh\nenv\nexit 1\n");
-            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(bun, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            // a bundler that prints its environment and then fails, so the lines come back as the diagnostics; written before any test
+            // started, never here (FakeBundlerFixture says why)
+            var bun = fakeBundler.PrintEnvironmentAndFail!;
 
             var result = await new BunAppBundler(bun).BundleAsync(new AppBundleRequest(Path.Combine(root, "src"), "src/main.ts", Path.Combine(root, "out")));
 
