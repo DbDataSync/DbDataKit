@@ -91,19 +91,18 @@ if (!isWorker) {
 }
 
 // A runner for the runner story (plan 28a, R19): a real `dbdatarunner` with the sample package of the runner's tests (`DbDataKit.Runner.TestPackage`, published to a folder here) published on the `dev` channel by the story (as version 1, then 2), two tasks:
-// `ok` (every hour, so it also has a next time) and `tally` (by hand, with a progress value `seen` its runs move). A pairing code lets the console grant admin; a second, for a publisher, is what the story's `package publish` of
-// version 2 (which resets `seen`: a loss) uses. The runner's directory is short: its task socket lives in it and a Unix socket path is limited.
+// `ok` (every hour, so it also has a next time) and `tally` (by hand, with a progress value `seen` its runs move). A pairing code lets the console grant admin; the story publishes both versions through the console (version 2 resets
+// `seen`: a loss). The runner's directory is short: its task socket lives in it and a Unix socket path is limited.
 export const runnerServer = {
   directory: path.join(os.tmpdir(), 'ddk-e2e-runner'),
   port: 8496,
   url: 'https://localhost:8496',
   package: path.join(os.tmpdir(), 'ddk-e2e-runner-package'),
   manifests: path.join(os.tmpdir(), 'ddk-e2e-runner-manifests'),
-  clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-runner-publisher'),
   dll: path.join(repoRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
 }
 if (!isWorker) {
-  for (const directory of [runnerServer.directory, runnerServer.package, runnerServer.manifests, runnerServer.clientDirectory]) {
+  for (const directory of [runnerServer.directory, runnerServer.package, runnerServer.manifests]) {
     fs.rmSync(directory, { recursive: true, force: true })
     fs.mkdirSync(directory, { recursive: true })
   }
@@ -120,29 +119,22 @@ if (!isWorker) {
   fs.writeFileSync(path.join(runnerServer.manifests, 'v2.yaml'), manifest(true))
   const made = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', runnerServer.directory, '--max-role', 'viewer,operator,admin'], { encoding: 'utf8' })
   fs.writeFileSync(path.join(scratchDirectory, 'runner-pairing-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
-  const madePublisher = execFileSync('dotnet', ['exec', runnerServer.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', runnerServer.directory, '--max-role', 'publisher'], { encoding: 'utf8' })
-  fs.writeFileSync(path.join(scratchDirectory, 'runner-publisher-code.txt'), /Pairing code: (\S+)/.exec(madePublisher)![1])
 }
 
-// A runner for the runner-scheduling story (plan 33, UE06): `runner-schedule.spec.ts` moves a task of the sample package between schedulers on the runner's screens. The runner has two pairing codes: the console's (admin) and the story's own
-// publisher for the sample package. (The Build server that published to it in `runner-publish.spec.ts` went with the Build server, plan 33 SC23.)
+// A runner for the runner-scheduling story (plan 33, UE06): `runner-schedule.spec.ts` moves a task of the sample package between schedulers on the runner's screens. The runner has the console's pairing code (admin); the story
+// publishes the sample package through the console. (The Build server that published to it in `runner-publish.spec.ts` went with the Build server, plan 33 SC23.)
 export const publishRunner = {
   directory: path.join(os.tmpdir(), 'ddk-e2e-pubrunner'),
   port: 8503,
   url: 'https://localhost:8503',
-  clientDirectory: path.join(os.tmpdir(), 'ddk-e2e-pubrunner-sample-client'),
   dll: path.join(repoRoot, 'DbDataRunner/src/DbDataRunner.Server/bin/Debug/net10.0/dbdatarunner.dll'),
 }
 // Plan 22a GP34: `apps-authoring.spec.ts` starts a Gateway of its own on 8601 (identity home), 8602 (apps host) and 8603 (management); no entry here, the story spawns it.
 if (!isWorker) {
-  for (const directory of [publishRunner.directory, publishRunner.clientDirectory]) {
-    fs.rmSync(directory, { recursive: true, force: true })
-    fs.mkdirSync(directory, { recursive: true })
-  }
-  const code = (file: string, output: string) => fs.writeFileSync(path.join(scratchDirectory, file), /Pairing code: (\S+)/.exec(output)![1])
-  const pairRunner = (roles: string) => execFileSync('dotnet', ['exec', publishRunner.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', publishRunner.directory, '--max-role', roles], { encoding: 'utf8' })
-  code('publish-runner-console-code.txt', pairRunner('viewer,operator,admin'))
-  code('publish-runner-sample-code.txt', pairRunner('publisher'))
+  fs.rmSync(publishRunner.directory, { recursive: true, force: true })
+  fs.mkdirSync(publishRunner.directory, { recursive: true })
+  const made = execFileSync('dotnet', ['exec', publishRunner.dll, 'server', 'pair', '--minutes', '120', '--minutes', '120', '--repo', publishRunner.directory, '--max-role', 'viewer,operator,admin'], { encoding: 'utf8' })
+  fs.writeFileSync(path.join(scratchDirectory, 'publish-runner-console-code.txt'), /Pairing code: (\S+)/.exec(made)![1])
 }
 
 // Plan 24a UC08 and UC09: a runner for the upgrades story (`upgrades.spec.ts`), port 8591 (a port table: 8591 upgrades runner; a Build server until plan 33 SC23). It runs by hand, not as a service, so the console shows what is available for it and says why it is not
