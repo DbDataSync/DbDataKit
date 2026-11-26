@@ -66,7 +66,7 @@ Run the "before you push" list of `docs/ci-lessons.md`, then:
 
 ```
 python3 -I -m unittest discover -s scripts/tests
-python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py && python3 -I scripts/check_doc_inputs.py
+python3 -I scripts/check_package_versions.py && python3 -I scripts/check_solution.py && python3 -I scripts/check_duckdb_cache.py && python3 -I scripts/check_native_cache.py && python3 -I scripts/check_plans.py && python3 -I scripts/check_formats.py && python3 -I scripts/check_state_migrations.py && python3 -I scripts/check_compatibility.py && python3 -I scripts/check_ui_editors.py && python3 -I scripts/check_env_names.py && python3 -I scripts/check_secret_names.py && python3 -I scripts/check_default_ports.py && python3 -I scripts/check_product_name.py && python3 -I scripts/check_doc_inputs.py && python3 -I scripts/check_caught_exceptions.py
 ```
 
 and the product's build and the suites your change can affect (`CLAUDE.md`, "Build and test"), through `scripts/build-slot.sh` on a shared machine
