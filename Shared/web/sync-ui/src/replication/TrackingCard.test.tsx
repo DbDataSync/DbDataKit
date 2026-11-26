@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { TrackingCard, modeOf, retentionText, withMode, withRetention } from './TrackingCard'
+import { TrackingCard, modeOf, noStateTableReason, retentionText, withMode, withRetention } from './TrackingCard'
 import type { ReplicationTaskConfig } from '../types'
 
-const task = (tracking: ReplicationTaskConfig['tracking']): ReplicationTaskConfig => ({
-  name: 'orders', enabled: true, endpoints: { source: null, target: null },
+const task = (tracking: ReplicationTaskConfig['tracking'], target: string | null = null): ReplicationTaskConfig => ({
+  name: 'orders', enabled: true, endpoints: { source: null, target: target ? { connectionName: target, database: null } : null },
   scheduling: { mode: 'Continuous', frequencySeconds: 60, cronExpression: null },
   changeProcessing: { reader: { kind: 'BatchReload', options: {} }, cache: { kind: 'StagingTable', options: {} }, writer: { kind: 'DeleteInsert', options: {} }, degreeOfParallelism: 4, bulkLoadDegreeOfParallelism: 4 },
   tracking,
@@ -44,6 +44,29 @@ describe('the tracking settings', () => {
     const state = renderToStaticMarkup(<TrackingCard draft={task({ mode: 'state' })} onChange={() => {}} />)
     expect(state).not.toContain('tracking-retention')
     expect(renderToStaticMarkup(<TrackingCard draft={task(undefined)} onChange={() => {}} />)).toContain('tracking-default-note')
+  })
+
+  it('disables target and both, with the reason, when the target\'s driver keeps no state table', () => {
+    const mysql = { driverType: 'MySql', keepsStateTable: false }
+    expect(noStateTableReason(mysql, 'mart')).toBe('The target connection mart (driver MySql) keeps no state table, so this replication keeps its state on the Runner: choose State only or Default.')
+    expect(noStateTableReason({ driverType: 'Postgres', keepsStateTable: true }, 'dw')).toBeNull()
+    expect(noStateTableReason(undefined, 'dw')).toBeNull()
+
+    const html = renderToStaticMarkup(<TrackingCard draft={task(null, 'mart')} onChange={() => {}} target={mysql} />)
+    expect(html).toMatch(/<option value="target" disabled=""/)
+    expect(html).toMatch(/<option value="both" disabled=""/)
+    expect(html).not.toMatch(/<option value="state" disabled/)
+    expect(html).toContain('data-testid="tracking-no-state-table"')
+    expect(html).toContain('(driver MySql) keeps no state table')
+
+    // a file that already asks for the target keeps it shown, and the reason reads as a warning
+    const asked = renderToStaticMarkup(<TrackingCard draft={task({ mode: 'target' }, 'mart')} onChange={() => {}} target={mysql} />)
+    expect(asked).toMatch(/class="hint warn" data-testid="tracking-no-state-table"/)
+    expect(asked).not.toContain('tracking-target-note')
+
+    const postgres = renderToStaticMarkup(<TrackingCard draft={task(null, 'dw')} onChange={() => {}} target={{ driverType: 'Postgres', keepsStateTable: true }} />)
+    expect(postgres).not.toMatch(/<option value="(target|both)" disabled/)
+    expect(postgres).not.toContain('tracking-no-state-table')
   })
 
   it('is read only for a person who may not change the draft', () => {

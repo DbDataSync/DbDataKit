@@ -4,10 +4,10 @@ import { Link as ConsoleLink } from 'react-router-dom'
 import { ErrorBanner, useModule } from '@dbdatakit/shell'
 import {
   catalogReadApi, defaultChannel, defaultRunner, differenceLine, lastRunnerRead, isUnchanged, productionWarning, refreshOutcome, unboundLine, workspaceServerOf,
-  type CatalogDifference, type CatalogReadAnswer, type CatalogReadRequest, type ChannelList, type RunnerChoice,
+  type CatalogDifference, type CatalogReadAnswer, type CatalogReader, type CatalogReadRequest, type ChannelList, type RunnerChoice,
 } from '../catalogRefresh'
-import { setUpOffered } from '../authoringReads'
-import { BindingTest, DevelopmentSetUp } from './AuthoringReads'
+import { needsBuildOf, setUpOffered } from '../authoringReads'
+import { BindingTest, BuildAndStage, DevelopmentSetUp } from './AuthoringReads'
 
 /**
  * The channel picker of a read: the Runner and the channel to read a connection's shape from. The console lists the channels of the project's package on
@@ -109,10 +109,12 @@ export function useChannelChoice(project: string, connection: string, current?: 
   }
 }
 
-export function CatalogRefresh({ project, connection, table, current, onAccept, canEdit, offerTest = false }: {
+export function CatalogRefresh({ project, connection, table, current, onAccept, canEdit, offerTest = false, reader }: {
   project: string; connection: string; table?: { schema: string; name: string }; current: string | undefined; onAccept: (text: string) => void; canEdit: boolean
   /** Offer **Test** of the connection in the picked channel beside Refresh. */
   offerTest?: boolean
+  /** Who reads the connection: the Runner's built-in package (the default) or the project's own package, which offers **Build and stage** where the channel holds no build. */
+  reader?: CatalogReader
 }) {
   const choice = useChannelChoice(project, connection, current)
   const { workspace, runners, channels } = choice
@@ -133,7 +135,8 @@ export function CatalogRefresh({ project, connection, table, current, onAccept, 
 
   if (workspace === null) return <div className="hint" data-testid="wsp-refresh-unavailable">A read from a Runner is asked through the console: open this draft from the console's Workspace screens.</div>
   const what = table ? `${connection} ${table.schema}.${table.name}` : connection
-  const body: CatalogReadRequest = { runner: runnerId, channel: channelChosen, connection, ...(table ? { schema: table.schema, table: table.name } : {}) }
+  const body: CatalogReadRequest = { runner: runnerId, channel: channelChosen, connection, ...(table ? { schema: table.schema, table: table.name } : {}), ...(reader && reader !== 'builtin' ? { reader } : {}) }
+  const needs = needsBuildOf(start.error)
   const stillRunning = running !== undefined && follow.data?.state !== 'done' && !follow.isError
   return (
     <div data-testid="wsp-refresh" data-connection={connection} data-table={table ? `${table.schema}.${table.name}` : ''}>
@@ -150,6 +153,7 @@ export function CatalogRefresh({ project, connection, table, current, onAccept, 
         </div>
       )}
       {start.isError && <div data-testid="wsp-refresh-failed"><ErrorBanner error={start.error} /></div>}
+      {needs && <BuildAndStage project={project} needs={needs} canEdit={canEdit} onStaged={() => { if (asked) start.mutate(asked) }} />}
       {follow.isError && <div data-testid="wsp-refresh-failed"><ErrorBanner error={follow.error} /></div>}
       {outcome && !outcome.ok && <div className="banner error" role="alert" data-testid="wsp-refresh-refused"><span className="mark">!</span><span>{outcome.problem}</span></div>}
       {outcome?.ok && answer && (

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ErrorBanner, Field, Link, NotesPanel, SubTabs, useNavigate } from '@dbdatakit/shell'
-import { filesPath, syncNameProblem, useDraft, useProvisioningPlan } from '@dbdatakit/workspace'
-import { useInferredColumns } from '../api/hooks'
+import { filesPath, syncNameProblem, useDraft } from '@dbdatakit/workspace'
+import { useDraftProvisioningPlan, useInferredColumns } from '../api/hooks'
 import { EndpointSidePair } from '../components/EndpointSidePair'
 import { ScriptBindingsCard } from '../components/ScriptBindings'
 import { columnsOf, findTable, tablesIn, useCacheConnection, useColumns, useTables } from '../metadata'
@@ -51,7 +51,7 @@ const overridesOf = (m: TableMappingConfig): PipelineOverrides => ({
  * Picking a table records that side's columns from the catalog cache in the mapping (`sourceColumns`, `targetColumns`), and, while nobody has
  * edited the column mappings, pairs the columns of the same name again, so a table picked and then replaced leaves none of its columns behind.
  * What is inferred (each column's target type, the natural key) is the Workspace's answer (`sync/inferred-columns`), asked with the draft's unsaved
- * edits; the Provisioning tab shows this mapping's entry of the replication's plan, made from the saved files.
+ * edits; the Provisioning tab and its count show this mapping's entry of the replication's plan, asked with the same edits.
  */
 export function TableMappingForm({ model, name, tab, base, afterRemove }: { model: SyncDraft; name: string; tab: string; base: string; afterRemove: string }) {
   const draft = useDraft()
@@ -77,7 +77,7 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
   const sourceColumns = querySource ? (mapping?.sourceColumns?.length ? mapping.sourceColumns : undefined) : catalogSourceColumns
   const catalogTargetColumns = useColumns(resolvedTarget.connectionName || undefined, resolvedTarget.database || undefined, resolvedTarget.schema, targetExists === true ? resolvedTarget.table : undefined).data
   const inferred = useInferredColumns(model.replication, mapping ? name : undefined, !!mapping && !querySource && !!source.table)
-  const plan = useProvisioningPlan(draft.project, draft.id, model.replication)
+  const plan = useDraftProvisioningPlan(model.replication)
 
   if (!view || view.loading) return <div className="empty">Loading…</div>
   if (!mapping) {
@@ -234,11 +234,9 @@ export function TableMappingForm({ model, name, tab, base, afterRemove }: { mode
         {shownTab === 'provisioning' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span className="hint" data-testid="mapping-provisioning-saved-only">
-                {view.isNew
-                  ? 'The plan is made from the saved files: this mapping has none yet, so it is planned once it is saved.'
-                  : view.dirty
-                  ? 'The plan is made from the saved files: this mapping\'s unsaved edits are not in it until saved.'
+              <span className="hint" data-testid="mapping-provisioning-plan-basis">
+                {view.dirty
+                  ? 'The plan is made from this mapping as shown here, its unsaved edits included, and the catalog cache; it is applied from the replication\'s Provisioning tab once saved and published.'
                   : 'The plan is made from the saved files and the catalog cache; it is applied from the replication\'s Provisioning tab.'}
               </span>
               <button type="button" className="btn btn-sm spacer" disabled={plan.isFetching} onClick={() => void plan.refetch()} data-testid="mapping-provisioning-replan">
