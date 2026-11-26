@@ -105,6 +105,7 @@ public sealed class DriverRegistry
                 // has nothing this action could ever exercise.
                 driver.RequiredLibraryId is not null && driver.StagingProviders.Count > 0 && driver.Writers.Count > 0,
                 driver is IConnectionTester tester ? tester.DefaultTestQuery : null,
-                driver is IDialectProvider dialectProvider && dialectProvider.Dialect.SupportsTieSafeRowLimit)
+                driver is IDialectProvider dialectProvider && dialectProvider.Dialect.SupportsTieSafeRowLimit,
+                TrackingResolution.TargetWriterEngines.Contains(driverType))
             : null;
 }

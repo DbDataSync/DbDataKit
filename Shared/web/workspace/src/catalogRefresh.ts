@@ -14,8 +14,14 @@ export interface ChannelChoice { channel: string; production: boolean; bound: bo
 /** What the console answers for the channel picker. `default` is the first channel that is not production and binds the slot; `note` says how to bind one when none does. */
 export interface ChannelList { package: string; connection: string; slot: string; runner: string; runner_name: string; channels: ChannelChoice[]; default: string | null; note?: string }
 
-/** What a read is asked: the Runner, the channel, the project's connection, and one schema or one table of it. */
-export interface CatalogReadRequest { runner: string; channel: string; connection: string; schema?: string; table?: string }
+/**
+ * Who reads a connection on the Runner: its built-in package (`builtin`, the default), or the project's own package (`package`), whose tasks `discover` and
+ * `describe` read a connection whose driver the built-in package cannot run, in the newest build the channel holds.
+ */
+export type CatalogReader = 'builtin' | 'package'
+
+/** What a read is asked: the Runner, the channel, the project's connection, one schema or one table of it, and who reads it. */
+export interface CatalogReadRequest { runner: string; channel: string; connection: string; schema?: string; table?: string; reader?: CatalogReader }
 
 /** Where a read stands: still going (with the run's link), or done with the connection as a `catalog-cache/2` file of that one connection. */
 export interface CatalogReadAnswer {
@@ -42,6 +48,9 @@ export interface GatewayReadAnswer { state: 'done'; gateway: string; gateway_nam
 const enc = encodeURIComponent
 const base = (workspace: string, project: string) => `/api/workspace-catalog/${enc(workspace)}/${enc(project)}`
 
+/** The reader in a follow's query: nothing for the built-in package, the default. */
+export const readerQuery = (reader: CatalogReader | undefined) => (reader && reader !== 'builtin' ? `&reader=${enc(reader)}` : '')
+
 /** The servers of one product the console lists (`/api/instances`): each one's id in the console and its name. */
 const serversOf = (product: string) => () =>
   request<{ id: string; name: string; product: string | null }[]>('/api/instances').then((all) => all.filter((s) => s.product === product).map((s) => ({ id: s.id, name: s.name })))
@@ -57,7 +66,7 @@ export const catalogReadApi = {
   read: (workspace: string, project: string, body: CatalogReadRequest) =>
     request<CatalogReadAnswer>(`${base(workspace, project)}/read`, { method: 'POST', body: JSON.stringify(body) }),
   follow: (workspace: string, project: string, run: string, body: CatalogReadRequest) =>
-    request<CatalogReadAnswer>(`${base(workspace, project)}/read/${enc(run)}?runner=${enc(body.runner)}&channel=${enc(body.channel)}&connection=${enc(body.connection)}`),
+    request<CatalogReadAnswer>(`${base(workspace, project)}/read/${enc(run)}?runner=${enc(body.runner)}&channel=${enc(body.channel)}&connection=${enc(body.connection)}${readerQuery(body.reader)}`),
 }
 
 /** The Workspace server a module talks to through the console's relay (`/relay/<id>`), or null when the screens are not in a console. */

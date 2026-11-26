@@ -45,6 +45,8 @@ export interface DriverCapabilities {
   writers: WriterCapability[]
   supportsConnectionTest: boolean
   supportedProvisioningActions: string[]
+  /** Whether a target of this driver keeps the replication's state table, which tracking modes `target` and `both` need. */
+  keepsStateTable: boolean
 }
 
 export type BindingLevel = 'connection' | 'replication' | 'mapping'

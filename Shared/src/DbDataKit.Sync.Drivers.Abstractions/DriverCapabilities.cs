@@ -40,7 +40,11 @@ public sealed record DriverCapabilities(
     /// <see cref="SupportsConnectionTest"/> — or whose dialect admits the gap itself (<c>MySqlDialect</c>).
     /// A UI offering <c>BoundedRead</c>'s <c>maxRowsPerRead</c> option uses this to warn, rather than
     /// silently letting an operator configure a cap that can quietly skip rows.</summary>
-    bool SupportsTieSafeRowLimit = false);
+    bool SupportsTieSafeRowLimit = false,
+    /// <summary>Whether a target of this driver keeps the replication's state table (the position log, <c>tracking: target</c> or
+    /// <c>both</c>), by the same rule the save-time check applies (<see cref="TrackingResolution.TargetWriterEngines"/>). False for every
+    /// other driver, a driver a project carries among them, so a UI disables those modes rather than offering one the check refuses.</summary>
+    bool KeepsStateTable = false);
 // Connection parameters used to be a field here. They moved out in phase 50, when they stopped being
 // a fixed list: what a connection takes now depends on what it has been given so far — Host is not a
 // setting once the operator picks connection-string addressing — and an answer that depends on values

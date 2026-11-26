@@ -12,7 +12,7 @@ export { runsAgainstAConnection } from './types'
 // the client of the Workspace's sync routes and what they answer
 export { syncApi, unsavedOf, isQuestionPath } from './api/syncApi'
 export type { Unsaved } from './api/syncApi'
-export { useBulkCreate, useCapabilities, useInferredColumns, useScriptSlots, useUnsaved } from './api/hooks'
+export { PLAN_SETTLE_MS, useBulkCreate, useCapabilities, useDraftProvisioningPlan, useInferredColumns, useScriptSlots, useUnsaved } from './api/hooks'
 export { CHANGE_WRITER_KIND, RECONCILE_ONLY_KINDS, writerForReader, writerNote } from './api/types'
 export type * from './api/types'
 export { readerNotes } from './api/readerNotes'

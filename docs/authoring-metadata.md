@@ -15,7 +15,7 @@ plan); the Runner's built-in package `dbdatakit-metadata` with its tasks `discov
 or a Gateway's data source and describe a query ([below](#how-a-screen-asks-for-a-read)); the shared pieces of the screens ([below](#every-kind-uses-the-same-pieces)):
 the channel picker with **Set up for development** (the login stored, the draft's connection copied and the slot bound on the Runner), **Refresh**, **Test**, **Describe columns** and the newest-check card; a Sync mapping's **Preview rows** and a
 segmenting strategy's **Try**, answered to the screen and kept nowhere ([below](#rows-and-trials-are-answered-never-kept)); a Sync script's **Test**, run on a Runner
-([below](#a-scripts-test-runs-on-a-runner)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
+([below](#a-scripts-test-runs-on-a-runner)); a Sync set's own tasks `discover` and `describe`, which read a connection whose driver is Sync's own, with **Build and stage** where the channel holds no build of the set ([A sync project](#a-sync-project)). **Not built yet:** everything else on this page (the subjects [AUTHORING](../planning/AUTHORING.md) and
 [SYNCAUTHORING](../planning/SYNCAUTHORING.md) build it).
 
 ## Who reads: the Runner, with the login the channel binds
@@ -95,7 +95,8 @@ read is asked there, and again when its own files differ from what the channel s
 serves the version of the member that was asked last. The package runs in the task host, in a process of its own per read. It opens SQL Server,
 PostgreSQL, MySQL, MariaDB and Oracle.
 
-A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged in that channel.
+A connection whose driver the built-in package cannot run is read by the project's own package instead, which needs a build staged or served in that
+channel. A Sync set has the tasks for it: [Sync's own drivers](#syncs-own-drivers-the-sets-discover-and-describe).
 
 **What a screen offers before a read.** `GET /api/v1/metadata/channels?package=sales-dw` answers the channels the Runner serves, the bindings it holds
 for the package in each, and whether it holds a version of the package in any channel. The call needs the viewer role. A console asks it to list the
@@ -118,10 +119,10 @@ The console has these routes, each under `api/workspace-catalog/{workspace}/{pro
 | Route | What the console does |
 | --- | --- |
 | `GET .../channels?runner=&connection=` | lists every channel the Runner serves, whether each binds the connection's slot for the project's package, and the first channel that is not `prod` and binds it (`default`): what the channel picker offers |
-| `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?}` | starts `discover` for the person and waits up to 10 seconds for it |
-| `GET .../read/{run}?runner=&channel=&connection=` | answers how the run started earlier stands |
-| `POST .../describe` with `{"runner", "channel", "connection", "sql"}` | starts `describe` of the query for the person and waits up to 10 seconds for it ([below](#how-a-screen-asks-for-a-querys-columns)) |
-| `GET .../describe/{run}?runner=&channel=&connection=` | answers how the description started earlier stands |
+| `POST .../read` with `{"runner", "channel", "connection", "schema"?, "table"?, "reader"?}` | starts `discover` for the person and waits up to 10 seconds for it |
+| `GET .../read/{run}?runner=&channel=&connection=&reader=` | answers how the run started earlier stands |
+| `POST .../describe` with `{"runner", "channel", "connection", "sql", "reader"?}` | starts `describe` of the query for the person and waits up to 10 seconds for it ([below](#how-a-screen-asks-for-a-querys-columns)) |
+| `GET .../describe/{run}?runner=&channel=&connection=&reader=` | answers how the description started earlier stands |
 | `POST .../gateway-read` with `{"gateway", "connection", "data_source"?, "adopt"?}` | asks a Gateway for the tables and columns of one of its data sources, as the person ([below](#a-read-from-a-gateway)) |
 | `POST .../binding-test` with `{"runner", "channel", "connection", "role"?}` | asks the Runner's test of the connection's slot in the channel, as the person ([Testing a connection](#how-a-screen-asks-for-a-test)) |
 
@@ -131,6 +132,12 @@ words. An app or a Store project is not read from a Runner: its kind makes no si
 
 The slot is the one the package makes of the connection's name: lower-case, with every character other than a letter, a digit or `_` turned into `_`
 (`CRM-db` is read through the slot `crm_db`). A Build project's connection names already are slot names.
+
+`reader` says which package's task reads the connection:
+
+- No `reader`, or `builtin`: the Runner's built-in package `dbdatakit-metadata`, through the slot of the project's package.
+- `package`: the project's own package, for a connection whose driver the built-in package cannot run ([Sync's own
+  drivers](#syncs-own-drivers-the-sets-discover-and-describe)).
 
 The console then starts the read on the Runner as the person (`on_behalf_of`). The token it sends carries the person's roles on that Runner, so a
 person who holds only the viewer role there is refused (403, the operator role is needed). A read in `prod` goes ahead: the screen warns before it
@@ -627,6 +634,7 @@ The built-in package, the cache, the channel picker, **Refresh**, **Describe**, 
 | `CatalogRefresh` | **Refresh** of a connection or one table, the difference shown before **Accept** | the tab **Catalog**; the Sync Designer's Refresh buttons |
 | `BindingTest` | **Test**: the Runner's binding test in the picked channel, each step with its state | the tab **Catalog**; **Test** on each endpoint card of the Sync Designer |
 | `QueryDescribe` | **Describe columns** of a query, handed to the kind on **Use these columns** | the Sync Designer's card **Query columns** of a mapping whose source is a query |
+| `BuildAndStage`, `buildAndStage` | **Build and stage for `<channel>`**: the draft built, and the build staged in the channel through the console's deploy, where a read by the project's own package needs a build there | under **Refresh** and **Describe columns** when the console answers `needs_build` |
 | `NewestChecks`, `NewestCheck` | per Runner and channel the draft was published to, the newest `preflight` run: version, outcome, time, findings, the run's link | the Runs tab, under **Re-check** |
 | `usePublishedChannels`, `useNewestRun` | the channels the draft was published to, and the newest run of a task in one of them | the newest-check card; the Sync Designer's **Newest preflight** on the Provisioning sub-tabs |
 | `useRunAnswer`, `RunAnswerStatus` | a manual task of the version the draft's newest deploy put on a Runner, run for the person through the console, and its answer ([above](#rows-and-trials-are-answered-never-kept)); a run longer than 10 seconds is followed by its link | the Sync Designer's **Preview rows** and **Try** |
@@ -662,9 +670,54 @@ The pickers, the overview and Column Mapping read the databases, tables and colu
 unsaved edit and read the same way. No server route answers metadata: the server would read the saved file and miss the unsaved edit. Example: Ana
 presses Refresh on `accounts`, accepts "1 column added", and opens Column Mapping before saving; the new column is there.
 
-A connection whose driver is Sync's own (a YAML driver, or a `metadataProvider` script) is read by the tasks `discover` and `describe` of the replication
-set's own package (Sync's metadata service behind them), which needs a build staged in that channel; the Designer says so and offers **Build and stage
-for dev**.
+### Sync's own drivers: the set's `discover` and `describe`
+
+The built-in package opens SQL Server, PostgreSQL, MySQL, MariaDB and Oracle with the suite's own readers. Every other connection of a Sync set is read by
+the set's own package, with Sync's driver of the connection:
+
+- the connection's engine is a driver the set carries (`drivers/<id>/driver.yaml` or `driver.csx`), DuckDB or Flight SQL;
+- the connection binds a `metadataProvider` script (`extensions.sync.scripts.metadataProvider` of its file), whatever its engine. The script answers its
+  tables and columns, as it did on the old Sync server.
+
+Every Sync package carries two more manual, read-only tasks for this, over every connection of the set:
+
+| Task | Inputs | What it answers |
+| --- | --- | --- |
+| `discover` | `connection` (the set's connection), and `schemas` (a JSON list), `pattern` (SQL `LIKE` over table names) or `table` (one table of the one schema given) | one connection of `catalog-cache/2`, as the built-in `discover` answers: the database the connection opens, the schemas of its tables, and each table with its columns, type text, nullability and primary key |
+| `describe` | `connection` and `sql` | `{"engine", "strategy", "columns"}`, as the built-in `describe` answers: the read-only policy first, then `SELECT * FROM (<query>) t WHERE 1 = 0` asked for its columns (the provider's schema-only describe when the query cannot be a derived table) |
+
+Each task reads with the login the channel binds to the connection's slot, and keeps its answer in a step named after the task, keyed by the run's id,
+as the built-in package does. A driver's catalog lists no unique key, no foreign key, no view apart from the tables, and no schema without a table, so
+the cache entry has none of them. A replication may not be named `discover` or `describe`.
+
+**Which version runs them.** The console runs the task of the newest build the channel holds: the version staged there, else the version it serves
+(`POST /api/v1/tasks/<package>/<channel>/<task>/run` with that `version`). Two cases answer 409 with `"needs_build": true`, the package, the task, the
+Runner and the channel:
+
+- the channel holds no build of the set;
+- the build it holds was made before the set had these tasks.
+
+```
+POST /api/workspace-catalog/ws-1/plant-sync/read
+{"runner": "runners-eu", "channel": "dev", "connection": "lite", "reader": "package"}
+
+409 {"error": "runners-eu holds no build of plant-sync in 'dev'. The connection 'lite' is read by the project's own task discover, which runs in a build staged or served there: build the draft and stage it in 'dev' first.",
+     "needs_build": true, "package": "plant-sync", "task": "discover", "runner": "r-1", "runner_name": "runners-eu", "channel": "dev", "production": false, "connection": "lite"}
+```
+
+**In the Designer.** **Refresh** and **Describe columns** ask with `"reader": "package"` for such a connection, and say why above the button. When the
+console answers `needs_build`, the panel offers **Build and stage for `<channel>`**. It builds the draft as the Builds tab's **Build** does, then deploys
+the build to that channel of the Runner through the console (`POST /api/deploys` with the channel and no `serve`), as the Builds tab's publish panel
+does. Staged is enough: the read runs in the staged version, and nothing is served. When the build is staged, the panel asks the read again. The
+deploy needs every slot of the set bound in the channel; a slot that is not bound is refused with the Runner's words, and **Set up for development**
+binds it. A build reads the saved files, so the panel says when an edit is not saved. In `prod` the panel offers nothing: a build goes there from the
+Builds tab, with its preflight.
+
+Example: the set `plant-sync` reads the connection `lite`, whose engine is the set's YAML driver `sqlite.generic`. Ana presses **Refresh catalog** on
+the source card in `dev`. The panel says "lite is a sqlite.generic connection, whose driver is Sync's own, so this set's own package reads it, in the
+build the channel holds." and, since `dev` holds no build of `plant-sync`, offers **Build and stage for dev**. She presses it; the Workspace builds the
+draft, the console stages the build in `dev` of `runners-eu`, and the read runs again: "1 table added". She accepts, and `catalog-cache.yaml` holds
+`main.items` with its columns, as an unsaved edit.
 
 **The source.** Offline: from the cache and the files. Live: as checks of the set's `preflight`, with the run login the replication will use, read-only.
 

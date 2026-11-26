@@ -124,8 +124,12 @@ export const workspaceApi = {
   lineage: (project: string, id: string, column?: string) => request<ToolAnswer<unknown>>(`${ws(project, id)}/lineage`, json(column ? { column } : {})),
   /** The mapped models `project import --from-cache` would make of the draft's catalog cache for one connection (plan 33 SC20k): on a copy, nothing written; `data` is the tool's own document with the text of each file it wrote. With no `tables` it refreshes the descriptors the project has. */
   importPreview: (project: string, id: string, connection: string, tables: string[] = []) => request<ToolAnswer<unknown>>(`${ws(project, id)}/import-preview`, json({ connection, ...(tables.length > 0 ? { tables } : {}) })),
-  /** The provisioning plan of one replication of a Sync draft, offline, from the draft's `catalog-cache.yaml` (plan 33 SC22j). Applying is the Sync server's. */
-  provisioningPlan: (project: string, id: string, replication: string) => request<ToolAnswer<ProvisioningPlan>>(`${ws(project, id)}/provisioning-plan`, json({ replication })),
+  /**
+   * The provisioning plan of one replication of a Sync draft, offline, from the draft's `catalog-cache.yaml`. With `unsaved` (a path of `config/`,
+   * `drivers/<folder>/driver.yaml` or `catalog-cache.yaml` and its text) the plan reads the draft as the person sees it. Applying is the set's task `provision` on a Runner.
+   */
+  provisioningPlan: (project: string, id: string, replication: string, unsaved: Record<string, string | null> = {}, signal?: AbortSignal) =>
+    request<ToolAnswer<ProvisioningPlan>>(`${ws(project, id)}/provisioning-plan`, { ...json(Object.keys(unsaved).length > 0 ? { replication, unsaved } : { replication }), signal }),
   /** The commits in which one file changed (newest first), and its text as one of them committed it (plan 33 SC21e). */
   fileHistory: (project: string, id: string, path: string) => request<{ path: string; commits: Commit[] }>(`${ws(project, id)}/file-history/${filePath(path)}`).then((r) => r.commits),
   fileAt: (project: string, id: string, sha: string, path: string) => request<{ path: string; sha: string; content: string }>(`${ws(project, id)}/file-at/${enc(sha)}/${filePath(path)}`).then((r) => r.content),

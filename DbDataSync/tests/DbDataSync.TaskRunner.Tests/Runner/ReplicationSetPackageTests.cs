@@ -74,8 +74,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
         var built = Build(out var problems);
 
         Assert.Empty(problems);
-        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask, PreviewTasks.Preview, PreviewTasks.TryStrategy, ReplicationSetPackage.ScriptTestTask], built.Manifest.Tasks.Select(t => t.Name));
-        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask or PreviewTasks.Preview or PreviewTasks.TryStrategy or ReplicationSetPackage.ScriptTestTask)).ToList();
+        Assert.Equal(["customers", "events", "orders", ReplicationSetPackage.ProvisionTask, ReplicationSetPackage.PreflightTask, PreviewTasks.Preview, PreviewTasks.TryStrategy, ReplicationSetPackage.ScriptTestTask, SetCatalogSteps.Discover, SetCatalogSteps.Describe], built.Manifest.Tasks.Select(t => t.Name));
+        var drains = built.Manifest.Tasks.Where(t => t.Name is not (ReplicationSetPackage.ProvisionTask or ReplicationSetPackage.PreflightTask or PreviewTasks.Preview or PreviewTasks.TryStrategy or SetCatalogSteps.Discover or SetCatalogSteps.Describe or ReplicationSetPackage.ScriptTestTask)).ToList();
         var orders = built.Manifest.Tasks.Single(t => t.Name == "orders");
         Assert.Equal("*/15 * * * *", orders.Schedule.Cron);
         Assert.Equal(TimeSpan.FromSeconds(30), built.Manifest.Tasks.Single(t => t.Name == "events").Schedule.Every);
@@ -126,6 +126,20 @@ public sealed class ReplicationSetPackageTests : IDisposable
             Assert.All(screen.Inputs, i => Assert.NotNull(i.Default));
         }
 
+        // the shape of a connection whose driver is Sync's own, for the same screens: by hand only, one attempt, overlapping itself, over the same connections, each keeping its answer in a step named after it
+        foreach (var name in ReplicationSetPackage.CatalogTaskNames)
+        {
+            var read = built.Manifest.Tasks.Single(t => t.Name == name);
+            Assert.Null(read.Schedule.Cron);
+            Assert.Null(read.Schedule.Every);
+            Assert.Equal((1, true), (read.Limits.Attempts, read.AllowOverlap));
+            Assert.Equal(provision.Connections.Select(c => c.Name), read.Connections.Select(c => c.Name));
+            Assert.Equal([name], read.StepList.Select(s => s.Name));
+            Assert.All(read.Inputs, i => Assert.NotNull(i.Default));
+        }
+
+        Assert.Equal(["connection", "schemas", "pattern", "table", "repo_dir"], built.Manifest.Tasks.Single(t => t.Name == SetCatalogSteps.Discover).Inputs.Select(i => i.Name));
+        Assert.Equal(["connection", "sql", "repo_dir"], built.Manifest.Tasks.Single(t => t.Name == SetCatalogSteps.Describe).Inputs.Select(i => i.Name));
         Assert.Equal(["replication", "mapping", "rows", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.Preview).Inputs.Select(i => i.Name));
         Assert.Equal(["replication", "mapping", "strategy", "name", "column", "repo_dir", "mapping_text"], built.Manifest.Tasks.Single(t => t.Name == PreviewTasks.TryStrategy).Inputs.Select(i => i.Name));
 
@@ -256,6 +270,8 @@ public sealed class ReplicationSetPackageTests : IDisposable
     [Theory]
     [InlineData("preview")]
     [InlineData("try-strategy")]
+    [InlineData("discover")]
+    [InlineData("describe")]
     public void AReplicationNamedForATaskOfTheSetsScreensIsRefused(string name)
     {
         Replication(name, ScheduleMode.Periodic, cron: "0 1 * * *");
