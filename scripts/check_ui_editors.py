@@ -22,9 +22,12 @@ import sys
 STATES = ("full", "partial", "view-only", "none", "planned")
 HEADER = re.compile(r"^\|\s*Feature\s*\|")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")
-TASK_ID = re.compile(r"\b[A-Z][A-Z0-9]{7,}-\d+\b")
+# A task id is `<SLUG>-<n>`; a prefix of fewer than 8 characters counts only when it is the slug of a subject file, so that `UTF-8` or
+# `SHA-256` are not read as task ids (the same rule as scripts/check_plans.py).
+TASK_ID = re.compile(r"\b([A-Z][A-Z0-9]*)-\d+\b")
+ID_PREFIX_MIN = 8
 UE_ID = re.compile(r"\bUE\d+[a-z]?\b")
-TASK_ROW = re.compile(r"^\|\s*\**([A-Z][A-Z0-9]{7,}-\d+)\**\s*\|", re.M)
+TASK_ROW = re.compile(r"^\|\s*\**([A-Z][A-Z0-9]*-\d+)\**\s*\|", re.M)
 BACKTICKED = re.compile(r"`([^`]+)`")
 TSX = re.compile(r"`([A-Za-z0-9_]+\.tsx)`")
 COUNTS = re.compile(r"^Counts: full (\d+), partial (\d+), view-only (\d+), none (\d+), planned (\d+)\.\s*$", re.M)
@@ -53,6 +56,18 @@ def rows(text):
             continue
         found.append(cells)
     return found
+
+
+def subject_slugs(root):
+    folder = os.path.join(root, PLANNING)
+    if not os.path.isdir(folder):
+        return set()
+    return {n[:-3] for n in os.listdir(folder) if n.endswith(".md") and os.path.isfile(os.path.join(folder, n))}
+
+
+def task_ids(text, slugs):
+    """The task ids in the text: `<SLUG>-<n>` whose prefix is a subject's slug or 8 characters or longer."""
+    return [m.group(0) for m in TASK_ID.finditer(text) if m.group(1) in slugs or len(m.group(1)) >= ID_PREFIX_MIN]
 
 
 def planned_tasks(root):
@@ -88,6 +103,7 @@ def problems(root):
     registry_path = os.path.join(root, "docs", "formats.json")
     registered = [f["id"] for f in json.loads(read(registry_path))["formats"]] if os.path.exists(registry_path) else []
     tasks = planned_tasks(root)
+    slugs = subject_slugs(root)
     table = rows(text)
     if not table:
         return [f"{DOC} has no table whose header starts with | Feature |"]
@@ -108,11 +124,11 @@ def problems(root):
             out.append(f"{DOC}: '{feature}' has state '{state}': the first word is one of {', '.join(STATES)}")
             continue
         counts[word] += 1
-        if word != "full" and not TASK_ID.search(gap) and "(" not in state:
+        if word != "full" and not task_ids(gap, slugs) and "(" not in state:
             out.append(f"{DOC}: '{feature}' is {word} and says neither which task closes the gap nor why not: name a task of planning/ in the last cell or write `{word} (reason)`")
         for ue in UE_ID.findall(" ".join(cells)):
             out.append(f"{DOC}: '{feature}' names {ue}, a slice of the removed editors plan: say what was built, or name the slice of the plan that owns the screen")
-        for ident in sorted(set(TASK_ID.findall(" ".join(cells)))):
+        for ident in sorted(set(task_ids(" ".join(cells), slugs))):
             if ident not in tasks:
                 out.append(f"{DOC}: '{feature}' names {ident}, which is not a task (a table row) of any subject in {PLANNING}/")
         for name in TSX.findall(editor):
