@@ -33,12 +33,14 @@ public delegate void DefinitionsAuditor(string verb, DefinitionsCaller caller, s
 /// PUT  bindings/{channel}/{kind}/{name}  {slots: {slot: boundTo}, expected_revision}  |  DELETE bindings/{channel}/{kind}/{name}/{slot}   (publisher: own; admin)
 /// GET  trust                                                                    every kind this host takes, each with its trusted keys            (viewer; how a console finds the kinds to trust its key for)
 /// GET  trust/{kind}  |  PUT trust/{kind}/keys {public_key, label}  |  POST trust/{kind}/{keyId}/revoke   the trust store of one kind   (viewer; admin)
+/// GET  settings/handovers  |  PUT settings/handovers/{client} {to}  |  DELETE settings/handovers/{client}   what one client owns belongs to another (viewer; admin; a host that keeps <see cref="OwnerHandovers"/>)
 /// </code>
 /// The caller's roles and the owner rules (a publisher changes only the definitions it created) are the API's; what a kind checks is the registry's. A host that serves a kind from what the group serves (the Gateway) is told of each change
 /// through <paramref name="changed"/> so it applies it at once. Framework-free: the host maps the routes and hands over the body text.
 /// </summary>
 public sealed partial class DefinitionsApi(DefinitionPublisher publisher, DefinitionStore store, DefinitionKinds kinds, PayloadStore payloads, IGroupSettings settings, string targetType, DefinitionsAuditor? audit = null, Action<string, string, string>? changed = null,
-    long maxArtifactBytes = 512L * 1024 * 1024, IVersionSignatureVerifier? verifier = null, SignaturePolicy? policy = null, DefinitionTrustStore? trust = null, IEnumerable<IDefinitionKindHook>? hooks = null, string payloadOwner = DefinitionsApi.PayloadOwner)
+    long maxArtifactBytes = 512L * 1024 * 1024, IVersionSignatureVerifier? verifier = null, SignaturePolicy? policy = null, DefinitionTrustStore? trust = null, IEnumerable<IDefinitionKindHook>? hooks = null, string payloadOwner = DefinitionsApi.PayloadOwner,
+    OwnerHandovers? handovers = null, Func<string, bool>? isClient = null)
 {
     public const string PayloadOwner = "publish";
 
@@ -52,7 +54,7 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
     [GeneratedRegex("^[a-z0-9][a-z0-9_-]{0,63}$")]
     private static partial Regex ChannelRule();
 
-    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions" || route == "trust" || route.StartsWith("trust/", StringComparison.Ordinal) || route.StartsWith("settings/signatures/", StringComparison.Ordinal) || route == "settings/group";
+    public static bool Handles(string route) => route.StartsWith("definitions/", StringComparison.Ordinal) || route.StartsWith("bindings/", StringComparison.Ordinal) || route.StartsWith("artifacts/", StringComparison.Ordinal) || route == "definitions" || route == "trust" || route.StartsWith("trust/", StringComparison.Ordinal) || route.StartsWith("settings/signatures/", StringComparison.Ordinal) || route == "settings/group" || route == "settings/handovers" || route.StartsWith("settings/handovers/", StringComparison.Ordinal);
 
     private static DefinitionsResult Error(int status, string message, string? code = null) =>
         new(status, new JsonObject { ["error"] = message, ["code"] = code ?? (status switch { 400 => "invalid", 403 => "denied", 404 => "not_found", 409 => "refused", 413 => "too_large", _ => "error" }), ["message"] = message });
@@ -140,6 +142,9 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
             if (parts is ["trust", var tk3, var keyId, "revoke"] && method == "POST") return RevokeKey(tk3, keyId, caller);
             if (parts is ["settings", "signatures", var sk] && method == "PUT") return RequireSignatures(sk, body, caller);
             if (parts is ["settings", "group"] && method == "PUT") return GroupMode(body, caller);
+            if (parts is ["settings", "handovers"] && method == "GET") return Handovers(caller);
+            if (parts is ["settings", "handovers", var from] && method == "PUT") return HandOver(from, body, caller);
+            if (parts is ["settings", "handovers", var ended] && method == "DELETE") return EndHandover(ended, caller);
             if (parts is ["bindings", var channel, var k4, var n4] && method == "PUT") return Bind(channel, k4, n4, body, caller);
             if (parts is ["bindings", var channel2, var k5, var n5, var slot] && method == "DELETE") return Unbind(channel2, k5, n5, slot, caller);
             return Error(404, "There is no such call.");
@@ -177,7 +182,14 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
 
     private bool SignaturesRequired(string kind) => HookOf(kind)?.SignaturesRequired ?? policy?.Required(kind) ?? false;
 
-    private string? Owner(string kind, string name) => settings.Get(OwnerKey(kind, name)) ?? HookOf(kind)?.OwnerOf(name);
+    // the owner the definition names (the group's setting, else what its content says), as the group's hand-overs make it now
+    private string? Owner(string kind, string name) => Owner(kind, name, handovers?.All());
+
+    private string? Owner(string kind, string name, IReadOnlyDictionary<string, OwnerHandover>? handedOver)
+    {
+        var named = settings.Get(OwnerKey(kind, name)) ?? HookOf(kind)?.OwnerOf(name);
+        return handedOver is null ? named : OwnerHandovers.Resolve(named, handedOver);
+    }
 
     /// <summary>The owner rules: an administrator may do anything; a publisher creates, and changes only what it created.</summary>
     private DefinitionsResult? Authorize(string verb, DefinitionsCaller caller, string kind, string name, string channel)
@@ -573,4 +585,56 @@ public sealed partial class DefinitionsApi(DefinitionPublisher publisher, Defini
         audit?.Invoke("definition.group", caller, "-", "-", "-", "ok", new { mode = Text(json, "mode") });
         return new(200, new JsonObject { ["mode"] = Text(json, "mode") });
     }
+
+    // ---- hand-overs: what one client owns belongs to another (Design: docs/publishing.md#taking-over-what-a-workspace-key-published)
+
+    private DefinitionsResult Handovers(DefinitionsCaller caller)
+    {
+        if (!caller.Admin && !caller.Viewer) return Error(403, "This needs the viewer role.");
+        if (handovers is null) return Error(404, "This host keeps no hand-overs.");
+        return new(200, new JsonObject { ["handovers"] = new JsonArray([.. handovers.All().Values.OrderBy(h => h.From, StringComparer.Ordinal).Select(h => (JsonNode)Describe(h))]) });
+    }
+
+    private static JsonObject Describe(OwnerHandover h) => new() { ["from"] = h.From, ["to"] = h.To, ["by"] = h.By, ["at"] = h.At.UtcDateTime.ToString("O") };
+
+    /// <summary>
+    /// <c>PUT settings/handovers/{from}</c> <c>{"to": "&lt;client id&gt;"}</c>: from now on what the client <paramref name="from"/> owns belongs to <c>to</c>, a paired client. An administrator's call; the audit has one
+    /// <c>definition.handover</c> entry and a <c>definition.owner</c> entry for each definition whose owner changes, and the answer lists them.
+    /// </summary>
+    private DefinitionsResult HandOver(string from, string? body, DefinitionsCaller caller)
+    {
+        if (NeedAdmin("definition.handover", caller, "client") is { } denied) return denied;
+        if (handovers is null) return Error(404, "This host keeps no hand-overs.");
+        var json = Json(body, out var badJson);
+        if (json is null) return badJson!;
+        if (Text(json, "to") is not { Length: > 0 } to) return Error(400, "The body is {\"to\": \"<the id of the paired client that takes over>\"}.");
+        if (string.Equals(from, to, StringComparison.Ordinal)) return Error(400, $"'{from}' is the client handed over and the client that takes over; name another client in \"to\".");
+        if (isClient is not null && !isClient(to)) return Error(404, $"There is no paired client '{to}'.");
+        var all = handovers.All();
+        if (OwnerHandovers.Resolve(to, all) == from) return Error(409, $"What '{to}' owns is handed to '{from}' already, so this would hand it back in a circle; end that hand-over first (DELETE settings/handovers/{to}).");
+        var moving = OwnedBy(from, all);
+        if (all.TryGetValue(from, out var held) && held.To == to)
+            return new(200, new JsonObject { ["handover"] = Describe(held), ["unchanged"] = true, ["definitions"] = Listed(moving) });
+
+        var done = handovers.Hand(from, to, caller.Actor, DateTimeOffset.UtcNow);
+        audit?.Invoke("definition.handover", caller, "client", from, "-", $"handed to {to}", new { from, to, definitions = moving.Count });
+        foreach (var (kind, name) in moving) audit?.Invoke("definition.owner", caller, kind, name, "-", $"handed from {from} to {to}", new { from, to });
+        return new(200, new JsonObject { ["handover"] = Describe(done), ["unchanged"] = false, ["definitions"] = Listed(moving) });
+    }
+
+    private DefinitionsResult EndHandover(string from, DefinitionsCaller caller)
+    {
+        if (NeedAdmin("definition.handover", caller, "client") is { } denied) return denied;
+        if (handovers is null) return Error(404, "This host keeps no hand-overs.");
+        if (!handovers.Remove(from)) return Error(404, $"'{from}' is not handed over.");
+        audit?.Invoke("definition.handover", caller, "client", from, "-", "ended", new { from });
+        return new(200, new JsonObject { ["from"] = from, ["ended"] = true });
+    }
+
+    // every definition of the kinds this host takes whose owner is the client now
+    private List<(string Kind, string Name)> OwnedBy(string client, IReadOnlyDictionary<string, OwnerHandover> handedOver) =>
+        [.. kinds.All.Where(k => k.TargetTypes.Contains(targetType)).SelectMany(k => publisher.Names(k.Name).Where(n => Owner(k.Name, n, handedOver) == client).Select(n => (k.Name, n)))];
+
+    private static JsonArray Listed(List<(string Kind, string Name)> definitions) =>
+        new([.. definitions.Select(d => (JsonNode)new JsonObject { ["kind"] = d.Kind, ["name"] = d.Name })]);
 }

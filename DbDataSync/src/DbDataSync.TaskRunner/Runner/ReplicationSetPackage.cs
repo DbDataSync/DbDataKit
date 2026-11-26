@@ -63,6 +63,8 @@ public static class ReplicationSetPackage
     /// <summary>The names of the set's tasks a person waits for on a screen (<see cref="PreviewJob"/>, <see cref="TryStrategyJob"/>); a replication may not take them.</summary>
     public static readonly IReadOnlyList<string> PreviewTaskNames = [PreviewTasks.Preview, PreviewTasks.TryStrategy];
 
+    /// <summary>The name of the set's manual task that tests a script against generated input (<see cref="ScriptTestJob"/>); it uses no connection, and a replication may not take it.</summary>
+    public const string ScriptTestTask = ScriptTestJob.TaskName;
     /// <summary>The names of the set's tasks that read a connection's shape for a screen (<see cref="SetDiscoverJob"/>, <see cref="SetDescribeJob"/>); a replication may not take them.</summary>
     public static readonly IReadOnlyList<string> CatalogTaskNames = [SetCatalogSteps.Discover, SetCatalogSteps.Describe];
 
@@ -138,6 +140,7 @@ public static class ReplicationSetPackage
             if (!PackageManifestValidator.NameRule.IsMatch(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task name `{taskName}`, which is not 1 to 64 lower-case letters, digits, `-` or `_`."); continue; }
             if (taskName == ProvisionTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's provisioning task; rename the replication."); continue; }
             if (taskName == PreflightTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's preflight; rename the replication."); continue; }
+            if (taskName == ScriptTestTask) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of the set's test of a script; rename the replication."); continue; }
             if (CatalogTaskNames.Contains(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of a task the set has for its screens (the read of a connection's tables and columns, the description of a query); rename the replication."); continue; }
             if (PreviewTaskNames.Contains(taskName)) { problems.Add($"{file}: the replication `{task.Name}` makes the task `{taskName}`, the name of a task the set has for its screens (the rows of a mapping, the trial of a segmenting strategy); rename the replication."); continue; }
             if (named.TryGetValue(taskName, out var other)) { problems.Add($"{file}: the replications `{other}` and `{task.Name}` both make the task `{taskName}`; rename one of them."); continue; }
@@ -236,6 +239,8 @@ public static class ReplicationSetPackage
         tasks.Add(Screen(typeof(PreviewJob), allSlots, PreviewTasks.PreviewInputs(RepoDir)));
         tasks.Add(Screen(typeof(TryStrategyJob), allSlots, PreviewTasks.TryStrategyInputs(RepoDir)));
 
+        // the test of a script of the version against generated input (Design: docs/authoring-metadata.md#a-scripts-test-runs-on-a-runner): by hand, answered and kept nowhere, as the two above, and over no connection
+        tasks.Add(Screen(typeof(ScriptTestJob), [], ScriptTestJob.Inputs(RepoDir)));
         // the shape of a connection whose driver is Sync's own, for the same screens (Design: docs/authoring-metadata.md#a-sync-project): read only, by hand, over the same connections, answered in a step keyed by the run as the
         // runner's built-in package answers
         tasks.Add(Screen(typeof(SetDiscoverJob), allSlots, SetCatalogSteps.DiscoverInputs(RepoDir)));

@@ -135,6 +135,10 @@ public static class ServerProducts
         new("PUT", "api/v1/artifacts/{sha}", ServerRole.Admin, ServerRole.Publisher),
         new("PUT", "api/v1/bindings/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),         // a channel's own bindings, written before a promoted version is published
         new("DELETE", "api/v1/bindings/{name}/{name}/{name}/{name}", ServerRole.Admin, ServerRole.Publisher),
+        new("GET", "api/v1/settings/handovers", ServerRole.Viewer),                                         // what one paired client owns, handed to another
+        new("PUT", "api/v1/settings/handovers/{name}", ServerRole.Admin),
+        new("DELETE", "api/v1/settings/handovers/{name}", ServerRole.Admin),
+        new("GET", "api/v1/clients", ServerRole.Admin),                                                      // the paired server clients: the Workspace servers' publisher keys among them
     ];
 
     /// <summary>The row of <see cref="GatewayRoutes"/> that a call matches, or null (a call of a Gateway's screens that is not a publish call).</summary>
@@ -200,7 +204,7 @@ public static class ServerProducts
         ("POST", "api/v1/projects/{p}/workspaces/{id}/sample", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/import-preview", ServerRole.Viewer),   // plan 33 SC20k: the mapped models the catalog cache would make, on a copy
         ("POST", "api/v1/projects/{p}/workspaces/{id}/lineage", ServerRole.Viewer),   // plan 33 SC20h: the column lineage of a Build draft, read only
-        // plan 33 SC22k: a Sync draft's scripts (read) and the test of one (it runs the draft's C# in a child process, so the author's)
+        // plan 33 SC22k: a Sync draft's scripts (read); the route that tested one answers that a script is tested on a Runner (the set's task script-test, through the console's deploy)
         ("GET", "api/v1/projects/{p}/workspaces/{id}/scripts", ServerRole.Viewer),
         ("POST", "api/v1/projects/{p}/workspaces/{id}/script-test", ServerRole.Author),
         // plan 33 SC22j: the provisioning plan of a Sync draft from its catalog cache (offline, read only)
@@ -220,22 +224,8 @@ public static class ServerProducts
         // what a build holds to send and its record, and each file by hash: what the console reads to deploy a build as the person
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contents", ServerRole.Viewer),
         ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/files/{name}", ServerRole.Viewer),
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/publish", ServerRole.Approver),
-        // plan 28c E21 step e: a manual task (Sync's provision) of the version a build staged on a Runner, for the person, and that run read back
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/run", ServerRole.Approver),
-        ("GET", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/runs/{b}", ServerRole.Viewer),
-        // plan 33 SC22h: a connection of what a build published, tried by the Runner with the login its channel binds (the Runner asks its administrator role of the pairing)
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/binding-test", ServerRole.Approver),
-        // plan 33 SC24: a Store model's approved contract, checked against the lineage of the paired Gateways before it runs on the Runner
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/contract", ServerRole.Approver),
-        // GP35d: send the build to the Gateway's preview channel (a read-only preview instance with the instance's data); nothing goes to production, so the author may
-        ("POST", "api/v1/projects/{p}/workspaces/{id}/builds/{b}/preview-data", ServerRole.Author),
-        ("GET", "api/v1/publish-targets", ServerRole.Approver),
-        // the publisher's key reference: which secret holds the key of a target and which Gateway it is paired with; an administrator's, audited at the server. The key itself is never in a call.
-        ("GET", "api/v1/publisher-keys", ServerRole.Admin),
-        ("PUT", "api/v1/publisher-keys/{name}", ServerRole.Admin),
-        ("POST", "api/v1/publisher-keys/{name}/pair", ServerRole.Admin),
-        ("DELETE", "api/v1/publisher-keys/{name}", ServerRole.Admin),
+        // the routes that sent a build to a Runner or a Gateway, ran its tasks there, read a Gateway's catalog or kept publisher keys are gone from the Workspace
+        // server (it answers 410 naming the console's call); the console does them itself as the person (/api/deploys, /api/workspace-catalog)
     ];
 
     private static readonly IReadOnlyList<(string Method, Regex Pattern, ServerRole Needed)> WorkspaceTable =
@@ -263,7 +253,7 @@ public static class ServerProducts
 
     /// <summary>What the relay tells a person whose call it does not pass.</summary>
     public static string RefusalFor(string? product, string name) => product == Workspace
-        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, workspaces and their files, changes, history, commit, push and merge, builds, previews, publishing and the publisher keys)."
+        ? $"{name} is a Workspace server: the console relays only the calls its screens make (projects, workspaces and their files, changes, history, commit, push and merge, builds and previews). The console deploys a build, runs its tasks and reads a Gateway's catalog itself: POST /api/deploys, /api/deploys/{{id}}/..., /api/workspace-catalog/..."
         : $"{name} is a runner: the console relays only its management calls (status, instances, runs, tasks, packages and their life cycle).";
 
     /// <summary>A relayed path as it goes to the server: each part escaped, because the relay holds the decoded one and a file name may hold <c>#</c>, <c>?</c> or <c>%</c>.</summary>

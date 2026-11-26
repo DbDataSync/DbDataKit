@@ -155,21 +155,21 @@ public sealed class SchedulerTests
 
         h.Clock.Advance(TimeSpan.FromMinutes(1));
         var first = await scheduler.TickAsync();
-        await FakeStarted(runner, 2);
+        await FakeStarted(h, runner, 2);
         h.Clock.Advance(TimeSpan.FromMinutes(1));
         var second = await scheduler.TickAsync();
 
         Assert.Equal(2, first.Enqueued.Count);
         Assert.Equal(1, second.OverlapRefused);                         // strict: one run going, none queued
         Assert.Equal(["pkg/prod/loose"], second.Enqueued.Select(t => t.ToString()));
-        await FakeStarted(runner, 3);
+        await FakeStarted(h, runner, 3);
         Assert.Equal(2, runner.Of("loose").Count);
         Assert.Single(runner.Of("strict"));
         release.SetResult();
         await scheduler.WhenIdleAsync();
     }
 
-    private static Task FakeStarted(FakeRunner runner, int count) => Until(() => runner.Requests.Count >= count, $"{count} runs to have started");
+    private static Task FakeStarted(SchedulerHarness h, FakeRunner runner, int count) => Until(() => runner.Requests.Count >= count, $"{count} runs to have started", explain: h.Explain);
 
     // ---- the projection
 
@@ -236,7 +236,7 @@ public sealed class SchedulerTests
         var scheduler = h.NewScheduler(runner, heartbeat: TimeSpan.FromMilliseconds(40));
 
         await scheduler.TickAsync();
-        await FakeStarted(runner, 1);
+        await FakeStarted(h, runner, 1);
         h.Clock.Advance(TimeSpan.FromSeconds(60));
         var expected = h.Clock.GetUtcNow() + RunnerSchedulerOptions.DefaultLease;     // the default lease: 90 seconds
         await Until(() => h.Queue.ListInFlight(Owner).Single().LeaseExpiresAt == expected, "the lease to be renewed from the new time");
@@ -257,7 +257,7 @@ public sealed class SchedulerTests
         var scheduler = h.NewScheduler(runner, worker: "loop-a");
 
         await scheduler.TickAsync();
-        await FakeStarted(runner, 1);
+        await FakeStarted(h, runner, 1);
         var run = runner.Requests.Single().RunId!.Value;
 
         // the whole process stalls for longer than the lease (a loaded machine): no renewal happens
@@ -291,7 +291,7 @@ public sealed class SchedulerTests
         var scheduler = h.NewScheduler(runner, worker: "loop-a");
 
         await scheduler.TickAsync();
-        await FakeStarted(runner, 1);
+        await FakeStarted(h, runner, 1);
         var run = runner.Requests.Single().RunId!.Value;
 
         // the process stalls between the renewal and the release (nothing renews here: the renewal is off), the lease is over when the tick looks
@@ -333,7 +333,7 @@ public sealed class SchedulerTests
         a.SuspendHeartbeats = true;                                       // a stalled runner: the task goes on, the lease is not renewed
 
         await a.TickAsync();
-        await FakeStarted(runnerA, 1);
+        await FakeStarted(h, runnerA, 1);
         var firstRun = runnerA.Requests.Single().RunId!.Value;
 
         h.Clock.Advance(TimeSpan.FromSeconds(100));                       // past the 90 second lease
@@ -476,7 +476,7 @@ public sealed class SchedulerTests
         foreach (var name in new[] { "a", "b", "c" }) scheduler.RunNow(new TaskRef(Package, Channel, name));
 
         var report = await scheduler.TickAsync();
-        await FakeStarted(runner, 2);
+        await FakeStarted(h, runner, 2);
         await scheduler.TickAsync();
 
         Assert.Equal(2, report.Claimed);
@@ -500,7 +500,7 @@ public sealed class SchedulerTests
         foreach (var name in new[] { "a", "b", "c" }) scheduler.RunNow(new TaskRef(Package, Channel, name));
 
         await scheduler.TickAsync();
-        await FakeStarted(runner, 1);
+        await FakeStarted(h, runner, 1);
         await scheduler.TickAsync();
 
         Assert.Equal(1, scheduler.RunningCount);
@@ -528,7 +528,7 @@ public sealed class SchedulerTests
         var scheduler = h.NewScheduler(runner, tick: TimeSpan.FromMilliseconds(30));
         using var stop = new CancellationTokenSource();
         var loop = scheduler.RunAsync(stop.Token);
-        await FakeStarted(runner, 1);
+        await FakeStarted(h, runner, 1);
 
         await stop.CancelAsync();
         await loop.WaitAsync(TimeSpan.FromSeconds(30));

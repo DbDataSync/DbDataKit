@@ -1,7 +1,7 @@
 /** The workspace a version was published from (plan 33 SC20o, SC22l): the console's server of the Workspace, the project and the workspace (the draft). */
 export interface WorkspaceOrigin { instance: string; project: string; workspace: string }
 
-/** The token a Workspace puts at the end of a version's note (`WorkspaceOrigin.Token`, `DbDataKit.Authoring.Server`): `[workspace:<instance>/<project>/<workspace>]`, each part escaped as a URL path segment. */
+/** The token a Workspace puts at the end of a version's note (`DeployOrigin.Token`, `DbDataKit.Deploy`): `[workspace:<instance>/<project>/<workspace>]`, each part escaped as a URL path segment. */
 const Token = /\[workspace:([^/\]\s]+)\/([^/\]\s]+)\/([^/\]\s]+)\]/
 
 function decode(part: string): string | null {

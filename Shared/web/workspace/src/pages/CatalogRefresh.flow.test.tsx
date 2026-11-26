@@ -34,7 +34,6 @@ function fakeConsole() {
     const draft = '/relay/ws-1/api/v1/projects/crm-to-dw/workspaces/ws'
     if (path === `${draft}/files`) return reply({ files: [{ path: 'catalog-cache.yaml', size: 1 }, { path: 'config/connections/crm.yaml', size: 1 }], truncated: false, max_file_bytes: 1 })
     if (path === `${draft}/files/catalog-cache.yaml`) return reply({ path: 'catalog-cache.yaml', content: CACHE })
-    if (path === '/relay/ws-1/api/v1/publish-targets') return reply({ targets: [] })
     if (path === '/api/instances') return reply([{ id: 'r-1', name: 'runners-eu', product: 'dbdatarunner' }, { id: 'ws-1', name: 'Workspace', product: 'dbdataworkspace' }])
     if (path === '/api/workspace-catalog/ws-1/crm-to-dw/channels') {
       return reply({

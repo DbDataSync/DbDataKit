@@ -33,9 +33,29 @@ Back-end products (Build, the apps back end, DbDataStore, DbDataIntegration) **p
 The control service deploys a build of a Workspace project to a Runner or a Gateway as the person who asks. The Workspace service builds the project
 and serves what the build holds; it never calls the Runner or the Gateway.
 
+The Workspace server does not hold a publisher key. The calls it had for sending a build, running its tasks and reading a Gateway's catalog answer
+`410 Gone` with the sentence that names the console's call to use instead:
+
+| Workspace server call | What to use |
+| --- | --- |
+| `POST .../builds/{b}/publish` | **Publish** on the Builds tab, or `POST /api/deploys` |
+| `POST .../builds/{b}/preview-data` | **Preview with data** on the Builds tab, or `POST /api/deploys` with `previewInstance` |
+| `POST .../builds/{b}/run`, `GET .../builds/{b}/runs/{run}` | `POST /api/deploys/{id}/runs`, `GET /api/deploys/{id}/runs/{run}` |
+| `POST .../builds/{b}/binding-test` | `POST /api/deploys/{id}/binding-test` |
+| `POST .../builds/{b}/contract` | `POST /api/deploys/{id}/contract` |
+| `POST .../catalog/refresh` | **Refresh** from a Gateway on the Catalog tab, or `POST /api/workspace-catalog/{workspace}/{project}/gateway-read` |
+| `GET /api/v1/publish-targets` | `GET /api/instances`: the Runners and Gateways the console manages |
+| `GET`, `PUT`, `DELETE /api/v1/publisher-keys/{name}`, `POST .../pair` | none: the console signs with its own publisher key ([install.md](install.md#the-consoles-publisher-key)) |
+
+The Workspace server's former command `publisher` (its verbs `pair` and `list`) answers the same way and exits with code 2.
+
+Example: a script sends `POST /api/v1/projects/orders/workspaces/ana-draft/builds/4f1c.../publish` to the Workspace server. It answers 410 with
+"The Workspace server never calls a Runner or a Gateway and does not hold a publisher key; the console does this, as the signed-in person: deploy
+the build from the Builds tab, or with the console's POST /api/deploys." The console's relay does not pass these calls.
+
 1. The person asks the console: `POST /api/deploys` with the Workspace server, the project, the workspace, the build and the target, and what the
    kind's deploy takes (for a Runner the `channel`, `serve`, `expectedVersion`, `bind`; for a Gateway the `dataSource` and `adopt`; the `model` of a
-   Store build; a `note`).
+   Store build; for an app, the `previewInstance` it previews; a `note`).
 2. The console asks the Workspace server for the project as the person (`GET /api/v1/projects/{project}`). The Workspace server answers a person who
    may read the project: one with the viewer role, or a role above it, on the project or on the whole server. Otherwise the deploy is refused in the
    Workspace server's words: "Workspace does not let you read the project 'orders': This needs the viewer role." The console also checks that the
@@ -81,9 +101,59 @@ POST /api/deploys
 The answer has the steps, what the Runner answered (`package`, `channel`, `mode` `stage`, `version`, `signature` `verified`) and the deploy record.
 An app is sent over the Gateway's app calls, which do not take a signature or a build record yet; the build record is kept by the console only.
 
+An app build can also go to a Gateway as the preview of one of its instances. The body names the instance as `previewInstance`. The console sends the
+build to the Gateway's `preview` channel (`PUT /api/v1/apps/{name}/channels/preview`) and points that instance's preview at it
+(`PUT /api/v1/app-instances/{instance}/channels/preview`), both as the person. The Gateway refuses a preview of an instance that production does not
+have: "There is no instance 'ghost' in production to preview." A build of any other kind is refused: "Only an app has a preview with data." The deploy
+record keeps the preview with the channel `preview`, the mode `preview` and `preview` (the instance, and the preview's address and path on the
+Gateway's apps host).
+
+Example: Ana sends build `7d20...` of the app `sales` as the preview of the instance `sales` on the Gateway `edge`:
+
+```
+POST /api/deploys
+{"workspaceServer": "Workspace", "project": "sales", "workspace": "draft-3", "build": "7d20...", "target": "edge", "previewInstance": "sales"}
+```
+
+The answer's `deployed` has `channel` `preview`, the app's `version` in that channel and `preview_address`, `https://apps.example.com/apps/sales~preview/`.
+People who may open the instance `sales` open its preview there, signed in as themselves ([apps.md](apps.md#building-previewing-and-publishing-in-the-workspace-server)).
+
 Example: Ben may read the project `orders` on the Workspace server and nothing else there. On the Runner `jobs` he holds the publisher and operator
 roles. He serves a build of `orders` in `dev`, and the Runner records him as the publisher. On the Runs tab he runs the task `load` of the version
 `dev` serves. **Test** of a connection's login is refused, in the Runner's words, because it needs the administrator role on `jobs`.
+
+### Taking over what a Workspace key published
+
+A Workspace server that published to a Gateway with its own publisher key paired with that Gateway as a server client, with an id that starts with
+`workspace-`. The Gateway lets only the owner of a data source, a model or a view change it, so the console's deploys cannot publish over what that
+key published. An administrator of the Gateway hands it to the console once per Gateway:
+
+```
+POST /api/deploys/handover
+{"gateway": "edge"}
+```
+
+1. The console asks the Gateway, as the person, for its paired server clients (`GET /api/v1/clients`) and keeps those whose id starts with
+   `workspace-`. A body with `"clients": ["workspace-0a1b2c"]` names the clients instead.
+2. For each client, the console asks `PUT /api/v1/settings/handovers/{client}` with `{"to": "<the console's id>"}`. The Gateway takes this call from a
+   person with its administrator role. Anyone else is refused in the Gateway's words.
+3. The Gateway keeps the hand-over in its group's settings and records it in its audit: one `definition.handover` entry for the client, and one
+   `definition.owner` entry for each definition whose owner changes (`data-source/erp`, "handed from workspace-0a1b2c to console-5d6e7f"). The answer
+   lists those definitions.
+4. The console audits the step as `gateway.handover`.
+
+From then on, the Gateway counts everything the client handed over as the console's: what it published before and what it publishes later. The
+console's deploys publish over those data sources, models and views as the person with no adoption asked, and each version records that person as
+its publisher. The client handed over can no longer read or change them. Nothing the client published is rewritten: a signed version keeps the
+`managedBy` it was signed with.
+
+`GET /api/v1/settings/handovers` on the Gateway lists the hand-overs (who, to whom, by whom, when). An administrator ends one with
+`DELETE /api/v1/settings/handovers/{client}`; what carries the client's id is then its own again.
+
+When a Workspace server of this version starts, it deletes the publisher keys an earlier version kept in its secret store
+(`dbdatakit:workspace:publisher-key:<name>`) and its list of targets, `publish-targets.json`, and says so in its log. The key's client stays paired
+on each Gateway and Runner. Hand what it published to the console first, then remove the pairing on that server:
+`dbdatagateway server unpair workspace-0a1b2c` (or `dbdatarunner server unpair ...`).
 
 ### Preflight before activation
 

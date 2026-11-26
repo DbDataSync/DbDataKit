@@ -21,7 +21,8 @@ namespace DbDataGateway.Server.Management;
 /// kept, so a rollback is a switch of which one is served. A model named in <c>server.yaml</c> is not replaced by a publish.
 /// </summary>
 public sealed partial class GatewaySemanticModels(
-    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null)
+    PublishedSemanticModels store, SemanticModels models, Func<GatewayOptions> options, string configDirectory, Func<DataSourceCatalog> catalog, IAuditLog audit, TimeProvider? clock = null, DataSourceAdoptions? adoptions = null, Func<RuledTables>? ruled = null,
+    Func<string?, string?>? ownerNow = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -84,7 +85,11 @@ public sealed partial class GatewaySemanticModels(
 
     internal static string? Client(ManagementCaller caller) => IsAdministrator(caller) ? null : OwnerScope.Stamp(caller.Token!);
 
-    private string? OwnerOf(string name) => store.Current(name) is { } n ? store.Version(name, n)?.ManagedBy : null;
+    /// <summary>Who owns a model now: the client its current version names, or the client an administrator handed that one to (the group's hand-overs).</summary>
+    private string? OwnerOf(string name) => OwnerNow(store.Current(name) is { } n ? store.Version(name, n)?.ManagedBy : null);
+
+    /// <summary>Who owns what <paramref name="managedBy"/> names now, after the group's hand-overs.</summary>
+    internal string? OwnerNow(string? managedBy) => ownerNow is null ? managedBy : ownerNow(managedBy);
 
     internal ManagementResult? Scope(ManagementCaller caller, ObjectAction action, string name)
     {
@@ -101,10 +106,10 @@ public sealed partial class GatewaySemanticModels(
         {
             var current = store.Current(name);
             var meta = current is { } n ? store.Version(name, n) : null;
-            if (owner is not null && meta?.ManagedBy != owner) continue;
+            if (owner is not null && OwnerNow(meta?.ManagedBy) != owner) continue;
             items.Add(new JsonObject
             {
-                ["name"] = name, ["current_version"] = current, ["versions"] = store.Versions(name).Count, ["managed_by"] = meta?.ManagedBy, ["served"] = models.Find(name) is not null,
+                ["name"] = name, ["current_version"] = current, ["versions"] = store.Versions(name).Count, ["managed_by"] = OwnerNow(meta?.ManagedBy), ["served"] = models.Find(name) is not null,
                 // what this instance serves of it, which lags the group's by a poll at most, and a version it could not load
                 ["served_version"] = store.Served(name), ["failed_version"] = store.Failed(name)?.Version, ["failure"] = store.Failed(name)?.Reason,
             });
@@ -275,7 +280,7 @@ public sealed partial class GatewaySemanticModels(
         var file = Path.Combine(configDirectory, "connections", dataSource + ".yaml");
         // the group's published data sources (plan 20 O04b) are beside the configuration folder, as each instance serves them
         if (!File.Exists(file)) file = Path.Combine(PublishedDataSources.FolderIn(Path.GetDirectoryName(Path.GetFullPath(configDirectory))!), dataSource + ".yaml");
-        return File.Exists(file) ? DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(File.ReadAllText(file), file).Definition?.ManagedBy : null;
+        return File.Exists(file) ? OwnerNow(DbDataKit.Connections.ConnectionDefinitionLoader.LoadDatabaseConnection(File.ReadAllText(file), file).Definition?.ManagedBy) : null;
     }
 
     private async Task<ManagementResult> RollbackAsync(string name, string? body, ManagementCaller caller)

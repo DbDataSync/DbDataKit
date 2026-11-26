@@ -13,6 +13,12 @@ Example: Ana's Sync preflight reads `crm.dbo.orders` with the filter `regoin > 0
 server. [db 42703] (failure 7f3a...)". Omar, an administrator of the Runner, opens the run on the console and sees PostgreSQL's
 `column "regoin" does not exist`, the statement and the stack.
 
+No code loses an exception's details. Code that throws its own error in place of one it caught passes the original as the inner exception,
+logs it, or both. That holds in every place an error can be replaced: a `catch` that throws a clearer message, a `Dispose` or `finally` that runs
+while an error is already on its way out, and a test's setup and cleanup. Example: a migration fails on SQL Server and the connection closes.
+Releasing the migration lock must not throw its own "connection is closed" error in place of the migration's error. The person running the test
+sees the migration's error, with the release's problem logged beside it.
+
 The detail can hold values from a row (a duplicate key's value in a constraint message); it is shown to administrators only.
 
 ## What exists today
@@ -28,6 +34,7 @@ The detail can hold values from a row (a duplicate key's value in a constraint m
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
+| ERRORDETAILS-6 | Every place that replaces an exception keeps the original: a `catch` that throws a new exception passes the caught one as its inner exception; a `Dispose`, `finally` or cleanup step (in product code and in tests) that fails while an exception is already propagating logs its own failure and lets the first one through. A repository check finds a `throw new` inside a `catch` that does not pass the caught exception, with a short list of reviewed exceptions | none | M | the check fails on a `catch (Exception ex) { throw new InvalidOperationException("x"); }` and passes once `ex` is passed; a test fails a migration inside the lock and the error it sees is the migration's |
 | ERRORDETAILS-1 | A shared library for a failure's detail: from any exception it makes the detail (type, message, inner exceptions, stack trace, a driver's own message and code), passed through the redactor, with an id; the answer to a caller carries the classified words and the id; the hosting library keeps the detail of every request that ends in an exception | none | M | a test throws a driver failure and a plain exception in a request; the answer holds the classified words and the id, and the stored detail holds the message, the inner exception and the stack, with a secret in the message redacted |
 | ERRORDETAILS-2 | The Runner keeps the detail of each failed run, step and task host, with the run; an administrator of the Runner reads it on the console's run page and through the management API; a viewer, an operator and the console's relayed reads for a person who is not an administrator get the classified words and the id. A preflight finding (the Sync set's, the Build project's) carries the failure's id, so an administrator sees the database's own message beside it | ERRORDETAILS-1 | M | a test fails a read on a misspelled column; an administrator's answer holds the engine's message naming the column, and a viewer's answer holds only `The statement was not accepted by the server. [db 42703]` and the id |
 | ERRORDETAILS-3 | The Gateway keeps the detail of each failed request, refresh, Flight SQL query and worker call; an administrator of the Gateway reads it by id on the console; a Gateway's users (apps, Flight SQL clients, report tools) get the classified words and the id | ERRORDETAILS-1 | M | a Flight SQL query on a misspelled column answers the classified words and an id; an administrator reads the engine's message under that id |

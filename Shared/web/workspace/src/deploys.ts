@@ -16,7 +16,12 @@ export interface DeployTarget { id: string; name: string; product: 'runner' | 'g
 export interface DeployBody {
   workspaceServer: string; project: string; workspace: string; build: string; target: string
   channel?: string; serve?: boolean; expectedVersion?: number; bind?: Record<string, string>; dataSource?: string; adopt?: string[]; model?: string; note?: string
+  /** An app build sent as the preview of this instance of the Gateway, in its `preview` channel, in place of a version. */
+  previewInstance?: string
 }
+
+/** The preview a deploy of an app made: the instance, and the preview's address and path on the Gateway's apps host (the address is null when the Gateway runs no apps host). */
+export interface DeployPreview { instance: string | null; address: string | null; path: string | null }
 
 /** One deploy the console keeps (`GET /api/deploys`): what was sent where, by whom, and what the target answered; a refused deploy has its `error`. */
 export interface DeployRecord {
@@ -27,6 +32,8 @@ export interface DeployRecord {
   tasks?: string[]
   /** The preflight the deploy waited for before it served the version in production, and what became of the activation; null when it waited for none. */
   preflight?: DeployPreflight | null
+  /** The preview of an instance the deploy sent the app build to; null for a deploy that is not a preview. */
+  preview?: DeployPreview | null
 }
 
 /** A run started through the console on what a deploy put on a Runner (`POST /api/deploys/{id}/runs`). */
@@ -133,6 +140,7 @@ export function deployLine(d: DeployRecord): string {
   if (d.outcome !== 'ok') return d.error ?? 'Refused.'
   const what = d.name ?? d.item
   const version = d.version != null ? ` as version ${d.version}` : ''
+  if (d.mode === 'preview') return `Sent ${what} to ${d.target_name} as the preview of ${d.preview?.instance ?? 'an instance'}${d.version != null ? ` (version ${d.version} of the preview channel)` : ''}.`
   if (d.product === 'runner') return `${d.mode === 'serve' ? 'Published' : 'Staged'} ${what} on ${d.channel ?? 'its channel'} of ${d.target_name}${version}.`
   return `Published ${what} to ${d.target_name}${version}.`
 }

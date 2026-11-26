@@ -9,7 +9,7 @@ namespace DbDataGateway.Server.Management;
 
 /// <summary>
 /// The shared publish API (plan 30 PB02, <see cref="DefinitionsApi"/>) on the Gateway's management listener, for every serving kind of <see cref="ServingKinds"/> and the views' <c>dashboard</c> and <c>report</c>:
-/// <c>HEAD</c> and <c>PUT /api/v1/artifacts/{sha256}</c>, <c>GET /api/v1/definitions/{kind}[/{name}]</c>, <c>PUT /api/v1/definitions/{kind}/{name}</c>, <c>POST .../activate|switch|rollback|retire|prune</c>, <c>PUT /api/v1/bindings/{channel}/{kind}/{name}</c>.
+/// <c>HEAD</c> and <c>PUT /api/v1/artifacts/{sha256}</c>, <c>GET /api/v1/definitions/{kind}[/{name}]</c>, <c>PUT /api/v1/definitions/{kind}/{name}</c>, <c>POST .../activate|switch|rollback|retire|prune</c>, <c>PUT /api/v1/bindings/{channel}/{kind}/{name}</c>, and the hand-overs (<c>GET</c>, <c>PUT</c> and <c>DELETE /api/v1/settings/handovers[/{client}]</c>, administrators) that give what one paired client owns to another.
 /// The management caller's roles and token decide who the caller is (a paired client's id is what the owner rules compare); every change is in the Gateway's audit. The per-kind endpoints are still there (plan 30: they go when Sync is
 /// operational on the Runner) and write the same rows; a definition published here is served by every instance when its follower next looks.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class GatewayDefinitionsManagement
         return [new SemanticModelKindHook(semanticModels, models, policy), new DataSourceKindHook(dataSources, policy), .. entityModels is null ? (IEnumerable<IDefinitionKindHook>)[] : [new EntityModelKindHook(entityModels, policy)]];
     }
 
-    public GatewayDefinitionsManagement(StateDatabase state, IAuditLog? audit = null, TimeProvider? clock = null, IEnumerable<IDefinitionKindHook>? hooks = null)
+    public GatewayDefinitionsManagement(StateDatabase state, IAuditLog? audit = null, TimeProvider? clock = null, IEnumerable<IDefinitionKindHook>? hooks = null, OwnerHandovers? handovers = null, Func<string, bool>? isClient = null)
     {
         var store = new DefinitionStore(state);
         var payloads = new PayloadStore(state);
@@ -36,7 +36,7 @@ public sealed class GatewayDefinitionsManagement
         var settings = new GroupSettings(state);
         _api = new DefinitionsApi(new DefinitionPublisher(state, kinds, payloads, ServingKinds.TargetType), store, kinds, payloads, settings, ServingKinds.TargetType,
             (verb, caller, kind, name, channel, outcome, _) => audit?.Append(new AuditEntry(time.GetUtcNow(), "api", "management", caller.ClientId ?? caller.Actor, caller.Actor, false, verb, $"{kind}/{name}" + (channel == "-" ? "" : "/" + channel), outcome, "")),
-            verifier: new TrustStoreVerifier(trust), policy: new SignaturePolicy(settings), trust: trust, hooks: hooks);
+            verifier: new TrustStoreVerifier(trust), policy: new SignaturePolicy(settings), trust: trust, hooks: hooks, handovers: handovers, isClient: isClient);
     }
 
     public static bool Handles(string route) => route.StartsWith(Prefix, StringComparison.Ordinal) && DefinitionsApi.Handles(route[Prefix.Length..]);

@@ -164,21 +164,16 @@ public sealed class WorkspaceIntegrationKindTests
     }
 
     [Fact]
-    public async Task A_built_integration_is_staged_on_a_channel_of_a_runner_by_the_publisher_key()
+    public async Task A_built_integration_is_one_package_for_a_runner_that_the_console_reads_from_its_contents()
     {
-        await using var runner = await FakeRunner.StartAsync();
         await using var server = await WorkspaceHarness.StartAsync(runnerExecutable: Tool());
-        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/publisher-keys/jobs/pair", new JsonObject { ["url"] = runner.Url.ToString(), ["code"] = runner.NewCode() }.ToJsonString())).Response.StatusCode);
         var id = await DraftAsync(server);
         var build = await BuildAsync(server, id, expectSuccess: true);
 
-        var published = await server.Send("grace", ServerRole.Approver, HttpMethod.Post, $"/api/v1/projects/{Project}/workspaces/{id}/builds/{(string)build["id"]!}/publish", """{"target":"jobs","channel":"prod"}""");
-        Assert.Equal(HttpStatusCode.OK, published.Response.StatusCode);
-        var answer = published.Body!["published"]!;
-        Assert.Equal(("orders-pull", "prod", "stage"), ((string)answer["package"]!, (string)answer["channel"]!, (string)answer["mode"]!));
-        var sent = Assert.Single(runner.Published);
-        Assert.Contains("name: orders-pull", (string)sent["manifest"]!);
-        Assert.Contains("bin/orders-pull.dll", sent["artifacts"]!.AsArray().Select(a => (string)a!["path"]!));
+        var contents = (await server.AsAda(HttpMethod.Get, $"/api/v1/projects/{Project}/workspaces/{id}/builds/{(string)build["id"]!}/contents")).Body!;
+        var item = Assert.Single(contents["items"]!.AsArray())!;
+        Assert.Equal(("runner", "package"), ((string)item["product"]!, (string)item["what"]!));
+        Assert.Contains(item["files"]!.AsArray(), f => ((string)f!["path"]!).EndsWith("bin/orders-pull.dll", StringComparison.Ordinal));
     }
 
     [Fact]

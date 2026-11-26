@@ -79,4 +79,54 @@ public static class GatewayCalls
         }
         return (graphs, unreachable);
     }
+
+    /// <summary>The start of the id a Workspace server's publisher key pairs with a Gateway under (a server client): what such a key published is what <see cref="HandOverAsync"/> hands to the control service.</summary>
+    public const string WorkspaceClientPrefix = "workspace-";
+
+    /// <summary>
+    /// Makes <paramref name="to"/> (the control service's client id on the Gateway) the owner of what each client of <paramref name="clients"/> owns there: one <c>PUT /api/v1/settings/handovers/{client}</c> per client, which the
+    /// Gateway takes from an administrator and records in its audit, one entry for each definition whose owner changes. With no client named, the clients are the Workspace servers' publisher keys the Gateway lists
+    /// (<c>GET /api/v1/clients</c>, ids that start with <see cref="WorkspaceClientPrefix"/>). The answer has each hand-over and the definitions it moved, in the Gateway's words; a refusal is a <see cref="DeployException"/> in them.
+    /// </summary>
+    public static async Task<JsonObject> HandOverAsync(IDefinitionsLink link, DeployTarget target, string to, IReadOnlyList<string>? clients, Action<string> step, CancellationToken ct = default)
+    {
+        if (target.Product != DeployProducts.Gateway)
+            throw new DeployException($"'{target.Name}' is a {target.Product} ({target.Url}); what a publisher key published is handed over on a Gateway.", 409);
+        var from = clients is { Count: > 0 } ? clients.Select(c => c.Trim()).Where(c => c.Length > 0).Distinct(StringComparer.Ordinal).ToList() : await WorkspaceClientsAsync(link, target, ct);
+        if (from.Count == 0) step($"{target.Name} has no client of a Workspace server's publisher key, so there is nothing to hand over.");
+        var handed = new JsonArray();
+        foreach (var client in from.Where(c => c != to))
+        {
+            var answer = await SendAsync(link, target, HttpMethod.Put, $"settings/handovers/{Uri.EscapeDataString(client)}", new JsonObject { ["to"] = to }, $"to hand what '{client}' owns to '{to}'", ct);
+            var moved = answer["definitions"] as JsonArray ?? [];
+            step(answer["unchanged"]?.GetValue<bool>() == true
+                ? $"What '{client}' owns on {target.Name} was handed to '{to}' already ({moved.Count} definition(s))."
+                : $"{target.Name} handed what '{client}' owns to '{to}': {moved.Count} definition(s).");
+            handed.Add(new JsonObject { ["from"] = client, ["to"] = to, ["unchanged"] = answer["unchanged"]?.DeepClone(), ["definitions"] = moved.DeepClone() });
+        }
+        return new JsonObject { ["gateway"] = target.Name, ["to"] = to, ["handovers"] = handed };
+    }
+
+    private static async Task<List<string>> WorkspaceClientsAsync(IDefinitionsLink link, DeployTarget target, CancellationToken ct)
+    {
+        var answer = await SendAsync(link, target, HttpMethod.Get, "clients", null, "to list its paired server clients", ct);
+        return [.. (answer["clients"] as JsonArray ?? []).Select(c => (string?)c?["id"]).Where(id => id?.StartsWith(WorkspaceClientPrefix, StringComparison.Ordinal) == true).Select(id => id!).Order(StringComparer.Ordinal)];
+    }
+
+    private static async Task<JsonObject> SendAsync(IDefinitionsLink link, DeployTarget target, HttpMethod method, string path, JsonObject? body, string doing, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try { response = await link.SendAsync(method, path, body is null ? null : JsonContent.Create(body), ct); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+        using (response)
+        {
+            var text = await response.Content.ReadAsStringAsync(ct);
+            JsonObject? answer = null;
+            try { answer = string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text) as JsonObject; }
+            catch (System.Text.Json.JsonException) { /* not JSON: the text is the answer */ }
+            if (!response.IsSuccessStatusCode)
+                throw new DeployException($"{target.Name} refused {doing} ({(int)response.StatusCode}): {(string?)answer?["error"] ?? (text.Length > 0 ? text : response.ReasonPhrase)}", response.StatusCode == System.Net.HttpStatusCode.Forbidden ? 403 : 409);
+            return answer ?? [];
+        }
+    }
 }
