@@ -162,6 +162,9 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 | SYNCAUTHORING-20 | The three rules the offline check copies from Sync's engine become public methods both call: the Flight SQL driver's reading of a type (`FlightSqlTypes` in `DbDataKit.Sync.Core`), `Scd2Writer.RequireNaturalKey` and `KeyReconcileDeleteWriter.RequireKey` | none | S | `SyncOfflineCheck` holds no copied rule, and its tests and the writers' tests pass |
 | SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
+| SYNCAUTHORING-25 | The set's `discover` asks a bound `metadataProvider` script for the connection's configured database (`address.database`, or `extensions.sync.database`), and `""` only when the file names none; the driver path keeps `""`, so a driver that cannot switch database (SQLite) still reads (`MetadataService.ReadCatalogAsync`) | none | S | a test: a script that reads `[{database}].INFORMATION_SCHEMA.TABLES` lists the tables of `sales` for a connection whose `address.database` is `sales`; a SQLite YAML driver still reads with `""` |
+| SYNCAUTHORING-26 | The provisioning plan honours **Create target table if missing**: `dbdatasync provisioning plan` reads the mapping's `createTargetTableIfMissing` and plans `CREATE TABLE` for a missing target only when it is on (today it plans it whether the setting is on or off); the Files area's Provisioning tab plans unsaved edits as the Designer's tabs do | none | S | a test: a missing target table gets `CREATE TABLE` in the plan with the setting on and none with it off; a story turns the setting off and the badge clears |
+| SYNCAUTHORING-27 | **Build and stage** (the set's own `discover` and `describe`) is offered in every channel, `prod` included, with the production warning the reads show; the target's roles decide | none | S | a vitest: on a Runner whose only channel is `prod`, Build and stage is offered with the warning; a console test stages in `prod` |
 
 ## Needs from other subjects
 
@@ -182,23 +185,11 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
-## Proposed decisions
-
-### SYNCAUTHORING-P60: the database a `metadataProvider` script is asked for by the set's `discover`
-
-Default, awaiting the owner. The set's `discover` reads the database the connection opens, over one connection, and asks a bound `metadataProvider`
-script for the tables and columns of the database `""` (empty), as it asks the driver. The old Sync server's pickers passed the database the person
-had picked. Example: Ben's connection `erp` (SQL Server, `address.database: sales`) binds a script whose `ListTablesAsync` runs
-`SELECT ... FROM [{database}].INFORMATION_SCHEMA.TABLES`. Asked with `""`, the script builds `[].INFORMATION_SCHEMA.TABLES` and the read fails; a script
-that treats an empty database as "the current one" works.
-
-- A, the default: the script gets `""`, which means the database the connection opens. Scripts written for the old server may need a line for it.
-- B: the script gets the connection's configured database (`address.database`, or `extensions.sync.database`), and `""` only when the file names none.
-  The driver path keeps `""`, so a driver that cannot switch database (SQLite) still reads.
-
-Recommendation: B, so a script written for the old server keeps working; it is a small change in `MetadataService.ReadCatalogAsync`.
-
 ## Open designs
+
+### One connection, several databases
+
+A connection names one database (`address.database`), and the set's reads, the Designer's pickers and the run all use it. Some sources hold the same tables in several databases on one server (one per plant, one per company), and the old Sync server let the person pick a database per mapping on one connection. Whether the suite needs a way for one connection to serve several databases (a database per mapping, a list on the connection, or a connection per database as today), and how its tracking state and change positions are kept per database, is not decided. AUTHORING-25 lists every database a SQL Server login can open for the pickers; it does not change what a mapping reads. Example: `erp` on `sql01` holds `plant_a` and `plant_b`; today Ben makes two connections, `erp-a` and `erp-b`.
 
 ### The preflight reads privileges on MySQL and Oracle
 
