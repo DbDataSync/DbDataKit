@@ -685,4 +685,21 @@ public sealed class ConsoleDeployTests : IAsyncLifetime
         var allowances = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeployRuns.AllowConsumerVerb));
         Assert.Contains(allowances, a => a.Entry.ActorId == personId && a.Entry.Detail!.Contains("gateway:Gateway gone"));
     }
+
+    [Fact]
+    public async Task What_a_workspace_key_published_is_handed_over_on_a_gateway_only_and_a_refused_step_is_audited()
+    {
+        var unnamed = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject());
+        Assert.Equal(HttpStatusCode.BadRequest, unnamed.Status);
+        Assert.Contains("Name the Gateway (\"gateway\")", (string?)unnamed.Body!["error"]);
+
+        var unknown = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject { ["gateway"] = "nowhere" });
+        Assert.Equal((HttpStatusCode.NotFound, "No server 'nowhere' is registered."), (unknown.Status, (string?)unknown.Body!["error"]));
+
+        var onRunner = await As(HttpMethod.Post, "/api/deploys/handover", new JsonObject { ["gateway"] = runnerId });
+        Assert.Equal(HttpStatusCode.BadRequest, onRunner.Status);
+        Assert.Contains("what a publisher key published is handed over on a Gateway", (string?)onRunner.Body!["error"]);
+        var audited = console.Services.GetRequiredService<AuditLog>().Read(new AuditQuery(Verb: ConsoleDeploys.HandoverVerb));
+        Assert.Contains(audited, a => a.Entry.ActorId == personId && a.Entry.Outcome == "refused" && a.Entry.TargetId == runnerId);
+    }
 }

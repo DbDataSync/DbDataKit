@@ -11,6 +11,9 @@ namespace DbDataKit.Server;
 public sealed record DeployBody(string? WorkspaceServer, string? Project, string? Workspace, string? Build, string? Target, string? Channel = null, bool Serve = false, int? ExpectedVersion = null,
     Dictionary<string, string>? Bind = null, string? DataSource = null, List<string>? Adopt = null, string? Model = null, string? Note = null, bool ConfirmPreflight = false, string? PreviewInstance = null);
 
+/// <summary>The body of <c>POST api/deploys/handover</c>: the Gateway, and the clients whose definitions the console takes over (by default the Workspace servers' publisher keys the Gateway lists).</summary>
+public sealed record DeployHandoverBody(string? Gateway, List<string>? Clients = null);
+
 /// <summary>The body of <c>POST api/deploys/{id}/activate</c>: whether the person confirms the errors the preflight found (the Runner keeps the confirmation with the activation).</summary>
 public sealed record DeployActivateBody(bool Confirm = false);
 
@@ -30,7 +33,8 @@ public sealed record DeployContractBody(string? PlanRun, string? Approve, List<s
 /// The deploy of a build from a Workspace server to a Runner or a Gateway, by the console as the signed-in person (<see cref="ConsoleDeploys"/>): <c>POST api/deploys</c> deploys, <c>GET api/deploys?workspace_server=&amp;project=&amp;workspace=&amp;build=</c>
 /// lists what was deployed from a Workspace server, newest first (each parameter after the server narrows the one before), the record the Builds and Runs tabs read. The runs of a deploy to a Runner go through the console too
 /// (<see cref="ConsoleDeployRuns"/>): <c>POST api/deploys/{id}/runs</c> starts a task (with <c>answer</c>, waits for its answer), <c>GET api/deploys/{id}/runs/{run}/answer</c> takes the answer of a run started earlier, <c>GET api/deploys/{id}/runs/{run}?step=</c> reads a run and its steps, <c>GET api/deploys/{id}/runs?task=&amp;step=</c> reads the newest run of a task in the deploy's channel, <c>POST api/deploys/{id}/binding-test</c> tests a slot's login on the Runner,
-/// <c>POST api/deploys/{id}/contract</c> runs a Store model's approved contract, and <c>POST api/deploys/{id}/activate</c> activates a version a deploy staged in production for its preflight.
+/// <c>POST api/deploys/{id}/contract</c> runs a Store model's approved contract, and <c>POST api/deploys/{id}/activate</c> activates a version a deploy staged in production for its preflight. <c>POST api/deploys/handover</c> makes the console the owner, on a Gateway, of what the
+/// Workspace servers' publisher keys published there.
 /// </summary>
 [ApiController]
 [Route("api/deploys")]
@@ -49,6 +53,16 @@ public sealed class DeploysController(ConsoleDeploys deploys, ConsoleDeployRuns 
             return BadRequest(new { error = "Name the build (\"workspaceServer\", \"project\", \"workspace\", \"build\") and the Runner or Gateway it goes to (\"target\")." });
         var done = await deploys.DeployAsync(new DeployBuildRequest(body.WorkspaceServer, body.Project, body.Workspace, body.Build, body.Target, body.Channel, body.Serve, body.ExpectedVersion, body.Bind, body.DataSource, body.Adopt,
             body.Model, body.Note, body.ConfirmPreflight, body.PreviewInstance), Person, ct);
+        return StatusCode(done.Status, done.Body);
+    }
+
+    /// <summary><c>POST api/deploys/handover</c>: the console takes over, on one Gateway, what the Workspace servers' publisher keys published there, as the person (an administrator of that Gateway; <see cref="ConsoleDeploys.HandOverAsync"/>).</summary>
+    [HttpPost("handover")]
+    [Authorize(Policies.Viewer)]
+    public async Task<IActionResult> HandOver([FromBody] DeployHandoverBody body, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.Gateway)) return BadRequest(new { error = "Name the Gateway (\"gateway\") on which the console takes over what the Workspace servers' publisher keys published." });
+        var done = await deploys.HandOverAsync(body.Gateway.Trim(), body.Clients, Person, ct);
         return StatusCode(done.Status, done.Body);
     }
 

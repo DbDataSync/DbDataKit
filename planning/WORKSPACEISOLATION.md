@@ -38,10 +38,9 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | WORKSPACEISOLATION-13 | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
+| WORKSPACEISOLATION-8 | Remove what the list marks for removal: the Workspace's publisher keys, its pairing with targets, its clients of the Runner and Gateway, and the Publisher keys screen | none | M | no Workspace code opens a connection to a Runner or Gateway; the removed routes answer with the sentence naming the control service |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | WORKSPACEISOLATION-8 | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
 | WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-8, WORKSPACEISOLATION-9 | S | the owner approves the text |
-| WORKSPACEISOLATION-13 | Before the Workspace's publisher keys go, the control service, as an administrator of each Gateway, makes its own client the owner of what each Workspace key published, one recorded step per Gateway; from then on it owns what it publishes, and each version records the person who published it | none | S | a data source a Workspace key made is updated by the control service's publish with no adoption asked; the Gateway's audit records the change of owner |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 
@@ -127,7 +126,7 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `ModelPackageFolder` | which model's deploy package of a Store build is sent | **Stays**: it names the packages a Store build serves, one per model |
 | `PublishPackageAsync` | a Runner package: reads `package.yaml`, binds slots, publishes or stages through `RunnerPublishClient` | **Moves** |
 | `PublishModelsAsync`, `PublishSemanticModelsAsync` | Store models, and Build semantic models with their views, to a Gateway | **Moves** |
-| `WorkspaceGatewayPublish` (the whole class) | entity models, data source documents, semantic models and views over the shared publish API; binds slots where the Gateway lets the client; refusals in the Gateway's words | **Moves**; it signs, and sets `managedBy`, with the publisher key's identity; the control service takes ownership first (WORKSPACEISOLATION-13) |
+| `WorkspaceGatewayPublish` (the whole class) | entity models, data source documents, semantic models and views over the shared publish API; binds slots where the Gateway lets the client; refusals in the Gateway's words | **Moves**; it signs, and sets `managedBy`, with the publisher key's identity; an administrator hands what the Workspace's keys published to the console first (the console's `POST /api/deploys/handover`, `docs/publishing.md`) |
 | `RunStagedTaskAsync`, `RunServedTaskAsync`, `RunOfAsync`, `TestBindingAsync`, `Refused` | a run of a staged or served version; a run and its steps; a binding test; a Runner's refusal as a status | **Moves**, without its key and target lookup; the console's runs use it (`ConsoleDeployRuns`) |
 | `GatewayLineageAsync` | the lineage graph of each paired Gateway, and the Gateways that did not answer | **Moves** |
 | `ReadSchemaAsync` (`WorkspaceCatalogRefresh.cs`) | a data source's tables and columns from a Gateway (`POST /api/v1/data-sources/{name}/schema`) | **Moves**: `GatewayCalls.ReadSchemaAsync` (`DbDataKit.Deploy`), which the console's `gateway-read` calls over `ConsolePromotions.LinkFor` as the person; the Workspace's adapter keeps its key and target lookup until WORKSPACEISOLATION-8; the merge into the cache is `CatalogCache.Refreshed`, already in `DbDataKit.Catalog.Cache` |
@@ -193,7 +192,8 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   - `ArtifactDeploy`: what a kind made, by its route: a Runner package (`model-package` takes the one model's folder the caller chose), Store models,
     a Build project's semantic models and views.
   - `GatewayDefinitionsPublish`: the former `WorkspaceGatewayPublish`. It writes the id of the key it signs with as `managedBy`: the console's id when the
-    control service deploys (WORKSPACEISOLATION-13 moves what the Workspace's keys made).
+    control service deploys. The console takes over what the Workspace's keys made with `POST /api/deploys/handover` (the Gateway's
+    `PUT /api/v1/settings/handovers/{client}`).
   - `RunnerCalls`: runs of a staged or served version, a run and its steps, a binding test.
   - `GatewayCalls`: a data source's catalog (`ReadSchemaAsync`) and the lineage of a list of Gateways (`LineageAsync`).
   - `ContractPlans`: the contract route's checks (the plan's run and hash, the consumers through `ContractGuard`, the inputs of the run).
@@ -212,8 +212,8 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   Workspace stops writing `publishes.jsonl` (WORKSPACEISOLATION-8). The Builds, Runs, Provisioning and Deploy tabs read the console's record now.
 - A preview with data is the console's deploy with `previewInstance`, which the Builds tab's form calls; the screens run `contract` through
   the console's `POST /api/deploys/{id}/contract`.
-- What the Workspace's keys published on a Gateway is owned by the key's client until WORKSPACEISOLATION-13 makes the control service its owner;
-  a deploy by the console over a model a Workspace key published needs that task.
+- What the Workspace's keys published on a Gateway is owned by the key's client until an administrator hands it to the console
+  (`POST /api/deploys/handover`); -3's test of a publish over a model published before does that first.
 - Not for the deploy: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
