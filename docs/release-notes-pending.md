@@ -153,6 +153,24 @@ release moves the entries into its notes and empties this file.
 ## A Sync script is tested on a Runner
 
 - **Changed: Test on the Scripts tab of a Workspace sync project runs the script on a Runner.** It builds the saved draft, stages the build in the Runner and channel chosen beside the button through the console (never `prod`), and runs the replication set's new manual task `script-test` there, which compiles the script and runs it against generated sample input with no connection; the tab shows the cases with a link to the run. The Workspace server no longer runs `dbdatasync script test`: `POST .../script-test` answers 410 with a sentence saying where a script is tested. A set's package has the task `script-test`, and a replication named `script-test` is refused. What to do: have a Runner the console manages with the slots of the set bound in a channel other than `prod` (`dev` with **Set up for development** is enough); the person who tests needs the publisher and operator roles there.
+- **Changed: Test of a script stages in `prod` like any other channel.** Picking `prod` beside the button shows a warning that the test replaces the
+  version staged in production, not the one it serves; the Runner's roles decide whether the person may stage there. The tab starts on the channel of
+  the draft's newest deploy to a Runner, `prod` included. What to do: nothing.
+
+## The Workspace server never calls a Runner or a Gateway
+
+- **Removed: the Workspace server's publisher keys, its targets, and its calls that published, ran, tested and read on Runners and Gateways.** These
+  calls answer `410 Gone` with the console's call to use instead: `POST .../builds/<build>/publish`, `.../preview-data`, `.../run`,
+  `GET .../builds/<build>/runs/<run>`, `POST .../binding-test`, `.../contract`, `POST .../catalog/refresh`, `GET /api/v1/publish-targets` and
+  `GET|PUT|DELETE /api/v1/publisher-keys/<name>` with `POST .../pair`. The console's relay no longer passes them. `dbdataworkspace publisher pair`
+  and `publisher list` answer that the console deploys, with exit code 2. The Publisher keys page is gone from the Workspace screens, and a build's
+  detail no longer has `publishes`. What to do: deploy, run, test and refresh through the console (`POST /api/deploys`, `/api/deploys/<id>/...`,
+  `POST /api/workspace-catalog/<workspace>/<project>/gateway-read`), as the Workspace screens already do.
+- **Changed: a Workspace server deletes its publisher keys when it starts.** It deletes each `dbdatakit:workspace:publisher-key:<name>` from its secret
+  store and its file `publish-targets.json`, and logs what it deleted. Its state module `workspace` moves to version 2, which drops the table
+  `publisher_key`; a Workspace server of an earlier version refuses that database. What to do: before you upgrade, hand what each Workspace key
+  published on a Gateway to the console (`POST /api/deploys/handover`). After the upgrade, remove the key's pairing on each Gateway and Runner
+  (`server clients`, then `server unpair workspace-<id>`).
 
 ## A Sync connection on a driver of Sync's own is read by the set's own package
 

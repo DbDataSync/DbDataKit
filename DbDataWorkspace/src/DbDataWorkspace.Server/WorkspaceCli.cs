@@ -36,7 +36,7 @@ public static class WorkspaceCli
     /// </summary>
     public static RemovedCommands Removed { get; } = new(Program, new Dictionary<string, string>
     {
-        ["publisher"] = "this server publishes nothing and holds no publisher key; the console deploys a build from the Workspace and signs each version with its own publisher key, which every Runner and Gateway group it manages trusts.",
+        ["publisher"] = "this server never publishes and does not hold a publisher key; the console deploys a build from the Workspace and signs each version with its own publisher key, which every Runner and Gateway group it manages trusts.",
     });
 
     public static NounRouter Router(Func<string, string?>? environment = null, string[]? invocation = null) => new(Program,

@@ -1,7 +1,7 @@
 # DbDataWorkspace
 
 The server where people (and, later, agents) author projects in git workspaces (plan 22a GP31, decision D8; plan 27). A project is a git repository of some kind (an app today; a Build, Store, Sync and integration project beside it, see [`docs/integrations.md`](../docs/integrations.md); plan 27 adds agent, skill and knowledge projects); a **workspace** is one person's draft of it, a git worktree on its own branch in a folder the server owns, so a draft never changes what is published. The server lists, creates and abandons workspaces, shows their changes, commits, pushes and merges them (the shared library `DbDataKit.Authoring`, which Build serves its workspaces with too), and keeps a record of what was done in its state database. It has no web page of its own: a console pairs with it and shows its screens (Servers, then the Workspace server, then Workspaces).
-**Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store, a read-only preview and publishing to a paired Gateway (GP35b, below). **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The `build` table and the publisher's key reference are in the state module; the builds write the one and publishing reads the other.
+**Built:** editing a draft's files, commit, push and merge (GP35a); an app project starts as the app template (GP32); builds from a vendored package store and a read-only preview (GP35b, below); the console reads a build and deploys it as the person ([docs/publishing.md](../docs/publishing.md#deploying-a-build-from-the-control-service)), and the Workspace server never calls a Runner or a Gateway. **Not built:** a preview with live data (the semantic route and the apps host's preview channel), a git remote for a project. The builds write the `build` table of the state module.
 
 ```
 dbdataworkspace server run [--repo <server directory>] [--listen https://127.0.0.1:7860] [--state-engine sqlite|mssql|postgres --state-connection <connection string>]
@@ -12,8 +12,6 @@ dbdataworkspace project create <id> [--title <text>] [--kind app|build|store|syn
 dbdataworkspace project add <id> --path <repository folder> [--title <text>] [--kind app|build|store|sync|integration] [--template <name>] [--repo <server directory>]   # host a repository that is already on this machine, in place
 dbdataworkspace project list [--repo <server directory>]
 dbdataworkspace workspace list [--project <id>] [--repo <server directory>]
-dbdataworkspace publisher pair <name> --url <https address of a Gateway's management API> --code <pairing code> [--client-name <text>] [--repo <server directory>]   # make the key for a target and pair it with a Gateway (the code: `server pair --max-role publisher` there)
-dbdataworkspace publisher list [--repo <server directory>]   # each target's key reference (never the key) and its Gateway
 dbdataworkspace service install|uninstall|status|start|stop|restart|check|unit
 dbdataworkspace state init --topology service|group|install [--engine mssql|postgres --connection <connection with Password=secret:NAME or env:NAME>] [--login <role or user> [--migrate]] [--admin-connection <reference> --apply] [--group <name>] [--settings <file>] [--repo <server directory>]   # writes the state section of server.yaml (a SQLite file per service is the default)
 dbdataworkspace state show [--offline] [--engine mssql|postgres] [--repo <server directory>]      # the state database: engine, where each setting came from, namespaces, module versions, pending migrations; creates nothing
@@ -143,15 +141,15 @@ The Workspace holds no login of a customer database and never opens one. What a 
 | `state.db` | the state database on SQLite (the default); `DBDATAKIT_STATE_WORKSPACE_ENGINE` and `DBDATAKIT_STATE_WORKSPACE_CONNECTION`, or the `state:` section, name SQL Server or PostgreSQL |
 | `projects/<id>/` | a project the server made (a git repository); a project added by path stays where it is |
 | `workspaces/<project>/<id>/` and `<id>.json` | a workspace's worktree and the record that says whose it is (the layout Build's server has always had; `DbDataKit.Authoring`) |
-| `builds/<project>/<id>/` | a build: `app/` (the built folder), `result.json`, `publishes.jsonl` |
-| `publish-targets.json` | the Gateway each publisher key is paired with (address, instance id, pinned fingerprint, roles; never a key) |
-| `management-audit.log` | who made a project or changed a publisher's key reference, never a value |
+| `builds/<project>/<id>/` | a build: `app/` (the built folder) or `artifact/`, and `result.json` |
+| `secrets/` | the server's own secret store: the login of its state connection, when the state is on SQL Server or PostgreSQL |
+| `management-audit.log` | who made a project, requested a build or changed a draft, never a value |
 
 `DBDATAKIT_DATA_WORKSPACE` (or the folder `workspace` under `DBDATAKIT_DATA`) names the directory for every command; the service's own is `%ProgramData%\DbDataKit\workspace` (`/var/lib/dbdatakit/workspace`).
 
 ## The state module `workspace`
 
-Kept per service in the state database (`DbDataKit.State`, `WorkspaceModule`): `project` (id, kind, repository folder), `workspace` (the drafts that exist now), `workspace_event` (created, committed, pushed, merged, abandoned, with who; kept a year), `build` (kept 90 days; nothing writes it yet) and `publisher_key` (for a target, the **reference** to the secret that holds the publisher's key; a key itself is refused). The retention rules are the shared job's.
+Kept per service in the state database (`DbDataKit.State`, `WorkspaceModule`): `project` (id, kind, repository folder), `workspace` (the drafts that exist now), `workspace_event` (created, committed, pushed, merged, abandoned, with who; kept a year), and `build` (kept 90 days). Version 2 of the module drops the table `publisher_key`, which an earlier version used for its publisher keys. The retention rules are the shared job's.
 
 ## The management API
 
@@ -169,15 +167,14 @@ Every call needs a token a paired console issued; the roles are the suite's (`Db
 | `PUT .../{id}/files/{path}` `{content}`, `DELETE .../{id}/files/{path}`, `POST .../{id}/move` `{from, to}` | author, the owner (text files of at most 1 MiB; a path stays inside the draft and never names `.git`; saves are not history, the commit is) |
 | `POST .../{id}/commit`, `POST .../{id}/push` | author, the owner |
 | `POST .../{id}/merge` | approver (a project that follows a git remote is pushed to, never merged here) |
-| `GET /api/v1/publisher-keys`, `PUT\|DELETE /api/v1/publisher-keys/{name}` `{secret_ref}` | admin |
-| `POST /api/v1/publisher-keys/{name}/pair` `{url, code, product?}`, `GET /api/v1/publish-targets[?project=<id>]` | admin; approver (each target says its `product`, `gateway` or `runner`, found from the server's own `/version`; with `project`, `accepts` says whether that project's kind publishes to it; plan 33 SC20b) |
+| `GET .../{id}/builds/{build}/contents`, `GET .../{id}/builds/{build}/files/{sha256}` | viewer (what a build holds to send, its record and each file by hash: what the console reads to deploy it) |
 | `GET /api/v1/state` and the maintenance calls | the shared state API (`DbDataKit.State.Api`) |
 
-A build of a project whose kind produces something to publish (`build`, `sync`, `store`, `integration`) is the kind's check followed by its artifact in `builds/<project>/<id>/artifact/` (`package.yaml` and `files/` for a Runner, `models/` for a Gateway); `POST .../builds/{build}/publish` then takes `{target, note?}` and, by the target's product, `{channel, serve?, expected_version?, bind?}` for a Runner (the package is staged on the channel; `bind` is slot to connection name) or `{data_source?}` for a Gateway (the models' own storage connection by default). The answer is the Runner's or the Gateway's own; a refusal comes back in its words.
+A build of a project whose kind produces something to publish (`build`, `sync`, `store`, `integration`) is the kind's check followed by its artifact in `builds/<project>/<id>/artifact/` (`package.yaml` and `files/` for a Runner, `models/` for a Gateway); the console deploys it to a Runner or a Gateway as the person (`POST /api/deploys`). The calls that sent a build, ran its tasks, read a Gateway's catalog or kept publisher keys answer `410 Gone` with the console's call to use instead ([docs/publishing.md](../docs/publishing.md#deploying-a-build-from-the-control-service)), and `dbdataworkspace publisher` answers the same way.
 
 The `integration` kind (IX20) is a manifest (`package.yaml`), job classes in `src/*.csx` (or a `.csproj` for a compiled project), and test scripts in `tests/`: the check is `dbdatarunner package build` into a scratch folder (no .NET SDK needed for csx), a build runs `package test` first and then writes the package, and a compiled project is built with `dotnet publish` only where the SDK is installed (a server without it says so, `DBD-WS-INTEGRATION-SDK`). The programs are `dbdatarunner` and `dotnet`, found beside the server or on PATH (`RunnerExecutable`, `DotnetExecutable`, `IntegrationSources` and `IntegrationCache` name them and the NuGet feeds otherwise); see [`docs/integrations.md`](../docs/integrations.md).
 
-The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 30 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API; the publisher's key reference is not relayed.
+The console relays an explicit table of these (`ServerProducts.WorkspaceRoutes` in `DbDataKit.Server`: 45 routes, each with its role, checked at the relay against what the person holds, in the route's project too, and by the server again), not the whole API.
 
 ## Build and test
 

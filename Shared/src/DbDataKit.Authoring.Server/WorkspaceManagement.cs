@@ -33,7 +33,7 @@ public static class WorkspaceManagement
     public const string ScriptTestMoved = "A script is tested on a Runner, not on the Workspace server: Test on the Scripts tab builds the draft, stages it in a channel that is not production through the console, and runs the task script-test there.";
 
     /// <summary>How each removed answer starts: this server calls no Runner or Gateway and holds no publisher key, and the console does the work as the signed-in person.</summary>
-    public const string ConsoleDoesIt = "The Workspace server calls no Runner or Gateway and holds no publisher key; the console does this, as the signed-in person: ";
+    public const string ConsoleDoesIt = "The Workspace server never calls a Runner or a Gateway and does not hold a publisher key; the console does this, as the signed-in person: ";
 
     /// <summary>What the console deploys with, in place of a publisher key of this server.</summary>
     private const string ConsoleSigns = "the console signs each version it deploys with its own publisher key, which every Runner and Gateway group it manages trusts.";
