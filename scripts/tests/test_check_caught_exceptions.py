@@ -132,6 +132,19 @@ class CheckCaughtExceptions(unittest.TestCase):
         self.assertEqual(1, len(problems))
         self.assertIn("delete the line", problems[0])
 
+    def test_a_new_finding_in_a_file_outside_the_baseline_fails(self):
+        lost = method('try { Run(); } catch (Exception ex) { throw new X("a"); }')
+        root = tree({"src/A.cs": lost, "src/B.cs": lost, check.BASELINE: "src/A.cs: 1\n"})
+        problems, warnings = check.check(root, reviewed={})
+        self.assertEqual(1, len(problems), problems)
+        self.assertTrue(problems[0].startswith("src/B.cs:5: "), problems[0])
+        self.assertEqual(["src/A.cs: 1 (baseline)"], warnings)
+
+    def test_the_baseline_of_the_repository_is_well_formed_and_names_cs_files(self):
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        for path, count in check.load_baseline(root).items():
+            self.assertTrue(path.endswith(".cs") and count > 0, (path, count))
+
     def test_a_malformed_baseline_line_is_refused(self):
         root = tree({"src/A.cs": method("Run();"), check.BASELINE: "src/A.cs\n"})
         with self.assertRaises(ValueError):
