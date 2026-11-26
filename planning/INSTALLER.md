@@ -123,17 +123,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P64: what a bare `health check` does when the server's settings file cannot be read (default, awaiting the owner)
-
-A non-root user runs `dbdatarunner health check` on Linux, where `/var/lib/dbdatakit/runner` is mode 0700 for the service's user, or the
-`listen:` line of `server.yaml` is `listen: soon`. The command cannot learn the address the Runner listens on.
-
-- A (built): the check fails (exit 1) and says it cannot read the address, naming the file and `--url`. It never asks another address, where a
-  different program could answer and report a false "healthy".
-- B: it asks the default address (`https://localhost:7840/health/live`), as when there is no settings file.
-
-Recommendation: A. If A stands, `docs/install.md` ("Ports", where `health check` asks) gains the case.
-
 ### INSTALLER-P65: the ports the container images and the compose files use (default, awaiting the owner)
 
 `docker compose -f dist/compose/quickstart.yml up` now publishes `7800:7800` (the console) and `7821:7821` (the Gateway's Flight SQL); a Flight client

@@ -161,11 +161,20 @@ Where `health check` asks, with no `--url`:
 - The server's settings file has a `listen:` line: that address. A server that listens on `0.0.0.0`, `::` or a host name is asked on `localhost`.
   `--repo` names the server's folder when it is not the default one.
 - The file or its `listen:` line is not there: the default address (`https://localhost:7800`, `:7840` or `:7860`).
+- The file cannot be read, or its `listen:` line is not an address: the check asks nothing and exits 1. It names the file and `--url`, because
+  another program could answer on the default address and the check would then report the wrong server.
 
 The Gateway's `health check` asks its `listen` address from `config/server.yaml` in its data folder, which `--repo` names in the same way.
 
 Example: on a Runner whose `listen:` line is `https://127.0.0.1:7841`, `dbdatarunner health check` asks `https://127.0.0.1:7841/health/live` and
-prints `healthy: HTTP 200`.
+prints `healthy: HTTP 200`. On Linux the Runner's folder is closed to every user but the service's, so the same command run by another user
+prints:
+
+```
+The address the server listens on cannot be read: Access to the path '/var/lib/dbdatakit/runner/server.yaml' is denied. Fix the listen: line, or give the address with --url.
+```
+
+Run it with `sudo`, or give the address: `dbdatarunner health check --url https://127.0.0.1:7841/health/live`.
 
 `dbdatakit setup link` and `user invite` start their links with the console's `listen:` address when `--url` is not given. The identity home on its
 own (`dbdatakit identity run`) listens on 7819 unless `--listen` says otherwise.
