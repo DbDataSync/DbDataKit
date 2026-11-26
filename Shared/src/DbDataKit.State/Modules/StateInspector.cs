@@ -193,7 +193,7 @@ public sealed class StateInspector : IDisposable
             }
             else
             {
-                foreach (var table in ns.Tables.Values)
+                foreach (var table in ns.ExistingTables.Values)
                     if (TableExists(table)) clashes.Add(table);
             }
 
