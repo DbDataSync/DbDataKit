@@ -1,6 +1,5 @@
 using DbDataKit.Runner.Connections;
 using DbDataKit.Runner.Api;
-using DbDataKit.Runner.Client;
 using System.Globalization;
 using System.Net.Http;
 using DbDataKit.Cli;
@@ -41,13 +40,14 @@ public static class RunnerCli
     }
 
     /// <summary>
-    /// The commands that are gone, each answering the sentence that names what replaced it (exit code 2): publishing a package to a runner's API, and pairing
-    /// this machine as a publisher for it, went from the command line, since the console deploys.
+    /// The commands that are gone, each answering the sentence that names what replaced it (exit code 2): publishing a package to a runner's API, pairing
+    /// this machine as a publisher for it, and promoting a version from one runner group to another went from the command line, since the console deploys.
     /// </summary>
     public static RemovedCommands Removed { get; } = new(Program, new Dictionary<string, string>
     {
         ["package pair"] = RemovedCommands.ConsoleDeploys,
         ["package publish"] = RemovedCommands.ConsoleDeploys,
+        ["package promote"] = RemovedCommands.ConsoleDeploys,
     });
 
     public static NounRouter Router(Func<string, string?>? environment = null) => new(Program,
@@ -381,11 +381,8 @@ public static class RunnerCli
         }
     }
 
-    private static Noun PackageNoun(Func<string, string?>? environment) => new("package", "Packages in a runner: install into this runner's own state (the development path), promote between runner groups, build and test an integration, and the publishing settings",
+    private static Noun PackageNoun(Func<string, string?>? environment) => new("package", "Packages in a runner: install into this runner's own state (the development path), build and test an integration, and the publishing settings",
     [
-        new Verb("promote", "Promote a package to another runner group (plan 30 PB06): the same version, read from one runner and sent by hash to another (files it has are not sent again), published there in the channel asked with its signature, which the target's trust store must trust; the slots of that channel are the target's own (--bind) and an unbound one refuses naming it", EffectClass.TargetDataWrites,
-            "<package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>, default prod] [--version <n>] [--stage] [--bind <slot>=<connection>[,<slot>=<connection>...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]", (args, context) => PackagePromoteAsync(args, context, environment),
-            DataSchemas.Object([("package", DataSchemas.String), ("from_version", DataSchemas.Integer), ("version", DataSchemas.Integer), ("channel", DataSchemas.String), ("changed", DataSchemas.Boolean), ("mode", DataSchemas.String), ("sent", DataSchemas.Integer), ("skipped", DataSchemas.Integer), ("signature", DataSchemas.String)], "package", "from_version", "version", "channel", "changed", "mode", "sent", "skipped")),
         new Verb("require-signatures", "Show, or with on or off set, whether this runner refuses a version that is not signed (plan 30 section 6.2; the signature check itself is not built yet, so 'on' refuses every publish)", EffectClass.TargetDataWrites,
             $"[on|off] {Where}", (args, context) => PackageRequireSignaturesAsync(args, context, environment),
             DataSchemas.Object([("require_signatures", DataSchemas.Boolean)], "require_signatures")),
@@ -430,69 +427,6 @@ public static class RunnerCli
             return CliExit.Ok;
         }
         catch (PackageInstallException ex)
-        {
-            await context.Error.WriteLineAsync(ex.Message);
-            return CliExit.Failure;
-        }
-    }
-
-    private static async Task<int> PackagePromoteAsync(string[] args, CliContext context, Func<string, string?>? environment)
-    {
-        const string usage = "Usage: package promote <package> --from-server <name or https address> --server <name or https address> --channel <name> [--from-channel <name>] [--version <n>] [--stage] [--bind <slot>=<connection>[,...]] [--from-code <code>] [--code <code>] [--client-dir <directory>]";
-        var parsed = CliArgs.Parse(args, new HashSet<string> { "stage" }, new HashSet<string> { "from-server", "server", "channel", "from-channel", "version", "bind", "from-code", "code", "client-dir" });
-        if (parsed.Unknown.Count > 0 || parsed.Words.Count != 1 || parsed.Get("from-server") is not { } fromServer || parsed.Get("server") is not { } server || parsed.Get("channel") is not { } channel)
-        {
-            await context.Error.WriteLineAsync(usage);
-            return CliExit.Usage;
-        }
-
-        int? version = null;
-        if (parsed.Get("version") is { } versionText)
-        {
-            if (!int.TryParse(versionText, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number < 1)
-            {
-                await context.Error.WriteLineAsync("--version is a whole number of 1 or more.");
-                return CliExit.Usage;
-            }
-            version = number;
-        }
-
-        Dictionary<string, string>? bindings = null;
-        if (parsed.Get("bind") is { } bindText)
-        {
-            bindings = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var pair in bindText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                var at = pair.IndexOf('=');
-                if (at < 1 || at == pair.Length - 1)
-                {
-                    await context.Error.WriteLineAsync($"--bind is <slot>=<connection>[,<slot>=<connection>...]; '{pair}' is not.");
-                    return CliExit.Usage;
-                }
-                bindings[pair[..at].Trim()] = pair[(at + 1)..].Trim();
-            }
-        }
-
-        try
-        {
-            var client = new RunnerPublishClient(new RunnerClientStore(parsed.Get("client-dir") ?? RunnerClientStore.DefaultDirectory(environment)), environment);
-            var request = new DbDataKit.State.PromoteRequest("integration", parsed.Words[0], parsed.Get("from-channel") ?? "prod", channel, version, parsed.Has("stage") ? "stage" : null, bindings);
-            var result = await client.PromoteToGroupAsync(fromServer, parsed.Get("from-code"), server, parsed.Get("code"), request, line => context.Out.WriteLine(line), context.Cancellation);
-            await context.Out.WriteLineAsync(
-                $"{(result.Mode == "stage" ? "Staged" : "Promoted")} {result.Name} on {server} {channel}: version {result.TargetVersion} (version {result.SourceVersion} of {fromServer} {result.FromChannel}){(result.Changed ? "" : ", the same content as before, nothing changed")}, {result.Sent} file(s) sent, {result.Skipped} already there, signature {result.Signature}."
-                + (result.Mode == "stage" ? " It is not run until an administrator activates it." : ""));
-            context.Data["package"] = result.Name;
-            context.Data["from_version"] = result.SourceVersion;
-            context.Data["version"] = result.TargetVersion;
-            context.Data["channel"] = result.ToChannel;
-            context.Data["changed"] = result.Changed;
-            context.Data["mode"] = result.Mode;
-            context.Data["sent"] = result.Sent;
-            context.Data["skipped"] = result.Skipped;
-            context.Data["signature"] = result.Signature;
-            return CliExit.Ok;
-        }
-        catch (RunnerClientException ex)
         {
             await context.Error.WriteLineAsync(ex.Message);
             return CliExit.Failure;
