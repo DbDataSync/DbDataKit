@@ -42,10 +42,10 @@ public sealed class FtpsFileStore : IFileStore
         {
             await client.Connect(ct).ConfigureAwait(false);
         }
-        catch (Exception) when (refused is not null)
+        catch (Exception ex) when (refused is not null)
         {
             client.Dispose();
-            throw new PinMismatchException("certificate", server.Host, refused, server.CertificateSha256);
+            throw new PinMismatchException("certificate", server.Host, refused, server.CertificateSha256, ex);
         }
         catch
         {

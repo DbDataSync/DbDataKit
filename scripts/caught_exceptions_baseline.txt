@@ -48,16 +48,9 @@ Shared/src/DbDataKit.Authoring.Server/WorkspaceProjects.cs: 2
 Shared/src/DbDataKit.Authoring/WorkspaceFiles.cs: 1
 Shared/src/DbDataKit.Backlog/WorkItemFile.cs: 1
 Shared/src/DbDataKit.Cli/Noun.cs: 1
-Shared/src/DbDataKit.Connections.Files/FileStore.cs: 1
-Shared/src/DbDataKit.Connections.Files/Ftps.cs: 1
 Shared/src/DbDataKit.Connections.Files/SshStores.cs: 1
-Shared/src/DbDataKit.Connections.FlightSql/FlightSqlConnection.cs: 1
-Shared/src/DbDataKit.Connections.FlightSql/FlightSqlProvider.cs: 1
 Shared/src/DbDataKit.Connections.Http/HttpConnections.cs: 1
-Shared/src/DbDataKit.Connections.Http/OAuthAuthorizationCode.cs: 1
-Shared/src/DbDataKit.Connections.Http/SignInHandler.cs: 1
 Shared/src/DbDataKit.Connections/ComposerBase.cs: 1
-Shared/src/DbDataKit.Connections/GenericComposers.cs: 1
 Shared/src/DbDataKit.DataModel.Runner/ModelContractJob.cs: 1
 Shared/src/DbDataKit.Delivery/DeliveryChannels.cs: 1
 Shared/src/DbDataKit.Delivery/Email/EmailChannel.cs: 1
