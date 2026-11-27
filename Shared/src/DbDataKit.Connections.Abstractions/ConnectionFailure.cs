@@ -55,8 +55,12 @@ public sealed class ConnectionFailure(ConnectionFailureKind kind, string? code, 
     public override string ToString() => PublicMessage;
 }
 
-/// <summary>Thrown by providers instead of the driver exception. The inner exception is deliberately not kept.</summary>
-public sealed class ConnectionFailureException(ConnectionFailure failure) : Exception(failure.PublicMessage)
+/// <summary>
+/// Thrown by providers instead of the driver exception; its message is the failure's public text. A provider that classifies a driver's
+/// exception does not keep it as the inner exception; code that replaces an error whose message holds no secret (a token answer that is not
+/// JSON) passes it as <paramref name="inner"/>.
+/// </summary>
+public sealed class ConnectionFailureException(ConnectionFailure failure, Exception? inner = null) : Exception(failure.PublicMessage, inner)
 {
     public ConnectionFailure Failure { get; } = failure;
 }
