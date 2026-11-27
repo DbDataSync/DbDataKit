@@ -13,7 +13,7 @@ public enum VerificationFailure
     UntrustedUrl, WrongProduct, VersionMismatch, UnsafeArchive, KeyRotationRejected, Download,
 }
 
-public sealed class UpdateVerificationException(VerificationFailure failure, string message) : Exception(message)
+public sealed class UpdateVerificationException(VerificationFailure failure, string message, Exception? inner = null) : Exception(message, inner)
 {
     public VerificationFailure Failure { get; } = failure;
 }
@@ -69,7 +69,7 @@ public static class SignatureFile
         var parts = text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 3 || parts[0] != Magic) throw new UpdateVerificationException(VerificationFailure.MalformedSignature, "Signature file is malformed.");
         try { return (parts[1], Convert.FromBase64String(parts[2])); }
-        catch (FormatException) { throw new UpdateVerificationException(VerificationFailure.MalformedSignature, "Signature is not valid base64."); }
+        catch (FormatException ex) { throw new UpdateVerificationException(VerificationFailure.MalformedSignature, "Signature is not valid base64.", ex); }
     }
 }
 
@@ -123,7 +123,7 @@ public sealed class TrustStore
             throw new UpdateVerificationException(VerificationFailure.KeyRotationRejected, "Key manifest is malformed.");
         byte[] payload, sig;
         try { payload = Convert.FromBase64String(env.Payload); sig = Convert.FromBase64String(env.Signature); }
-        catch (FormatException) { throw new UpdateVerificationException(VerificationFailure.KeyRotationRejected, "Key manifest is not valid base64."); }
+        catch (FormatException ex) { throw new UpdateVerificationException(VerificationFailure.KeyRotationRejected, "Key manifest is not valid base64.", ex); }
         if (!_keys.TryGetValue(env.KeyId, out var signer) || !Ed25519.Verify(signer, payload, sig))
             throw new UpdateVerificationException(VerificationFailure.KeyRotationRejected, "Key manifest is not signed by a trusted key.");
         KeySetPayload? p;
@@ -182,7 +182,7 @@ public static class ReleaseVerifier
         trust.VerifyOrThrow(manifestBytes, signatureText);
         ReleaseManifest m;
         try { m = ReleaseManifest.Parse(manifestBytes); }
-        catch (FormatException ex) { throw new UpdateVerificationException(VerificationFailure.MalformedManifest, ex.Message); }
+        catch (FormatException ex) { throw new UpdateVerificationException(VerificationFailure.MalformedManifest, ex.Message, ex); }
         if (expectedProduct is not null && !string.Equals(m.Product, expectedProduct, StringComparison.OrdinalIgnoreCase))
             throw new UpdateVerificationException(VerificationFailure.WrongProduct, $"Manifest is for '{m.Product}', expected '{expectedProduct}'.");
         return new VerifiedManifest(m, ManifestSigner.Sha256Hex(manifestBytes), manifestBytes);

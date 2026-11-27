@@ -27,7 +27,7 @@ public sealed class GatewayPairingsFile(string path) : IGatewayPairings
         {
             if (!File.Exists(Path)) return [];
             try { return JsonSerializer.Deserialize<List<GatewayPairing>>(File.ReadAllText(Path), Json) ?? []; }
-            catch (JsonException) { throw new InvalidDataException($"{Path} is not a list of paired gateways; remove it and pair again."); }
+            catch (JsonException ex) { throw new InvalidDataException($"{Path} is not a list of paired gateways; remove it and pair again.", ex); }
         }
     }
 

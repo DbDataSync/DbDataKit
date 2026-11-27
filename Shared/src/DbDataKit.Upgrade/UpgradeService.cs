@@ -10,7 +10,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Upgrade;
 
 /// <summary>A call the upgrade cannot do, with the status the answer has and the words for the person.</summary>
-public sealed class UpgradeException(int status, string message) : Exception(message)
+public sealed class UpgradeException(int status, string message, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 }
@@ -167,7 +167,7 @@ public sealed class UpgradeService
                 : releases.FirstOrDefault(r => r.Parsed.Equals(ReleaseVersion.TryParse(version, out var asked) ? asked : null))
                   ?? throw new UpgradeException(404, $"The feed {_feed.Source} has no release {version} of {_options.Product}.");
         }
-        catch (FeedException ex) { throw new UpgradeException(502, ex.Message); }
+        catch (FeedException ex) { throw new UpgradeException(502, ex.Message, ex); }
 
         var report = new JsonObject
         {
@@ -198,7 +198,7 @@ public sealed class UpgradeService
 
         FeedReleaseDetails details;
         try { details = await _feed.DetailsAsync(target, ct); }
-        catch (FeedException ex) { throw new UpgradeException(502, ex.Message); }
+        catch (FeedException ex) { throw new UpgradeException(502, ex.Message, ex); }
         report["generation_of_release"] = details.Generation;
 
         var zipName = target.ZipName(_options.Rid);
@@ -225,11 +225,11 @@ public sealed class UpgradeService
         }
         catch (UpdateVerificationException ex)
         {
-            throw new UpgradeException(422, $"{zipName} was refused and nothing was changed: {ex.Message}");
+            throw new UpgradeException(422, $"{zipName} was refused and nothing was changed: {ex.Message}", ex);
         }
         catch (Exception ex) when (ex is IOException or HttpRequestException or UnauthorizedAccessException)
         {
-            throw new UpgradeException(502, $"{zipName} could not be downloaded from {_feed.Source}: {ex.Message}");
+            throw new UpgradeException(502, $"{zipName} could not be downloaded from {_feed.Source}: {ex.Message}", ex);
         }
 
         if (problems.Count > 0)
@@ -274,7 +274,7 @@ public sealed class UpgradeService
     private UpdatePlan? LoadJournal()
     {
         try { return PlanStore.Load(_layout); }
-        catch (UpdatePlanException ex) { throw new UpgradeException(409, ex.Message); }
+        catch (UpdatePlanException ex) { throw new UpgradeException(409, ex.Message, ex); }
     }
 
     private (byte[] Seed, byte[] Public) AttestKey()
@@ -339,7 +339,7 @@ public sealed class UpgradeService
         {
             _drain.Resume();
             Fail("the helper could not be started: " + ex.Message);
-            throw new UpgradeException(500, $"The helper that swaps the program could not be started ({ex.Message}). Nothing was changed and the server takes work again.");
+            throw new UpgradeException(500, $"The helper that swaps the program could not be started ({ex.Message}). Nothing was changed and the server takes work again.", ex);
         }
 
         return Status();

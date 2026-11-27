@@ -92,7 +92,7 @@ public sealed class Downloader(IContentFetcher fetcher, TrustedUrlPolicy policy,
         catch (UpdateVerificationException ex) when (ex.Failure == VerificationFailure.SizeMismatch)
         {
             // truncated: keep the partial so the next attempt can resume
-            throw new UpdateVerificationException(VerificationFailure.Download, "Download incomplete (resumable): " + ex.Message);
+            throw new UpdateVerificationException(VerificationFailure.Download, "Download incomplete (resumable): " + ex.Message, ex);
         }
         File.Move(partial, final, true);
         return final;

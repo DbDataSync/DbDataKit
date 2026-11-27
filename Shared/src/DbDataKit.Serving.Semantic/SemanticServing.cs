@@ -126,7 +126,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken, scans), new Validator(model.Catalog), models.Level, rowCap: 1);
             Result result;
             try { result = engine.Run(document); }
-            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message, refused); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             if (note is not null) note.Plan = string.Join("\n", scans.Select(x => $"{x.Source} ({x.Engine}): {x.Text}"));
             return new ExplainAnswer(scans, provenance);
@@ -138,8 +138,8 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level, rowCap: (int)Math.Min(limit ?? 1_000_000, 1_000_000));
             Result result;
             try { result = engine.Run(document); }
-            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
-            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
+            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit, stopped); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message, refused); }
             if (result.Status == "failed") throw new ServingInvalidException(Describe(result));
             return new SemanticAnswer(result, provenance, HashMasking.Of(view, models, model.Name));
         }, cancellationToken);
@@ -164,8 +164,8 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
             var engine = new QisEngine(CatalogFor(context, model), new ServingSourceExecutor(inner, catalog, context, model, models, cancellationToken), new Validator(model.Catalog), models.Level);
             (List<string> members, bool truncated, List<DbDataKit.Semantic.Abstractions.QisError>? errors) result;
             try { result = engine.Members(attribute, search, limit); }
-            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit); }
-            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message); }
+            catch (SandboxLimitException stopped) { throw new ServingLimitException(stopped.Message, stopped.Limit, stopped); }
+            catch (RowAccessRefusedException refused) { throw new ServingDeniedException(refused.Message, refused); }
             if (result.errors is { Count: > 0 } failed) throw new ServingInvalidException(string.Join("; ", failed.Select(e => $"{e.Code}: {e.Message}")));
             var shown = HashMasking.Of(view, models, model.Name) is { } masking && masking.Covers(attribute) ? result.members.Select(m => masking.Apply(attribute, m)).ToList() : result.members;
             return new MembersAnswer(shown, result.truncated, provenance);
@@ -221,7 +221,7 @@ internal sealed class SemanticQueries(IServingQueries inner, IServingCatalog cat
     private static JsonObject Parse(string json)
     {
         try { return JsonNode.Parse(json) as JsonObject ?? throw new ServingInvalidException("A semantic request is a JSON object."); }
-        catch (System.Text.Json.JsonException e) { throw new ServingInvalidException($"The semantic request is not valid JSON: {e.Message}"); }
+        catch (System.Text.Json.JsonException e) { throw new ServingInvalidException($"The semantic request is not valid JSON: {e.Message}", e); }
     }
 
     /// <summary>The values bound with a statement (a prepared statement's parameters), as the request's <c>parameters</c>: by name, or "1", "2", ... for the unnamed ones in order.</summary>
