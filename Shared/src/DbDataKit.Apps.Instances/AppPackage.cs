@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace DbDataKit.Apps;
 
 /// <summary>A package that is damaged, too large, or names a file outside itself.</summary>
-public sealed class AppPackageException(string message) : Exception(message);
+public sealed class AppPackageException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// What is published for an app version (plan 26): the manifest and the files the host serves, the built bundle and the declarative views (plan 22: builds are offline, so what is published is what was built). It is one piece of text
@@ -71,7 +71,7 @@ public sealed class AppPackage
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidCastException or NullReferenceException)
         {
-            throw new AppPackageException("The package is damaged: " + ex.Message);
+            throw new AppPackageException("The package is damaged: " + ex.Message, ex);
         }
     }
 }

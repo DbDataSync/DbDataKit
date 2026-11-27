@@ -10,7 +10,7 @@ public sealed record AppStorageLimits(int MaximumValueBytes = 256 * 1024, int Ma
 public sealed record StoredValue(string Key, string Json, int Version);
 
 /// <summary>Why a storage call was refused. <see cref="Kind"/> is stable (<c>key</c>, <c>value</c>, <c>quota</c>, <c>conflict</c>), the message says what to change.</summary>
-public sealed class AppStorageException(string kind, string message) : Exception(message)
+public sealed class AppStorageException(string kind, string message, Exception? inner = null) : Exception(message, inner)
 {
     public string Kind { get; } = kind;
 }
@@ -62,7 +62,7 @@ public sealed class AppStorage(StateDatabase database, TimeProvider? clock = nul
         var size = Encoding.UTF8.GetByteCount(json);
         if (size > limits.MaximumValueBytes) throw new AppStorageException("value", $"A value is at most {limits.MaximumValueBytes / 1024} KB; this one is {size / 1024} KB.");
         try { using var _ = JsonDocument.Parse(json); }
-        catch (JsonException) { throw new AppStorageException("value", "A value is JSON."); }
+        catch (JsonException ex) { throw new AppStorageException("value", "A value is JSON.", ex); }
         var now = _clock.GetUtcNow();
         var owner = OwnerOf(scope, person);
 
