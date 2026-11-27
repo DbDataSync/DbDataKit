@@ -133,9 +133,9 @@ internal sealed class OdbcNativeFunctions(string connectionString, OdbcCatalogOp
                 }
                 return new OdbcRows(rows, truncated: false);
             }
-            catch (OdbcCatalogException) when (cancellationToken.IsCancellationRequested)
+            catch (OdbcCatalogException ex) when (cancellationToken.IsCancellationRequested)
             {
-                throw new OperationCanceledException(cancellationToken);
+                throw new OperationCanceledException("The operation was canceled.", ex, cancellationToken);
             }
         }
         finally { api.FreeHandle(HandleStmt, stmt); }
@@ -173,9 +173,9 @@ internal sealed class OdbcNativeFunctions(string connectionString, OdbcCatalogOp
                             return rows;
                         }, cancellationToken).ConfigureAwait(false);
                     }
-                    catch (OdbcCatalogException) when (cancellationToken.IsCancellationRequested)
+                    catch (OdbcCatalogException ex) when (cancellationToken.IsCancellationRequested)
                     {
-                        throw new OperationCanceledException(cancellationToken);
+                        throw new OperationCanceledException("The operation was canceled.", ex, cancellationToken);
                     }
                     foreach (var row in batch) yield return row;
                 }

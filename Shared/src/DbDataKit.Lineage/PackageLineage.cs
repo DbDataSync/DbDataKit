@@ -39,12 +39,12 @@ public static class PackageLineage
     {
         JsonNode? root;
         try { root = JsonNode.Parse(text); }
-        catch (JsonException) { throw new LineageGraphException($"{file} is not JSON."); }
+        catch (JsonException ex) { throw new LineageGraphException($"{file} is not JSON.", ex); }
         var schema = root is JsonObject o && o["schema"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
         if (schema != Schema)
             throw new LineageGraphException(schema is null ? $"{file} has no `schema`; this reads {Schema}." : $"{file} is `{schema}`; this reads {Schema} (a newer package needs a newer runner).");
         try { return LineageJson.Read(root!["graph"]); }
-        catch (LineageGraphException ex) { throw new LineageGraphException($"{file}: {ex.Message}"); }
+        catch (LineageGraphException ex) { throw new LineageGraphException($"{file}: {ex.Message}", ex); }
     }
 
     /// <summary>The slot a dataset or column id names, or null when it names a table by its own identity (<c>engine://@slot/schema.table[#column]</c>).</summary>

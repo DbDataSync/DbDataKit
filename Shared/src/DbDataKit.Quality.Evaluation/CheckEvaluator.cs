@@ -305,9 +305,9 @@ public sealed class CheckEvaluator(ISqlDialect dialect, EvaluationLimits? limits
             await using var reader = await command.ExecuteReaderAsync(timeout.Token).ConfigureAwait(false);
             await read(reader, timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new RefusedException($"limit reached: the statement ran past its limit of {_limits.StatementTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)} seconds and was stopped.");
+            throw new RefusedException($"limit reached: the statement ran past its limit of {_limits.StatementTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)} seconds and was stopped.", ex);
         }
     }
 
@@ -391,5 +391,5 @@ public sealed class CheckEvaluator(ISqlDialect dialect, EvaluationLimits? limits
         return colon > 0 && colon < 40 && message[..colon].EndsWith("Error", StringComparison.Ordinal) ? message[..colon] : null;
     }
 
-    private sealed class RefusedException(string message) : Exception(message);
+    private sealed class RefusedException(string message, Exception? inner = null) : Exception(message, inner);
 }

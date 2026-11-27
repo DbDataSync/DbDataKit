@@ -79,7 +79,7 @@ public static class ArtifactDeploy
             var published = await new GatewayDefinitionsPublish(link, publisher, step, ct, build).PublishEntityModelsAsync([.. files.Select(f => (f, File.ReadAllText(f)))], options.DataSource, options.Adopt);
             return new JsonObject { ["models"] = published, ["target"] = target.Name, ["gateway"] = target.Url, ["signature"] = SignatureOf(published) };
         }
-        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502, inner: ex); }
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public static class ArtifactDeploy
             if (views.Count > 0) answer["views"] = views;
             return answer;
         }
-        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502, inner: ex); }
     }
 
     /// <summary>What the Gateway said of the signatures of the models it took: <c>verified</c> when it verified every one, otherwise the first other word it gave (a model it took unsigned); null when it said nothing of one of them.</summary>

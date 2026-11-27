@@ -32,9 +32,9 @@ public sealed class LocalChannelClient : IAsyncDisposable
             catch { socket.Dispose(); throw; }
             return new LocalChannelClient(new NetworkStream(socket, ownsSocket: true), options.MaxMessageBytes);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new TimeoutException($"Nothing answered on {options.Endpoint} within {timeout.Value.TotalSeconds:0.#}s.");
+            throw new TimeoutException($"Nothing answered on {options.Endpoint} within {timeout.Value.TotalSeconds:0.#}s.", ex);
         }
     }
 
