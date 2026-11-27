@@ -8,7 +8,7 @@ using DbDataKit.Serving;
 namespace DbDataKit.Views;
 
 /// <summary>A widget that cannot be drawn: the entry it gets instead (its code and words, where in the document, what would fix it). The others still draw.</summary>
-internal sealed class WidgetProblem(string code, string message, string? path = null, IReadOnlyList<string>? suggestions = null) : Exception(message)
+internal sealed class WidgetProblem(string code, string message, string? path = null, IReadOnlyList<string>? suggestions = null, Exception? inner = null) : Exception(message, inner)
 {
     public string Code { get; } = code;
     public string? Path { get; } = path;

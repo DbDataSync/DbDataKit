@@ -44,13 +44,3 @@ Shared/src/DbDataKit.Connections/ComposerBase.cs: 1
 Shared/src/DbDataKit.State.Engines/Snapshots/StateEndpoints.cs: 2
 Shared/src/DbDataKit.State.Engines/Snapshots/StateMoveService.cs: 1
 Shared/src/DbDataKit.State.Engines/Snapshots/StateSnapshotService.cs: 1
-Shared/src/DbDataKit.Views.Export/ChromiumExporter.cs: 3
-Shared/src/DbDataKit.Views.Hosting/ViewsApi.Pages.cs: 1
-Shared/src/DbDataKit.Views.Hosting/ViewsApi.cs: 1
-Shared/src/DbDataKit.Views/Resolution/AnswerViews.cs: 1
-Shared/src/DbDataKit.Views/Resolution/WidgetResolver.Custom.cs: 3
-Shared/src/DbDataKit.Web/GroupKey.cs: 4
-Shared/src/DbDataKit.Web/JoinClient.cs: 2
-Shared/src/DbDataKit.Web/JoinRequestFile.cs: 2
-Shared/src/DbDataKit.Web/ManagementApi.cs: 1
-Shared/src/DbDataKit.Web/PairingClient.cs: 3

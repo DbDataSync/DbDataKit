@@ -22,7 +22,7 @@ public static class GroupCipher
     {
         byte[] bytes;
         try { bytes = Convert.FromBase64String(text.Trim()); }
-        catch (FormatException) { throw new FormatException($"{what} is not base64."); }
+        catch (FormatException ex) { throw new FormatException($"{what} is not base64.", ex); }
         if (bytes.Length != 32) throw new FormatException($"{what} is 32 bytes; this one is {bytes.Length}.");
         return bytes;
     }
@@ -50,7 +50,7 @@ public static class GroupCipher
 }
 
 /// <summary>A group key that is missing, not a key, or not the group's; <see cref="Secret"/> names the secret that holds it on the instance.</summary>
-public sealed class GroupKeyException(string secret, string message, GroupKeyProblem problem = GroupKeyProblem.WrongKey) : InvalidOperationException(message)
+public sealed class GroupKeyException(string secret, string message, GroupKeyProblem problem = GroupKeyProblem.WrongKey, Exception? inner = null) : InvalidOperationException(message, inner)
 {
     public string Secret { get; } = secret;
 
@@ -133,7 +133,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
     {
         byte[] key;
         try { key = GroupCipher.Parse(keyText); }
-        catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey); }
+        catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey, inner: ex); }
         Check(key, made: false, opened: null);
         lock (_gate)
         {
@@ -188,7 +188,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
 
             byte[] key;
             try { key = GroupCipher.Parse(text); }
-            catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey); }
+            catch (FormatException ex) { throw new GroupKeyException(spec.Secret, spec.NotAKeyText(ex.Message), GroupKeyProblem.NotAKey, inner: ex); }
             Check(key, made, opened);
             _key = key;
             return key;
@@ -208,7 +208,7 @@ public sealed class GroupKey(StateDatabase state, Func<ISecretStore> store, Grou
         catch (Exception ex) when (ex is CryptographicException or FormatException)
         {
             if (made) opened?.DeleteAsync(SecretName.Parse(spec.Secret)).GetAwaiter().GetResult();
-            throw new GroupKeyException(spec.Secret, spec.WrongKeyText);
+            throw new GroupKeyException(spec.Secret, spec.WrongKeyText, inner: ex);
         }
     }
 

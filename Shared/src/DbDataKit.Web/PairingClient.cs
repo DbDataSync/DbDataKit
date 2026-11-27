@@ -8,7 +8,7 @@ namespace DbDataKit.Web.Trust;
 /// <summary>A server a client has paired with: where it is, who it is, the certificate fingerprint to pin and what the client may grant there. <paramref name="Generation"/> and <paramref name="ProgramVersion"/> are what the server said at pairing (24a UC04); null from a server that predates them.</summary>
 public sealed record PairedServer(Uri Url, string InstanceId, string CertificateFingerprint, int ApiVersion, string Name, ServerRole Ceiling, int? Generation = null, string? ProgramVersion = null);
 
-public sealed class PairingFailedException(string message) : Exception(message);
+public sealed class PairingFailedException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// The client's half of pairing (plan 13, W12; <c>dbdatakit instance add</c> is this): it looks at the certificate the server presents, proves with the code that it holds it and that it saw that certificate,
@@ -38,7 +38,7 @@ public static class PairingClient
         {
             Hello? hello;
             try { hello = await probe.GetFromJsonAsync<Hello>(endpoint, Json, ct); }
-            catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { throw new PairingFailedException($"{url.Authority} did not answer as a DbDataKit server ({ex.GetType().Name})."); }
+            catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { throw new PairingFailedException($"{url.Authority} did not answer as a DbDataKit server ({ex.GetType().Name}).", ex); }
             if (hello?.InstanceId is null || seen.Length == 0) throw new PairingFailedException($"{url.Authority} did not answer as a DbDataKit server.");
             if (ManagementApi.Incompatibility(hello.ApiVersion) is { } message) throw new IncompatibleServerException(message, hello.ApiVersion);
             // a pair further apart than N and N-1 is refused before anything is proved or sent: the message names both versions and the side to upgrade (24a UC04)
@@ -53,7 +53,7 @@ public static class PairingClient
         {
             response = await http.PostAsJsonAsync(endpoint, new { proof, clientId = self.Id, name, kind = kind.ToString().ToLowerInvariant(), publicKey = Base64Url.Encode(self.Key.PublicKey), generation = ownGeneration, programVersion = ownProgramVersion ?? SuiteCompatibility.ProgramVersion }, Json, ct);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { throw new PairingFailedException($"{url.Authority} could not be reached for pairing ({ex.GetType().Name})."); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { throw new PairingFailedException($"{url.Authority} could not be reached for pairing ({ex.GetType().Name}).", ex); }
         using (response)
         {
             // the server's own half of the generation check (it sees this client's generation): its message names both versions and the side to upgrade
@@ -68,7 +68,7 @@ public static class PairingClient
             if (!response.IsSuccessStatusCode) throw new PairingFailedException($"The server refused the pairing ({(int)response.StatusCode}).");
             Answer? answer;
             try { answer = await response.Content.ReadFromJsonAsync<Answer>(Json, ct); }
-            catch (JsonException) { throw new PairingFailedException("The server's answer was not understood."); }
+            catch (JsonException ex) { throw new PairingFailedException("The server's answer was not understood.", ex); }
             if (answer?.InstanceId is null || answer.ServerProof is null || answer.CertificateFingerprint != seen
                 || !PairingProof.Matches(answer.ServerProof, PairingProof.ForResponse(key, answer.InstanceId, seen, self.Id, self.Key.PublicKey)))
                 throw new PairingFailedException("The server's answer did not prove that it holds the code, so nothing was paired. Check the address; something may be answering in its place.");
