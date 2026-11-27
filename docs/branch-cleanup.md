@@ -38,5 +38,9 @@ subject into `work/<slug>`, whose pull request goes into `main` (`planning/ROLES
   commits the pull request did not carry (its worker went on after the combine) is kept and listed in the job's log; it goes later, with the pull
   request that carries the rest, or by the cleanup above.
 
+When a `work/<slug>` pull request merges, both of them run and can delete the same task branches; whichever comes second finds them gone.
+A branch the remote no longer has is reported as `already deleted` and does not fail the job (in both workflows, and for the head branch the
+workflow **Delete merged branch** deletes); any other failure to delete a branch, such as a refused push, still fails it.
+
 By hand, from a clone: `python3 scripts/backup_branches.py tasks --base <base commit> --head <head commit>` is a dry run; `--apply` deletes. `work/<slug>`
 itself goes with its pull request, like any merged branch.

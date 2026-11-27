@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -172,6 +174,50 @@ class BackupBranches(unittest.TestCase):
         self.assertTrue(rest["backup/installer-5"].startswith("kept"), rest)
         self.assertTrue(rest["backup/endpoints-2"].startswith("kept"), rest)
 
+
+    def gone_on_the_remote(self, branch):
+        """Push `branch`, fetch it, then delete it on the remote only: the clone still has its remote-tracking ref, as when another workflow deleted it first."""
+        run(self.work, "push", "origin", branch)
+        run(self.work, "fetch", "origin", "+refs/heads/backup/*:refs/remotes/origin/backup/*")
+        run(self.remote, "branch", "-D", branch)
+
+    def main_quietly(self, *argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = backup_branches.main(list(argv))
+        return code, out.getvalue()
+
+    def test_clean_counts_a_branch_another_workflow_deleted_first_as_already_deleted(self):
+        run(self.work, "branch", "backup/work/gone", "main")
+        self.gone_on_the_remote("backup/work/gone")
+        done = dict(backup_branches.clean("origin", 0, apply=True))
+        self.assertEqual(done["backup/work/gone"], "already deleted")
+        code, out = self.main_quietly("clean", "--apply")
+        self.assertEqual(code, 0, out)
+        self.assertIn("backup/work/gone: already deleted", out)
+
+    def test_tasks_counts_a_task_branch_another_workflow_deleted_first_as_already_deleted(self):
+        base = run(self.work, "rev-parse", "main")
+        run(self.work, "checkout", "-b", "backup/installer-36", base)
+        self.commit_as("installer_36", "INSTALLER-36: a task")
+        head = run(self.work, "rev-parse", "HEAD")
+        run(self.work, "checkout", "main")
+        self.gone_on_the_remote("backup/installer-36")
+        code, out = self.main_quietly("tasks", "--base", base, "--head", head, "--apply")
+        self.assertEqual(code, 0, out)
+        self.assertIn("backup/installer-36: already deleted", out)
+
+    def test_any_other_delete_failure_still_fails(self):
+        run(self.work, "branch", "backup/work/held", "main")
+        run(self.work, "push", "origin", "backup/work/held")
+        hook = os.path.join(self.remote, "hooks", "pre-receive")
+        with open(hook, "w") as f:
+            f.write("#!/bin/sh\necho 'refused by the test' >&2\nexit 1\n")
+        os.chmod(hook, 0o755)
+        code, out = self.main_quietly("clean", "--apply")
+        self.assertEqual(code, 1, out)
+        self.assertIn("backup/work/held: FAILED:", out)
+        self.assertIn("refs/heads/backup/work/held", "\n".join(self.remote_branches()))
 
 if __name__ == "__main__":
     unittest.main()

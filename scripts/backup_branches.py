@@ -10,6 +10,7 @@
           BASE..HEAD names one, and it is deleted when HEAD (the pull request's head) or origin/main carries its tip; one with commits the pull request
           did not carry is kept and listed. Dry run unless --apply. The workflow `delete-merged-branch.yml` runs it when a `work/<slug>` pull request merges.
 
+In clean and tasks, a branch the remote no longer has (another workflow deleted it first) is reported as already deleted, not as a failure.
 Only committed work is backed up: an agent's uncommitted files are not. Intent: docs/agent-workflow.md ("Backups").
 Run from a clone of the repository: python3 scripts/backup_branches.py push | clean [--apply] [--hours N] | tasks --base BASE --head HEAD [--apply] [--remote origin]
 """
@@ -114,6 +115,17 @@ def remote_backups(remote):
     return rows
 
 
+def delete_remote(remote, name):
+    """Delete a remote branch and say how it went. A branch that is already gone counts as deleted: on a merge of a `work/<slug>` pull request,
+    `delete-merged-branch.yml` (tasks) and `backup-branch-cleanup.yml` (clean) both delete its task branches, and the second finds them gone."""
+    result = git("push", remote, "--delete", name, check=False)
+    if result.returncode == 0:
+        return "deleted"
+    if "remote ref does not exist" in result.stderr:
+        return "already deleted"
+    return "FAILED: " + result.stderr.strip()
+
+
 def clean(remote, hours, apply, now=None):
     now = time.time() if now is None else now
     main_ref = f"{remote}/main"
@@ -129,8 +141,7 @@ def clean(remote, hours, apply, now=None):
             deleted.append((name, f"kept: on main but touched {age_hours:.0f} h ago (under {hours} h)"))
             continue
         if apply:
-            result = git("push", remote, "--delete", name, check=False)
-            deleted.append((name, "deleted" if result.returncode == 0 else "FAILED: " + result.stderr.strip()))
+            deleted.append((name, delete_remote(remote, name)))
         else:
             deleted.append((name, f"would delete (on main, {age_hours:.0f} h old)"))
     return deleted
@@ -173,8 +184,7 @@ def clean_tasks(remote, base, head, apply):
             rows.append((name, "kept: it has commits the pull request did not carry"))
             continue
         if apply:
-            result = git("push", remote, "--delete", name, check=False)
-            rows.append((name, "deleted" if result.returncode == 0 else "FAILED: " + result.stderr.strip()))
+            rows.append((name, delete_remote(remote, name)))
         else:
             rows.append((name, f"would delete ({ident} is in the pull request)"))
     return rows
