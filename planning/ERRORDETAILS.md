@@ -34,7 +34,7 @@ The detail can hold values from a row (a duplicate key's value in a constraint m
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| ERRORDETAILS-7 | The Shared libraries keep the original exception in every case the check lists for them (153 today), and their entries leave the baseline | none | M | the check passes with no `Shared/` entry in its baseline |
+| ERRORDETAILS-7 | The Shared libraries keep the original exception in the 7 cases the check still lists for them, whose message can hold a secret (`Connections.Files/SshStores.cs`, `Connections.Http/HttpConnections.cs`, `Connections/ComposerBase.cs`, `State.Engines/Snapshots/StateEndpoints.cs` (2), `StateMoveService.cs`, `StateSnapshotService.cs`), as ERRORDETAILS-P1 decides, and their entries leave the baseline | none | S | the check passes with no `Shared/` entry in its baseline |
 | ERRORDETAILS-8 | The Gateway and Build keep the original exception in every case the check lists for them (22 and 21 today), and their entries leave the baseline | none | S | the check passes with no `DbDataGateway/` or `DbDataBuild/` entry in its baseline |
 | ERRORDETAILS-9 | Sync, the Store, the console and the Runner's tests keep the original exception in every case the check lists for them (26 today); the baseline is empty and goes | none | S | the check passes with no baseline file |
 | ERRORDETAILS-1 | A shared library for a failure's detail: from any exception it makes the detail (type, message, inner exceptions, stack trace, a driver's own message and code), passed through the redactor, with an id; the answer to a caller carries the classified words and the id; the hosting library keeps the detail of every request that ends in an exception | none | M | a test throws a driver failure and a plain exception in a request; the answer holds the classified words and the id, and the stored detail holds the message, the inner exception and the stack, with a secret in the message redacted |
@@ -46,6 +46,34 @@ The detail can hold values from a row (a duplicate key's value in a constraint m
 The fixes of ERRORDETAILS-7 to ERRORDETAILS-9 pass the original in the cancellation and deadline cases too (`ChromiumExporter.cs`,
 `OdbcNativeFunctions.cs`, the Gateway's `ActiveQueries.cs`). A case the script misreads while fixing them goes to the owner: it is the reason to
 reconsider a Roslyn analyzer in place of the script.
+
+## Proposed decisions
+
+### ERRORDETAILS-P1: a caught exception whose message can hold a secret (awaiting the owner)
+
+Seven catches in the Shared libraries drop the original on purpose, and the code says why:
+
+- `Connections.Files/SshStores.cs`: a private key that does not read; SSH.NET's message can hold part of the key.
+- `Connections.Http/HttpConnections.cs`: a client certificate that does not load; the loader's message can hold a path or part of the file.
+- `Connections/ComposerBase.cs`: a connection string the driver's builder refuses; the builder's message can quote the text, a password included.
+- `State.Engines/Snapshots/StateEndpoints.cs` (2), `StateMoveService.cs`, `StateSnapshotService.cs`: a state move or a snapshot import. The message
+  goes through the state redactor because it can hold the resolved connection string; `StateSnapshotService` throws only when the redactor changed
+  the message, so there the original always holds a secret.
+
+Example: Ana moves the state to PostgreSQL with `Password=secret:state-db`, and the driver's error quotes the resolved connection string. Today the
+answer and the log show the redacted text. If the original became the inner exception, a log that writes `ex.ToString()` would print the password.
+
+Options:
+
+1. Pass the original anyway and rely on the detail store of ERRORDETAILS-1 running the redactor. Until then, and in every log that writes
+   `ex.ToString()`, the secret is printed.
+2. List the seven on `REVIEWED` in `scripts/check_caught_exceptions.py`, each with its reason: the type and the stack are lost.
+3. Pass a stand-in as the inner exception: a shared exception that keeps the original's type name and stack trace (and its inner chain, handled the
+   same way), with the redacted message where a redactor knows the secrets (State) and no message where nothing knows which part is secret (the key,
+   the certificate, the connection string).
+
+Recommendation: 3. An administrator sees where it failed and what kind of error it was, and no secret is written anywhere. ERRORDETAILS-1 can use
+the same type for the detail it keeps.
 
 ## Needs from other subjects
 
