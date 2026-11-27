@@ -30,11 +30,14 @@ public static class GatewayManagementHost
 
     /// <summary>
     /// The join step of the start: joins the console a <c>join-request.yaml</c> in the data directory names, while the management listener answers the
-    /// console's callback. The console calls the Gateway back at the management listener's address with its certificate pinned.
+    /// console's callback. The console calls the Gateway back at the management listener's address with its certificate pinned. The join reports the instance's
+    /// listen settings, and the key of its group when it holds one; it keeps the group's key the console hands over and, for a further instance of a group, writes the
+    /// group's ports to <c>config/server.yaml</c> as its own.
     /// </summary>
-    public static async Task JoinAsync(WebApplication app, string dataDirectory, CancellationToken ct)
+    /// <returns>True when the instance must start again to serve what the join gave it: the group's ports, or the certificate of a group whose key it was waiting for.</returns>
+    public static async Task<bool> JoinAsync(WebApplication app, string dataDirectory, CancellationToken ct)
     {
-        if (!File.Exists(ServerJoin.RequestPath(dataDirectory))) return;
+        if (!File.Exists(ServerJoin.RequestPath(dataDirectory))) return false;
         var options = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
         var target = app.Services.GetRequiredService<GatewayJoinTarget>();
         if (target.State is null || target.Clients is null || target.InstanceId is null)
@@ -42,14 +45,34 @@ public static class GatewayManagementHost
                 + "so the console cannot call this gateway back. Turn the management API on and start the gateway again.");
         var holder = app.Services.GetRequiredService<TlsCertificateHolder>();
         var listen = GatewayListeners.Parsed(options.Management.Listen).FirstOrDefault()?.ToUri() ?? throw new InvalidOperationException("The management API has no address to listen on.");
+        var sessionKey = app.Services.GetRequiredService<DbDataGateway.Server.State.GroupSessionKey>();
+        var waitedForKey = !sessionKey.Usable;
+        var restart = false;
         try
         {
             await ServerJoin.RunAsync(dataDirectory,
                 () => new JoiningServer("gateway", target.InstanceId, Dns.GetHostName(), ServerJoin.AddressFor(listen),
-                    PairingProof.CertificateFingerprint(holder.Current ?? throw new InvalidOperationException("This gateway has no certificate for the console to pin.")), ConsoleSigningKey.Generate()),
-                app.Services.GetRequiredService<PendingJoins>(), target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct);
+                    PairingProof.CertificateFingerprint(holder.Current ?? throw new InvalidOperationException("This gateway has no certificate for the console to pin.")), ConsoleSigningKey.Generate(),
+                    Listeners: GatewayListeners.Reported(options), GroupKey: HeldKey(options, sessionKey)),
+                app.Services.GetRequiredService<PendingJoins>(), target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct,
+                keep: joined =>
+                {
+                    if (joined.GroupKey is { } key) sessionKey.Join(key);
+                    if (joined.Listeners is { } group && GatewayListeners.TakeGroup(GatewayConfigFile.PathIn(dataDirectory), options, group)) restart = true;
+                });
         }
         catch (ServerJoinException ex) { throw DbDataKit.Hosting.Startup.StartupStepException.JoinFailed(ex.Console, ex.Answer, ex.Message, ex); }
+        // an instance of a group serves the group's certificate once it holds the key; it served its own until the join
+        return restart || (waitedForKey && DbDataGateway.Server.State.GatewayState.IsGroup(target.State) && sessionKey.Usable);
+    }
+
+    /// <summary>The group's key as this instance holds it, sent with the join so a console that keeps none for the group keeps this one; null when it holds none.</summary>
+    private static string? HeldKey(GatewayOptions options, DbDataGateway.Server.State.GroupSessionKey sessionKey)
+    {
+        if (!sessionKey.Key.Held) return null;
+        var store = SecretsRuntime.OpenStore(options) as DbDataKit.Secrets.ISecretProvider;
+        using var held = store?.TryResolveAsync(DbDataKit.Secrets.SecretRef.Parse("secret:" + DbDataGateway.Server.State.GroupSessionKey.Secret)).AsTask().GetAwaiter().GetResult();
+        return held?.RevealString();
     }
 
     /// <summary>Adds the management listener to Kestrel (after the Flight one). Only when the options ask for it and TLS is on.</summary>

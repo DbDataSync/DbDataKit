@@ -14,8 +14,11 @@ public sealed class GroupCertificate(StateDatabase state, GroupSessionKey key)
 {
     public const string Setting = "tls-certificate";
 
-    /// <summary>Whether this instance is one of a group (a SQL Server or PostgreSQL state).</summary>
-    public bool Enabled => GatewayState.IsGroup(state);
+    /// <summary>
+    /// Whether this instance serves the group's certificate: it is one of a group (a SQL Server or PostgreSQL state) and holds the group's key. An instance that waits for the key from the console it joins at this
+    /// start serves its own certificate until then; the console calls it back with that one pinned.
+    /// </summary>
+    public bool Enabled => GatewayState.IsGroup(state) && key.Usable;
 
     /// <summary>
     /// The certificate to serve: the group's while it is not due for renewal; otherwise <paramref name="local"/>'s (this instance's own self-signed one, made or renewed by the caller), which becomes the group's unless

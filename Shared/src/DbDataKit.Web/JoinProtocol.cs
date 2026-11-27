@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 
 namespace DbDataKit.Web.Trust;
 
@@ -17,9 +18,14 @@ namespace DbDataKit.Web.Trust;
 /// <param name="PublicKey">The server's own Ed25519 public key; it signs the callback's answer.</param>
 /// <param name="Generation">The server's compatibility generation (<see cref="SuiteCompatibility"/>).</param>
 /// <param name="ProgramVersion">The server's program version.</param>
+/// <param name="Listeners">The listen settings the server is configured with, by their name in its settings file (<c>listen</c>, <c>public.listen</c>, <c>management.listen</c> of a
+/// Gateway); the console hands the first instance's to every further instance of its group. Null from a server that has none to report.</param>
+/// <param name="GroupKey">The key the server's group already protects its values with, when the server holds one and the console may hold none yet (a group that
+/// made its own key before it joined a console); the console keeps it as the group's key only when it has none for the group. Null otherwise.</param>
 public sealed record JoinRequest(
     string? JoinId, string? TokenKey, string? Proof, string? Product, string? Group, string? InstanceId, string? Name, string? Address,
-    string? CertificateFingerprint, string? PublicKey, int? Generation = null, string? ProgramVersion = null);
+    string? CertificateFingerprint, string? PublicKey, int? Generation = null, string? ProgramVersion = null,
+    Dictionary<string, string[]>? Listeners = null, string? GroupKey = null);
 
 /// <summary>The console's answer to a join it accepted: who the console is, the key its tokens are signed with, and what it may do on the server.</summary>
 /// <param name="Ceiling">The role names of the console's ceiling on the server.</param>
@@ -28,7 +34,11 @@ public sealed record JoinRequest(
 /// <param name="ConsoleName">The console's name.</param>
 /// <param name="ConsolePublicKey">The base64url Ed25519 key the console's tokens are signed with.</param>
 /// <param name="InstanceId">The server's instance id, as the console recorded it.</param>
-public sealed record JoinAnswer(string ConsoleId, string ConsoleName, string ConsolePublicKey, string[] Ceiling, string? Group, string InstanceId);
+/// <param name="GroupKey">The key of the server's group (base64 of 32 bytes), which the server keeps in its own secret store; null when its product keeps no group key.</param>
+/// <param name="Listeners">The listen settings of the group's first instance, for a further instance of the group to listen on the same ports; null otherwise.</param>
+/// <param name="Link">The link of the server's group with its partner group, when the console made one; null otherwise.</param>
+public sealed record JoinAnswer(string ConsoleId, string ConsoleName, string ConsolePublicKey, string[] Ceiling, string? Group, string InstanceId,
+    string? GroupKey = null, Dictionary<string, string[]>? Listeners = null, JsonObject? Link = null);
 
 /// <summary>The console's callback to the joining server, made before the token is spent.</summary>
 public sealed record JoinCallbackRequest(string? JoinId, string? ConsoleId, string? ConsoleThumbprint);
