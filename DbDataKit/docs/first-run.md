@@ -67,7 +67,7 @@ When the console and its back-ends (Sync, Build, the Gateway, the Store, a runne
 
 ```
 dbdatakit bundle init --members dbdatasync,dbdatabuild
-./install.sh --system --announce-url http://127.0.0.1:8481 --bundle-token-file /var/lib/dbdatakit/server/bundle.token   # each server on this machine
+./install.sh --system --announce-url http://127.0.0.1:7801 --bundle-token-file /var/lib/dbdatakit/server/bundle.token   # each server on this machine
 dbdatakit bundle show
 ```
 

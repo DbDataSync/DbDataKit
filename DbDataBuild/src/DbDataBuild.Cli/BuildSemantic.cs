@@ -12,7 +12,7 @@ namespace DbDataBuild.Cli;
 internal static class BuildSemantic
 {
     public const string TokenVariable = "DBDATAKIT_GATEWAY_TOKEN";
-    public const int DefaultFlightPort = 8815;
+    public const int DefaultFlightPort = 7821;
     public static readonly string[] Options = ["gateway", "address", "flight-port", "ca-file", "repo"];
     public static readonly string[] Flags = ["insecure"];
     public const string Usage = "--address URL [--ca-file PEM] [--insecure]   (the token is " + TokenVariable + ")";
@@ -31,14 +31,14 @@ internal static class BuildSemantic
     }
 
     /// <summary>What <c>--gateway</c> answers now that the server whose pairings it named is gone.</summary>
-    public const string GatewayGone = "--gateway named a Gateway the Build server was paired with, and the Build server was deleted (plan 33 SC23): give the Gateway's Flight address with --address, such as https://gateway.example.com:8815.";
+    public const string GatewayGone = "--gateway named a Gateway the Build server was paired with, and the Build server was deleted (plan 33 SC23): give the Gateway's Flight address with --address, such as https://gateway.example.com:7821.";
 
     /// <summary>The Flight address: <c>--address</c> as given.</summary>
     internal static Uri AddressOf(CliArgs arguments)
     {
         if (arguments.Get("address") is { } given)
-            return Uri.TryCreate(given, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" ? uri : throw new InvalidOperationException("--address is an http or https address, such as https://gateway.example.com:8815.");
+            return Uri.TryCreate(given, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" ? uri : throw new InvalidOperationException("--address is an http or https address, such as https://gateway.example.com:7821.");
         if (arguments.Get("gateway") is not null || arguments.Get("repo") is not null) throw new InvalidOperationException(GatewayGone);
-        throw new InvalidOperationException("Name the Gateway's Flight address: --address URL, such as https://gateway.example.com:8815.");
+        throw new InvalidOperationException("Name the Gateway's Flight address: --address URL, such as https://gateway.example.com:7821.");
     }
 }

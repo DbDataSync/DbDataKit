@@ -793,7 +793,7 @@ Usage: `dbdatabuild semantic describe <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:7821 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
 | `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
 | `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
@@ -815,7 +815,7 @@ Usage: `dbdatabuild semantic query <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:7821 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
 | `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
 | `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
@@ -839,7 +839,7 @@ Usage: `dbdatabuild semantic explain <model> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:7821 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
 | `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
 | `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |
@@ -864,7 +864,7 @@ Usage: `dbdatabuild semantic members <model> <attribute> [options]`
 
 | Option | Meaning |
 |---|---|
-| `--address` `<text>` | The Gateway's Flight SQL address, https://host:8815 |
+| `--address` `<text>` | The Gateway's Flight SQL address, https://host:7821 |
 | `--ca-file` `<text>` | A PEM file with the certificate authority the Gateway's certificate is checked against |
 | `--flight-port` `<number>` | Gone with the Build server (plan 33 SC23): the port is part of --address |
 | `--gateway` `<text>` | Gone with the Build server (plan 33 SC23): answers that --address is given instead |

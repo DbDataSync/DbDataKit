@@ -99,7 +99,7 @@ public static class Cli
                     var options = GatewayConfiguration.LoadOptions(dataDirectory);
                     if (!options.Management.Enabled)
                         context.Error.WriteLine("Warning: the management API is off here (`management.enabled: false`), so no console can reach this gateway: a pairing made now cannot be used. "
-                            + "Remove that setting or set `management.enabled: true` (https on the management port, 8816 by default) and restart the gateway, then pair.");
+                            + "Remove that setting or set `management.enabled: true` (https on the management port, 7822 by default) and restart the gateway, then pair.");
                     else if (options.Tls.Mode == TlsMode.None)
                         context.Error.WriteLine("Warning: `tls.mode` is None, and the management API is https only, so no console can reach this gateway: a pairing made now cannot be used. Choose another TLS mode (SelfSigned, File or Store).");
                 }

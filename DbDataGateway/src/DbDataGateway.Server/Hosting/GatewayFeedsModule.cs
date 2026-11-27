@@ -17,7 +17,7 @@ public sealed class GatewayFeedsModule(IOptionsMonitor<GatewayOptions> options, 
 {
     private WebApplication? _app;
 
-    /// <summary>The address the module answers at once it started (<c>https://localhost:8817/feeds</c>), or null.</summary>
+    /// <summary>The address the module answers at once it started (<c>https://localhost:7820/feeds</c>), or null.</summary>
     public string? Address { get; private set; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
