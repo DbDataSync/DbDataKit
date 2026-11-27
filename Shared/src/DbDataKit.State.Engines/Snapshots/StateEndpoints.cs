@@ -132,7 +132,7 @@ internal static class StateEndpoints
         var settings = endpoint.Settings;
         string engine;
         try { engine = settings.EngineId; }
-        catch (InvalidOperationException ex) { throw new StateServiceException(StateServiceRefusal.ConnectionFailed, ex.Message); }
+        catch (InvalidOperationException ex) { throw new StateServiceException(StateServiceRefusal.ConnectionFailed, ex.Message, inner: ex); }
 
         if (engine == StateEngineIds.Sqlite)
         {
@@ -147,7 +147,7 @@ internal static class StateEndpoints
         try { database = StateOpener.OpenWithoutMigrating(settings, endpoint.SqliteFile, modules, scope, secrets, appliedBy, time); }
         catch (InvalidOperationException ex) when (ex.Message.Contains("secret", StringComparison.OrdinalIgnoreCase) && ex.InnerException is SecretNotFoundException)
         {
-            throw new StateServiceException(StateServiceRefusal.SecretMissing, ex.Message + " Add the secret (or fix the reference in the state connection) and retry.");
+            throw new StateServiceException(StateServiceRefusal.SecretMissing, ex.Message + " Add the secret (or fix the reference in the state connection) and retry.", inner: ex);
         }
         catch (InvalidOperationException ex)
         {

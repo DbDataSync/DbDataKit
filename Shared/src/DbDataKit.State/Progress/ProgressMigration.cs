@@ -48,7 +48,7 @@ public sealed record MigrationPlan(IReadOnlyList<MigrationStep> Steps)
 }
 
 /// <summary>A change the standard rules cannot make, naming the value (so the staging fails, not a run).</summary>
-public sealed class ProgressMigrationException(string message) : InvalidOperationException(message);
+public sealed class ProgressMigrationException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>
 /// Plans and applies the change of a task's progress between two versions of its declaration (plan 29 section 4.3), the way Build plans a table change from the declared shape against the live one.
@@ -297,7 +297,7 @@ public static class ProgressMigration
         try { return convert(value); }
         catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException or System.Text.Json.JsonException)
         {
-            throw new ProgressMigrationException($"The stored value of '{target}' ('{value.Canonical()}') does not read as {to}{(format is null ? "" : $" in the format '{format}'")}: nothing was changed.");
+            throw new ProgressMigrationException($"The stored value of '{target}' ('{value.Canonical()}') does not read as {to}{(format is null ? "" : $" in the format '{format}'")}: nothing was changed.", ex);
         }
     }
 }
