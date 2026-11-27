@@ -29,12 +29,14 @@ public static class GatewayManagementHost
     public const string ListenerItem = "dbdata.listener.management";
 
     /// <summary>
-    /// The join step of the start: joins the console a <c>join-request.yaml</c> in the data directory names, while the management listener answers the
-    /// console's callback. The console calls the Gateway back at the management listener's address with its certificate pinned. The join reports the instance's
-    /// listen settings, and the key of its group when it holds one; it keeps the group's key the console hands over and, for a further instance of a group, writes the
-    /// group's ports to <c>config/server.yaml</c> as its own.
+    /// Joins the console a <c>join-request.yaml</c> in the data directory names, before the server starts: a listener of its own on the management API's
+    /// addresses, with the certificate the management API will present, answers the console's callback and nothing else, and stops once the join is made.
+    /// The join reports the instance's listen settings, and the key of its group when it holds one; it keeps the group's key the console hands over and, for a
+    /// further instance of a group, writes the group's ports to <c>config/server.yaml</c> as its own. The server is then built again on what the join kept, so
+    /// its listeners start on the group's ports and an instance of a group serves the group's certificate.
+    /// Design: docs/install.md#one-startup-sequence
     /// </summary>
-    /// <returns>True when the instance must start again to serve what the join gave it: the group's ports, or the certificate of a group whose key it was waiting for.</returns>
+    /// <returns>True when a join request was there and the server must be built again; false when there was none.</returns>
     public static async Task<bool> JoinAsync(WebApplication app, string dataDirectory, CancellationToken ct)
     {
         if (!File.Exists(ServerJoin.RequestPath(dataDirectory))) return false;
@@ -43,27 +45,50 @@ public static class GatewayManagementHost
         if (target.State is null || target.Clients is null || target.InstanceId is null)
             throw new InvalidOperationException($"The join request {ServerJoin.RequestPath(dataDirectory)} cannot be used: the management API is off here (`management.enabled: false`, or `tls.mode` None), "
                 + "so the console cannot call this gateway back. Turn the management API on and start the gateway again.");
-        var holder = app.Services.GetRequiredService<TlsCertificateHolder>();
-        var listen = GatewayListeners.Parsed(options.Management.Listen).FirstOrDefault()?.ToUri() ?? throw new InvalidOperationException("The management API has no address to listen on.");
+        var addresses = GatewayListeners.Parsed(options.Management.Listen).ToList();
+        if (addresses.Count == 0) throw new InvalidOperationException("The management API has no address to listen on.");
+        var certificate = CertificateProvider.Load(options, dataDirectory, app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Tls"),
+                secrets: app.Services.GetRequiredService<SecretsRuntime>(), group: app.Services.GetRequiredService<GroupCertificate>())
+            ?? throw new InvalidOperationException("This gateway has no certificate for the console to pin.");
         var sessionKey = app.Services.GetRequiredService<DbDataGateway.Server.State.GroupSessionKey>();
-        var waitedForKey = !sessionKey.Usable;
-        var restart = false;
+        var pending = new PendingJoins();
+        var callback = CallbackListener(addresses, certificate, pending);
         try
         {
+            // a port another program holds fails here, as it would fail the server's own listener
+            await callback.StartAsync(ct);
             await ServerJoin.RunAsync(dataDirectory,
-                () => new JoiningServer("gateway", target.InstanceId, Dns.GetHostName(), ServerJoin.AddressFor(listen),
-                    PairingProof.CertificateFingerprint(holder.Current ?? throw new InvalidOperationException("This gateway has no certificate for the console to pin.")), ConsoleSigningKey.Generate(),
-                    Listeners: GatewayListeners.Reported(options), GroupKey: HeldKey(options, sessionKey)),
-                app.Services.GetRequiredService<PendingJoins>(), target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct,
+                () => new JoiningServer("gateway", target.InstanceId, Dns.GetHostName(), ServerJoin.AddressFor(addresses[0].ToUri()), PairingProof.CertificateFingerprint(certificate),
+                    ConsoleSigningKey.Generate(), Listeners: GatewayListeners.Reported(options), GroupKey: HeldKey(options, sessionKey)),
+                pending, target.Clients, new JoinedConsoles(new GroupSettings(target.State)), ct,
                 keep: joined =>
                 {
                     if (joined.GroupKey is { } key) sessionKey.Join(key);
-                    if (joined.Listeners is { } group && GatewayListeners.TakeGroup(GatewayConfigFile.PathIn(dataDirectory), options, group)) restart = true;
+                    if (joined.Listeners is { } group) GatewayListeners.TakeGroup(GatewayConfigFile.PathIn(dataDirectory), options, group);
                 });
         }
         catch (ServerJoinException ex) { throw DbDataKit.Hosting.Startup.StartupStepException.JoinFailed(ex.Console, ex.Answer, ex.Message, ex); }
-        // an instance of a group serves the group's certificate once it holds the key; it served its own until the join
-        return restart || (waitedForKey && DbDataGateway.Server.State.GatewayState.IsGroup(target.State) && sessionKey.Usable);
+        finally
+        {
+            await callback.StopAsync(CancellationToken.None);
+            await callback.DisposeAsync();
+        }
+        return true;
+    }
+
+    /// <summary>The listener that answers the console's callback during a join: the management API's addresses and certificate, the callback route only.</summary>
+    private static WebApplication CallbackListener(IReadOnlyList<DbDataKit.Hosting.Startup.ListenUrl> addresses, System.Security.Cryptography.X509Certificates.X509Certificate2 certificate, PendingJoins pending)
+    {
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            foreach (var url in addresses) kestrel.Listen(url.Address, url.Port, listen => listen.UseHttps(certificate));
+        });
+        var callback = builder.Build();
+        callback.MapJoinCallback(pending);
+        return callback;
     }
 
     /// <summary>The group's key as this instance holds it, sent with the join so a console that keeps none for the group keeps this one; null when it holds none.</summary>

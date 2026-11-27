@@ -5,7 +5,8 @@
 - Join protocol (`DbDataKit.Web`): request carries the server's listeners and the key its group holds; answer carries the group key, the first
   instance's listeners and a link slot; `IJoinGroups` in `JoinService`; `ServerJoin.RunAsync(keep:)`.
 - Console: `ConsoleJoinGroups`, `ConsoleGroupKeyRing`; registry keeps a group's first entry.
-- Gateway: awaiting-join key mode, group certificate waits for the key, `GatewayListeners.TakeGroup`, start again in-process.
+- Gateway: awaiting-join key mode, group certificate waits for the key, `GatewayListeners.TakeGroup`, the join made before the listeners start
+  (a callback listener of its own), then the server built again; a join failed inside the ports step is reported as the join step.
 - Runner: keeps the key from the answer.
 - Tests: `GroupJoinByTokenTests` (both engines pass), `ConsoleJoinGroupsTests`, `JoinGroupTests`, `ServerJoinStepTests`, `GroupListenersTests`.
 - Docs: `docs/install.md`, `DbDataGateway/README.md`, `Shared/src/DbDataKit.Web/README.md`, release notes, ci-lessons row.

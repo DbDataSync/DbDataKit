@@ -73,6 +73,10 @@ step looks the same in every product, and a fix reaches all four. The library is
 | ports | binds each listener: the configured port, or a pinned one, or a free one of its sub-block ("Ports" below) | the port, who holds it if Windows says, the excluded ranges |
 | join | consumes `join-request.yaml` if there is one and joins the console ("Pairing" below); otherwise checks it is paired | the console's address, what it answered |
 
+A Gateway with a join request waiting joins at the start of its ports step, before its listeners start: a listener of its own on the management API's
+address, with the certificate the management API presents, answers the console's call back and then stops. The Gateway then starts its listeners on the
+ports and with the key the join handed over, and an instance of a group serves the group's certificate. A refused join still fails the join step.
+
 The `logs` subfolder and the failure file come before the first step. A step that fails writes the failure file and the process exits non-zero (the
 service manager records the failure); `service check` and `setup single-server` print the file.
 
@@ -208,8 +212,8 @@ names the port and the excluded ranges; the Gateway never moves a port it was gi
 listener, so inside the container it takes 7820 and is not published.
 
 When a further Gateway joins an existing group, the join hands over the group's pinned ports (those of `public.listen`, `listen` and
-`management.listen`) and they become that instance's exact configuration: the instance writes them to its `config/server.yaml` and starts again on them. If
-one is taken on the new machine, the instance fails at the ports step naming the port, listens on nothing, and never picks another. So every instance of a
+`management.listen`) and they become that instance's exact configuration: the instance writes them to its `config/server.yaml` and its listeners start on
+them. If one is taken on the new machine, the instance fails at the ports step naming the port, listens on nothing, and never picks another. So every instance of a
 group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
 
 Example: the first Gateway of group `sales` takes 7820, 7821 and 7822 for its public, Flight SQL and management listeners (or the next free values) and
@@ -299,8 +303,7 @@ cancels them.
 (`dbdatakit setup invite gateway --group sales`). The console keeps one key per group in its own secret store and hands it over in the join's answer: it
 makes the key at the first instance's join, and every further instance that joins with a token for the group gets the same key, so nobody copies a key
 by hand. The instance keeps the key in its own secret store. A key that does not open what the group's state already holds is refused, naming the
-secret, and the join step fails. A Gateway that starts with a join request waiting makes no key of its own and serves its own certificate until the join
-has given it the group's; it then starts again, serving the group's certificate.
+secret, and the join step fails. A Gateway that starts with a join request waiting makes no key of its own until the join has given it the group's.
 
 A token for a named group is refused for a server whose state is another database than the group's (it would be a group of its own), and for an
 instance the console already knows under another group. The joining server is told why:

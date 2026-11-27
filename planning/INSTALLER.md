@@ -179,19 +179,23 @@ Options:
 
 Recommendation: A until TRUSTZONES-11 gives a group its instances, then C.
 
-### INSTALLER-P69: a Gateway starts again in its own process after the join (default, awaiting the owner)
+### INSTALLER-P69: a Gateway joins before its listeners start (default, awaiting the owner)
 
-The join step runs after the ports step, because the console calls the instance back on its management listener. When the join hands a further
-instance the group's ports, or gives the first key to an instance of a group (which must then serve the group's certificate), the Gateway stops its
-host and runs the whole start once more in the same process, writing `Joined the console; starting again on the group's ports and certificate.` A port
-held on the machine then fails that second start at the ports step, and the process exits 1 listening on nothing.
+The Runner and the Workspace join after their ports step, because the console calls them back on their own listener. A Gateway with a join request
+waiting joins at the start of its ports step instead: a listener of its own on the management address answers only the console's call back, and stops
+once the join is made. The Gateway then builds its server again on what the join kept (the group's key, the group's ports) and starts its listeners.
+Example: a second instance of `sales` with no settings answers the call back on `127.0.0.1:7822` for a moment, gets 7820, 7821 and 7822 from its join and
+starts on them; if 7821 is held on its machine, the ports step fails naming 7821 and the instance listens on nothing. The console lists the Gateway a
+few seconds before it answers calls (between the join and the start of its listeners); the console's first calls are retried.
 
 Options:
 
-- A, as built: the second start in the same process.
-- B: the process exits after the join, and the service manager starts it again.
+- A, as built: the join before the listeners start.
+- B: the join after the ports step on the server's own listener, then the host stopped and started again in the same process. Stopping the host of a
+  Windows service or a systemd unit tells the service manager that the service stopped, so it does not work for an installed service.
+- C: the process exits after the join and the service manager starts it again. It depends on the restart policy, and does nothing from a terminal.
 
-Recommendation: A. B depends on the service manager's restart policy and does nothing when the Gateway runs from a terminal.
+Recommendation: A.
 
 ### INSTALLER-P70: the identity home's key of a Gateway group is still copied by hand (awaiting the owner)
 

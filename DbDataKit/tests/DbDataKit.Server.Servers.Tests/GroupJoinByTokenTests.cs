@@ -144,18 +144,15 @@ public sealed class GroupJoinByTokenTests
             var key = await ConsoleKeyAsync(gateway.InstanceId);
             Assert.NotNull(key);
             Assert.Equal(key, await KeyOnInstanceAsync(dirA, GatewayKey));
-            // the first instance starts again once it holds the key, so it keeps its certificate in the state as the group's
-            for (var wait = 0; wait < 240 && !a.Output.Contains("starting again", StringComparison.Ordinal); wait++) await Task.Delay(250);
-            await a.WaitUntilAsync(new Uri($"https://127.0.0.1:{portsA.Item3}/health"), TimeSpan.FromSeconds(120));
 
-            // the second, on its own address with ports of its own in its settings: the join hands it the group's key and the first one's ports, and it starts
-            // again on them, serving the group's certificate; the console keeps calling the group at the first one's address
+
+            // the second, on its own address with ports of its own in its settings: the join hands it the group's key and the first one's ports before its
+            // listeners start, and it starts on them serving the group's certificate; the console keeps calling the group at the first one's address
             var dirB = GatewayFolder(root, "gateway-b", "127.0.0.2", ThreePorts(), engine, server);
             await RealProcess.RunAsync(Programs.Gateway, [.. await InviteAsync(cli, consoleDirectory, consoleUrl, "gateway", "sales"), "--repo", dirB]);
             var b = RealProcess.Start(Programs.Gateway, GatewayRun(dirB, engine, gatewayState));
             started.Add(b);
             await b.WaitUntilAsync(new Uri($"https://127.0.0.2:{portsA.Item3}/health"), TimeSpan.FromSeconds(180));
-            Assert.Contains("starting again on the group's ports", b.Output);
             Assert.False(File.Exists(Path.Combine(dirB, JoinRequestFile.FileName)));
             var settingsB = File.ReadAllText(Path.Combine(dirB, "config", "server.yaml"));
             Assert.Contains($"https://127.0.0.2:{portsA.Item1}", settingsB);

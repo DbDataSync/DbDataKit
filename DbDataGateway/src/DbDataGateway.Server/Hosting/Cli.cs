@@ -124,23 +124,13 @@ public static class Cli
             : args;
         var dataDirectory = GatewayConfigFile.ResolveDataDirectory(hostArgs);
         var service = DbDataKit.Hosting.Startup.SuiteServices.Gateway;
-        Microsoft.AspNetCore.Builder.WebApplication? app = null;
-        // a join can hand this instance its group's ports and key: it then starts again, once, to listen on those ports and serve the group's certificate
-        for (var pass = 0; ; pass++)
+        var (result, app) = await StartAsync(hostArgs, skipFlag, dataDirectory, service, context);
+        if (!result.Succeeded)
         {
-            var (result, startAgain, started) = await StartOnceAsync(hostArgs, skipFlag, dataDirectory, service, context);
-            app = started;
-            if (!result.Succeeded)
-            {
-                // invalid configuration keeps its documented exit code; its message names the key paths and sources, never a secret value
-                await context.Error.WriteLineAsync(result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? result.Error.Message : result.Summary());
-                if (app is not null) await app.DisposeAsync();
-                return result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? GatewayConfigException.ExitCode : result.ExitCode;
-            }
-            if (!startAgain || pass > 0) break;
-            await context.Error.WriteLineAsync("Joined the console; starting again on the group's ports and certificate.");
-            await app!.StopAsync(context.Cancellation);
-            await app.DisposeAsync();
+            // invalid configuration keeps its documented exit code; its message names the key paths and sources, never a secret value
+            await context.Error.WriteLineAsync(result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? result.Error.Message : result.Summary());
+            if (app is not null) await app.DisposeAsync();
+            return result.Error is GatewayConfigException or Secrets.PlainSecretNotAllowedException ? GatewayConfigException.ExitCode : result.ExitCode;
         }
 
         try
@@ -155,12 +145,11 @@ public static class Cli
         return CliExit.Ok;
     }
 
-    /// <summary>One run of the startup sequence: the result, whether the join asks for another start, and the server it built (null when the start failed before building it).</summary>
-    private static async Task<(DbDataKit.Hosting.Startup.StartupResult Result, bool StartAgain, Microsoft.AspNetCore.Builder.WebApplication? App)> StartOnceAsync(
+    /// <summary>The startup sequence: the result, and the server it built (null when the start failed before building it).</summary>
+    private static async Task<(DbDataKit.Hosting.Startup.StartupResult Result, Microsoft.AspNetCore.Builder.WebApplication? App)> StartAsync(
         string[] hostArgs, bool skipFlag, string dataDirectory, DbDataKit.Hosting.Startup.SuiteService service, CliContext context)
     {
         Microsoft.AspNetCore.Builder.WebApplication? app = null;
-        var startAgain = false;
         ListenerChoice? choice = null;
         var result = await new DbDataKit.Hosting.Startup.StartupSequence(new DbDataKit.Hosting.Startup.StartupOptions
             {
@@ -196,17 +185,27 @@ public static class Cli
                 // reads the settings of the data folder (config/server.yaml), validates them and builds the server
                 app = GatewayHost.Build(hostArgs, chooseListeners: o => choice = GatewayListeners.Choose(o, step.Options.ExcludedPorts()));
             })
-            .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, (step, ct) =>
+            .Step(DbDataKit.Hosting.Startup.StartupStep.Ports, async (step, ct) =>
             {
                 if (choice?.Failure is { } noPort) throw noPort;
+                // a join waits: the Gateway joins before its listeners start, so they start on the ports and with the key the join hands over
+                // Design: docs/install.md#one-startup-sequence
+                if (File.Exists(DbDataKit.Web.Trust.ServerJoin.RequestPath(dataDirectory)))
+                {
+                    if (choice is { Chosen.Count: > 0 }) GatewayListeners.Pin(GatewayConfigFile.PathIn(dataDirectory), choice.Chosen);
+                    await Management.GatewayManagementHost.JoinAsync(app!, dataDirectory, ct);
+                    await app!.DisposeAsync();
+                    app = null;
+                    app = GatewayHost.Build(hostArgs, chooseListeners: o => choice = GatewayListeners.Choose(o, step.Options.ExcludedPorts()));
+                    if (choice?.Failure is { } stillNoPort) throw stillNoPort;
+                }
                 var options = app!.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<GatewayOptions>>().CurrentValue;
                 // every address of every listener is a port the start may be refused: the step names the one the host could not bind
                 var ports = GatewayListeners.Parsed([.. options.Public.Listen, .. options.Listen, .. options.Management.Listen, .. options.Identity.Listen, .. options.Apps.Listen, .. options.Store.Listen, .. options.Views.Listen, .. options.Mcp.Listen, .. options.Rest.Listen]).Select(u => u.Port).Where(p => p != 0);
-                return StartAndPinAsync(step, app, ports, choice, dataDirectory, ct);
+                await StartAndPinAsync(step, app, ports, choice, dataDirectory, ct);
             })
-            .Step(DbDataKit.Hosting.Startup.StartupStep.Join, async (_, ct) => startAgain = await Management.GatewayManagementHost.JoinAsync(app!, dataDirectory, ct))
             .RunAsync(context.Cancellation);
-        return (result, startAgain, app);
+        return (result, app);
     }
 
     /// <summary>Starts the host (the ports step) and, once every listener is bound, writes the addresses that were chosen at this start to <c>server.yaml</c>, so the next start listens on the same ones.</summary>
