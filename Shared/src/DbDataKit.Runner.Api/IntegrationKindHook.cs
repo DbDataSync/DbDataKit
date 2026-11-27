@@ -26,7 +26,7 @@ internal sealed class IntegrationKindHook(RunnerPublishing publishing) : IDefini
         try { return work(); }
         catch (RunnerPostureConfirmationException ex)
         {
-            throw new DefinitionsRefusalException(ex.Status, ex.Message)
+            throw new DefinitionsRefusalException(ex.Status, ex.Message, ex)
             {
                 Body = new JsonObject
                 {
@@ -35,7 +35,7 @@ internal sealed class IntegrationKindHook(RunnerPublishing publishing) : IDefini
                 },
             };
         }
-        catch (RunnerPublishException ex) { throw new DefinitionsRefusalException(ex.Status, ex.Message); }
+        catch (RunnerPublishException ex) { throw new DefinitionsRefusalException(ex.Status, ex.Message, ex); }
     }
 
     private static void Translate(Action work) => Translate<object?>(() => { work(); return null; });

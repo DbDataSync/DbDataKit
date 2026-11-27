@@ -68,16 +68,6 @@ Shared/src/DbDataKit.Lineage/PackageLineage.cs: 2
 Shared/src/DbDataKit.Metadata/DialectLockFile.cs: 1
 Shared/src/DbDataKit.Odbc.Metadata/OdbcNativeFunctions.cs: 2
 Shared/src/DbDataKit.Quality.Evaluation/CheckEvaluator.cs: 1
-Shared/src/DbDataKit.Runner.Api/IntegrationKindHook.cs: 2
-Shared/src/DbDataKit.Runner.Api/RunnerGroupSecrets.cs: 1
-Shared/src/DbDataKit.Runner.Api/RunnerPackageInstaller.cs: 1
-Shared/src/DbDataKit.Runner.Api/RunnerPublishing.cs: 5
-Shared/src/DbDataKit.Runner.Client/RunnerPublishClient.cs: 5
-Shared/src/DbDataKit.Runner.Kit.Testing/RecordedHttp.cs: 1
-Shared/src/DbDataKit.Runner/Hosting/RunnerControl.cs: 2
-Shared/src/DbDataKit.Runner/Scheduler/ProjectionDocuments.cs: 1
-Shared/src/DbDataKit.Runner/Staging/PackageActivator.cs: 1
-Shared/src/DbDataKit.Runner/Staging/StagingFollower.cs: 4
 Shared/src/DbDataKit.Scripting/ScriptDirectives.cs: 2
 Shared/src/DbDataKit.Secrets.Windows/DpapiKeyProtector.cs: 1
 Shared/src/DbDataKit.Secrets.Windows/DpapiSecretStore.cs: 1

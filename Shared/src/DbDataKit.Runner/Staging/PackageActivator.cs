@@ -292,7 +292,7 @@ public sealed class PackageActivator
             var oldDeclaration = previous?.Tasks.FirstOrDefault(t => t.Name == task)?.Progress ?? ProgressDeclaration.Empty;
             var newDeclaration = next.Tasks.FirstOrDefault(t => t.Name == task)?.Progress ?? ProgressDeclaration.Empty;
             try { plans.Add((task, ProgressMigration.Plan(oldDeclaration, newDeclaration))); }
-            catch (ProgressMigrationException ex) { throw new ProgressMigrationException($"task '{task}': {ex.Message}"); }
+            catch (ProgressMigrationException ex) { throw new ProgressMigrationException($"task '{task}': {ex.Message}", ex); }
         }
 
         return plans;
