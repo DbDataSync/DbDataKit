@@ -31,7 +31,15 @@ jobs:
             echo "Keeping '$BRANCH': $stacked open pull request(s) are based on it."
             exit 0
           fi
-          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" --silent && echo "Deleted '$BRANCH'." || echo "'$BRANCH' was already gone."
+          # A branch that is already gone (GitHub answers 422 "Reference does not exist") counts as deleted; any other failure fails the step.
+          if err="$(gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" --silent 2>&1)"; then
+            echo "Deleted '$BRANCH'."
+          elif printf '%s' "$err" | grep -q "Reference does not exist"; then
+            echo "'$BRANCH' was already gone."
+          else
+            echo "$err" >&2
+            exit 1
+          fi
 
   task-branches:
     if: >-
