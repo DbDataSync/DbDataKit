@@ -91,7 +91,7 @@ public sealed class GroupJoinByTokenTests
         // the server's address only: a pass-through session connects with the caller's login
         var source = engine == "mssql"
             ? new SqlConnectionStringBuilder { DataSource = new SqlConnectionStringBuilder(server).DataSource, InitialCatalog = "master", TrustServerCertificate = true }.ConnectionString
-            : new NpgsqlConnectionStringBuilder { Host = new NpgsqlConnectionStringBuilder(server).Host, Port = new NpgsqlConnectionStringBuilder(server).Port, Database = "postgres" }.ConnectionString;
+            : new NpgsqlConnectionStringBuilder { Host = new NpgsqlConnectionStringBuilder(server).Host, Port = new NpgsqlConnectionStringBuilder(server).Port, Database = "postgres", SslMode = SslMode.Disable }.ConnectionString;
         File.WriteAllText(Path.Combine(directory, "config", "connections", "engine.yaml"),
             $"schema: connection/1\nname: engine\nengine: {(engine == "mssql" ? "sqlserver" : "postgres")}\nconnection_string: '{source.Replace("'", "''")}'\nextensions:\n  gateway:\n    pass_through: true\n");
         return directory;
