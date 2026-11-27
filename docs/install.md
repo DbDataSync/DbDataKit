@@ -310,9 +310,6 @@ The join token was made for group night, and this server is not an instance of i
 its own. Point this server's state at the group's database, or make a command for a group of its own on the console.
 ```
 
-The console keeps calling a group at the address and certificate of the instance that joined first; a further instance shares the console as a client
-with the rest of its group through their state.
-
 Runner and Gateway groups never pair with each other directly. Linking a Gateway group with a Runner group is a console action (`docs/architecture.md`,
 "What runs where"); a new instance of a linked group gets the link with its join.
 

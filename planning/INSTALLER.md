@@ -83,7 +83,15 @@ rules are in [docs/install.md](../docs/install.md).
   send an app version with `AppsRemote`). One test per command: `RunnerCliTests`, `PackageCommandTests`, `ProjectPublishTests`, `AppsRemoteTests`.
   The Playwright stories `runner.spec.ts`, `runner-schedule.spec.ts` and `runner-checkpoints.spec.ts` publish the sample package through the console's
   relay as the signed-in administrator (`tests/runner-publish.ts`). Nothing writes Sync's published marker (`PublishedDefinition.Record`) any more; only the removed form did.
-- A second Runner instance joins its group by a code made on it (`POST /api/instances/{id}/join`); a Gateway group makes its own key.
+- Groups through the token (`docs/install.md`, "Pairing", "Groups"): the console keeps one key per Gateway or Runner group, by the group's instance id
+  (`ConsoleGroupKeyRing`, `dbdatakit:server:group-key:<instance id>` in its store), and hands it in the join's answer (`ConsoleJoinGroups`, the
+  `IJoinGroups` of `JoinService`); the instance keeps it in its own store (`GroupSessionKey.Join`, `RunnerGroupSecrets.Key`). A Gateway with a join
+  request waiting makes no key and serves its own certificate until the join. A further Gateway instance gets the first one's `public.listen`, `listen`
+  and `management.listen` ports, writes them to its `config/server.yaml` (`GatewayListeners.TakeGroup`) and starts again on them in the same process; a
+  held port fails the ports step naming it. A token for a named group is refused for an instance of another state database, or one the console knows
+  under another group. The answer has a place for the group's link (`JoinAnswer.Link`). Tests: `GroupJoinByTokenTests` (Servers suite, SQL Server and
+  PostgreSQL), `ConsoleJoinGroupsTests`, `JoinGroupTests`, `ServerJoinStepTests`, `GroupListenersTests`. A second Runner instance can still be joined
+  by a code made on it (`POST /api/instances/{id}/join`), which INSTALLER-20 deletes.
 - The folder step of the four servers checks the data folder (`FolderPermissions` in the startup library) and fails
   naming the folder, its owner, what is wrong, the flag and the setting. `--skip-folder-permissions-check` on `server run` and
   `startup.skip_folder_permissions_check: true` in the server's settings file skip it, with a warning on standard error at every start (and the
@@ -106,11 +114,10 @@ rules are in [docs/install.md](../docs/install.md).
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | INSTALLER-7 | Admin commands through the local API (`DbDataKit.Hosting.Local`) for all four servers: `secret`, `cert`, `state`, `setup link`, `user invite` and the rest call the running service; opening the files is `--recovery`, refused while the service runs, and a file it writes is given the service's account as owner; `WindowsServiceAccounts`' accepted grants (`e0135708`, which taught the command line which service accounts a key file may grant) are then needed only in recovery; `setup single-server` mints its join tokens through the local channel, so the administrator opens no file in the console's folder | none | M | with the service running, `secret set` adds the value and no file under the data folder is owned by the administrator; a direct open while it runs is refused naming `--recovery`; recovery with the service stopped writes a file owned by the service's account; Windows leg and Linux job |
-| INSTALLER-15 | Groups through the token: the console makes every group key (a Gateway group's too) and hands it at the join; the join answer carries a link when TRUSTZONES-1 made one; a Gateway joining an existing group gets the group's pinned ports in the join answer and they become its exact configuration (a taken one fails the ports step naming it; another is never picked); the Gateway's pinned `listen`, `public.listen` and `management.listen` in `config/server.yaml` are the settings handed over | none | M | Servers suite: two Gateway instances joined to group X serve each other's sessions with no key copied; the second instance listens on exactly the first's pinned ports; with one of them held on the second's machine, the second fails with a startup-failure file naming the port and listens on nothing; a Runner instance joined to group Y resolves the group's logins; a token for Y used by a Gateway, or for another group, is refused |
 | INSTALLER-17 | The Scoop scripts shrink (`docs/install.md`, "Scoop"): no copy; `post_install` prints the next commands; `pre_uninstall` stops the services and on an uninstall prints the `sc.exe delete` commands; verify which `pre_uninstall` runs during `scoop update` (the installed version's) and whether Scoop's running-process check comes before it, with and without `ignore_running_processes`; if both allow it, `pre_uninstall` stops the services on an update too; the outcome in `docs/ci-lessons.md` (its row on "Running process detected, skip updating" rewritten); `dist/README.md` and `docs/suite-single-server-install.md` rewritten | none | M | `suite-scoop-e2e.ps1`: install, `dbdatakit setup single-server`, every service ready and registered against `current`; the update check installs a version N whose manifest carries `pre_uninstall`, then updates to N+1 (a new manifest alone cannot show it), and records which `pre_uninstall` ran and whether the running-process check came first, with and without `ignore_running_processes`; the update from N to N+1 by the verified procedure (one command if both allow it, otherwise `setup single-server --stop`, `scoop update`, `setup single-server`) ends with the new version running; uninstall leaves no service running |
 | INSTALLER-18 | Docker Compose through the same path: the console's settings list its members (`setup.members`); at its first start it writes one `join-request.yaml` per member into the shared volume `join`; each member's container consumes its own at its start; the quickstart loses `instance pending` and `instance confirm` | none | S | `dist/compose/check.sh` on the quickstart: the console and the Gateway are joined with no `instance confirm`; CI runs it |
-| INSTALLER-19 | Clean break messages, one per row of the table in `docs/install.md` ("Clean break"): a file in a service's top folder owned by another account (the folder step), a `server.yaml` listing a console paired the old way (a warning at start and in `service check`; the pairing not used), old `instances.yaml` entries (removed by `setup single-server`, marked on the Servers page with the generated command), a `dbdatagateway` registration (stopped, removed, `DbDataGateway` registered on the same folder), services registered from `bin\<version>` (registered against the program folder, the copy removed), `bundle.json` and `--announce-listen` (the console refuses to start), `DBDATAKIT_ANNOUNCE_URL` (a warning at every start), the old default ports (the release notes, `docs/suite-single-server-install.md` and the Servers page), `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` (exit 2, `RemovedCommands`) | INSTALLER-15 | S | one test per row of the table: each finding gives its message (naming what the table's last column says), exit code or warning, from the one the table names as saying it; the old-port row is checked by `check_docs_commands.py` and a test that the Servers page shows the reported address |
-| INSTALLER-20 | Delete the old pairing and install code: `PairingCodes`, `pairing-codes.json`, the code verbs (`server pair`, `instance add --code`), `PairingClient`'s code exchange, the announcement, the bundle (`bundle/1` leaves `docs/formats.json` and `docs/ui-editors.md`), the group join route, `publisher pair --code`. Voids: the Gateway pairing of the Store command line (`dbdatastore gateway add`, with PUBLISHING-2) | INSTALLER-15 to INSTALLER-19 | M | the suites pass with those types gone; the removed verbs answer their sentence; `check_formats.py` and `check_ui_editors.py` pass without `bundle` |
+| INSTALLER-19 | Clean break messages, one per row of the table in `docs/install.md` ("Clean break"): a file in a service's top folder owned by another account (the folder step), a `server.yaml` listing a console paired the old way (a warning at start and in `service check`; the pairing not used), old `instances.yaml` entries (removed by `setup single-server`, marked on the Servers page with the generated command), a `dbdatagateway` registration (stopped, removed, `DbDataGateway` registered on the same folder), services registered from `bin\<version>` (registered against the program folder, the copy removed), `bundle.json` and `--announce-listen` (the console refuses to start), `DBDATAKIT_ANNOUNCE_URL` (a warning at every start), the old default ports (the release notes, `docs/suite-single-server-install.md` and the Servers page), `server pair`, `instance add --code`, `instance pending`, `instance confirm`, `publisher pair --code`, `bundle init` (exit 2, `RemovedCommands`) | none | S | one test per row of the table: each finding gives its message (naming what the table's last column says), exit code or warning, from the one the table names as saying it; the old-port row is checked by `check_docs_commands.py` and a test that the Servers page shows the reported address |
+| INSTALLER-20 | Delete the old pairing and install code: `PairingCodes`, `pairing-codes.json`, the code verbs (`server pair`, `instance add --code`), `PairingClient`'s code exchange, the announcement, the bundle (`bundle/1` leaves `docs/formats.json` and `docs/ui-editors.md`), the group join route, `publisher pair --code`. Voids: the Gateway pairing of the Store command line (`dbdatastore gateway add`, with PUBLISHING-2) | INSTALLER-17 to INSTALLER-19 | M | the suites pass with those types gone; the removed verbs answer their sentence; `check_formats.py` and `check_ui_editors.py` pass without `bundle` |
 | INSTALLER-21 | A service writes its own `state:` settings: at first start from the settings `setup single-server` or the MSI pass (`STATE_ENGINE`, `STATE_CONNECTION` with a secret reference), never a password; one login per service and group | none | M | Windows leg: an MSI install with the two properties starts the service on SQL Server with the login it names; Linux: `install.sh` the same on PostgreSQL; a password in the property is refused |
 | INSTALLER-22 | The Runner's release and Windows service legs: a release cut with `dbdatarunner-release.yml`, the MSI installed on Windows, a task run under `NT SERVICE\DbDataRunner`; a package's manifest generated by a build step (`ManifestGenerator.ForAssembly`) | none | M | the `windows` job of `dbdatarunner-ci.yml` installs the service, runs a task, reads its run and removes the service; a snapshot release publishes the Runner's zips and MSI |
 | INSTALLER-23 | Framework-dependent Build and Gateway: `scripts/publish.sh`, `build/publish.ps1`, `package.ps1`, `requiresDotnet` in `dist.json`; the 32-bit ODBC worker stays self-contained | none | M | `dist/tests` and the suite dry run pass with every zip framework-dependent but the worker; `dbdatabuild version` and a Gateway query run on a machine with only the .NET 10 runtime; the zip sizes are in the commit |
@@ -124,10 +131,86 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
+### INSTALLER-P66: a further Gateway instance takes the group's ports on its own addresses (default, awaiting the owner)
+
+The join hands a further instance the ports of the first instance's `public.listen`, `listen` and `management.listen`, as the first instance reported them
+when it joined. The further instance keeps the address (host) its own setting names, or the listener's default address (`0.0.0.0`, and `127.0.0.1` for
+the management API) when it has none, and takes the scheme and the port. Example: the first Gateway of `sales` listens on `https://10.0.0.5:7821`; the
+second, on another machine with no setting, writes `listen: https://0.0.0.0:7821`, not `https://10.0.0.5:7821`, which it could not bind. A setting that
+the command line or an environment variable gives (the image's `DBDATAKIT_Gateway__Listen`) still wins over the file, so such an instance keeps the
+port it was given. A port the administrator later changes on the first instance by hand is handed to a new instance only after the first joins again.
+
+Options:
+
+- A, as built: the group's ports on the instance's own addresses.
+- B: the first instance's whole addresses, host included.
+
+Recommendation: A. B fails on every machine but the first as soon as the first names its own IP address.
+
+### INSTALLER-P67: the console keeps the key a group already holds when it has none (default, awaiting the owner)
+
+A Gateway that ran alone before it joined a console made its own group key at its first start, and its state holds values protected with it. When it
+joins, it sends that key with the join; a console that keeps no key for the group keeps this one and hands it back, and every further instance gets it.
+Example: an administrator installs a Gateway from its MSI, uses it for a week, then runs the `pair` command a console made; the Gateway's pass-through
+sessions and its clients' secrets keep working, and a second instance joined later opens them. Without this, the console's new key would not open what
+the group's state holds and the join step would fail naming the secret.
+
+Options:
+
+- A, as built: the console adopts the key the group sends when it keeps none for the group.
+- B: the console always makes the key; a group that made its own fails at its join and must be set up again.
+
+Recommendation: A. The key travels only inside the join's TLS, pinned to the console's certificate, by a server that holds a valid token.
+
+### INSTALLER-P68: the console keeps calling a group at its first instance (default, awaiting the owner)
+
+`instances.yaml` has one entry per instance id, and every instance of a group has the group's id. A further instance that joins from another address
+does not replace the entry: the console keeps the first instance's address and certificate, and the further instance holds the console as a client
+through the group's state. The instance that joined first, joining again from its own address, replaces the entry (a renewed certificate). A token
+that names no group joins an instance under the group the console already knows it by. Example: Gateways `gw-a` and `gw-b` of `sales`; the Servers page
+lists `sales` at `gw-a`'s address. If `gw-a` moves to a new address and joins again, the console still calls the old address until the server is
+removed from the Servers page and joined again.
+
+Options:
+
+- A, as built.
+- B: the last join's address wins, so the console follows a moved server but calls whichever instance joined last.
+- C: the console lists each instance of a group (the group as one node with its instances, TRUSTZONES-11) and calls any live one.
+
+Recommendation: A until TRUSTZONES-11 gives a group its instances, then C.
+
+### INSTALLER-P69: a Gateway starts again in its own process after the join (default, awaiting the owner)
+
+The join step runs after the ports step, because the console calls the instance back on its management listener. When the join hands a further
+instance the group's ports, or gives the first key to an instance of a group (which must then serve the group's certificate), the Gateway stops its
+host and runs the whole start once more in the same process, writing `Joined the console; starting again on the group's ports and certificate.` A port
+held on the machine then fails that second start at the ports step, and the process exits 1 listening on nothing.
+
+Options:
+
+- A, as built: the second start in the same process.
+- B: the process exits after the join, and the service manager starts it again.
+
+Recommendation: A. B depends on the service manager's restart policy and does nothing when the Gateway runs from a terminal.
+
+### INSTALLER-P70: the identity home's key of a Gateway group is still copied by hand (awaiting the owner)
+
+A Gateway group that runs the identity home protects its signing keys in the state with a second key, `dbdatakit:gateway:identity:signing-keys`, made on
+the first start and copied by hand into every other instance (`DbDataGateway/README.md`). The join hands over only the group's session key. Example: the
+second instance of `sales` joins and serves sessions, but its identity home refuses to start until an administrator copies the signing-key secret.
+
+Options:
+
+- A: the console hands that key at the join too, as a second group key.
+- B: the identity home's signing keys are protected with the group's session key, so one key serves both.
+- C: leave it as it is.
+
+Recommendation: B, with the key that exists today read once and the signing keys protected again; it removes the second key instead of adding one.
+
 ## Needs from other subjects
 
 - INSTALLER-21 writes each service's `state:` section by `state init --topology install` (`docs/state-logins.md`): the login `dbdatakit_<service>[_<group>]`, its schemas and registry, and the statements `state grants` prints exist.
-- TRUSTZONES-1: the link the join answer carries (INSTALLER-15 carries it when it exists).
+- TRUSTZONES-1: the link the join answer carries; the answer has its place (`JoinAnswer.Link`, which the console fills through `JoinGroupHandover.Link` in `ConsoleJoinGroups`), empty until the console makes links.
 - TASKENGINE-9: two Gateway instances behind a balancer in CI, before INSTALLER-28.
 - PUBLISHING-2: the Store command line's `gateway add` goes with `dbdatastore model publish --proxy`.
 

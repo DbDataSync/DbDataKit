@@ -2,18 +2,23 @@
 
 ## Built so far
 
-- Nothing yet: audit done, design below.
+- Join protocol (`DbDataKit.Web`): request carries the server's listeners and the key its group holds; answer carries the group key, the first
+  instance's listeners and a link slot; `IJoinGroups` in `JoinService`; `ServerJoin.RunAsync(keep:)`.
+- Console: `ConsoleJoinGroups`, `ConsoleGroupKeyRing`; registry keeps a group's first entry.
+- Gateway: awaiting-join key mode, group certificate waits for the key, `GatewayListeners.TakeGroup`, start again in-process.
+- Runner: keeps the key from the answer.
+- Tests: `GroupJoinByTokenTests` (both engines pass), `ConsoleJoinGroupsTests`, `JoinGroupTests`, `ServerJoinStepTests`, `GroupListenersTests`.
+- Docs: `docs/install.md`, `DbDataGateway/README.md`, `Shared/src/DbDataKit.Web/README.md`, release notes, ci-lessons row.
+- Planning: row removed, references cleared in TRUSTZONES, BACKUPRESTORE, ENDPOINTS; proposals INSTALLER-P66 to P70 written.
 
-## Plan
+## Left
 
-- Join request: a Gateway reports its pinned listeners; an instance that already holds its group's key sends it (adoption, see the defaults).
-- Join answer: the group key, the group's listeners (a further Gateway instance only), a link slot (null until TRUSTZONES-1).
-- Console: `IJoinGroups` in `JoinService`; the group key is kept by instance id as `ConsoleGroupKeys` keeps it; a group name is tied to the
-  first instance id that joined with it.
-- Gateway: with a join request waiting and no key held, the instance neither makes a key nor serves the group certificate; after the join it keeps
-  the key, writes the group's ports to `config/server.yaml` and starts again in the same process.
-- Runner: keeps the key from the join answer.
+- Full suites and checks before reporting ready.
 
 ## Open questions
 
+- INSTALLER-P70 (identity home's signing-key secret still copied by hand).
+
 ## Defaults taken
+
+- INSTALLER-P66 to INSTALLER-P69 (in the subject file).
