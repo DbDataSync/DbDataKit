@@ -22,7 +22,7 @@ public enum BacklogProblem
 }
 
 /// <summary>A refusal with its reason in words a person can act on.</summary>
-public sealed class BacklogException(BacklogProblem problem, string message) : Exception(message)
+public sealed class BacklogException(BacklogProblem problem, string message, Exception? inner = null) : Exception(message, inner)
 {
     public BacklogProblem Problem { get; } = problem;
 }

@@ -55,13 +55,15 @@ public class ProviderTests
     }
 
     [Fact]
-    public async Task Open_failures_become_classified_failures_without_driver_text()
+    public async Task Open_failures_become_classified_failures_without_driver_text_and_keep_the_original()
     {
         var p = Provider(new ThrowingFactory());
         var ex = await Assert.ThrowsAsync<ConnectionFailureException>(async () => await p.OpenAsync(Ctx()));
         Assert.Equal(ConnectionFailureKind.Timeout, ex.Failure.Kind);
         Assert.DoesNotContain("prod-db-01", ex.Message, StringComparison.Ordinal);
-        Assert.Null(ex.InnerException);
+        Assert.DoesNotContain("prod-db-01", ex.Failure.PublicMessage, StringComparison.Ordinal);
+        var original = Assert.IsType<TimeoutException>(ex.InnerException);
+        Assert.Equal("server prod-db-01 did not answer", original.Message);
     }
 
     [Fact]

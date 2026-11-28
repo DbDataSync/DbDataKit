@@ -78,7 +78,7 @@ public sealed partial class GatewayDefinitionsPublish(IDefinitionsLink link, Con
         if (!File.Exists(manifestPath)) throw new DeployException("This build has no semantic model to publish (gateway.json is not in it).", 409);
         JsonObject manifest;
         try { manifest = JsonNode.Parse(File.ReadAllText(manifestPath)) as JsonObject ?? throw new JsonException(); }
-        catch (JsonException) { throw new DeployException("gateway.json of this build is not a document.", 409); }
+        catch (JsonException ex) { throw new DeployException("gateway.json of this build is not a document.", 409, inner: ex); }
         if ((string?)manifest["schema"] != "gateway-publish/1") throw new DeployException($"gateway.json of this build says '{(string?)manifest["schema"]}', which this server does not read (gateway-publish/1).", 409);
         var entries = (manifest["models"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
         if (entries.Count == 0) throw new DeployException("This build has no semantic model to publish.", 409);

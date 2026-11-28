@@ -31,7 +31,7 @@ public static class GatewayCalls
         step($"Asked {target.Url} for the tables and columns of the data source '{dataSource}' (no row is read).");
         HttpResponseMessage response;
         try { response = await link.SendAsync(HttpMethod.Post, $"data-sources/{Uri.EscapeDataString(dataSource)}/schema", JsonContent.Create(new JsonObject { ["adopt"] = adopt ? dataSource : null }), ct); }
-        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502, inner: ex); }
         using (response)
         {
             var text = await response.Content.ReadAsStringAsync(ct);
@@ -117,7 +117,7 @@ public static class GatewayCalls
     {
         HttpResponseMessage response;
         try { response = await link.SendAsync(method, path, body is null ? null : JsonContent.Create(body), ct); }
-        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502, inner: ex); }
         using (response)
         {
             var text = await response.Content.ReadAsStringAsync(ct);

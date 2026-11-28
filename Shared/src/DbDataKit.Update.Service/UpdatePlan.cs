@@ -70,7 +70,7 @@ public static class PlanStore
                 if (p.Steps.All(s => s.Name != n)) p.Steps.Add(new PlanStep { Name = n });
             return p;
         }
-        catch (JsonException ex) { throw new UpdatePlanException($"{layout.PlanPath}: the journal is not valid JSON: {ex.Message}"); }
+        catch (JsonException ex) { throw new UpdatePlanException($"{layout.PlanPath}: the journal is not valid JSON: {ex.Message}", ex); }
     }
 
     /// <summary>Atomic write (temp + rename) so a power cut leaves either the old or the new journal, never a torn one.</summary>

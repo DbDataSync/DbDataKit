@@ -31,7 +31,7 @@ public sealed record UserRecord(
 }
 
 /// <summary>An address that another account already holds (the key is unique), or that is not an address at all. The message is meant to be shown to the person or administrator, and never names a secret.</summary>
-public sealed class AccountConflictException(string message, string? otherUserId = null) : Exception(message)
+public sealed class AccountConflictException(string message, string? otherUserId = null, Exception? inner = null) : Exception(message, inner)
 {
     /// <summary>The account that already holds the address; null when the refusal is about the address itself.</summary>
     public string? OtherUserId { get; } = otherUserId;
@@ -83,7 +83,7 @@ public sealed class UserStore(StateDatabase database) : IUserAccounts
             catch (Exception ex) when (key is not null && IsDuplicate(ex))
             {
                 // two sign-ins racing for the same address: the unique index decided, and the loser is told so
-                throw new AccountConflictException($"The address '{email}' is already used by another account.");
+                throw new AccountConflictException($"The address '{email}' is already used by another account.", inner: ex);
             }
 
             return user;
@@ -131,7 +131,7 @@ public sealed class UserStore(StateDatabase database) : IUserAccounts
             try { cmd.ExecuteNonQuery(); }
             catch (Exception ex) when (IsDuplicate(ex))
             {
-                throw new AccountConflictException($"The address '{email}' is already used by another account.");
+                throw new AccountConflictException($"The address '{email}' is already used by another account.", inner: ex);
             }
         });
         return Get(userId) ?? throw new InvalidOperationException($"No user '{userId}'.");
@@ -318,7 +318,7 @@ public sealed class UserStore(StateDatabase database) : IUserAccounts
                 cmd.Bind(database, "createdAt", DateTimeOffset.UtcNow.ToString("O"));
                 cmd.Bind(database, "key", (object?)key ?? DBNull.Value);
                 try { cmd.ExecuteNonQuery(); }
-                catch (Exception ex) when (key is not null && IsDuplicate(ex)) { throw new AccountConflictException($"The address '{email}' is already used by another account."); }
+                catch (Exception ex) when (key is not null && IsDuplicate(ex)) { throw new AccountConflictException($"The address '{email}' is already used by another account.", inner: ex); }
             });
             return Get(id)!;
         }

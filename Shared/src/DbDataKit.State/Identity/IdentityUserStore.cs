@@ -38,7 +38,7 @@ public sealed class IdentityUserStore(StateDatabase database) : IUserAccounts
         catch (Exception ex) when (user.EmailKey is not null && IsDuplicate(ex))
         {
             // two sign-ins racing for the same address: the unique index decided, and the loser is told so
-            throw new AccountConflictException($"The address '{email}' is already used by another account.");
+            throw new AccountConflictException($"The address '{email}' is already used by another account.", inner: ex);
         }
     }
 
@@ -75,7 +75,7 @@ public sealed class IdentityUserStore(StateDatabase database) : IUserAccounts
             using var cmd = database.Command(Module, connection, "UPDATE {table:account} SET email = $email, email_key = $key WHERE id = $id;");
             cmd.Bind(database, "email", email.Trim()).Bind(database, "key", key).Bind(database, "id", userId);
             try { cmd.ExecuteNonQuery(); }
-            catch (Exception ex) when (IsDuplicate(ex)) { throw new AccountConflictException($"The address '{email}' is already used by another account."); }
+            catch (Exception ex) when (IsDuplicate(ex)) { throw new AccountConflictException($"The address '{email}' is already used by another account.", inner: ex); }
         });
         return Get(userId) ?? throw new InvalidOperationException($"No user '{userId}'.");
     }

@@ -50,7 +50,7 @@ public sealed class ChannelContext(ChannelConfig config, ISecretResolver resolve
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            throw new ChannelUnavailableException($"The secret for `{key}` of the channel '{Config.Name}' ({reference.ToAuditString()}) could not be read: {e.GetType().Name}.");
+            throw new ChannelUnavailableException($"The secret for `{key}` of the channel '{Config.Name}' ({reference.ToAuditString()}) could not be read: {e.GetType().Name}.", e);
         }
     }
 }

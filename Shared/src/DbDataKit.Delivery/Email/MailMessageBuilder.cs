@@ -6,7 +6,7 @@ using System.Text;
 namespace DbDataKit.Delivery.Email;
 
 /// <summary>The message cannot be made into mail (an address that is not one, a line break in the subject): the message's own fault, so a permanent failure.</summary>
-public sealed class MailFormatException(string message) : Exception(message);
+public sealed class MailFormatException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// Makes the RFC 5322 text of a <see cref="DeliveryPayload"/>: headers (From, To, Subject, Date, Message-Id, MIME-Version), then one part, or <c>multipart/alternative</c> for the two bodies, inside <c>multipart/mixed</c> when there are attachments. An attachment with a content id (and an HTML body) is an inline picture: <c>multipart/related</c> around the body, the picture after it with <c>Content-ID</c> and <c>Content-Disposition: inline</c>.
@@ -132,7 +132,7 @@ public static class MailMessageBuilder
         }
         catch (FormatException e)
         {
-            throw new MailFormatException($"'{text}' is not an email address: {e.Message}.");
+            throw new MailFormatException($"'{text}' is not an email address: {e.Message}.", e);
         }
     }
 

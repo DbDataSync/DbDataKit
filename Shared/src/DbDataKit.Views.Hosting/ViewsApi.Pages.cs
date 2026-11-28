@@ -84,7 +84,7 @@ public sealed partial class ViewsApi
                 Interlocked.Increment(ref refused);
                 return ViewsAnswer.Error(status, code, $"Export of the page '{target}' failed: {e.Message}", e.Code == "busy" ? new Dictionary<string, string> { ["Retry-After"] = "5" } : null);
             }
-            catch (ExportException) { throw new OperationCanceledException(cancellationToken); }
+            catch (ExportException ex) { throw new OperationCanceledException("The operation was canceled.", ex, cancellationToken); }
         }
     }
 

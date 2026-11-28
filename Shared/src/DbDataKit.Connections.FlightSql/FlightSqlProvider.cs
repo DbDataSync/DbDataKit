@@ -43,7 +43,7 @@ public sealed class FlightSqlComposer : IConnectionStringComposer
     {
         FlightSqlLoginValue login;
         try { login = FlightSqlLoginValue.Parse(text); }
-        catch (FlightSqlLoginValueException) { throw new ConnectionPolicyException("the Flight SQL connection string does not follow the grammar (grpc://host:port or grpc+tls://host:port, then ;option=value parts)"); }
+        catch (FlightSqlLoginValueException ex) { throw new ConnectionPolicyException("the Flight SQL connection string does not follow the grammar (grpc://host:port or grpc+tls://host:port, then ;option=value parts)", inner: ex); }
         if (login.TokenFromOutside) throw new ConnectionPolicyException("token_env and token_command are not available for a Flight SQL data source (give the token as token, or a user and password, as a secret reference)");
         return login;
     }

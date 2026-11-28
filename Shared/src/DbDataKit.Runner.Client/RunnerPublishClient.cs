@@ -18,7 +18,7 @@ namespace DbDataKit.Runner.Client;
 public delegate Task<string?> PackageSigner(string package, string manifest, IReadOnlyList<ArtifactRef> files, string? build, CancellationToken ct);
 
 /// <summary>A call to a runner failed or was refused; the message is the server's own, or says what could not be done here.</summary>
-public sealed class RunnerClientException(string message) : InvalidOperationException(message);
+public sealed class RunnerClientException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>A runner this machine is paired with as a publisher: where it is, who it is, the certificate fingerprint every call pins and the roles the pairing allows.</summary>
 public sealed record PairedRunner(string Name, string Url, string InstanceId, string Fingerprint, IReadOnlyList<string> Roles, DateTimeOffset PairedAt);
@@ -49,7 +49,7 @@ public sealed class RunnerClientStore(string directory)
     {
         if (!File.Exists(ServersFile)) return [];
         try { return JsonSerializer.Deserialize<List<PairedRunner>>(File.ReadAllText(ServersFile), Json) ?? []; }
-        catch (JsonException) { throw new InvalidDataException($"{ServersFile} is not a list of paired runners; remove it and pair again."); }
+        catch (JsonException ex) { throw new InvalidDataException($"{ServersFile} is not a list of paired runners; remove it and pair again.", ex); }
     }
 
     /// <summary>The runner paired under this name or at this address.</summary>
@@ -140,7 +140,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         var self = await store.IdentityAsync(environment, ct);
         PairedServer paired;
         try { paired = await PairingClient.PairAsync(url, code, self, ClientKind.Server, $"publisher {Environment.UserName}@{Environment.MachineName}", ct); }
-        catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException) { throw new RunnerClientException(ex.Message); }
+        catch (Exception ex) when (ex is PairingFailedException or IncompatibleServerException) { throw new RunnerClientException(ex.Message, ex); }
         var runner = new PairedRunner(name ?? url.Authority, paired.Url.ToString().TrimEnd('/'), paired.InstanceId, paired.CertificateFingerprint, ServerRoles.Names(paired.Ceiling), DateTimeOffset.UtcNow);
         store.Add(runner);
         return runner;
@@ -274,13 +274,13 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
             {
                 const string prefix = "api/v1/";
                 try { return await through.SendAsync(method, path.StartsWith(prefix, StringComparison.Ordinal) ? path[prefix.Length..] : path, content, ct); }
-                catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message})."); }
+                catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message}).", ex); }
             }
 
             using var request = new HttpRequestMessage(method, path) { Content = content };
             request.Headers.TryAddWithoutValidation(ManagementAuthentication.TokenHeader, self!.Issuer().Issue(new ConsoleTokenRequest(runner!.InstanceId, _subject, displayName ?? Environment.UserName, role)));
             try { return await http!.SendAsync(request, ct); }
-            catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message})."); }
+            catch (HttpRequestException ex) { throw new RunnerClientException($"{Address} could not be reached ({ex.Message}).", ex); }
         }
 
         public async Task<RunnerClientException> RefusedAsync(HttpResponseMessage response, string doing, CancellationToken ct)
@@ -374,7 +374,7 @@ public sealed class RunnerPublishClient(RunnerClientStore store, Func<string, st
         using var from = await OpenAsync(fromServer, fromCode, log, ct);
         using var to = await OpenAsync(toServer, toCode, log, ct);
         try { return await new DefinitionPromoter().PromoteAsync(new GroupLink(from), new GroupLink(to), request, log, ct); }
-        catch (DefinitionPromotionException ex) { throw new RunnerClientException(ex.Message); }
+        catch (DefinitionPromotionException ex) { throw new RunnerClientException(ex.Message, ex); }
     }
 
     private sealed class GroupLink(Link link) : IDefinitionsLink

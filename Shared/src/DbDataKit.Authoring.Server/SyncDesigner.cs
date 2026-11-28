@@ -15,7 +15,7 @@ using DbDataSync.Scripting.Abstractions;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>A question of the sync Designer that cannot be answered as asked: the words for the person and the HTTP status they come back with.</summary>
-public sealed class SyncDesignerRefusal(string message, int status) : Exception(message)
+public sealed class SyncDesignerRefusal(string message, int status, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 }
@@ -71,10 +71,10 @@ public static class SyncDesigner
         RequireName(connection, "connection");
         ConnectionConfig config;
         try { config = Repository(root).LoadConnection(connection!); }
-        catch (FileNotFoundException) { throw new SyncDesignerRefusal($"The draft has no connection '{connection}' (config/connections/{connection}.yaml).", 404); }
+        catch (FileNotFoundException ex) { throw new SyncDesignerRefusal($"The draft has no connection '{connection}' (config/connections/{connection}.yaml).", 404, ex); }
         catch (Exception ex) when (ex is ConfigValidationException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
-            throw new SyncDesignerRefusal($"config/connections/{connection}.yaml does not read: {ex.Message}", 400);
+            throw new SyncDesignerRefusal($"config/connections/{connection}.yaml does not read: {ex.Message}", 400, ex);
         }
 
         var capabilities = BuiltInDriverCapabilities.For(config.DriverType) ?? FromDescriptor(root, config.DriverType);
@@ -97,7 +97,7 @@ public static class SyncDesigner
             try { descriptor = DriverDescriptors.Read(path); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or YamlDotNet.Core.YamlException)
             {
-                if (Path.GetFileName(dir) == driverType) throw new SyncDesignerRefusal($"{file} does not read: {ex.Message}", 400);
+                if (Path.GetFileName(dir) == driverType) throw new SyncDesignerRefusal($"{file} does not read: {ex.Message}", 400, ex);
                 continue;
             }
             if (descriptor.Id != driverType) continue;
@@ -111,7 +111,7 @@ public static class SyncDesigner
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException)
             {
-                throw new SyncDesignerRefusal($"{file} does not describe a driver the engine can build: {ex.Message}", 400);
+                throw new SyncDesignerRefusal($"{file} does not describe a driver the engine can build: {ex.Message}", 400, ex);
             }
         }
         throw new SyncDesignerRefusal(unknown, 404);
@@ -140,10 +140,10 @@ public static class SyncDesigner
             task = repository.LoadReplicationTask(replication!);
             config = repository.LoadTableMapping(replication!, mapping!);
         }
-        catch (FileNotFoundException ex) { throw new SyncDesignerRefusal(ex.Message, 404); }
+        catch (FileNotFoundException ex) { throw new SyncDesignerRefusal(ex.Message, 404, ex); }
         catch (Exception ex) when (ex is ConfigValidationException or InvalidOperationException or YamlDotNet.Core.YamlException or MappingLoadingException)
         {
-            throw new SyncDesignerRefusal($"The mapping does not read: {ex.Message}", 400);
+            throw new SyncDesignerRefusal($"The mapping does not read: {ex.Message}", 400, ex);
         }
         if (config.Sources.Count != 1 || config.Targets.Count != 1)
             throw new SyncDesignerRefusal($"Table mapping '{config.Name}' has {config.Sources.Count} source(s) and {config.Targets.Count} target(s): types and a key are inferred for a mapping of one source and one target.", 400);
@@ -151,7 +151,7 @@ public static class SyncDesigner
         SourceTableRef source;
         TableRef target;
         try { (source, target) = (EndpointResolution.ResolveSource(task, config.Sources[0]), EndpointResolution.ResolveTarget(task, config.Targets[0])); }
-        catch (ConfigValidationException ex) { throw new SyncDesignerRefusal(ex.Message, 400); }
+        catch (ConfigValidationException ex) { throw new SyncDesignerRefusal(ex.Message, 400, ex); }
 
         var table = string.IsNullOrEmpty(source.Schema) ? source.Table : $"{source.Schema}.{source.Table}";
         var answer = new JsonObject
@@ -222,10 +222,10 @@ public static class SyncDesigner
         var repository = Repository(root);
         ReplicationTaskConfig task;
         try { task = repository.LoadReplicationTask(replication!); }
-        catch (FileNotFoundException) { throw new SyncDesignerRefusal($"The draft has no replication '{replication}' (config/replications/{replication}/task.yaml).", 404); }
+        catch (FileNotFoundException ex) { throw new SyncDesignerRefusal($"The draft has no replication '{replication}' (config/replications/{replication}/task.yaml).", 404, ex); }
         catch (Exception ex) when (ex is ConfigValidationException or InvalidOperationException or YamlDotNet.Core.YamlException)
         {
-            throw new SyncDesignerRefusal($"config/replications/{replication}/task.yaml does not read: {ex.Message}", 400);
+            throw new SyncDesignerRefusal($"config/replications/{replication}/task.yaml does not read: {ex.Message}", 400, ex);
         }
 
         var existing = repository.ListTableMappings(replication!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -246,7 +246,7 @@ public static class SyncDesigner
             SourceTableRef source;
             TableRef target;
             try { (source, target) = (EndpointResolution.ResolveSource(task, mapping.Sources[0]), EndpointResolution.ResolveTarget(task, mapping.Targets[0])); }
-            catch (ConfigValidationException ex) { throw new SyncDesignerRefusal($"Creating '{name}' failed: {ex.Message}", 400); }
+            catch (ConfigValidationException ex) { throw new SyncDesignerRefusal($"Creating '{name}' failed: {ex.Message}", 400, ex); }
 
             var sourceRead = await reader.ReadAsync(source, cancellationToken);
             var targetRead = await reader.ReadAsync(target, cancellationToken);
@@ -256,7 +256,7 @@ public static class SyncDesigner
 
             string text;
             try { text = repository.TableMappingText(replication!, mapping); }
-            catch (ConfigValidationException ex) { throw new SyncDesignerRefusal($"Creating '{name}' failed: {ex.Message}", 400); }
+            catch (ConfigValidationException ex) { throw new SyncDesignerRefusal($"Creating '{name}' failed: {ex.Message}", 400, ex); }
             files.Add(new JsonObject { ["path"] = $"config/replications/{replication}/table-mappings/{name}.yaml", ["text"] = text });
             created.Add(name);
             Note(notes, name, "source", sourceRead, "the source table is not in the catalog cache, so nothing was captured and no columns were mapped");

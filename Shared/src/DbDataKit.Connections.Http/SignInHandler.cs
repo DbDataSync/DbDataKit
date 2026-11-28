@@ -16,16 +16,16 @@ internal static class SecretText
             using var value = await secrets.ResolveAsync(SecretRef.Parse(reference), ct).ConfigureAwait(false);
             return value.RevealString();
         }
-        catch (SecretNotFoundException)
+        catch (SecretNotFoundException ex)
         {
             // the reference is not a secret; the value never was in it: it is safe to say which one is missing
-            throw new SecretNotSetException(reference);
+            throw new SecretNotSetException(reference, ex);
         }
     }
 }
 
 /// <summary>A secret the connection names is not set. It is a permanent login failure: the connection cannot sign in until a person sets it. The message names the reference (which holds no value), never a value.</summary>
-public sealed class SecretNotSetException(string reference) : Exception($"The secret `{reference}` is not set.")
+public sealed class SecretNotSetException(string reference, Exception? inner = null) : Exception($"The secret `{reference}` is not set.", inner)
 {
     public string Reference { get; } = reference;
 

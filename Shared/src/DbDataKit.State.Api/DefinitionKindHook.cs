@@ -4,7 +4,7 @@ using DbDataKit.State;
 namespace DbDataKit.State.Api;
 
 /// <summary>A refusal a kind's hook makes: the HTTP status and the sentence the caller reads. The API audits it as a refused call and answers with it.</summary>
-public sealed class DefinitionsRefusalException(int status, string message) : Exception(message)
+public sealed class DefinitionsRefusalException(int status, string message, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 

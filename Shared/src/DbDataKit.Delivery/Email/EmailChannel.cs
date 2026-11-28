@@ -40,7 +40,7 @@ public sealed class EmailChannel : IDeliveryChannel
             try { trusted = X509CertificateLoader.LoadCertificateFromFile(file); }
             catch (Exception e) when (e is IOException or System.Security.Cryptography.CryptographicException)
             {
-                throw new DeliverySettingsException($"delivery.channels.{config.Name}.trusted_certificate: {file} is not a certificate file that can be read ({e.Message}).");
+                throw new DeliverySettingsException($"delivery.channels.{config.Name}.trusted_certificate: {file} is not a certificate file that can be read ({e.Message}).", e);
             }
         }
 

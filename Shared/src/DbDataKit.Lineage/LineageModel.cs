@@ -52,4 +52,4 @@ public sealed record EdgeRun(string From, string To, EdgeKind Kind, DateTimeOffs
 }
 
 /// <summary>A graph that has a cycle in it, or an edge to a node it does not have.</summary>
-public sealed class LineageGraphException(string message) : Exception(message);
+public sealed class LineageGraphException(string message, Exception? inner = null) : Exception(message, inner);

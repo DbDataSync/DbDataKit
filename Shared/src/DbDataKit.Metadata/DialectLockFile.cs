@@ -13,7 +13,7 @@ public sealed record DialectLockEntry(string Connection, ServerFacts Reported, D
         new(connection, facts, DialectProfiles.ToProfile(facts, catalog));
 }
 
-public sealed class DialectLockException(string message) : FormatException(message);
+public sealed class DialectLockException(string message, Exception? inner = null) : FormatException(message, inner);
 
 /// <summary>
 /// A <c>dialects.lock.yml</c>-style file: deterministic text (sorted connections, LF line ends, no timestamps, nothing about the machine)
@@ -111,7 +111,7 @@ public static partial class DialectLockFile
         ArgumentNullException.ThrowIfNull(text);
         var stream = new YamlStream();
         try { stream.Load(new StringReader(text)); }
-        catch (YamlDotNet.Core.YamlException ex) { throw new DialectLockException("not valid YAML: " + ex.Message); }
+        catch (YamlDotNet.Core.YamlException ex) { throw new DialectLockException("not valid YAML: " + ex.Message, ex); }
         if (stream.Documents.Count != 1 || stream.Documents[0].RootNode is not YamlMappingNode root) throw new DialectLockException("the file is not a mapping");
 
         var top = Keys(root, TopKeys, TopKeys, "the file");

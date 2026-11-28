@@ -30,8 +30,8 @@ internal static class Ssh
             }
             catch (Exception e) when (e is SshException or ArgumentException or FormatException or InvalidOperationException)
             {
-                // what failed is told by its kind, never by the library's message (it can hold part of the key)
-                throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Login, "ssh-private-key", FileFailures.Engine));
+                // the message people see is the kind; the library's own message (it can hold part of the key) stays in the inner exception
+                throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Login, "ssh-private-key", FileFailures.Engine), e);
             }
         }
         else if (signIn.Method == "basic") method = new PasswordAuthenticationMethod(signIn.User!, await SecretReader.ReadAsync(secrets, signIn.PasswordSecret!, ct).ConfigureAwait(false));
@@ -168,7 +168,7 @@ public sealed class SftpFileStore : IFileStore
     private static Task<T> Run<T>(Func<T> call, CancellationToken ct) => Task.Run(() =>
     {
         try { return call(); }
-        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct)); }
+        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct), e); }
     }, ct);
 
     public ValueTask DisposeAsync()
@@ -242,7 +242,7 @@ public sealed class ScpFileStore : IFileStore
     private static Task<T> Run<T>(Func<T> call, CancellationToken ct) => Task.Run(() =>
     {
         try { return call(); }
-        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct)); }
+        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct), e); }
     }, ct);
 
     public ValueTask DisposeAsync()

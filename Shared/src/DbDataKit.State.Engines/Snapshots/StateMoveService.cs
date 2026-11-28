@@ -226,7 +226,7 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsFile);
         var redactor = new Redactor(_secrets, from, to);
         try { PreflightCore(from, to, Path.GetFullPath(settingsFile), modules, scope, redactor); }
-        catch (StateServiceException ex) { throw new StateServiceException(ex.Reason, redactor.Apply(ex.Message)); }
+        catch (StateServiceException ex) { throw new StateServiceException(ex.Reason, redactor.Apply(ex.Message), inner: ex); }
         return new MovePreflight(from.Describe(), to.Describe());
     }
 
@@ -293,10 +293,10 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
         {
             if (File.Exists(settingsPath)) File.Copy(settingsPath, scratch);
             try { new StateSettingsWriter().Write(scratch, to.Settings); }
-            catch (InvalidOperationException ex) { throw new StateServiceException(StateServiceRefusal.SettingsInvalid, ex.Message.Replace(scratch, settingsPath, StringComparison.Ordinal)); }
+            catch (InvalidOperationException ex) { throw new StateServiceException(StateServiceRefusal.SettingsInvalid, ex.Message.Replace(scratch, settingsPath, StringComparison.Ordinal), inner: ex); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new StateServiceException(StateServiceRefusal.SettingsInvalid, $"The directory '{directory}' cannot be written: {ex.Message}");
+                throw new StateServiceException(StateServiceRefusal.SettingsInvalid, $"The directory '{directory}' cannot be written: {ex.Message}", inner: ex);
             }
         }
         finally

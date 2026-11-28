@@ -25,7 +25,7 @@ public sealed class PublishRefusedException(PublishRefusal reason, string messag
 }
 
 /// <summary>An <c>expected_version</c> that no longer holds: someone changed the definition after the caller looked. Nothing was changed; read again and decide.</summary>
-public sealed class DefinitionConflictException(string message, int expected, int actual) : Exception(message)
+public sealed class DefinitionConflictException(string message, int expected, int actual, Exception? inner = null) : Exception(message, inner)
 {
     public int Expected { get; } = expected;
 

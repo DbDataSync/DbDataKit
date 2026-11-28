@@ -268,7 +268,7 @@ public static class StateSnapshotImporter
         }
         catch (InvalidOperationException ex)
         {
-            throw new SnapshotImportException(SnapshotImportRefusal.FeatureMissing, ex.Message);
+            throw new SnapshotImportException(SnapshotImportRefusal.FeatureMissing, ex.Message, inner: ex);
         }
     }
 

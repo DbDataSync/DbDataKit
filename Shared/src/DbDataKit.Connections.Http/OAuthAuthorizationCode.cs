@@ -54,7 +54,7 @@ internal static class TokenEndpoint
             throw new ConnectionFailureException(HttpFailures.ClassifyToken(response.StatusCode));
         }
         try { return JsonDocument.Parse(text).RootElement.Clone(); }
-        catch (JsonException) { throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Login, "oauth-no-token", HttpFailures.Engine)); }
+        catch (JsonException ex) { throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Login, "oauth-no-token", HttpFailures.Engine), ex); }
     }
 
     public static ConsentGrant Read(JsonElement root)

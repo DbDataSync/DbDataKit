@@ -113,7 +113,7 @@ internal abstract class ObjectStoreBase : IFileStore
         catch (Exception e)
         {
             // our own timeout (the connection's command timeout) is a timeout; anything else is told by its kind, never by its message (it holds the address)
-            throw new ConnectionFailureException(e is OperationCanceledException ? new ConnectionFailure(ConnectionFailureKind.Timeout, "timeout", FileFailures.Engine) : HttpFailures.Classify(e, ct));
+            throw new ConnectionFailureException(e is OperationCanceledException ? new ConnectionFailure(ConnectionFailureKind.Timeout, "timeout", FileFailures.Engine) : HttpFailures.Classify(e, ct), e);
         }
     }
 

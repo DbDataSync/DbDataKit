@@ -54,7 +54,7 @@ public class GenericAdoComposer(EngineId engine, GenericComposerOptions? options
             return OdbcBag.Parse(text);
         }
         try { return new BuilderBag(new DbConnectionStringBuilder { ConnectionString = text }); }
-        catch (ArgumentException) { throw new ConnectionPolicyException("the connection string is malformed"); }
+        catch (ArgumentException ex) { throw new ConnectionPolicyException("the connection string is malformed", inner: ex); }
     }
 
     private bool IsFixedLocked(string key) =>

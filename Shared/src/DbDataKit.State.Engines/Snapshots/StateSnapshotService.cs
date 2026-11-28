@@ -110,7 +110,7 @@ public sealed class StateSnapshotService(ISecretResolver? secrets = null, TimePr
         }
         catch (SnapshotImportException ex) when (ex.Message != redactor.Apply(ex.Message))
         {
-            throw new SnapshotImportException(ex.Reason, redactor.Apply(ex.Message), ex.CompletedModules);
+            throw new SnapshotImportException(ex.Reason, redactor.Apply(ex.Message), ex.CompletedModules, ex);
         }
     }
 

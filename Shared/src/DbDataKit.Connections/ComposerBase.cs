@@ -269,8 +269,8 @@ public abstract class BuilderComposer(EngineId engine) : ComposerBase(engine)
         try { b.ConnectionString = text; }
         catch (Exception e) when (e is ArgumentException or FormatException or KeyNotFoundException)
         {
-            // the message of a builder exception can quote the offending text, so it is dropped
-            throw new ConnectionPolicyException("the connection string is malformed or uses a keyword this engine does not know");
+            // the builder's message can quote the offending text, so the message people see does not use it; the original stays in the inner exception
+            throw new ConnectionPolicyException("the connection string is malformed or uses a keyword this engine does not know", inner: e);
         }
         return new BuilderBag(b, NewBuilder);
     }

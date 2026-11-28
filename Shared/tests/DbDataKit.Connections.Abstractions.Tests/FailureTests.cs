@@ -49,9 +49,12 @@ public class FailureTests
         Assert.DoesNotContain("prod-db-01", f.PublicMessage, StringComparison.Ordinal);
         Assert.DoesNotContain("sa'", f.ToString(), StringComparison.Ordinal);
         Assert.Null(f.Raw);
-        var ex = new FailureClassifier().ToException(new FakeDbException(raw, "28000"), EngineId.SqlServer);
+        var driver = new FakeDbException(raw, "28000");
+        var ex = new FailureClassifier().ToException(driver, EngineId.SqlServer);
         Assert.DoesNotContain("hunter2", ex.Message, StringComparison.Ordinal);
-        Assert.Null(ex.InnerException);
+        Assert.DoesNotContain("prod-db-01", ex.Failure.PublicMessage, StringComparison.Ordinal);
+        Assert.Null(ex.Failure.Raw);
+        Assert.Same(driver, ex.InnerException);
     }
 
     [Fact]

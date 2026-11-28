@@ -4,7 +4,7 @@ using DbDataKit.Authoring;
 namespace DbDataKit.Deploy;
 
 /// <summary>A deploy, or a call around one, was refused or could not be done. <see cref="Status"/> is the HTTP status a route answers with, and the message is a sentence a person can act on (the target's own words when it refused).</summary>
-public sealed class DeployException(string message, int status, JsonObject? adopt = null) : Exception(message)
+public sealed class DeployException(string message, int status, JsonObject? adopt = null, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 
