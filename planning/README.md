@@ -42,6 +42,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 32 | [SYNCNEXT](SYNCNEXT.md) | Sync after the Designer: watching and operating runs, the replication and script pages, Preview SQL, MySQL and Oracle privileges, the installed-suite story | queued | unassigned |
 | 33 | [CONNECTIONS](CONNECTIONS.md) | Every connection kind has a form with Test, a channel never reaches production's connection, each kind proven on a real system | queued | unassigned |
 | 34 | [INTEGRATIONS](INTEGRATIONS.md) | The integration product's features: the kit, its sources and targets, triggers and screens | open design | unassigned |
+| 35 | [ACTIONS](ACTIONS.md) | Scripts that apps and agents call to do something: the format, where they run, the editor; elevated actions wait for the security model | queued | unassigned |
 
 ## Parked
 
