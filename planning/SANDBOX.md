@@ -40,7 +40,7 @@ rows. Ben's code never holds the API key or the database password, and a request
 - **Sync's drivers and scripts:** YAML and compiled drivers, `driver.csx` and metadata scripts load from NuGet packages and run inside the Sync
   engine's process, which holds the source's and target's logins.
 - **Test doubles:** `RecordedHttp` (format `http-recording/1`) and `FakeFileShare` in `DbDataKit.Runner.Kit.Testing`.
-- **A script's Test:** builds and stages the whole Sync set on a Runner (WORKSPACEISOLATION-P31, P32, open).
+- **A script's Test:** builds and stages the whole Sync set on a Runner, in the channel the Scripts tab presets.
 
 ## Scenarios
 
@@ -299,7 +299,7 @@ where it should. This is the binding test that exists today, widened to every fa
 1. **The sandbox library and its first backend.** `DbDataKit.Sandbox` over MXC, on Linux and Windows 11. Nothing uses it yet. Windows Server is
    documented as unsupported.
 2. **Development and testing on the Workspace.** An integration's tests, a Sync script's Test and a driver's test run sandboxed against fakes. This
-   replaces staging the Sync set on a Runner for a script's Test (WORKSPACEISOLATION-P31, P32). Build tools (`dotnet`, `bun`) and git run under a policy
+   replaces staging the Sync set on a Runner for a script's Test. Build tools (`dotnet`, `bun`) and git run under a policy
    too, with only the package sources and remotes they need, and their own credentials.
 3. **Hosted connections for the files and HTTP families**, with their fakes and conformance suites. These are the two families integrations use most.
    Versions of added connection kinds run in the host when an administrator trusts them, flagged; the connection host of their own comes after step 6.
@@ -347,6 +347,6 @@ Which jobs run when is set by CIPLAN.
   trust.
 - An open design **"Shared ground with PLUGINS, PUBLISHING and the Runner"**: PLUGINS' SDK connection contract as the hosted-connection API; connection
   kinds and the plugin manifest; load contexts and the connection host; one vocabulary of approval.
-- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (-9, -10, -14, -15, P31, P32), COMMANDLINES-8, TRUSTZONES (OS outbound rules,
+- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (-9, -10, -14, -15; a script's Test), COMMANDLINES-8, TRUSTZONES (OS outbound rules,
   -14), TASKENGINE (limits, accounts), PLUGINS, PUBLISHING-3, KNOWLEDGE (-18, -20), APPHOSTING-7, MASTERDATA (extraction), SAMPLEDATA, DATAQUALITY,
   CHANNELS (-3, -7), SYNCAUTHORING, ERRORDETAILS, INSTALLER (labels, Bubblewrap, Windows Server note, testenv), CIPLAN (new).
