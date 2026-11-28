@@ -168,7 +168,7 @@ public sealed class SftpFileStore : IFileStore
     private static Task<T> Run<T>(Func<T> call, CancellationToken ct) => Task.Run(() =>
     {
         try { return call(); }
-        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct)); }
+        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct), e); }
     }, ct);
 
     public ValueTask DisposeAsync()
@@ -242,7 +242,7 @@ public sealed class ScpFileStore : IFileStore
     private static Task<T> Run<T>(Func<T> call, CancellationToken ct) => Task.Run(() =>
     {
         try { return call(); }
-        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct)); }
+        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct), e); }
     }, ct);
 
     public ValueTask DisposeAsync()

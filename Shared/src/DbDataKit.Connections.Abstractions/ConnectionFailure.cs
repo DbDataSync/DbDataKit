@@ -116,8 +116,8 @@ public sealed class FailureClassifier(IEnumerable<IFailureMapper>? mappers = nul
         return WithRaw(new ConnectionFailure(ConnectionFailureKind.Other, exception.GetType().Name, engine), exception);
     }
 
-    /// <summary>Wraps <see cref="Classify"/> in the exception providers throw.</summary>
-    public ConnectionFailureException ToException(Exception exception, EngineId engine) => new(Classify(exception, engine));
+    /// <summary>Wraps <see cref="Classify"/> in the exception providers throw, with the original as its inner exception.</summary>
+    public ConnectionFailureException ToException(Exception exception, EngineId engine) => new(Classify(exception, engine), exception);
 
     private ConnectionFailure WithRaw(ConnectionFailure f, Exception original)
     {

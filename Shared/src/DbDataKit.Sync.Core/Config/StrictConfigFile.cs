@@ -6,8 +6,8 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace DbDataSync.Core.Config;
 
 /// <summary>A configuration file that cannot be read as written: a syntax error, a repeated key, or a key the file kind does not have. The message names the file, the position and the key's path.</summary>
-public sealed class ConfigFileException(string file, IReadOnlyList<ConfigDiagnostic> diagnostics)
-    : InvalidOperationException($"{Path.GetFileName(file)} cannot be read:{Environment.NewLine}{string.Join(Environment.NewLine, diagnostics.Select(d => "  " + d))}")
+public sealed class ConfigFileException(string file, IReadOnlyList<ConfigDiagnostic> diagnostics, Exception? inner = null)
+    : InvalidOperationException($"{Path.GetFileName(file)} cannot be read:{Environment.NewLine}{string.Join(Environment.NewLine, diagnostics.Select(d => "  " + d))}", inner)
 {
     public string File { get; } = file;
     public IReadOnlyList<ConfigDiagnostic> Diagnostics { get; } = diagnostics;
@@ -71,7 +71,7 @@ internal static class StrictConfigFile
         try { return bind(text); }
         catch (YamlDotNet.Core.YamlException ex)
         {
-            throw new ConfigFileException(file, [DefaultDiagnosticCatalog.Instance.Create(SharedCodes.InvalidValue, file, (int)ex.Start.Line, (int)ex.Start.Column, ex.InnerException?.Message ?? ex.Message)]);
+            throw new ConfigFileException(file, [DefaultDiagnosticCatalog.Instance.Create(SharedCodes.InvalidValue, file, (int)ex.Start.Line, (int)ex.Start.Column, ex.InnerException?.Message ?? ex.Message)], ex);
         }
     }
 

@@ -20,6 +20,7 @@ DbDataGateway/src/DbDataGateway.Server/Data/QueryLimits.cs: 1
 DbDataGateway/src/DbDataGateway.Server/Data/WorkerProcessHost.cs: 2
 DbDataGateway/src/DbDataGateway.Server/Hosting/AppsRemote.cs: 3
 DbDataGateway/src/DbDataGateway.Server/Hosting/Cli.cs: 1
+DbDataGateway/src/DbDataGateway.Server/Hosting/GatewayHost.cs: 1
 DbDataGateway/src/DbDataGateway.Server/Hosting/GatewayIdentityModule.cs: 2
 DbDataGateway/src/DbDataGateway.Server/Hosting/LineageCommand.cs: 2
 DbDataGateway/src/DbDataGateway.Server/Management/GatewayApps.cs: 1
