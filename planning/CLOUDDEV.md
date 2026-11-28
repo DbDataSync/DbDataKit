@@ -36,7 +36,7 @@ offers the running instance's MCP endpoints to the session through a development
 ## Needs from other subjects
 
 - AGENTACCESS-5: the console's MCP endpoint, the forwarder's second target.
-- KNOWLEDGE-24: the goldens of MCP tools of every product, which CLOUDDEV-5's tool list is generated from (the console's golden exists today).
+- AGENTACCESS-14: the goldens of MCP tools of every product, which CLOUDDEV-5's tool list is generated from (the console's golden exists today).
 
 ## Shared areas touched
 
