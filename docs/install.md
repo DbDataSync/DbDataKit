@@ -317,6 +317,17 @@ makes the key at the first instance's join, and every further instance that join
 by hand. The instance keeps the key in its own secret store. A key that does not open what the group's state already holds is refused, naming the
 secret, and the join step fails. A Gateway that starts with a join request waiting makes no key of its own until the join has given it the group's.
 
+A Gateway that ran alone before it joined made its own key at its first start, and its state holds values protected with that key. The Gateway sends
+the key with its join:
+
+- The console keeps no key for the group yet: it keeps the key the Gateway sent and hands it to every further instance of the group.
+- The console already keeps a key for the group: it hands that key back, and the rule above applies.
+
+The key travels only inside the join's TLS connection, which is pinned to the console's certificate.
+
+Example: an administrator installs a Gateway from its MSI, uses it alone for a week, then runs the `pair` command the console made. The Gateway's
+pass-through sessions and its clients' secrets keep working after the join, and a second instance joined to the group later opens them.
+
 A token for a named group is refused for a server whose state is another database than the group's (it would be a group of its own), and for an
 instance the console already knows under another group. The joining server is told why:
 

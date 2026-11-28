@@ -132,21 +132,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P67: the console keeps the key a group already holds when it has none (default, awaiting the owner)
-
-A Gateway that ran alone before it joined a console made its own group key at its first start, and its state holds values protected with it. When it
-joins, it sends that key with the join; a console that keeps no key for the group keeps this one and hands it back, and every further instance gets it.
-Example: an administrator installs a Gateway from its MSI, uses it for a week, then runs the `pair` command a console made; the Gateway's pass-through
-sessions and its clients' secrets keep working, and a second instance joined later opens them. Without this, the console's new key would not open what
-the group's state holds and the join step would fail naming the secret.
-
-Options:
-
-- A, as built: the console adopts the key the group sends when it keeps none for the group.
-- B: the console always makes the key; a group that made its own fails at its join and must be set up again.
-
-Recommendation: A. The key travels only inside the join's TLS, pinned to the console's certificate, by a server that holds a valid token.
-
 ### INSTALLER-P68: the console keeps calling a group at its first instance (default, awaiting the owner)
 
 `instances.yaml` has one entry per instance id, and every instance of a group has the group's id. A further instance that joins from another address
