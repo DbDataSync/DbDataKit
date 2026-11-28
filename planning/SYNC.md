@@ -54,7 +54,7 @@ person, or the console's Runner screens with a link from the Designer) before it
 - **Verification results** of a mapping and **quality check results** of a replication: now the Runner's run steps and the console's Quality page.
 - **The Runner tab and page**: the version served and staged per channel, slots and bindings, instances. Now: the Builds tab and `PublishForm.tsx`, and
   the Runner's own screens.
-- **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is TASKENGINE's).
+- **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is RUNNER's).
 - **Live updates**: the old screens followed runs over SignalR; the Runner's screens poll.
 
 
