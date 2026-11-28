@@ -130,7 +130,7 @@ public sealed partial class ServingFlightServer
         }
         catch (ServingInvalidException ex)
         {
-            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message, ex));
         }
         return rows;
     }

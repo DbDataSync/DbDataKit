@@ -78,9 +78,9 @@ public static class FileStorePaths
 /// <summary>The server is not the one the connection is pinned to: a host key or a certificate whose fingerprint is not in the pinned list. The message names the server and both fingerprints (they are public) and what to do; it is permanent and nothing is sent to the server.</summary>
 public sealed class PinMismatchException : Exception
 {
-    public PinMismatchException(string what, string host, string offered, IReadOnlyList<string> pinned)
+    public PinMismatchException(string what, string host, string offered, IReadOnlyList<string> pinned, Exception? inner = null)
         : base($"The {what} of {host} is {offered}, which is not one of the pinned ones ({(pinned.Count == 0 ? "none" : string.Join(", ", pinned))}). "
-             + "If the server was reinstalled or its key was replaced, check the new fingerprint with its administrator and pin it; otherwise do not connect: this may not be the server you mean.")
+             + "If the server was reinstalled or its key was replaced, check the new fingerprint with its administrator and pin it; otherwise do not connect: this may not be the server you mean.", inner)
     {
         What = what;
         Host = host;
@@ -100,7 +100,7 @@ public sealed class PinMismatchException : Exception
 }
 
 /// <summary>A secret the connection names is not set (a password, a private key): a permanent login failure that names the reference, which holds no value.</summary>
-public sealed class FileSecretNotSetException(string reference) : Exception($"The secret `{reference}` is not set.")
+public sealed class FileSecretNotSetException(string reference, Exception? inner = null) : Exception($"The secret `{reference}` is not set.", inner)
 {
     public string Reference { get; } = reference;
     public ConnectionFailure Failure { get; } = new(ConnectionFailureKind.Login, "secret-not-set", FileFailures.Engine);
@@ -115,7 +115,7 @@ internal static class SecretReader
             using var value = await secrets.ResolveAsync(SecretRef.Parse(reference), ct).ConfigureAwait(false);
             return value.RevealString();
         }
-        catch (SecretNotFoundException) { throw new FileSecretNotSetException(reference); }
+        catch (SecretNotFoundException ex) { throw new FileSecretNotSetException(reference, ex); }
     }
 }
 

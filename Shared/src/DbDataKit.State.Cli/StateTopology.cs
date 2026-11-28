@@ -17,7 +17,7 @@ public enum StateTopologyKind
 }
 
 /// <summary>Raised for arguments of <c>state init</c> that cannot make settings; the message is the sentence that names the fix.</summary>
-public sealed class StateTopologyException(string message) : ArgumentException(message);
+public sealed class StateTopologyException(string message, Exception? inner = null) : ArgumentException(message, inner);
 
 /// <summary>
 /// What each topology means as a service's <see cref="StateSettings"/> (plan 29b C03). The presets are data and pure functions: <see cref="Settings"/> works out the <c>state</c> section one service should have,
@@ -66,7 +66,7 @@ public static class StateTopology
             throw new StateTopologyException($"--topology {which} needs --engine mssql or --engine postgres.");
         string id;
         try { id = new StateSettings(engine).EngineId; }
-        catch (InvalidOperationException) { throw new StateTopologyException($"--engine '{engine}' is not one of mssql or postgres."); }
+        catch (InvalidOperationException ex) { throw new StateTopologyException($"--engine '{engine}' is not one of mssql or postgres.", ex); }
         if (id == StateEngineIds.Sqlite)
             throw new StateTopologyException($"--topology {which} is a SQL Server or PostgreSQL database shared by several instances: use --engine mssql or --engine postgres (a SQLite file for each service is --topology service).");
         if (string.IsNullOrWhiteSpace(connection))

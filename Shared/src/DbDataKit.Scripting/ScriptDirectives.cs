@@ -18,7 +18,7 @@ public sealed record PackageRequest(string Id, VersionRange Range, int Line = 0)
 }
 
 /// <summary>A directive that cannot be used. The message names the script line and never quotes more of the directive than the package id.</summary>
-public sealed class ScriptDirectiveException(string message, int line) : FormatException(line > 0 ? $"{message} (script line {line})" : message)
+public sealed class ScriptDirectiveException(string message, int line, Exception? inner = null) : FormatException(line > 0 ? $"{message} (script line {line})" : message, inner)
 {
     public int Line { get; } = line;
 }
@@ -57,7 +57,7 @@ public static class ScriptDirectives
         var id = (comma < 0 ? text : text[..comma]).Trim();
         var version = comma < 0 ? null : text[(comma + 1)..].Trim();
         try { LibraryValidation.ValidatePackageId(id); }
-        catch (LibraryValidationException ex) { throw new ScriptDirectiveException($"The package id in the directive is not valid: {ex.Rule}", line); }
+        catch (LibraryValidationException ex) { throw new ScriptDirectiveException($"The package id in the directive is not valid: {ex.Rule}", line, ex); }
 
         if (version is null)
         {
@@ -67,7 +67,7 @@ public static class ScriptDirectives
         if (exactOnly)
         {
             try { LibraryValidation.ValidateVersion(version); }
-            catch (LibraryValidationException) { throw new ScriptDirectiveException($"The version of '{id}' must be one exact version (1.2.3), not a range, a wildcard or a property", line); }
+            catch (LibraryValidationException ex) { throw new ScriptDirectiveException($"The version of '{id}' must be one exact version (1.2.3), not a range, a wildcard or a property", line, ex); }
             return PackageRequest.Exact(id, version) with { Line = line };       // [1.2.3], not NuGet's "1.2.3 or newer"
         }
         if (!VersionRange.TryParse(version, out var range)) throw new ScriptDirectiveException($"The version of '{id}' is not a version or a version range", line);

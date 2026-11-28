@@ -36,7 +36,7 @@ public enum GateRefusal
 }
 
 /// <summary>The write gate refused a statement before it reached a driver.</summary>
-public sealed class GateRefusedException(string message, GateRefusal reason = GateRefusal.NotPermitted) : TransferException(message)
+public sealed class GateRefusedException(string message, GateRefusal reason = GateRefusal.NotPermitted, Exception? inner = null) : TransferException(message, inner)
 {
     public GateRefusal Reason { get; } = reason;
 }

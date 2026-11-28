@@ -1,6 +1,6 @@
 namespace DbDataSync.Core.Config;
 
-public sealed class ConfigValidationException(string message) : Exception(message);
+public sealed class ConfigValidationException(string message, Exception? inner = null) : Exception(message, inner);
 
 public static class ConfigValidation
 {

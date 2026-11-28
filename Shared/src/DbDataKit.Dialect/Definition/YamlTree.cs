@@ -4,7 +4,7 @@ using YamlDotNet.Core.Events;
 namespace DbDataKit.Dialect;
 
 /// <summary>Raised for a malformed or invalid dialect definition; carries source name and line.</summary>
-public sealed class DialectException(string message, string? source = null, int line = 0) : Exception(Format(message, source, line))
+public sealed class DialectException(string message, string? source = null, int line = 0, Exception? inner = null) : Exception(Format(message, source, line), inner)
 {
     public string? SourceName { get; } = source;
     public int Line { get; } = line;
@@ -37,7 +37,7 @@ internal static class YamlTree
         }
         catch (YamlException ex)
         {
-            throw new DialectException(ex.Message, source, (int)ex.Start.Line);
+            throw new DialectException(ex.Message, source, (int)ex.Start.Line, ex);
         }
     }
 

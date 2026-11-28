@@ -43,7 +43,7 @@ public sealed record JoinedConsole(string ConsoleId, string Name, byte[] PublicK
 }
 
 /// <summary>Why a join did not happen. <see cref="Refused"/> is true when the console answered and said no (a new command is needed), false when it could not be reached or was not the console the command named.</summary>
-public sealed class JoinFailedException(string message, bool refused) : Exception(message)
+public sealed class JoinFailedException(string message, bool refused, Exception? inner = null) : Exception(message, inner)
 {
     public bool Refused { get; } = refused;
 
@@ -84,8 +84,8 @@ public static class JoinClient
         {
             if (seen.Length > 0 && seen != file.ConsoleThumbprint)
                 throw new JoinFailedException($"{console} presented the certificate {Thumbprints.Format(seen)}, not {Thumbprints.Format(file.ConsoleThumbprint)} as the join command said, so nothing was sent. " +
-                    "Check the address; something may be answering in the console's place. If the console's certificate was renewed, make a new command on the console.", refused: false);
-            throw new JoinFailedException($"{console} could not be reached to join ({ex.GetType().Name}). Check that the console's address answers from this machine.", refused: false);
+                    "Check the address; something may be answering in the console's place. If the console's certificate was renewed, make a new command on the console.", refused: false, inner: ex);
+            throw new JoinFailedException($"{console} could not be reached to join ({ex.GetType().Name}). Check that the console's address answers from this machine.", refused: false, inner: ex);
         }
         using (response)
         {

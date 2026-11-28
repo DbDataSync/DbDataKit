@@ -5,7 +5,7 @@ using DbDataKit.Serving;
 namespace DbDataKit.Views;
 
 /// <summary>A custom view's rows could not be resolved: the serving core's own code and words (or the resolver's), naming the query.</summary>
-public sealed class CustomViewException(string code, string message) : Exception(message)
+public sealed class CustomViewException(string code, string message, Exception? inner = null) : Exception(message, inner)
 {
     public string Code { get; } = code;
 }
@@ -45,7 +45,7 @@ public sealed partial class WidgetResolver
     public async Task<JsonObject> ResolveCustomViewAsync(ServingContext context, CustomView view, string component, IReadOnlyDictionary<string, JsonNode?> parameters, CancellationToken cancellationToken = default)
     {
         try { return await RunCustomViewAsync(context, view, component, parameters.ToDictionary(p => p.Key, p => p.Value?.DeepClone()), "params", cancellationToken).ConfigureAwait(false); }
-        catch (WidgetProblem p) { throw new CustomViewException(p.Code, p.Message); }
+        catch (WidgetProblem p) { throw new CustomViewException(p.Code, p.Message, p); }
     }
 
     private async Task<JsonObject> RunCustomViewAsync(ServingContext context, CustomView view, string component, Dictionary<string, JsonNode?> given, string path, CancellationToken cancellationToken)
@@ -59,7 +59,7 @@ public sealed partial class WidgetResolver
         foreach (var query in view.Queries)
         {
             try { data[query.Name] = await RunCustomQueryAsync(context, view, query, given, limits, cancellationToken).ConfigureAwait(false); }
-            catch (WidgetProblem p) { throw new WidgetProblem(p.Code, $"The query `{query.Name}` of `{component}`: {p.Message}", p.Path); }
+            catch (WidgetProblem p) { throw new WidgetProblem(p.Code, $"The query `{query.Name}` of `{component}`: {p.Message}", p.Path, inner: p); }
             catch (ServingException e)
             {
                 var (code, message) = e switch
@@ -71,7 +71,7 @@ public sealed partial class WidgetResolver
                     ServingBackendException b => ("backend_" + b.Failure.Kind.ToString().ToLowerInvariant(), e.Message),
                     _ => EngineCode(e.Message),
                 };
-                throw new WidgetProblem(code, $"The query `{query.Name}` of `{component}`: {message}");
+                throw new WidgetProblem(code, $"The query `{query.Name}` of `{component}`: {message}", inner: e);
             }
         }
         var entry = new JsonObject { ["type"] = "custom", ["component"] = component, ["data"] = data };

@@ -7,7 +7,7 @@ using DbDataKit.State;
 namespace DbDataKit.Authoring.Server;
 
 /// <summary>Why a project could not be made or added, in a sentence a person can read; <see cref="Status"/> is the HTTP status the route answers with.</summary>
-public sealed class WorkspaceProjectException(string message, int status) : Exception(message)
+public sealed class WorkspaceProjectException(string message, int status, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 }
@@ -56,7 +56,7 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
                 // a new project starts as its kind's template (an app: the app template, plan 22a GP32), named for the project; made before the folder, so a kind that cannot make it leaves nothing behind
                 IReadOnlyList<ProjectKindFile> files;
                 try { files = projectKind.Template(id, title, template); }
-                catch (ProjectKindUnavailableException ex) { throw new WorkspaceProjectException(ex.Message, 409); }
+                catch (ProjectKindUnavailableException ex) { throw new WorkspaceProjectException(ex.Message, 409, ex); }
                 Directory.CreateDirectory(folder);
                 foreach (var file in files)
                 {
@@ -83,7 +83,7 @@ public sealed partial class WorkspaceProjects(string directory, WorkspaceStore s
                     }
                 }
                 catch (IOException) { }
-                throw new WorkspaceProjectException($"The project could not be made: {ex.Message}", 500);
+                throw new WorkspaceProjectException($"The project could not be made: {ex.Message}", 500, ex);
             }
         }
     }

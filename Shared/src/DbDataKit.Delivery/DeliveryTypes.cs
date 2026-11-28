@@ -112,4 +112,4 @@ public sealed class ChannelNotBoundException(string channel, string releaseChann
 }
 
 /// <summary>A channel cannot be used right now for a reason in its configuration (a secret that is not in the store yet): a temporary failure, because fixing the configuration makes the next try work.</summary>
-public sealed class ChannelUnavailableException(string message) : Exception(message);
+public sealed class ChannelUnavailableException(string message, Exception? inner = null) : Exception(message, inner);

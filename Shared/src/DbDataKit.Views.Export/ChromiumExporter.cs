@@ -187,12 +187,12 @@ public sealed class ChromiumExporter(ExportSettings settings, ILogger? logger = 
         try
         {
             try { await slots.WaitAsync(ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { throw new ExportException("busy", $"export is busy: {settings.MaxConcurrent} at once on this host and the deadline ended while waiting (views.export.max_concurrent)."); }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) { throw new ExportException("busy", $"export is busy: {settings.MaxConcurrent} at once on this host and the deadline ended while waiting (views.export.max_concurrent).", ex); }
             try { return await work(ct).ConfigureAwait(false); }
             finally { slots.Release(); }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw new ExportException("cancelled", "the export was cancelled."); }
-        catch (OperationCanceledException) { throw new ExportException("deadline", $"the export took longer than {settings.Deadline.TotalSeconds:0.#} s (views.export.deadline_seconds) and was stopped."); }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested) { throw new ExportException("cancelled", "the export was cancelled.", ex); }
+        catch (OperationCanceledException ex) { throw new ExportException("deadline", $"the export took longer than {settings.Deadline.TotalSeconds:0.#} s (views.export.deadline_seconds) and was stopped.", ex); }
     }
 
     /// <summary>The page once it says it is drawn: the browser's page, its version and what was collected so far.</summary>

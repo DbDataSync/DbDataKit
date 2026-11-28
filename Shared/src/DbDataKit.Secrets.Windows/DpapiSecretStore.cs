@@ -66,7 +66,7 @@ public sealed class DpapiSecretStore : ISecretStore, ISecretProvider
         if (r.Kind == SecretRefKind.Dpapi)
         {
             try { blob = Convert.FromBase64String(r.Target); }
-            catch (FormatException) { throw new FormatException("dpapi reference is not valid base64."); }
+            catch (FormatException ex) { throw new FormatException("dpapi reference is not valid base64.", ex); }
         }
         else
         {

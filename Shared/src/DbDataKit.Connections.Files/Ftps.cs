@@ -42,10 +42,10 @@ public sealed class FtpsFileStore : IFileStore
         {
             await client.Connect(ct).ConfigureAwait(false);
         }
-        catch (Exception) when (refused is not null)
+        catch (Exception ex) when (refused is not null)
         {
             client.Dispose();
-            throw new PinMismatchException("certificate", server.Host, refused, server.CertificateSha256);
+            throw new PinMismatchException("certificate", server.Host, refused, server.CertificateSha256, ex);
         }
         catch
         {
@@ -127,7 +127,7 @@ public sealed class FtpsFileStore : IFileStore
     private static async Task<T> Run<T>(Func<Task<T>> call, CancellationToken ct)
     {
         try { return await call().ConfigureAwait(false); }
-        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct)); }
+        catch (Exception e) when (e is not OperationCanceledException and not ConnectionFailureException and not PinMismatchException) { throw new ConnectionFailureException(FileFailures.Classify(e, ct), e); }
     }
 
     public ValueTask DisposeAsync()

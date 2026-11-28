@@ -71,7 +71,7 @@ public sealed record HomeIdentity(string UserId, string? Name, string? Email, IR
 }
 
 /// <summary>A sign-in that cannot be completed; the message is ours and never holds a token or a code.</summary>
-public sealed class OpenIdClientException(string message, bool homeRefused = false, string? error = null) : Exception(message)
+public sealed class OpenIdClientException(string message, bool homeRefused = false, string? error = null, Exception? inner = null) : Exception(message, inner)
 {
     /// <summary>The error the home answered with (RFC 6749 section 5.2: <c>invalid_grant</c>, <c>access_denied</c>, <c>unauthorized_client</c>, <c>invalid_target</c> ...), or null when it gave none or was not reached.</summary>
     public string? Error { get; } = error;
@@ -165,7 +165,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
         {
-            throw new OpenIdClientException("The identity home could not be reached.");
+            throw new OpenIdClientException("The identity home could not be reached.", inner: ex);
         }
     }
 
@@ -201,7 +201,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !ct.IsCancellationRequested)
         {
-            throw new OpenIdClientException("The identity home could not be reached.");
+            throw new OpenIdClientException("The identity home could not be reached.", inner: ex);
         }
     }
 
@@ -274,7 +274,7 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException or CryptographicException)
         {
-            throw new OpenIdClientException("The id token could not be read.");
+            throw new OpenIdClientException("The id token could not be read.", inner: ex);
         }
     }
 
@@ -287,9 +287,9 @@ public sealed class OpenIdClient(OpenIdClientOptions options, HttpClient http, T
         if (_discovery is { } known) return known;
         JsonElement d;
         try { d = await http.GetFromJsonAsync<JsonElement>(_authority + "/.well-known/openid-configuration", ct); }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException) { throw new OpenIdClientException("The identity home could not be reached."); }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException) { throw new OpenIdClientException("The identity home could not be reached.", inner: ex); }
         try { return _discovery = new Discovery(d.GetProperty("issuer").GetString()!, d.GetProperty("authorization_endpoint").GetString()!, d.GetProperty("token_endpoint").GetString()!, d.GetProperty("jwks_uri").GetString()!, d.TryGetProperty("end_session_endpoint", out var end) ? end.GetString() : null); }
-        catch (KeyNotFoundException) { throw new OpenIdClientException("The identity home's discovery document is incomplete."); }
+        catch (KeyNotFoundException ex) { throw new OpenIdClientException("The identity home's discovery document is incomplete.", inner: ex); }
     }
 
     private static string Random(int bytes) => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(bytes));

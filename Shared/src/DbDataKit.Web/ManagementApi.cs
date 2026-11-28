@@ -77,7 +77,7 @@ public sealed class ManagementVersionHandler(HttpMessageHandler inner, int own =
             response.Dispose();
             await Task.Delay(RetryAfterRequestTimeout, cancellationToken);
             try { response = await base.SendAsync(request, cancellationToken); }
-            catch (InvalidOperationException) { throw new HttpRequestException($"{request.RequestUri?.Authority} timed out reading the request, and the request could not be sent again."); }
+            catch (InvalidOperationException ex) { throw new HttpRequestException($"{request.RequestUri?.Authority} timed out reading the request, and the request could not be sent again.", ex); }
         }
         if (!response.Headers.TryGetValues(ManagementApi.VersionHeader, out var values) || !int.TryParse(values.FirstOrDefault(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version))
         {

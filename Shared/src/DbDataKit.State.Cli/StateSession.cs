@@ -5,7 +5,7 @@ using DbDataKit.Secrets;
 namespace DbDataKit.State.Cli;
 
 /// <summary>Raised for settings that cannot be used; the message is the sentence that names the fix.</summary>
-internal sealed class StateSettingsProblem(string message) : Exception(message);
+internal sealed class StateSettingsProblem(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// One run of <c>state show</c> or <c>state test</c> against one product's state: the effective settings, the layout they and the product's modules make, and the connection as it may be shown. Nothing is
@@ -47,18 +47,18 @@ internal sealed class StateSession
     {
         StateTarget target;
         try { target = context.Locate(args); }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException) { throw new StateSettingsProblem(ex.Message); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException) { throw new StateSettingsProblem(ex.Message, ex); }
 
         string engine;
         try { engine = target.Settings.EngineId; }
-        catch (InvalidOperationException ex) { throw new StateSettingsProblem($"{ex.Message} Set state.engine (or the product's option for it) to one of them."); }
+        catch (InvalidOperationException ex) { throw new StateSettingsProblem($"{ex.Message} Set state.engine (or the product's option for it) to one of them.", ex); }
 
         if (engine != StateEngineIds.Sqlite && string.IsNullOrWhiteSpace(target.Settings.ConnectionString))
             throw new StateSettingsProblem($"The state engine is {target.Settings.Engine}, which needs a connection string: set state.connection (a password can be a reference such as Password=secret:state-db).");
 
         StateLayout layout;
         try { layout = StateLayout.Create(engine, context.Modules ?? [], context.Scope, target.Settings.Namespaces, context.FeatureProbe); }
-        catch (InvalidOperationException ex) { throw new StateSettingsProblem(ex.Message); }
+        catch (InvalidOperationException ex) { throw new StateSettingsProblem(ex.Message, ex); }
         return new StateSession(context, target, layout);
     }
 
@@ -71,7 +71,7 @@ internal sealed class StateSession
         try { resolved = StateOpener.ResolveConnectionString(text, Target.Secrets?.Invoke()); }
         catch (InvalidOperationException ex)
         {
-            throw new StateSettingsProblem($"{ex.Message} Store the secret ({Context.Program} secret set <name>) or set the environment variable it names.");
+            throw new StateSettingsProblem($"{ex.Message} Store the secret ({Context.Program} secret set <name>) or set the environment variable it names.", ex);
         }
 
         _secrets.AddRange(ConnectionStringReferences.CredentialValues(resolved));

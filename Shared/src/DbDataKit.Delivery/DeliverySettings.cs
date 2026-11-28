@@ -5,7 +5,7 @@ using DbDataKit.Secrets;
 namespace DbDataKit.Delivery;
 
 /// <summary>The <c>delivery:</c> section is refused: the message names the source (the file) and the key.</summary>
-public sealed class DeliverySettingsException(string message) : Exception(message);
+public sealed class DeliverySettingsException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>What a channel setting holds: text, a whole number, true or false, a list of texts, or a reference to a secret (<c>secret:</c>, <c>env:</c>, <c>file:</c>), which is never a literal.</summary>
 public enum ChannelKeyType { Text, Whole, Bool, List, Secret }

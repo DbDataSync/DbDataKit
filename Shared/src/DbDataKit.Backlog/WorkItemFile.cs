@@ -169,7 +169,7 @@ public static class BacklogImport
             }
             catch (BacklogException ex)
             {
-                throw new BacklogException(ex.Problem, $"The item '{entry.Id}' ({entry.Title}) was not made: {ex.Message}" + (result.Count > 0 ? $" {result.Count} item(s) before it were made." : ""));
+                throw new BacklogException(ex.Problem, $"The item '{entry.Id}' ({entry.Title}) was not made: {ex.Message}" + (result.Count > 0 ? $" {result.Count} item(s) before it were made." : ""), ex);
             }
         }
 

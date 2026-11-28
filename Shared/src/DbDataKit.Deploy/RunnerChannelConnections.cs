@@ -166,7 +166,7 @@ public sealed class RunnerChannelConnections
             }
             return ((int)response.StatusCode, json);
         }
-        catch (HttpRequestException ex) { throw new DeployException($"{target.Name} could not be reached ({ex.Message}).", 502); }
+        catch (HttpRequestException ex) { throw new DeployException($"{target.Name} could not be reached ({ex.Message}).", 502, inner: ex); }
     }
 
     private static string ErrorOf(JsonNode? body, string otherwise) => (body as JsonObject)?["error"] is JsonValue v && v.TryGetValue<string>(out var error) ? error : otherwise + ".";

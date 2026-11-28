@@ -270,7 +270,7 @@ public sealed class WriteGate : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new GateRefusedException($"The statement log could not be written ({ex.GetType().Name}), so step `{step}` was not executed.", GateRefusal.LogUnavailable);
+            throw new GateRefusedException($"The statement log could not be written ({ex.GetType().Name}), so step `{step}` was not executed.", GateRefusal.LogUnavailable, inner: ex);
         }
     }
 

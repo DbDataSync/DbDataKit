@@ -298,7 +298,7 @@ internal sealed class StateMoveRunner(StateManagementOptions options, Action<Sta
         if (string.IsNullOrWhiteSpace(engine)) throw new ArgumentException("The engine is needed: mssql or postgres.");
         var settings = new StateSettings(engine, connection) { Namespaces = basis.Namespaces, Retention = basis.Retention, Housekeeping = basis.Housekeeping };
         try { _ = settings.EngineId; }
-        catch (InvalidOperationException ex) { throw new ArgumentException(ex.Message); }
+        catch (InvalidOperationException ex) { throw new ArgumentException(ex.Message, ex); }
         if (settings.IsSqlite)
         {
             // a SQLite state is a file on this server's machine (plan 29b C06): the path is as this server sees it

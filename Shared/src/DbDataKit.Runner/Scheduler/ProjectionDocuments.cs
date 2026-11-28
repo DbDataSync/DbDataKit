@@ -313,7 +313,7 @@ public static partial class ProjectionDocuments
     private static JsonDocument Open(string text, string name)
     {
         try { return JsonDocument.Parse(text); }
-        catch (JsonException ex) { throw new FormatException($"{name} is not JSON: {ex.Message}"); }
+        catch (JsonException ex) { throw new FormatException($"{name} is not JSON: {ex.Message}", ex); }
     }
 
     private static JsonElement Object(JsonDocument doc, string name) =>

@@ -12,7 +12,7 @@ using DbDataKit.Web.Trust;
 namespace DbDataKit.Runner.Api;
 
 /// <summary>A publishing call that is refused or fails, with the HTTP status the API answers it with (400 invalid, 403 policy, 404 unknown, 409 stale, 413 too large).</summary>
-public class RunnerPublishException(int status, string message) : InvalidOperationException(message)
+public class RunnerPublishException(int status, string message, Exception? inner = null) : InvalidOperationException(message, inner)
 {
     public int Status { get; } = status;
 }
@@ -252,13 +252,13 @@ public sealed partial class RunnerPublishing
             actual = Convert.ToHexStringLower(hash.GetHashAndReset());
             if (actual == sha) writer.Complete();
         }
-        catch (PayloadTooLargeException)
+        catch (PayloadTooLargeException ex)
         {
             await writer.DisposeAsync();
             _payloads.Delete(id);
             var message = $"The file named {sha} is larger than the cap of {MaxArtifactBytes} bytes.";
             Record(UploadVerb, actor, "artifact", sha, AuditEvent.Refused, new { reason = "too large", max_bytes = MaxArtifactBytes });
-            throw new RunnerPublishException(413, message);
+            throw new RunnerPublishException(413, message, ex);
         }
         catch
         {
@@ -291,7 +291,7 @@ public sealed partial class RunnerPublishing
         if (PackageManifestReader.Load(manifest, $"{Kind}/{name}") is { Ok: true, Manifest: { } candidate })
         {
             try { ProjectionDocuments.RequireNoCycle(_projections.ListByChannel(channel), name, channel, ProjectionDocuments.RowsOf(candidate, "0")); }
-            catch (TriggerCycleException ex) { throw new RunnerPublishException(400, ex.Message); }
+            catch (TriggerCycleException ex) { throw new RunnerPublishException(400, ex.Message, ex); }
         }
     }
 
@@ -404,7 +404,7 @@ public sealed partial class RunnerPublishing
             RequireChannelServed(channel);
             T result;
             try { result = await work().ConfigureAwait(false); }
-            catch (ProgressMigrationException ex) { throw new RunnerPublishException(400, ex.Message); }
+            catch (ProgressMigrationException ex) { throw new RunnerPublishException(400, ex.Message, ex); }
             catch (Exception ex) when (Translate(ex) is { } translated) { throw translated; }
             if (rebuild) RebuildProjection(name, channel);
             Record(verb, actor, "package", target, AuditEvent.Ok, Merge(new { kind = Kind, name, channel }, detail(result)));
@@ -430,8 +430,8 @@ public sealed partial class RunnerPublishing
             if (!dryRun) Record(PruneVerb, actor, "package", name, AuditEvent.Ok, new { kind = Kind, name, removed = plan.Remove, files = plan.Artifacts.Count });
             return plan;
         }
-        catch (ArgumentException ex) { throw new RunnerPublishException(400, ex.Message); }
-        catch (DefinitionNotFoundException ex) { throw new RunnerPublishException(404, ex.Message); }
+        catch (ArgumentException ex) { throw new RunnerPublishException(400, ex.Message, ex); }
+        catch (DefinitionNotFoundException ex) { throw new RunnerPublishException(404, ex.Message, ex); }
     }
 
     /// <summary>Stops serving the package in the channel and drops its schedule there; the versions stay. False when the channel had nothing.</summary>

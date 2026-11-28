@@ -36,7 +36,7 @@ public sealed record StepResolution(bool Resolved, Guid? RunId, bool RetryQueued
 public sealed record DeadLetterReplay(bool Replayed, Guid? InboxItem, bool Queued, bool HadBody);
 
 /// <summary>A task named in a call is not one this runner serves (not in the projection of a channel it serves, or its row cannot be read).</summary>
-public sealed class UnknownTaskException(string message) : InvalidOperationException(message);
+public sealed class UnknownTaskException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>
 /// The acts on a runner's tasks that a person asks for (plan 28a R10): start one now, pause it, resume it, and what the scheduler says of every task. The management API and the command line (<c>tasks run|pause|resume</c>) both
@@ -98,7 +98,7 @@ public sealed class RunnerControl
         var requestedBy = RequestedBy(actor, onBehalfOf);
         Guid? runId;
         try { runId = await _scheduler.RunVersionAsync(task, version, inputs, requestedBy, dryRun, ct).ConfigureAwait(false); }
-        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message); }
+        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message, ex); }
         Record(RunVerb, task, actor, new { run_id = runId, queued = runId is not null, version, dry_run = dryRun, inputs = inputs?.Keys.Order(StringComparer.Ordinal).ToArray() ?? [], on_behalf_of = onBehalfOf, approved_by = approval?.Approver, statements_sha256 = approval?.StatementsSha256 });
         return new RunNowResult(runId is not null, runId);
     }
@@ -284,7 +284,7 @@ public sealed class RunnerControl
     private static T Translate<T>(Func<T> act)
     {
         try { return act(); }
-        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message); }
+        catch (InvalidOperationException ex) { throw new UnknownTaskException(ex.Message, ex); }
     }
 
     private void Record(string verb, TaskRef task, RunnerActor actor, object? detail, string outcome = AuditEvent.Ok) =>

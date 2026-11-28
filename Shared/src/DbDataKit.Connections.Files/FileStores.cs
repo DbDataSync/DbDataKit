@@ -24,7 +24,7 @@ public static class FileStores
         static async Task<IFileStore> Open<T>(Task<T> opening) where T : IFileStore
         {
             try { return await opening.ConfigureAwait(false); }
-            catch (Exception e) when (e is not (OperationCanceledException or ConnectionFailureException or PinMismatchException or FileSecretNotSetException)) { throw new ConnectionFailureException(FileFailures.Classify(e)); }
+            catch (Exception e) when (e is not (OperationCanceledException or ConnectionFailureException or PinMismatchException or FileSecretNotSetException)) { throw new ConnectionFailureException(FileFailures.Classify(e), e); }
         }
     }
 

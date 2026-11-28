@@ -75,7 +75,7 @@ internal static class DialectYamlLoader
             _ = ResolvedDialect.ParseFlags<SqlSyntax>(d.Syntax.Replace ?? [], "syntax flag");
             _ = ResolvedDialect.ParseFlags<SqlSyntax>(d.Syntax.Add, "syntax flag");
         }
-        catch (DialectException e) { throw new DialectException(e.Message, source, f.Line); }
+        catch (DialectException e) { throw new DialectException(e.Message, source, f.Line, e); }
 
         if (f.Map("read_only") is { } ro)
         {
@@ -118,7 +118,7 @@ internal static class DialectYamlLoader
             if (fid != Fidelity.Exact && string.IsNullOrWhiteSpace(note)) throw r.Error("a Widened/Lossy row needs a 'note' naming what changes");
             CanonSpec spec;
             try { spec = CanonSpec.Parse(canonical, r.Path); }
-            catch (FormatException e) { throw new DialectException(e.Message, source, r.Line); }
+            catch (FormatException e) { throw new DialectException(e.Message, source, r.Line, e); }
             var rule = new TypeRule { NativePattern = native, Canon = spec, Direction = dir, Fidelity = fid, Note = note, Line = r.Line };
             if (r.Map("defaults") is { } df)
             {
@@ -132,7 +132,7 @@ internal static class DialectYamlLoader
             }
             r.EnsureNoUnknown();
             try { rule.Compile(r.Path); }
-            catch (FormatException e) { throw new DialectException(e.Message, source, r.Line); }
+            catch (FormatException e) { throw new DialectException(e.Message, source, r.Line, e); }
             list.Add(rule);
         }
         return list;

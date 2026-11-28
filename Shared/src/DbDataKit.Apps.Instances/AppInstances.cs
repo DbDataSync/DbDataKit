@@ -28,7 +28,7 @@ public sealed record NavigationSet(string Name, string Title, IReadOnlyList<Navi
 public sealed record ResolvedInstance(AppInstance Instance, int InstanceVersion, DefinitionVersion AppVersion, AppManifest Manifest, AppPackage Package);
 
 /// <summary>A publication the store refuses; the message says what to change.</summary>
-public sealed class AppInstanceException(string message) : Exception(message);
+public sealed class AppInstanceException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// How an instance of a channel other than production is addressed (plan 21, plan 22a GP35d): <c>&lt;name&gt;~&lt;channel&gt;</c>, so <c>acme~preview</c> is the instance <c>acme</c> as the <c>preview</c> channel has it. A name never holds the separator
@@ -165,7 +165,7 @@ public sealed class AppInstanceStore(DefinitionStore definitions)
         }
         catch (Exception ex) when (ex is DefinitionRejectedException or DefinitionNotFoundException)
         {
-            throw new AppInstanceException(ex.Message);
+            throw new AppInstanceException(ex.Message, ex);
         }
     }
 

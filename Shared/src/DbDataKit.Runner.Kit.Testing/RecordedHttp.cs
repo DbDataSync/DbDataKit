@@ -18,7 +18,7 @@ namespace DbDataKit.Runner.Kit.Testing;
 public sealed record RecordedExchange(string Method, string Url, string? RequestBody, JsonNode? RequestJson, int Status, IReadOnlyDictionary<string, string> Headers, string? Body, string? BodyBase64, bool Repeat);
 
 /// <summary>A recording could not be read, or a recording was not honoured (a request without an answer, an answer nobody asked for). The message names the file, the entry or the request; it never holds a body or a header value.</summary>
-public sealed class RecordingException(string message) : Exception(message);
+public sealed class RecordingException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// A recording of an outside API (format <c>http-recording/1</c>, plan 27a IX15): the exchanges a job's test replays so it runs with no network, as JSON with the entries in the order they are asked:
@@ -62,7 +62,7 @@ public sealed class HttpRecording
     {
         JsonNode? root;
         try { root = JsonNode.Parse(json); }
-        catch (JsonException ex) { throw new RecordingException($"The recording '{file}' is not JSON ({ex.Message.Split('.')[0]})."); }
+        catch (JsonException ex) { throw new RecordingException($"The recording '{file}' is not JSON ({ex.Message.Split('.')[0]}).", ex); }
         if (root is not JsonObject top || top["schema"]?.GetValue<string>() is not { } schema)
             throw new RecordingException($"The recording '{file}' has no 'schema': {Schema} is the one this version reads.");
         if (schema != Schema) throw new RecordingException($"The recording '{file}' is '{schema}'; this version reads '{Schema}'.");

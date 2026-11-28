@@ -748,9 +748,9 @@ public sealed class ConfigRepository
         {
             script = LoadScript(hook.Hook!);
         }
-        catch (FileNotFoundException)
+        catch (FileNotFoundException ex)
         {
-            throw new ConfigValidationException($"Hook '{label}' at '{point}' references unknown script '{hook.Hook}'.");
+            throw new ConfigValidationException($"Hook '{label}' at '{point}' references unknown script '{hook.Hook}'.", ex);
         }
 
         if (script.Manifest.Language != ScriptLanguage.Sql)
