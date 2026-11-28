@@ -7,7 +7,7 @@ namespace DbDataSync.Drivers.Descriptor;
 
 /// <summary>
 /// <c>&lt;repo&gt;/drivers/&lt;id&gt;/driver.csx</c> — the compiled-plugin counterpart to <c>driver.yaml</c>: a C# script that asks for its packages with <c>#r "nuget: Id, 1.2.3"</c>
-/// (exact versions), may <c>#load</c> helper scripts from the repository, declares what it needs and ends with an expression that is the <see cref="Abstractions.IDriver"/>
+/// (exact versions), may <c>#load</c> helper scripts from the repository, declares what it needs and ends with an expression that is the <see cref="DbDataKit.Sync.Drivers.Abstractions.IDriver"/>
 /// (<c>new MyDriver()</c>). <see cref="DriverLoader"/> tells the two apart by which file is present. The hashes of the packages are in <c>driver.lock</c> beside it, and
 /// <c>lib/</c> (not tracked in git) holds the package store and the compiled script.
 /// </summary>

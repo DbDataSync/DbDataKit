@@ -5,7 +5,7 @@ namespace DbDataSync.Drivers.MsSql.Tests;
 
 /// <summary>
 /// <see cref="MsSqlTargetShape.FromCachedColumns"/> mirrors
-/// <see cref="Generic.TargetShape.FromCachedColumns"/> for the three MERGE/delete-insert writers
+/// <see cref="DbDataKit.Sync.Drivers.Generic.TargetShape.FromCachedColumns"/> for the three MERGE/delete-insert writers
 /// (<see cref="MsSqlDeleteInsertWriter"/>, <see cref="MsSqlMergeWriter"/>,
 /// <see cref="MsSqlMergeReconcileWriter"/>) — see <c>TargetShapeCacheTests</c> in
 /// <c>DbDataSync.Drivers.Generic.Tests</c> for the shared reasoning. Restated here rather than skipped
