@@ -30,7 +30,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 20 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
 | 21 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
 | 22 | [AGENTTOOLS](AGENTTOOLS.md) | What an agent can do in the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, the MCP endpoints and their tools | needs review | unassigned |
-| 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
+| 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | queued | unassigned |
 | 24 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
 | 25 | [CLI](CLI.md) | Fewer programs for a person to run, each keeping only the commands that run and configure the services; Build, Sync and the Store are called as libraries | queued | unassigned |
 | 26 | [DOCSREVIEW](DOCSREVIEW.md) | Reference docs the owner approves, and every doc and plan checked against them | queued | unassigned |
