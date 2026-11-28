@@ -57,8 +57,8 @@ keep that model from being a rework (R1 to R8).
 
 ## Needs from other subjects
 
-- None. AGENTS-4 builds on AGENTTOOLS-10 and AGENTTOOLS-14's goldens become goldens of operations with AGENTTOOLS-1 (both recorded in
-  KNOWLEDGE); AUTHORING's tasks for the build-helper and for agents authoring through MCP moved into AGENTTOOLS-8.
+- CLI-1: the list of commands gives the order of the areas of AGENTTOOLS-7 to AGENTTOOLS-9.
+- AGENTS-4 builds on AGENTTOOLS-10, and AGENTTOOLS-14's goldens become goldens of operations with AGENTTOOLS-1; AUTHORING's tasks for the build-helper and for agents authoring through MCP moved into AGENTTOOLS-8.
 
 ## Requirements for the permissions model
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The planning folder stays consistent (planning/ROLES.md). Checks:
 
-  index      planning/README.md links every subject file (planning/<SLUG>.md other than README.md and ROLES.md), and every subject it links exists
-             (it carries no task counts, so a subject PR never has to touch it)
+  index      planning/README.md links every subject file (planning/<SLUG>.md other than README.md, ROLES.md and PARKED.md), and every subject it
+             links exists (it carries no task counts, so a subject PR never has to touch it)
+  others     README.md, ROLES.md and PARKED.md (the parked work) are not subjects: they need no index row, may be linked from anywhere, and hold no
+             task row or proposed-decision heading of their own; an id they name is checked like any other (refs)
   slug       a subject file's name is its slug: capitals and digits, starting with a letter, at most 12 characters (the longer slugs in
              LONG_SLUGS were named before the limit and stay)
   tasks      a task is a table row whose first cell is `<SLUG>-<n>`; every task id in a subject file starts with that file's slug, and no id is
@@ -53,7 +55,7 @@ PROPOSAL_HEADING = re.compile(r"^#{2,6}\s+([A-Z][A-Z0-9]*)-P(\d+)\b", re.M)
 ID_PREFIX_MIN = 8
 INDEX_LINK = re.compile(r"\[[^\]]*\]\(([^)\s#]+\.md)\)")
 MD_LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
-NOT_SUBJECTS = {"README.md", "ROLES.md"}
+NOT_SUBJECTS = {"README.md", "ROLES.md", "PARKED.md"}
 PLANS = "plans"
 HISTORY_OPTIONAL = "--history-optional"
 SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".claude", "wip"}
@@ -126,6 +128,16 @@ def problems(root, history_optional=False, warnings=None):
             if ident in proposals:
                 out.append(f"planning/{name}: proposed decision {ident} is also in planning/{proposals[ident]}")
             proposals[ident] = name
+
+    for name in sorted(NOT_SUBJECTS):
+        path = os.path.join(planning, name)
+        if not os.path.isfile(path):
+            continue
+        text = read(path)
+        for prefix, number in TASK_ROW.findall(text):
+            out.append(f"planning/{name}: has the task row {prefix}-{number}; tasks are rows of a subject file only")
+        for prefix, number in PROPOSAL_HEADING.findall(text):
+            out.append(f"planning/{name}: has the proposed decision {prefix}-P{number}; proposed decisions are in a subject file only")
 
     readme = read(readme_path)
     listed = set()

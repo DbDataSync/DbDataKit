@@ -232,7 +232,8 @@ order, by their ids from any subject. A task stays in its subject; a plan only l
 - **merged:** its row has left its subject, and a commit on `main` starts with its id;
 - **in progress:** a `backup/<slug>-<n>` branch exists;
 - **blocked:** a task in its "Depends on" cell is not merged;
-- **not started:** otherwise.
+- **not started:** otherwise;
+- **unknown:** the id is in no subject and no commit on `main` names it (a task that moved without its plan being updated).
 
 When a task moves to another subject, the move updates the plans that list it. `scripts/check_plans.py` fails when a plan names a task that is neither
 in a subject nor merged. The owner decides which plans exist and their order. The session proposes a plan's outcome and its task list, and keeps the

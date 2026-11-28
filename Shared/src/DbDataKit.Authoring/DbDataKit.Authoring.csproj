@@ -9,5 +9,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\DbDataKit.Config.Git\DbDataKit.Config.Git.csproj" />
     <ProjectReference Include="..\DbDataKit.Web\DbDataKit.Web.csproj" />
+    <ProjectReference Include="..\DbDataKit.Outbound\DbDataKit.Outbound.csproj" />
   </ItemGroup>
 </Project>

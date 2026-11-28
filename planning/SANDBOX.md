@@ -52,7 +52,8 @@ Each scenario says what code runs, where it runs, and what it may reach. "Today"
    Today: Bun runs in a network namespace on Linux. `dotnet` runs with the server's own access.
 2. **Git on the Workspace.** Clone, fetch and push a project's workspace. Git reaches the project's remotes only, with the remote's own credential and
    no others.
-   Today: git runs with the server's own access. WORKSPACEISOLATION-9 limits our own code's connections to the outbound list.
+   Today: git runs with the server's own access. The Workspace's own code, such as its push of a draft (libgit2, in its process), connects only to
+   the destinations of its outbound list (`outbound:` in `server.yaml`).
 3. **Develop, test and debug on the Workspace.** An integration's tests, a Sync script's Test, a Sync driver or metadata script, and a data model's build
    and tests. These run in a sandbox with no network, no real source or target, and no secrets. They reach fakes, recorded or generated responses,
    sample data and DuckDB through hosted connections.
@@ -435,6 +436,6 @@ From SYNCAUTHORING's "Outside a replication, later": the Connections list and a 
   trust.
 - An open design **"Shared ground with PLUGINS, PUBLISHING and the Runner"**: PLUGINS' SDK connection contract as the hosted-connection API; connection
   kinds and the plugin manifest; load contexts and the connection host; one vocabulary of approval.
-- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (-9, -10, -14, -15; a script's Test), CLI-8, TRUSTZONES (OS outbound rules,
+- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (its outbound list, -10, -14, -15; a script's Test), CLI-8, TRUSTZONES (OS outbound rules,
   -14), RUNNER (limits, accounts), PLUGINS, PUBLISHING-3, KNOWLEDGE (-18, -20), APPHOSTING-7, MASTERDATA (extraction), SAMPLEDATA, DATAQUALITY,
   CHANNELS (-3, -7), SYNCAUTHORING, ERRORDETAILS, INSTALLER (labels, Bubblewrap, Windows Server note, testenv), CIPLAN (new).
