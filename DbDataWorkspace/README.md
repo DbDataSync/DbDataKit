@@ -156,7 +156,7 @@ outbound:
 - `outbound:` lists destinations: the server connects only to them. A call to any other address, such as a Runner's, fails before it connects. The server logs a warning and writes a line to `management-audit.log` with the command `outbound.refused`, the host and port, and the operation (for example `refused: git.push`). The line never holds the address's path, query or login.
 - An entry that is not valid stops the start, and the message names `server.yaml` and the entry.
 
-A push of a draft to a project's git remote goes only to a listed remote. An entry is `scheme://host[:port]`; the full form is in [`DbDataKit.Outbound`](../Shared/src/DbDataKit.Outbound/README.md).
+When a project has a git remote, the server pushes a draft only to a listed remote. An entry is `scheme://host[:port]`; the full form is in [`DbDataKit.Outbound`](../Shared/src/DbDataKit.Outbound/README.md).
 
 The programs the server starts (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, `dotnet` and Bun) open their own connections, and the list does not limit them. The NuGet restores of an integration and of a Sync set's driver libraries run in those programs.
 
