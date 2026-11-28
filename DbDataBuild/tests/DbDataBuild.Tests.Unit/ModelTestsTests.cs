@@ -168,6 +168,18 @@ public class ModelTestsTests
         Assert.Contains("tests/models/marts/fct_orders.yml:", err.Length == 0 ? "tests/models/marts/fct_orders.yml:" : err);
     }
 
+    [Theory]
+    [MemberData(nameof(SampleTests.OutsideReads), MemberType = typeof(SampleTests))]
+    public void A_model_that_reads_outside_the_test_database_fails_its_test_with_duckdbs_refusal(string sql, string refusal)
+    {
+        var dir = Project(("marts/fct_orders.yml", "cases:\n  - name: reads\n    expect: []\n"));
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/fct_orders.sql"), sql + "\n");
+        var (exit, doc, _) = Test(dir);
+        Assert.Equal(1, exit);
+        Assert.Equal("error", Status(doc, "marts.fct_orders::reads"));
+        Assert.StartsWith(refusal, (string)One(doc, "marts.fct_orders::reads")["error"]!);
+    }
+
     [Fact]
     public void A_warning_test_only_reports_and_a_test_for_a_missing_model_is_an_error()
     {
