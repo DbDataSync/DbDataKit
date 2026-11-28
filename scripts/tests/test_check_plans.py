@@ -139,6 +139,24 @@ class CheckPlans(unittest.TestCase):
     def test_wip_notes_are_not_read_here(self):
         self.assertEqual([], self.problems({"planning/wip/ALPHABETA/ALPHABETA-1.md": "# notes\n- names NOSUCHTASK-3\n"}))
 
+    def test_the_parked_file_needs_no_index_row_and_may_be_linked(self):
+        parked = "# Parked\n\n## Offline installer\n\nThe whole design; it was ALPHABETA-2 before it was parked.\n"
+        found = self.problems({
+            "planning/PARKED.md": parked,
+            "planning/README.md": index(("ALPHABETA", 2), ("GAMMADELTA", 1)) + "\nParked work: [PARKED](PARKED.md).\n",
+            "planning/ALPHABETA.md": subject("ALPHABETA", [(1, "none"), (2, "ALPHABETA-1")], [1]) + "See [parked](PARKED.md#offline-installer).\n",
+        })
+        self.assertEqual([], found)
+
+    def test_the_parked_file_holds_no_task_rows_or_proposals(self):
+        found = self.problems({"planning/PARKED.md": "# Parked\n\n| PARKED-1 | what | none | S | a test |\n\n### PARKED-P1: a question\n"})
+        self.assertTrue(any(p.startswith("planning/PARKED.md: has the task row PARKED-1") for p in found), found)
+        self.assertTrue(any(p.startswith("planning/PARKED.md: has the proposed decision PARKED-P1") for p in found), found)
+
+    def test_the_parked_file_naming_a_task_that_does_not_exist_is_named(self):
+        found = self.problems({"planning/PARKED.md": "# Parked\n\nIt was ALPHABETA-9.\n"})
+        self.assertTrue(any("planning/PARKED.md: names ALPHABETA-9, which is not a task" in p for p in found), found)
+
     def test_the_repository_is_consistent(self):
         root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         self.assertEqual([], check.problems(root))
