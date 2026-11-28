@@ -211,33 +211,6 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - Not for the deploy: the child programs' NuGet restores leave from a child process, which the Workspace's outbound list (`outbound:` in
   `server.yaml`, `WorkspaceOutbound`, an `OutboundGate` in the Workspace's process) does not see.
 
-## Proposed decisions
-
-### WORKSPACEISOLATION-P40: the Workspace's calls to the console and its telemetry, outside the outbound list (default, awaiting the owner)
-
-The Workspace's outbound list (`outbound:` in `server.yaml`) checks the push of a draft and every connection made through the server's
-`OutboundGate`. Three connections of the shared host code do not go through it: the join to a console (`join-request.yaml`), the announcement to a
-console (`DBDATAKIT_ANNOUNCE_URL`, `ConsoleAnnouncer`) and the telemetry export (the `telemetry:` section). Example: Ana writes
-
-```yaml
-outbound:
-  - https://api.nuget.org
-  - ssh://github.com
-```
-
-and starts the Workspace with a `join-request.yaml` naming `https://console.example.com:7800`. As built, the join works, and so does the telemetry
-export to `http://otel.internal:4318`; neither address is on the list.
-
-Options:
-
-- A, as built: the console's join and announcement and the telemetry export are not checked; the list covers what the Workspace connects to for its
-  projects (package sources, git remotes).
-- B: they go through the gate, and the server adds the console it joined and the telemetry endpoint of `server.yaml` to the list by itself, so Ana
-  writes only package sources and remotes.
-- C: they go through the gate and Ana lists the console and the collector by hand; a join to an unlisted console fails at start, naming the entry to add.
-
-Recommendation: B, done in the shared host code by TRUSTZONES-14 for every service at once, so the four services behave the same; A until then.
-
 ## Needs from other subjects
 
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.

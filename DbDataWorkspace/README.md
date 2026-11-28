@@ -160,6 +160,8 @@ When a project has a git remote, the server pushes a draft only to a listed remo
 
 The programs the server starts (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, `dotnet` and Bun) open their own connections, and the list does not limit them. The NuGet restores of an integration and of a Sync set's driver libraries run in those programs.
 
+Three connections of the server's own process are not checked against the list either: the join to a console (`join-request.yaml`), the announcement to a console (`DBDATAKIT_ANNOUNCE_URL`) and the telemetry export (the `telemetry:` section). They connect to the addresses their settings name, whether or not the list has them.
+
 ## The server's directory
 
 | Path | What |
