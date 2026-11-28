@@ -36,7 +36,7 @@ are found and loaded, and leaves the plugins themselves unchanged. Breaking chan
 
 **What.** A small set of contract packages that every plugin builds against, and nothing else of the suite: secrets and secret references; connections
 and connection slots (`connection/1`); packages and deployment (`package/1`); the person, their roles and audit; a state module per plugin; lineage;
-quality checks; monitoring and run results; agent operations (AGENTACCESS's operation); dependencies between plugins. Each contract package has a
+quality checks; monitoring and run results; agent operations (AGENTTOOLS's operation); dependencies between plugins. Each contract package has a
 version, listed and frozen the way `docs/formats.json` lists formats, with a repository check that fails when a contract changes without a new
 version.
 
@@ -126,7 +126,7 @@ stage and is designed after the first.
 
 - CLI: the list of commands (CLI-1), and whether one program runs every role (its open design "One program for every service, or one per
   service"); its removal of the three command-line tools and its task host in the runtime packages (CLI-4) are steps toward the runtime part of a plugin.
-- AGENTACCESS: the operation (AGENTACCESS-1), the agent contract of the SDK.
+- AGENTTOOLS: the operation (AGENTTOOLS-1), the agent contract of the SDK.
 - INSTALLER: the install, the service registration and the startup failure file, for one program with a role, if CLI makes one program.
 - CLOUDDEV: the development instance, four processes of the one program, if CLI makes one program.
 

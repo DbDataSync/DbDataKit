@@ -4,7 +4,7 @@
 
 Every model a person authors can have sample data that looks like its real data and keeps its structure and constraints: the **source** data of a
 Build project (the most valuable: it runs the transforms and is what model tests are built from), the entities of a Store model, and the tables of a
-sync definition. The same sample data stands in for real data where an agent or a channel must not see it (AGENTACCESS's permissions model).
+sync definition. The same sample data stands in for real data where an agent or a channel must not see it (AGENTTOOLS's permissions model).
 
 ## What exists today
 
@@ -46,13 +46,13 @@ purpose; whether this is a Workspace screen (the build project's Designer) and a
 
 ### Sample data in place of real data
 
-**What.** The result treatment AGENTACCESS's permissions model names: an agent in a channel, through a model provider, gets sample rows instead of real
+**What.** The result treatment AGENTTOOLS's permissions model names: an agent in a channel, through a model provider, gets sample rows instead of real
 ones for an operation that reads data. **Open questions:** whether the substitute is drawn from the model's published sample set or generated per call
 with the same seed; how a person sees that an answer was sample data.
 
 ## Needs from other subjects
 
-- AGENTACCESS-2: the result stage of the pipeline, where sample data replaces real rows for an agent (its requirement R6).
+- AGENTTOOLS-2: the result stage of the pipeline, where sample data replaces real rows for an agent (its requirement R6).
 
 ## Shared areas touched
 

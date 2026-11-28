@@ -29,7 +29,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 19 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
 | 20 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
 | 21 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
-| 22 | [AGENTACCESS](AGENTACCESS.md) | Agents drive the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, provider and MCP client | needs review | unassigned |
+| 22 | [AGENTTOOLS](AGENTTOOLS.md) | What an agent can do in the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, the MCP endpoints and their tools | needs review | unassigned |
 | 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
 | 24 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
 | 25 | [CLI](CLI.md) | The programs we ship keep only the commands that run and configure the services; Build, Sync and the Store are called as libraries; one program or four | needs review | unassigned |
@@ -43,6 +43,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 33 | [CONNECTIONS](CONNECTIONS.md) | Every connection kind has a form with Test, a channel never reaches production's connection, each kind proven on a real system | queued | unassigned |
 | 34 | [INTEGRATIONS](INTEGRATIONS.md) | The integration product's features: the kit, its sources and targets, triggers and screens | open design | unassigned |
 | 35 | [ACTIONS](ACTIONS.md) | Scripts that apps and agents call to do something: the format, where they run, the editor; elevated actions wait for the security model | queued | unassigned |
+| 36 | [AGENTS](AGENTS.md) | Agents authored, tested and run: definitions, providers, test conversations, evaluation, the console's chat, the Gateway, integrations | queued | unassigned |
 
 ## Parked
 

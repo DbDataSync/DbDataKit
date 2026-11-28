@@ -4,7 +4,7 @@
 
 Knowledge (curated and generated items, verified queries, access-filtered search) is served by the Gateway's `knowledge` module and authored in
 Workspace projects. Agents run in the console (administrators and authors) and in the Gateway (end users), each over MCP or embedded, as the person
-(AGENTACCESS), and in Runner tasks when unattended.
+(AGENTTOOLS), and in Runner tasks when unattended.
 Actions (one script format) are declarative in Serving and run trusted code as a Runner run through path 1. The design of what is built is in
 `docs/knowledge.md`, `docs/agent-tools.md`, `docs/agents/` and `docs/integrations.md`.
 
@@ -38,16 +38,11 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 | KNOWLEDGE-11 | The knowledge app shipped with the suite and served by the apps module | KNOWLEDGE-10 | M | Playwright: the app searches, shows a subject's page and its verified queries |
 | KNOWLEDGE-12 | The console's knowledge screens, the rest: bind the built-in embedding model per channel, index progress, chunking and embedding defaults | KNOWLEDGE-2 | M | Playwright: bind the built-in model to a channel and see the index rebuilt |
 | KNOWLEDGE-13 | One shared step that makes registering a Workspace project kind a recipe (schema, check, build, publish, editor), before the agent, action and knowledge editors | none | M | a test kind registered by the recipe alone gets the editor, check, build and publish |
-| KNOWLEDGE-14 | The agent project editor's scripted test conversations, the knowledge file preview of the subjects and agents it reaches, on the recipe | KNOWLEDGE-13 | M | Playwright: run a scripted conversation of an agent project; a knowledge file's preview lists the agents an instruction reaches |
-| KNOWLEDGE-15 | The chat over a real model, providers and usage per channel, fallback lists, the console agent that offers the view-drafting tools | none | M | a recorded provider conversation in the console's chat shows usage and falls back to the second connection when the first fails |
-| KNOWLEDGE-16 | Evaluation runs as a Runner task: an agent's evaluation set runs on a Runner with the agent's model slot bound there; the promotion check (`EvaluationGate`) asks for the score | none | M | a Runner task runs a set and records scores; a promotion below the minimum is refused naming the score |
-| KNOWLEDGE-17 | Front-end agents in the Gateway's `mcp` module acting as the signed-in person, with the operations and agent data rules of AGENTACCESS-10 as their tools; an app's assistant panel; a published agent as one MCP tool | KNOWLEDGE-2, AGENTACCESS-10 | L | an MCP client calls a published agent through the module as a person and gets only what that person may read; Playwright of the assistant panel |
-| KNOWLEDGE-18 | Unattended agents in integrations: the agent runtime as a library in a task's process, the agent definition a dependency of the package, its model connection a slot | none | M | a Runner task runs an agent step with a recorded provider and records the turn |
 
 ## Needs from other subjects
 
 - TRUSTZONES-4: path 1, for code actions.
-- AGENTACCESS-10: the Gateway's operations and agent data rules, the tools of KNOWLEDGE-17.
+- AGENTTOOLS-10: the Gateway's operations and agent data rules, the tools of AGENTS-4.
 - MASTERDATA-1: the Store change feed, for the change trigger.
 
 ## Proposed decisions

@@ -5,7 +5,7 @@
 `dbdatabuild`, `dbdatasync` and `dbdatastore` are removed. The programs that run the four services remain: `dbdatakit` (the console),
 `dbdataworkspace` (the Workspace), `dbdatarunner` (the Runner) and `dbdatagateway` (the Gateway); whether they become one program is the open design
 "One program for every service, or one per service". Each keeps only the commands that run and configure its service. The Workspace and the Runner
-call Build, Sync and the Store as libraries; what a person did with a command is an operation in the console or the Workspace (AGENTACCESS).
+call Build, Sync and the Store as libraries; what a person did with a command is an operation in the console or the Workspace (AGENTTOOLS).
 
 Build was first written as a command line in a user's own git workspace; that has not been a goal since it joined the suite (owner, 2026-11-19).
 
@@ -27,19 +27,19 @@ Build was first written as a command line in a user's own git workspace; that ha
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| CLI-1 | The list: every noun and verb of the seven programs, each marked keep (runs or configures a service), operation (what replaces it, an AGENTACCESS operation or a screen), or remove; who calls it today (a person, the Workspace, a Runner, CI, a test); written into this file as the tasks below, per product | none | S | the list is in this file and the owner has read it |
+| CLI-1 | The list: every noun and verb of the seven programs, each marked keep (runs or configures a service), operation (what replaces it, an AGENTTOOLS operation or a screen), or remove; who calls it today (a person, the Workspace, a Runner, CI, a test); written into this file as the tasks below, per product | none | S | the list is in this file and the owner has read it |
 | CLI-2 | The Workspace calls Build in process: the engine of create, check and package moves to `Shared/src/DbDataKit.*` (adapter first in DbDataBuild); `BuildTool` is replaced | CLI-1 | M | the Workspace's build-kind tests pass unchanged with no `dbdatabuild` on the machine |
 | CLI-3 | The same for Sync (`SyncTool`) | CLI-1 | M | the Workspace's sync-kind tests pass with no `dbdatasync` on the machine |
 | CLI-8 | Building and testing an integration project: the Workspace compiles a csx or compiled integration in process with the shared package build library, which runs none of the author's code; Test starts the project's test task as a run on a Runner in a non-production channel and shows its result in the Workspace; `IntegrationProjectKind` starts no `dbdatarunner` and no `dotnet` that runs the author's code | none | M | the Workspace's integration tests pass with no `dbdatarunner` on the machine; a test script that writes a file leaves no file on the Workspace and its run is in the Runner's record for the `dev` channel |
 | CLI-4 | The runtime packages carry a task host the Runner loads by its task protocol, not a command-line program; Build's Runner jobs leave `DbDataBuild.Cli` | CLI-2 | L | a Runner runs a Build refresh, a Sync replication and a Store deploy from the new packages; a package with the old program is refused naming the new one |
-| CLI-5 | Each verb the list marks operation becomes one (AGENTACCESS-1) or a screen, area by area, as the list orders them | CLI-1, AGENTACCESS-1 | L | per area: the operation's test; the verb answers with the sentence naming where it went |
+| CLI-5 | Each verb the list marks operation becomes one (AGENTTOOLS-1) or a screen, area by area, as the list orders them | CLI-1, AGENTTOOLS-1 | L | per area: the operation's test; the verb answers with the sentence naming where it went |
 | CLI-6 | Remove `dbdatabuild`, `dbdatasync` and `dbdatastore` as programs, and the service programs' verbs the list marks remove; their packaging in `dist/` (MSI, Scoop, install scripts), their docs and tests | CLI-2, CLI-3, CLI-4, CLI-5 | M | `dist/` builds no package for the three; the service programs' removed verbs answer with their sentence (`RemovedCommands`); CI green |
 | CLI-7 | Docs: the "Planned architecture changes" section of `docs/architecture.md` thinned as each task lands and what is built described in its place; the products' READMEs | each task | S | `check_doc_inputs.py` passes; the section lists only what is still to come |
 
 ## Needs from other subjects
 
-- AGENTACCESS-1: the operation, for CLI-5.
-- AGENTACCESS-13 removes `ui mcp` from every program; CLI does not repeat it.
+- AGENTTOOLS-1: the operation, for CLI-5.
+- AGENTTOOLS-13 removes `ui mcp` from every program; CLI does not repeat it.
 - INSTALLER-7: the admin commands on the local API; CLI keeps what it moves.
 - SAMPLEDATA: Build's seeds and generator move to `Shared/` there; their commands (`project seed`, `project sample`, `connection seed`) are listed in
   CLI-1 like the others.

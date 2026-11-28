@@ -56,7 +56,7 @@ belongs: reads of a database as Runner tasks, results back on the same screen. E
 ## Needs from other subjects
 
 - Agents authoring Workspace projects (through MCP or the console's embedded agent, each change approved) and the build-helper on a Workspace build
-  project are AGENTACCESS-8.
+  project are AGENTTOOLS-8.
 - PUBLISHING-2: the per-kind routes removed and every caller on the shared route, before AUTHORING-7.
 - The control service's deploy is built (`POST /api/deploys`, `ConsoleDeploys`; `docs/publishing.md`, "Deploying a build from the control service"): AUTHORING-1
   and AUTHORING-2 (the target Runner's platform) build on it.
