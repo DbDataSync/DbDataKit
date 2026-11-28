@@ -109,6 +109,7 @@ reruns it once. A failure in the same test with `ArgumentOutOfRangeException` ma
 | CI-3 | **The flake list.** `docs/ci-flakes.md` holds every flake rerun in the last month, each with its fix task; the weekly run reports the list; the CI docs (`docs/ci-lessons.md`, `docs/agent-workflow.md`, the release docs) describe the tiers | CI-1, CI-2 | S | the list holds every flake rerun in the last month; the docs name the workflows that exist |
 | CI-4 | The compatibility job runs the previous release's programs against the current build (waits for the first stable release); the release workflows write `release.json` with the compatibility generation, so the console's "outside N-1" mark shows for a release from GitHub, not only from a mirror | none | M | the `compatibility` job pairs the previous stable console with the current Gateway and Runner and the reverse, and a publish and a query pass; a snapshot release carries `release.json` with its generation and the console's Upgrades page marks a release outside N-1 from it |
 | CI-6 | Run the other products' suites on the 2025 engines (SQL Server 2025, pgvector PostgreSQL) | none | S | the Gateway, Runner and Build conformance jobs pass on the 2025 profiles |
+| CI-7 | Split the Sync integration CI job: engine suites in one job, pairs and Runner suites in another, each starting only its containers (re-measure first) | none | S | each job finishes in under 25 minutes with a limit of 30; the union of the filters is the old filter |
 
 ## Shared areas touched
 
