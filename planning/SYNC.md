@@ -21,6 +21,8 @@ script's Test moves into the Workspace's sandbox with SANDBOX step 2.
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | SYNC-1 | A Playwright story on the installed suite (CI-5's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | CI-5 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
+| SYNC-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (`POST /api/deploys`, `ConsoleDeploys`), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | none | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
+| SYNC-3 | Resync and reconcile-deletes buttons on a sync project's Runs tab, started through the control service (the console's run calls, `/api/deploys/{id}/runs`) (paused, owner 2026-11-16; queued until the drain works out a mapping's source key) | none | M | Sync conformance: resync of one mapping reloads it; reconcile removes target rows the source lost |
 
 ## Open designs
 

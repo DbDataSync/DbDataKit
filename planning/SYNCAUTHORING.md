@@ -179,7 +179,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   test is the console's
   `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
-- AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
+- SYNC-3: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
 ## Shared areas touched
 
