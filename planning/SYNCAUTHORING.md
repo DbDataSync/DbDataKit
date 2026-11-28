@@ -10,10 +10,10 @@ project; the person moves between them by clicking. Sync is the first kind with 
 two areas: Files and Designer").
 
 This pass is authoring only, and only what lives inside a replication. The screens are taken from the code as it was before the Sync server was deleted (`96601f27^`), with everything that
-watched or operated a running replication taken out; those screens come back in a second pass reading the Runner (SYNCNEXT's open design "Monitoring and
+watched or operated a running replication taken out; those screens come back in a second pass reading the Runner (SYNC's open design "Monitoring and
 operations, second pass" below). The old Version Control tab is not restored: history and diffs are the Files area's History, Changes and earlier
 texts. The old screens outside a replication (the Replications list, the Connections and Scripts pages) are not restored either: a replication is
-reached from the Designer's navigation, and connections and scripts are edited in Files until SYNCNEXT's open design "Outside a replication" (and SANDBOX's connection pages) becomes
+reached from the Designer's navigation, and connections and scripts are edited in Files until SYNC's open design "Outside a replication" (and SANDBOX's connection pages) becomes
 tasks.
 
 Owner, 2026-11-18: "We need to restore the overall look and feel of the old Sync authoring UI. The new workspace file-format-driven UI needs to remain as
@@ -59,20 +59,20 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
 
 ### What is left out of this pass
 
-- **Monitoring and operations** (SYNCNEXT's open design): `StatusCard.tsx`, `MetricsCard.tsx`, `RefreshCountdown.tsx`, `MonitoringPanel.tsx`, `lag.ts`,
+- **Monitoring and operations** (SYNC's open design): `StatusCard.tsx`, `MetricsCard.tsx`, `RefreshCountdown.tsx`, `MonitoringPanel.tsx`, `lag.ts`,
   `holdState.ts`, `readIntent.ts`, `components/ReadIntentSetting.tsx`, `MappingReadStateDialog.tsx`, `MappingPositionHistory.tsx`, `RunsPanel.tsx`,
   `RunDetailsDialog.tsx`, `RunFigures.tsx`, `runTimes.ts`, `PauseHistoryPanel.tsx`, `PauseDialog.tsx`, `BulkLoadHistoryPanel.tsx`,
   `BulkLoadProgressCard.tsx`, `BulkLoadForm.tsx`, `ReconcileDeletesForm.tsx`, `JoinedRunNotice.tsx`,
   `RunnerHistoryNotice.tsx`, `RunnerStatusRow.tsx`, `RunningCounts.tsx`, `ReplicationRunnerPanel.tsx`, `pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`,
   `runnerPublish.ts`, `VerificationPanel.tsx`'s results and `VerificationResultPage.tsx`, `api/useRunHub.ts` (SignalR), the tracking card's live state
   and catch-up, and the connection list's reachable column and **Test all**.
-- **Outside a replication** (SYNCNEXT's open design "Outside a replication"; the connection pages are SANDBOX's): the Replications list's table (`pages/ReplicationsPage.tsx` apart from
+- **Outside a replication** (SYNC's open design "Outside a replication"; the connection pages are SANDBOX's): the Replications list's table (`pages/ReplicationsPage.tsx` apart from
   its form), the Connections list and page (`ConnectionsPage.tsx`, `ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`,
   `connection-edit/ConnectionTestCard.tsx`), the Scripts list and page (`ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`).
   Connections and scripts are edited in Files (the generated forms, the Scripts tab) meanwhile.
 - **Row previews**: `PreviewGrid.tsx` is not restored; **Preview rows** on a mapping (`MappingRowsPreview.tsx`) shows a mapping's or a query source's first rows, read by a Runner task and never kept.
 - **Version Control** (`HistoryPanel.tsx`, `components/DiffViewer.tsx` as used there): the Files area's History, Changes and a file's earlier texts.
-- **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; SYNCNEXT's open design.
+- **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; SYNC's open design.
 - The product frame and admin pages (`App.tsx`, `SyncModule.tsx`, `adminHost.tsx`, `components/AppShell.tsx`, Drivers, Libraries, Files, Docs, Admin):
   the Workspace's frame replaces them.
 
@@ -92,7 +92,7 @@ replication, a mapping or `checks:`, and reading the draft's connections and scr
 Left on the old server: everything in `Runner/`, `Hubs/`, `RunsController`, `ReplicationLagController`, `MetricsController`, `VerificationController`,
 `ReplicationTrackingController`, the read-state and position routes of `TableMappingsController`, `PreviewController`, `QualityController`,
 `LineageController`, the admin, driver, library and files controllers. Not ported in this pass because only the screens outside a replication used them
-(SYNCNEXT's open design "Outside a replication"): a script's compile (`ScriptsController` compile) and where each script is bound
+(SYNC's open design "Outside a replication"): a script's compile (`ScriptsController` compile) and where each script is bound
 (`Services/ScriptUsageScanner.cs`), a driver's capabilities by type (`/api/drivers/{type}/capabilities`), a driver's connection parameters
 (`connection-parameters`, `Services/ParameterCheck.cs`) and a connection's credential source (`credential-source`). The ported services run in the
 Workspace's process on Sync's libraries in `Shared/src/DbDataKit.Sync.*` (`DbDataWorkspace/README.md`).
@@ -176,8 +176,8 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   places the shared **Set up for development**, **Test** and **Describe columns** already (`ChannelReads.tsx` of `@dbdatakit/sync-ui`); the connection
   test is the console's
   `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
-- AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
-- AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
+- TESTING-1: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
+- SYNC-3: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
 
 ## Shared areas touched
 
