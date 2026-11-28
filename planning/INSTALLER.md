@@ -132,22 +132,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P66: a further Gateway instance takes the group's ports on its own addresses (default, awaiting the owner)
-
-The join hands a further instance the ports of the first instance's `public.listen`, `listen` and `management.listen`, as the first instance reported them
-when it joined. The further instance keeps the address (host) its own setting names, or the listener's default address (`0.0.0.0`, and `127.0.0.1` for
-the management API) when it has none, and takes the scheme and the port. Example: the first Gateway of `sales` listens on `https://10.0.0.5:7821`; the
-second, on another machine with no setting, writes `listen: https://0.0.0.0:7821`, not `https://10.0.0.5:7821`, which it could not bind. A setting that
-the command line or an environment variable gives (the image's `DBDATAKIT_Gateway__Listen`) still wins over the file, so such an instance keeps the
-port it was given. A port the administrator later changes on the first instance by hand is handed to a new instance only after the first joins again.
-
-Options:
-
-- A, as built: the group's ports on the instance's own addresses.
-- B: the first instance's whole addresses, host included.
-
-Recommendation: A. B fails on every machine but the first as soon as the first names its own IP address.
-
 ### INSTALLER-P67: the console keeps the key a group already holds when it has none (default, awaiting the owner)
 
 A Gateway that ran alone before it joined a console made its own group key at its first start, and its state holds values protected with it. When it

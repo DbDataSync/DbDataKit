@@ -211,14 +211,26 @@ The ports step of the start checks every address of every listener. A port that 
 names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821` in the image). The image does not set the public
 listener, so inside the container it takes 7820 and is not published.
 
-When a further Gateway joins an existing group, the join hands over the group's pinned ports (those of `public.listen`, `listen` and
-`management.listen`) and they become that instance's exact configuration: the instance writes them to its `config/server.yaml` and its listeners start on
-them. If one is taken on the new machine, the instance fails at the ports step naming the port, listens on nothing, and never picks another. So every instance of a
-group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
+When a further Gateway joins an existing group, the join hands it the ports of the group's first instance: those of `public.listen`, `listen` and
+`management.listen`, as the first instance reported them when it joined. The new instance keeps an address of its own and takes the scheme and the port
+from the group:
+
+- Its `config/server.yaml` names an address for the listener: that address, with the group's port.
+- It names none: the listener's default address, `0.0.0.0` (`127.0.0.1` for the management API), with the group's port.
+
+The instance writes the result to its `config/server.yaml` and its listeners start on it. If a port is taken on the new machine, the instance fails at
+the ports step naming the port, listens on nothing, and never picks another. So every instance of a group listens on the same ports, and a client or a
+balancer set for one instance is right for all of them.
+
+A `listen` given on the command line or in an environment variable (the image's `DBDATAKIT_Gateway__Listen`) still wins over the file, so an instance
+started with one keeps the port it was given. A port that an administrator changes by hand on the first instance reaches a new instance only after the
+first instance joins again.
 
 Example: the first Gateway of group `sales` takes 7820, 7821 and 7822 for its public, Flight SQL and management listeners (or the next free values) and
-pins them. A second instance joined to `sales` on another machine gets 7820, 7821 and 7822 from its join; if 7821 is held there, its
-`startup-failure-dbdatagateway.txt` names 7821 (and the program holding it, if Windows says) and the instance does not start until the port is freed.
+pins them, with Flight SQL on `https://10.0.0.5:7821`. A second instance joined to `sales` on another machine, with no settings, gets 7820, 7821 and 7822
+from its join and writes `listen: https://0.0.0.0:7821`. It does not write `https://10.0.0.5:7821`, because that is the first machine's address and the
+second machine cannot listen on it. If 7821 is held on the second machine, its `startup-failure-dbdatagateway.txt` names 7821 (and the program holding
+it, if Windows says) and the instance does not start until the port is freed.
 
 ## Skipping the folder permissions check
 
