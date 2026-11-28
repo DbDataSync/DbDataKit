@@ -38,6 +38,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 28 | [ERRORDETAILS](ERRORDETAILS.md) | An administrator can investigate every failure: its full detail is kept and shown to administrators; everyone else sees the classified words and an id | queued | unassigned |
 | 29 | [PLUGINS](PLUGINS.md) | One program runs every role; each kind of project is a plugin with parts per role, compiled in first and loaded from a feed later | open design | unassigned |
 | 30 | [SANDBOX](SANDBOX.md) | Author code runs sandboxed and reaches outside systems only through hosted connections; testable on the Workspace with no live system (draft) | open design | unassigned |
+| 31 | [CI](CI.md) | A pull request runs only what its change touches; everything runs weekly and on demand; a stable release needs a green full run; flakes are tracked to a fix (draft) | queued | unassigned |
 
 ## Parked
 
