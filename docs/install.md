@@ -76,6 +76,8 @@ step looks the same in every product, and a fix reaches all four. The library is
 A Gateway with a join request waiting joins at the start of its ports step, before its listeners start: a listener of its own on the management API's
 address, with the certificate the management API presents, answers the console's call back and then stops. The Gateway then starts its listeners on the
 ports and with the key the join handed over, and an instance of a group serves the group's certificate. A refused join still fails the join step.
+The console lists the Gateway a few seconds before its listeners answer, between the join and the start of the listeners, and retries its first
+calls to it.
 
 The `logs` subfolder and the failure file come before the first step. A step that fails writes the failure file and the process exits non-zero (the
 service manager records the failure); `service check` and `setup single-server` print the file.

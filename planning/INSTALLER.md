@@ -130,26 +130,6 @@ rules are in [docs/install.md](../docs/install.md).
 | INSTALLER-33 | The messages of the removed ways to publish (`dbdatasync package publish --to runner --server` and the others) name the Workspace's publish panel in the console, and the Runner's Packages screen for a package folder | none | S | the command-line tests check the new sentence |
 | INSTALLER-34 | An installed suite as a test fixture (not urgent; manual tests from a snapshot release meanwhile): a CI job on Linux installs the packaged suite with `install.sh`, runs `dbdatakit setup single-server`, enrols the first administrator from the setup link in `FIRST-RUN.txt` with a virtual passkey authenticator (as `tests/people.ts` does) and saves the signed-in browser state, the console's address and the testenv engines' addresses; any later story starts from that state instead of starting services from their build folders. Linux first; Windows (the MSI) later | none | M | the job installs, joins all four services, signs in, and a trivial story reusing the saved state opens the Servers page with four services joined |
 
-## Proposed decisions
-
-### INSTALLER-P69: a Gateway joins before its listeners start (default, awaiting the owner)
-
-The Runner and the Workspace join after their ports step, because the console calls them back on their own listener. A Gateway with a join request
-waiting joins at the start of its ports step instead: a listener of its own on the management address answers only the console's call back, and stops
-once the join is made. The Gateway then builds its server again on what the join kept (the group's key, the group's ports) and starts its listeners.
-Example: a second instance of `sales` with no settings answers the call back on `127.0.0.1:7822` for a moment, gets 7820, 7821 and 7822 from its join and
-starts on them; if 7821 is held on its machine, the ports step fails naming 7821 and the instance listens on nothing. The console lists the Gateway a
-few seconds before it answers calls (between the join and the start of its listeners); the console's first calls are retried.
-
-Options:
-
-- A, as built: the join before the listeners start.
-- B: the join after the ports step on the server's own listener, then the host stopped and started again in the same process. Stopping the host of a
-  Windows service or a systemd unit tells the service manager that the service stopped, so it does not work for an installed service.
-- C: the process exits after the join and the service manager starts it again. It depends on the restart policy, and does nothing from a terminal.
-
-Recommendation: A.
-
 ## Needs from other subjects
 
 - INSTALLER-21 writes each service's `state:` section by `state init --topology install` (`docs/state-logins.md`): the login `dbdatakit_<service>[_<group>]`, its schemas and registry, and the statements `state grants` prints exist.
