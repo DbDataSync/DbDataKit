@@ -34,7 +34,7 @@ The detail can hold values from a row (a duplicate key's value in a constraint m
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| ERRORDETAILS-8 | The Gateway and Build keep the original exception in every case the check lists for them (22 and 21 today), and their entries leave the baseline | none | S | the check passes with no `DbDataGateway/` or `DbDataBuild/` entry in its baseline |
+| ERRORDETAILS-8 | The Gateway and Build keep the original exception in every case the check lists for them (23 and 21 today), and their entries leave the baseline | none | S | the check passes with no `DbDataGateway/` or `DbDataBuild/` entry in its baseline |
 | ERRORDETAILS-9 | Sync, the Store, the console and the Runner's tests keep the original exception in every case the check lists for them (26 today); the baseline is empty and goes | none | S | the check passes with no baseline file |
 | ERRORDETAILS-10 | Each process has one redactor (the existing `DbDataKit.Secrets.Redactor` / `IRedactor`); every secret value the process resolves is registered with it; the hosting library's logging passes every message and exception text (`ex.ToString()`, inner exceptions included) through it; the separate copies (`Connections.Http/SecretRedaction`, the State `Redactor` in `StateEndpoints.cs`, and any other redaction that keeps its own list of values) use it instead | none | M | a test resolves a secret, throws an exception whose message and inner exception hold it, logs it through the hosting library, and the log line shows `***` |
 | ERRORDETAILS-1 | A shared library for a failure's detail: from any exception it makes the detail (type, message, inner exceptions, stack trace, a driver's own message and code), passed through the process's redactor of ERRORDETAILS-10, with an id; the answer to a caller carries the classified words and the id; the hosting library keeps the detail of every request that ends in an exception | ERRORDETAILS-10 | M | a test throws a driver failure and a plain exception in a request; the answer holds the classified words and the id, and the stored detail holds the message, the inner exception and the stack, with a secret in the message redacted |
@@ -45,31 +45,6 @@ The detail can hold values from a row (a duplicate key's value in a constraint m
 
 The fixes of ERRORDETAILS-8 and ERRORDETAILS-9 pass the original in the cancellation and deadline cases too (the Gateway's `ActiveQueries.cs`). A case the script misreads while fixing them goes to the owner: it is the reason to
 reconsider a Roslyn analyzer in place of the script.
-
-## Proposed decisions
-
-### ERRORDETAILS-P4: a classified driver failure drops the original, and the check does not see it (awaiting the owner)
-
-Eight throws in the Shared libraries turn a caught exception into a `ConnectionFailureException` through a classifier and pass no inner exception:
-`FailureClassifier.ToException` (used by `Connections/DbProviderBase.cs` and `Semantic.Connections/ConnectionsSourceExecutor.cs`) and
-`new ConnectionFailureException(...Classify(e, ...))` in `Connections.Files` (`FileStores.cs`, `Ftps.cs`, `Smb.cs`, `SshStores.cs` twice) and
-`Connections.Http/HttpFailures.cs`. `scripts/check_caught_exceptions.py` passes them, because the caught variable appears in the throw. Two tests
-assert the inner exception is null: `Open_failures_become_classified_failures_without_driver_text` (`Shared/tests/DbDataKit.Connections.Tests/ProviderTests.cs`)
-and `Public_text_never_contains_raw_driver_text` (`Shared/tests/DbDataKit.Connections.Abstractions.Tests/FailureTests.cs`).
-
-Example: Omar's SQL Server refuses the login of a connection. The provider throws "The server refused the sign-in. [db 28000]" with no inner
-exception, so the log and, later, the stored detail have neither SqlClient's message nor its stack.
-
-Options:
-
-1. Pass the original as the inner exception in all eight (`ToException` and `ConnectionFailureException` take it), change the two tests to assert
-   that the message stays classified and the inner exception is the driver's, and teach the check that a variable only passed to another call does
-   not count.
-2. Leave them as they are until ERRORDETAILS-1 keeps the detail.
-
-Recommendation: 1, as the answer about the seven catches whose message can hold a secret: the original is kept and the redaction happens where the
-detail is written (ERRORDETAILS-10). It is also the case of a misread script that the goal says goes to the owner: the reason to reconsider a
-Roslyn analyzer.
 
 ## Needs from other subjects
 
