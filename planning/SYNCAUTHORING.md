@@ -169,10 +169,10 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   says so.
 - SANDBOX (step 2): a script's Test runs on a Runner today (the set's task `script-test`, staged through the console); SANDBOX moves it into the
   Workspace's sandbox.
-- COMMANDLINES (needs review): if it is accepted, COMMANDLINES-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
-  configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
-  those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
-  COMMANDLINES-4 changes the form of the runtime package that holds the set's `preflight`, `discover` and `describe` (`SetPreflightJob` and `SetCatalogJobs.cs` in `DbDataSync.TaskRunner`).
+- CLI (needs review): if it is accepted, CLI-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
+  configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and CLI-3 builds on
+  those projects. CLI-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
+  CLI-4 changes the form of the runtime package that holds the set's `preflight`, `discover` and `describe` (`SetPreflightJob` and `SetCatalogJobs.cs` in `DbDataSync.TaskRunner`).
 - AUTHORING-17, after the slice: `facts` (`docs/authoring-metadata.md`). **Set up for development** is built: it stores the login, copies the draft's
   connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set up for development"). The Designer
   places the shared **Set up for development**, **Test** and **Describe columns** already (`ChannelReads.tsx` of `@dbdatakit/sync-ui`); the connection
