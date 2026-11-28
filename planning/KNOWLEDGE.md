@@ -48,9 +48,7 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 | KNOWLEDGE-20 | The action host: declarative actions answered in Serving; code actions as a Runner run through path 1 (the caller waits 10 seconds, then gets the run's link); apps and agents call actions through it | KNOWLEDGE-19, TRUSTZONES-4 | L | an app's call of a code action returns its result within the wait or the run's link; a declarative action writes a Store row as the person |
 | KNOWLEDGE-21 | Elevated actions: an action principal per channel, grants to it approved by two people, run grants to people, the declarative form (`where`, `from_state`, `to_state`, `fields`), audit and limits | KNOWLEDGE-20 | L | a person with run but no data grant changes a row only through the action; the audit names the action, its version, the principal and the person |
 | KNOWLEDGE-22 | The action editor's run with a sample input, and the console's approvals and grants of actions | KNOWLEDGE-21, KNOWLEDGE-13 | M | Playwright: run an action with a sample; approve an exact version; grant run to a group |
-| KNOWLEDGE-23 | Integration remainders: outbound steps in a non-production channel use the channel's connection or are refused (the rest), the console's connection form per kind with Test, the Store change trigger | MASTERDATA-1 | M | an outbound step in `test` with no binding is refused naming the slot; a Store change starts a task once; Playwright of the SFTP form's Test |
 | KNOWLEDGE-24 | The command-surface audit and the golden of MCP tools for every product, as the console has them (`ConsoleCommandSurfaceTests` over `CommandSurface.Audit` and `CommandSurface.Golden`): the Gateway, the Runner, the Workspace, Sync and Store each in its own test project, Build through its spec table, so a command that starts offering something to an agent (a secret, a write) is a line in a review; the goldens become goldens of operations with AGENTACCESS-1, and CLOUDDEV-5's tool list is generated from them | none | S | each product's test passes on its `golden/mcp-tools.txt`; a fake verb with no schema fails naming product and verb; adding a verb an agent may call changes the golden |
-| KNOWLEDGE-25 | SMB with Windows sign-in (Kerberos) proven on a Windows host in a domain: the `smb` connection kind lists, reads and writes a real share, and a ticket failure, a clock skew and an unreachable share are each classified as on Linux | none | S | by hand, because no domain is in CI: on a domain-joined Windows host, list, read, write and a failing ticket against a real share, with SMB signing on; the steps and the result in `docs/integrations.md`; anything found fixed with a unit test |
 
 ## Needs from other subjects
 
@@ -201,14 +199,6 @@ editing applies to its own work before it is merged; the published item is uncha
 otherwise an agent editing an instruction cannot see its effect until a merge and a publish. **Open questions:** whether the Workspace serves the overlay
 to the console's agent runtime or the runtime reads the branch itself; how the overlay's items are checked (the same `knowledge check`) and whether a
 broken one falls back to the published item. Proven by a scripted run: the agent edits an instruction and its next turn is given the edited text.
-
-### A semantic query as an outbound source of the integration kit
-
-Wanted, not urgent (owner, 2026-11-18). The kit's outbound push (`DbDataKit.Runner.Kit.Outbound`) sends the records of a table, a view, a query of a
-connection or a Store entity to an API or a file, batch by batch with idempotency keys, resuming after a failure without repeating what was sent. A
-semantic query as a source would let an integration send governed numbers (a measure by region) rather than re-deriving them from tables. **Open
-questions:** it goes through the Gateway's Flight SQL, which no kit library calls today, so as whom it runs (the task's service account through a
-Runner-to-Gateway link, TRUSTZONES) and how its rows get stable keys for the ledger.
 
 ## Shared areas touched
 

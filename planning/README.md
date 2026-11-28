@@ -40,6 +40,8 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 30 | [SANDBOX](SANDBOX.md) | Author code runs sandboxed and reaches outside systems only through hosted connections; testable on the Workspace with no live system (draft) | open design | unassigned |
 | 31 | [CI](CI.md) | A pull request runs only what its change touches; everything runs weekly and on demand; a stable release needs a green full run; flakes are tracked to a fix (draft) | queued | unassigned |
 | 32 | [SYNCNEXT](SYNCNEXT.md) | Sync after the Designer: watching and operating runs, the replication and script pages, Preview SQL, MySQL and Oracle privileges, the installed-suite story | queued | unassigned |
+| 33 | [CONNECTIONS](CONNECTIONS.md) | Every connection kind has a form with Test, a channel never reaches production's connection, each kind proven on a real system | queued | unassigned |
+| 34 | [INTEGRATIONS](INTEGRATIONS.md) | The integration product's features: the kit, its sources and targets, triggers and screens | open design | unassigned |
 
 ## Parked
 
