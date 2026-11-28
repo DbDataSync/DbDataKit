@@ -940,6 +940,8 @@ public sealed partial class RunnerScheduler
         if (_queue.FindByRun(runId) is not { } item) return (RunCancelOutcome.Unknown, null);
         TaskRef.TryParse(WorkPayload.TryParse(item.PayloadJson, out _)?.Task, out var task);
         if (item.Status is WorkItemStatus.Done or WorkItemStatus.Failed or WorkItemStatus.Cancelled) return (RunCancelOutcome.AlreadyEnded, task);
+        // the executor records the run's end before its loop finishes the queue item, so a run whose record has ended is over even while its item still reads as held
+        if (_runs.Get(runId)?.Run.Finished is not null) return (RunCancelOutcome.AlreadyEnded, task);
         if (item.Status == WorkItemStatus.Pending && _queue.TryCancelPending(runId)) return (RunCancelOutcome.Cancelled, task);
         return _queue.RequestCancel(runId) ? (RunCancelOutcome.Requested, task) : (RunCancelOutcome.AlreadyEnded, task);
     }
