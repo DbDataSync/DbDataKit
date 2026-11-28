@@ -1,10 +1,11 @@
-# WORKSPACEISOLATION: the Workspace service calls no other service and never handles a secret
+# WORKSPACEISOLATION: the Workspace service calls no other service and holds no login to a data system
 <!-- reviewed: 2026-11-20 -->
 
 ## Goal
 
-The Workspace service is called only by the control service. It calls only package sources (NuGet, npm) and git remotes, never handles a secret, and
-never executes code from a project. It builds and checks projects. The control service pulls the built package from it and deploys it to a Runner or
+The Workspace service is called only by the control service. It calls only package sources (NuGet, npm) and git remotes, and the only credentials it
+holds are theirs: it never holds a login to a data system. It runs code from a project only in the sandbox (SANDBOX); until that is built, it does not
+run code from a project at all. It builds and checks projects. The control service pulls the built package from it and deploys it to a Runner or
 Gateway as the person. Runs, binding tests, catalog reads and development logins go through the control service (`docs/architecture.md`, "Who calls
 whom" and "Planned architecture changes").
 

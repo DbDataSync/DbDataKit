@@ -34,7 +34,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 24 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
 | 25 | [COMMANDLINES](COMMANDLINES.md) | The suite's programs only run and configure the four services; Build, Sync and the Store are called as libraries | needs review | unassigned |
 | 26 | [DOCSREVIEW](DOCSREVIEW.md) | Reference docs the owner approves, and every doc and plan checked against them | queued | unassigned |
-| 27 | [WORKSPACEISOLATION](WORKSPACEISOLATION.md) | The Workspace service calls no other service and never handles a secret; the control service deploys what it builds | queued | unassigned |
+| 27 | [WORKSPACEISOLATION](WORKSPACEISOLATION.md) | The Workspace service calls no other service and holds no login to a data system; the control service deploys what it builds | queued | unassigned |
 | 28 | [ERRORDETAILS](ERRORDETAILS.md) | An administrator can investigate every failure: its full detail is kept and shown to administrators; everyone else sees the classified words and an id | queued | unassigned |
 | 29 | [PLUGINS](PLUGINS.md) | One program runs every role; each kind of project is a plugin with parts per role, compiled in first and loaded from a feed later | open design | unassigned |
 | 30 | [SANDBOX](SANDBOX.md) | Author code runs sandboxed and reaches outside systems only through hosted connections; testable on the Workspace with no live system (draft) | open design | unassigned |
