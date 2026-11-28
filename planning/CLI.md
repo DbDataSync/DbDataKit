@@ -35,9 +35,11 @@ Build was first written as a command line in a user's own git workspace; that ha
 | CLI-5 | Each verb the list marks operation becomes one (AGENTTOOLS-1) or a screen, area by area, as the list orders them | CLI-1, AGENTTOOLS-1 | L | per area: the operation's test; the verb answers with the sentence naming where it went |
 | CLI-6 | Remove `dbdatabuild`, `dbdatasync` and `dbdatastore` as programs, and the service programs' verbs the list marks remove; their packaging in `dist/` (MSI, Scoop, install scripts), their docs and tests | CLI-2, CLI-3, CLI-4, CLI-5 | M | `dist/` builds no package for the three; the service programs' removed verbs answer with their sentence (`RemovedCommands`); CI green |
 | CLI-7 | Docs: the "Planned architecture changes" section of `docs/architecture.md` thinned as each task lands and what is built described in its place; the products' READMEs | each task | S | `check_doc_inputs.py` passes; the section lists only what is still to come |
+| CLI-9 | Retire the offline verb `project publish --to gateway --out` and the per-publish adopt confirmation (adapter first: the slot bindings' tests have run) | PUBLISHING-2 | S | the verb and `adopt` answer their sentence; `gateway-publish/1` leaves `docs/formats.json` and `docs/ui-editors.md`; the Workspace's publish tests pass unchanged |
 
 ## Needs from other subjects
 
+- PUBLISHING-2: the per-kind routes removed and every caller on the shared route, before CLI-9.
 - AGENTTOOLS-1: the operation, for CLI-5.
 - AGENTTOOLS-13 removes `ui mcp` from every program; CLI does not repeat it.
 - INSTALLER-7: the admin commands on the local API; CLI keeps what it moves.
