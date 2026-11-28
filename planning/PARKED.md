@@ -239,3 +239,27 @@ For networks where a server cannot reach the console (low priority; the join by 
 **What.** Console-started pairing for networks where a server cannot reach the console (low priority): `setup invite` and the Add a server screen offer it; the console still generates the command for the remote, code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command prints; it then connects to the server and pins it, with the token's scope and single use
 
 **Done when (as it was written).** Servers suite: a Runner whose calls to the console are blocked joins by this path and is listed ready, once with its address given up front and once with the address the command printed entered afterwards; a reused or expired code is refused; a Playwright story of entering the address
+
+## Creating a service's login and database on request
+
+A convenience, parked: the administrator creates the login and database today, and `state grants` prints what is needed. Moved from TRUSTZONES' tasks.
+
+**What.** Create the login and the database in one go on request: by default the suite creates nothing (the administrator does, `state grants`), but `state init --apply` of a service's command line and a screen of the console (a button on the service's state settings) create the login and its database when the person asks, through a temporary administrator connection string they give once; the string is used for that run only and never stored, and the generated password is stored as the service's secret and used by the service from then on. The screen is not a stored format, so it needs no row of `docs/ui-editors.md`. INSTALLER-21 writes the `state:` settings and keeps passing the password by secret reference
+
+**Done when (as it was written).** a test on SQL Server and on PostgreSQL: the login and the database are created; the temporary connection string is found nowhere on disk and in no log or audit line; the generated password is stored as the secret and the service starts with it; a second run changes nothing; a story runs the screen
+
+## The console reading other services' runs from their databases
+
+Parked: it cuts against reading each service through its own API, and was always at most an option. Moved from TRUSTZONES' open designs.
+
+**What.** An option for installs where the console can reach a service's database: the console's login gets a read-only grant on the runs, audit and
+notifications schemas of that service, never payloads or secrets, and the console's registry lists them so one query reads all. It is never assumed. The
+default is each service's API (`docs/state-logins.md`, "Limits"), which needs no network path to the service's database.
+
+**Why.** An API is not always the best path for a large list of runs, and a person may prefer one query. The owner has no rule between APIs and database
+queries and cares about UX, performance and security, chosen case by case; direct access is at most an option, because some installs give the console no
+network access to a service's database (SQL Server Express, a private container database).
+
+**Open questions.** Where the option is switched on (the console's state settings, per service); how the grant is made (`state grants` for the console's
+login, limited to those three modules); how the console falls back to the API when the database is unreachable; and a test on SQL Server and PostgreSQL that the grant is
+read-only and limited to those modules, which is the "Done when" of a task made when the owner schedules this.
