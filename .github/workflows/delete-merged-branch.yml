@@ -31,14 +31,18 @@ jobs:
             echo "Keeping '$BRANCH': $stacked open pull request(s) are based on it."
             exit 0
           fi
-          # A branch that is already gone (GitHub answers 422 "Reference does not exist") counts as deleted; any other failure fails the step.
+          # A branch that is already gone counts as deleted; any other failure fails the step. After a failed delete GitHub is asked for the
+          # branch (a 404 means it is gone), because the delete's error for a branch that is gone has been worded more than one way.
           if err="$(gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" --silent 2>&1)"; then
             echo "Deleted '$BRANCH'."
-          elif printf '%s' "$err" | grep -q "Reference does not exist"; then
-            echo "'$BRANCH' was already gone."
           else
-            echo "$err" >&2
-            exit 1
+            status="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --include --silent 2>/dev/null | awk 'NR == 1 { print $2 }' || true)"
+            if [ "$status" = "404" ]; then
+              echo "'$BRANCH' was already deleted."
+            else
+              echo "Deleting '$BRANCH' failed (asking GitHub for the branch answered ${status:-nothing}): $err" >&2
+              exit 1
+            fi
           fi
 
   task-branches:

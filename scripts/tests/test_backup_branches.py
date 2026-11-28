@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 SCRIPTS = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, SCRIPTS)
@@ -218,6 +219,54 @@ class BackupBranches(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("backup/work/held: FAILED:", out)
         self.assertIn("refs/heads/backup/work/held", "\n".join(self.remote_branches()))
+
+    def failing_delete(self, also_delete_on_remote):
+        """A `git push --delete` that fails with an error the script has never seen; when asked, it first deletes the branch on the remote, as a
+        workflow that won the race would. Every other git call runs for real, so the script's check of the remote is the real `git ls-remote`."""
+        real_git = backup_branches.git
+        message = "error: cannot lock ref 'refs/heads/{0}': unable to resolve reference 'refs/heads/{0}'"
+
+        def git(*args, check=True):
+            if args[:1] == ("push",) and "--delete" in args:
+                name = args[-1]
+                if also_delete_on_remote:
+                    run(self.remote, "branch", "-D", name)
+                return subprocess.CompletedProcess(["git", *args], 1, "", message.format(name) + "\n")
+            return real_git(*args, check=check)
+
+        return unittest.mock.patch.object(backup_branches, "git", git)
+
+    def test_a_delete_that_fails_with_an_unknown_error_on_a_branch_that_is_gone_is_already_deleted(self):
+        run(self.work, "branch", "backup/work/raced", "main")
+        run(self.work, "push", "origin", "backup/work/raced")
+        with self.failing_delete(also_delete_on_remote=True):
+            self.assertEqual(backup_branches.delete_remote("origin", "backup/work/raced"), "already deleted")
+        self.assertNotIn("backup/work/raced", "\n".join(self.remote_branches()))
+
+    def test_a_delete_that_fails_with_an_unknown_error_on_a_branch_that_is_still_there_is_a_failure_naming_the_error(self):
+        run(self.work, "branch", "backup/work/stays", "main")
+        run(self.work, "push", "origin", "backup/work/stays")
+        with self.failing_delete(also_delete_on_remote=False):
+            status = backup_branches.delete_remote("origin", "backup/work/stays")
+        self.assertEqual(status, "FAILED: error: cannot lock ref 'refs/heads/backup/work/stays': unable to resolve reference 'refs/heads/backup/work/stays'")
+        self.assertIn("refs/heads/backup/work/stays", "\n".join(self.remote_branches()))
+
+    def test_a_branch_whose_name_is_the_end_of_another_is_not_taken_for_it(self):
+        # `git ls-remote --heads origin work/stays` would also list `backup/work/stays`; the full ref name matches only the branch itself.
+        run(self.work, "branch", "backup/work/stays", "main")
+        run(self.work, "push", "origin", "backup/work/stays")
+        with self.failing_delete(also_delete_on_remote=False):
+            self.assertEqual(backup_branches.delete_remote("origin", "work/stays"), "already deleted")
+
+    def test_a_remote_that_cannot_be_asked_after_a_failed_delete_is_a_failure(self):
+        run(self.work, "branch", "backup/work/unreachable", "main")
+        run(self.work, "push", "origin", "backup/work/unreachable")
+        run(self.work, "remote", "set-url", "origin", os.path.join(self.tmp.name, "no-such-remote.git"))
+        with self.failing_delete(also_delete_on_remote=False):
+            status = backup_branches.delete_remote("origin", "backup/work/unreachable")
+        self.assertTrue(status.startswith("FAILED: error: cannot lock ref"), status)
+        self.assertIn("asking origin whether the branch is still there failed", status)
+
 
 if __name__ == "__main__":
     unittest.main()
