@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -52,7 +52,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
             relationshipMetadata);
 
     private const string UpperEverything = """
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class Upper : ISqlColumnExpression
         {
@@ -85,7 +85,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     {
         var mappings = new List<ColumnMapping> { Map("Region") };
         var result = Apply(mappings, Compile("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
             public sealed class None : ISqlColumnExpression
             {
                 public string? RenderSql(SqlColumnExpressionContext c) => null;
@@ -108,7 +108,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
         var result = Apply(
             [Map("Code"), Map("Region")],
             Compile("""
-                using DbDataSync.Scripting.Abstractions;
+                using DbDataKit.Sync.Scripting.Abstractions;
 
                 public sealed class Pad : ISqlColumnExpression
                 {
@@ -130,7 +130,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     public void AScriptCanBranchOnTheEngine()
     {
         var result = Apply([Map("Region")], Compile("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class PerEngine : ISqlColumnExpression
             {
@@ -150,7 +150,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
         var result = Apply(
             [Map("Amount")],
             Compile("""
-                using DbDataSync.Scripting.Abstractions;
+                using DbDataKit.Sync.Scripting.Abstractions;
 
                 public sealed class ByType : ISqlColumnExpression
                 {
@@ -167,7 +167,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     public void AScriptThatThrows_FailsNamingTheColumnItWasWorkingOn()
     {
         var ex = Assert.Throws<ScriptExecutionException>(() => Apply([Map("Region")], Compile("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Boom : ISqlColumnExpression
             {
@@ -183,7 +183,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     public void AScriptDemandingAMissingRequiredParameter_SaysWhichOne()
     {
         var ex = Assert.Throws<ScriptExecutionException>(() => Apply([Map("Region")], Compile("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class NeedsIt : ISqlColumnExpression
             {
@@ -198,7 +198,7 @@ public sealed class ScriptedColumnTransformTests : IDisposable
     public void ARelationshipSourcedColumn_ResolvesMetadataFromItsOwnRelationshipCache_NotThePrimaryOne()
     {
         var byType = Compile("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class ByType : ISqlColumnExpression
             {
@@ -244,6 +244,6 @@ public sealed class ScriptedColumnTransformTests : IDisposable
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
         public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Sync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 }

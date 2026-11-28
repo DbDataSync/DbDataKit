@@ -1,3 +1,4 @@
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Drivers.Descriptor;
 using DbDataSync.Libraries;
 

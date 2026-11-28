@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 namespace DbDataSync.State.Tests;
 
 /// <summary>
@@ -495,7 +495,7 @@ public sealed class CrossEngineStateTests : IClassFixture<LibraryInstallFixture>
             return Task.CompletedTask;
         }
 
-        public Task<string> EnqueueSegmentsAsync(string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments, CancellationToken cancellationToken) =>
+        public Task<string> EnqueueSegmentsAsync(string replicationName, string mappingName, IReadOnlyList<DbDataKit.Sync.Core.Config.BatchReloadSegment> segments, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }

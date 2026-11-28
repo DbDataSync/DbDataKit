@@ -10,16 +10,16 @@
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
-  <!-- Reading a driver.yaml moved to the shared library DbDataKit.Sync.Drivers.Descriptor with its namespace; this assembly forwards to it
-       (TypeForwards.cs) and keeps what loads a library (DriverDescriptorReader.BuildDriver, DriverLoader) or compiles a driver.csx (DriverScriptHost). -->
+  <!-- Reading a driver.yaml is the shared library DbDataKit.Sync.Drivers.Descriptor; this assembly holds what loads a library
+       (DriverDescriptorReader.BuildDriver, DriverLoader) or compiles a driver.csx (DriverScriptHost). -->
   <ItemGroup>
     <DbDataKitReference Include="Sync.Drivers.Descriptor" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
+    <DbDataKitReference Include="Sync.Drivers.Generic" />
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
   </ItemGroup>
 

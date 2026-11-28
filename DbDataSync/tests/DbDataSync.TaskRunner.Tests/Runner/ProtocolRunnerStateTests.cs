@@ -1,6 +1,6 @@
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.State;
 using DbDataSync.TaskRunner.Runner;
 using Microsoft.Extensions.Logging.Abstractions;

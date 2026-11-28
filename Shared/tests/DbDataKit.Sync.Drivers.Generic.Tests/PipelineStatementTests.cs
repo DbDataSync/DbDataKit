@@ -1,7 +1,7 @@
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>The reader's and writer's generated SQL, per dialect, with no server.</summary>
 public sealed class PipelineStatementTests

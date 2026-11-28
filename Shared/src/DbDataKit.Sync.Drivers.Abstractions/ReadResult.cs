@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// <paramref name="NewWatermark"/> is computed by the reader up front (e.g. the Change Tracking

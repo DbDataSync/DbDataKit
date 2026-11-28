@@ -1,5 +1,5 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.Tracking;
 
@@ -38,7 +38,7 @@ public static class SyncPositionLogTargets
             string driver;
             try { driver = config.LoadConnection(name).DriverType; }
             catch (Exception ex) when (ex is FileNotFoundException or ConfigFileException or ConfigValidationException) { continue; }
-            if (DbDataSync.Core.Config.TrackingResolution.Resolve(task.Tracking, driver).EffectiveMode == "state") continue;
+            if (DbDataKit.Sync.Core.Config.TrackingResolution.Resolve(task.Tracking, driver).EffectiveMode == "state") continue;
             if (TargetPositionLog.EngineOf(driver) is { } engine) result.Add(new SyncPositionLogTarget(name, driver, engine));
         }
 

@@ -1,8 +1,8 @@
 using DbDataKit.Connections;
 using DbDataKit.Lineage;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Lineage;
+namespace DbDataKit.Sync.Core.Lineage;
 
 /// <summary>One replication with its table mappings, as the configuration holds them.</summary>
 public sealed record SyncReplication(ReplicationTaskConfig Task, IReadOnlyList<TableMappingConfig> Mappings);

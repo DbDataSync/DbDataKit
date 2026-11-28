@@ -1,7 +1,7 @@
 using DbDataKit.Connections;
 using DbDataKit.Lineage;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Lineage;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Lineage;
 
 namespace DbDataSync.State.Tests;
 
@@ -14,8 +14,8 @@ public sealed class SyncLineageTests : IDisposable
 
     private static readonly IReadOnlyDictionary<string, ConnectionConfig> Connections = new Dictionary<string, ConnectionConfig>
     {
-        ["crm"] = new() { Name = "crm", DriverType = DriverIds.MsSql, AuthMode = DbDataSync.Core.Config.AuthMode.IntegratedAuth, Host = "SQL01", Database = "Crm" },
-        ["dwh"] = new() { Name = "dwh", DriverType = DriverIds.Postgres, AuthMode = DbDataSync.Core.Config.AuthMode.IntegratedAuth, Host = "pg01", Database = "dwh" },
+        ["crm"] = new() { Name = "crm", DriverType = DriverIds.MsSql, AuthMode = DbDataKit.Sync.Core.Config.AuthMode.IntegratedAuth, Host = "SQL01", Database = "Crm" },
+        ["dwh"] = new() { Name = "dwh", DriverType = DriverIds.Postgres, AuthMode = DbDataKit.Sync.Core.Config.AuthMode.IntegratedAuth, Host = "pg01", Database = "dwh" },
     };
 
     private static ReplicationTaskConfig Task() => new()

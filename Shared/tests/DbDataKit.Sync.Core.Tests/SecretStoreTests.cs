@@ -1,8 +1,8 @@
 using DbDataKit.Secrets;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Sync's secrets are in the shared encrypted store under the repository root, named <c>dbdatakit:sync:...</c> (plan 13, A04): they

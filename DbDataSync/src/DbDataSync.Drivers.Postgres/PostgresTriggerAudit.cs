@@ -1,5 +1,5 @@
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Postgres;
 

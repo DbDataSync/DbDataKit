@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.Planning;
 using DbDataSync.State;
 
@@ -43,7 +43,7 @@ internal sealed class EngineReconcileEnqueuer(ConfigRepository config, ProtocolP
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException)
         {
-            return Invalid(DbDataSync.Core.Sql.DriverFailures.Describe(ex));
+            return Invalid(DbDataKit.Sync.Core.Sql.DriverFailures.Describe(ex));
         }
 
         var kinds = new WorkItemKinds(ReaderKind, CacheKind, PipelineResolution.ReconcileWriterKind(task, tableMapping));

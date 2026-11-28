@@ -84,7 +84,7 @@ internal sealed partial class JdbcCommand : DbCommand
     /// own <c>createStatement</c>/<c>prepareStatement</c>/bind calls — can throw a real
     /// <c>java.sql.SQLException</c>. Translated to <see cref="JdbcSqlException"/> at this boundary so a
     /// raw Java exception never reaches <see cref="System.Data.Common.DbCommand"/>'s own ADO.NET-contract
-    /// callers (every reader/writer in <c>DbDataSync.Drivers.Generic</c> expects a
+    /// callers (every reader/writer in <c>DbDataKit.Sync.Drivers.Generic</c> expects a
     /// <see cref="System.Data.Common.DbException"/>-shaped failure, the same as every other provider in
     /// this repo already gives them) — see <see cref="JdbcSqlException"/>'s own doc comment for why this
     /// has to happen here, in this project, not downstream.</summary>
@@ -198,7 +198,7 @@ internal sealed partial class JdbcCommand : DbCommand
     /// Phase 172V: dispatches on <paramref name="parameter"/>'s own <c>.Value</c> CLR runtime type, not
     /// <c>.DbType</c> — found, not assumed, while getting a real write working. <c>GenericValueBinder</c>'s
     /// own watermark-parameter path sets <c>DbType</c> explicitly (from <c>dialect.ReadColumnType</c>),
-    /// which is how this worked at all for readers. <c>DbDataSync.Drivers.Generic.DbCommandExtensions
+    /// which is how this worked at all for readers. <c>DbDataKit.Sync.Drivers.Generic.DbCommandExtensions
     /// .AddParameter</c> — the plain helper <c>BatchInsertStagingProvider</c> uses for every staged
     /// value, on every engine — never sets it, and <see cref="JdbcParameter.DbType"/> has no fallback
     /// inference the way <c>SqlParameter</c>/<c>NpgsqlParameter</c> do internally when left at its default

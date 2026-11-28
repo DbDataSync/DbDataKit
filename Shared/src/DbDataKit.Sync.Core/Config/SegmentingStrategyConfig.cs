@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>How a segmenting strategy produces its candidates — see phase 58.</summary>
 public enum SegmentingStrategyKind

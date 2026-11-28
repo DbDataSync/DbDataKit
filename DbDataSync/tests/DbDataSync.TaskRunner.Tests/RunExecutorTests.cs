@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 using DbDataSync.Scripting;
 using DbDataKit.Config.Git;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Libraries;
 using DbDataSync.State;
@@ -15,7 +15,7 @@ using Xunit;
 namespace DbDataSync.TaskRunner.Tests;
 
 /// <summary>
-/// Exercises RunExecutor against real DbDataSync.Core (git-backed config) and DbDataSync.State (SQLite)
+/// Exercises RunExecutor against real DbDataKit.Sync.Core (git-backed config) and DbDataSync.State (SQLite)
 /// infrastructure — everything except an actual database connection, so these don't need SQL Server
 /// and aren't tagged Category=Integration. A true end-to-end run against real MSSQL is covered
 /// separately (see DbDataSync.TaskRunner.Tests' Integration-tagged tests).
@@ -513,7 +513,7 @@ public sealed class RunExecutorTests : IDisposable
     /// <summary>
     /// The retarget's own guarantee: <see cref="ReadIntent.InitialLoad"/> is never refused, regardless
     /// of what a reader declares — the Watermark reader here declares only <c>Changes</c> and
-    /// <c>ChangesFromLatest</c> (see <see cref="DbDataSync.Drivers.Generic.WatermarkReader.SupportedIntents"/>),
+    /// <c>ChangesFromLatest</c> (see <see cref="DbDataKit.Sync.Drivers.Generic.WatermarkReader.SupportedIntents"/>),
     /// so a refusal check that did not exempt <c>InitialLoad</c> would refuse it too. Instead this run
     /// gets past the check and fails on the unreachable connection — proof the exemption is real,
     /// not merely that this reader happens to support it.

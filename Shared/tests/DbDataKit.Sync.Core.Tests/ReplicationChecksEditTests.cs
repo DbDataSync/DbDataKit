@@ -1,10 +1,10 @@
 using DbDataKit.Config.Git;
 using DbDataKit.Quality;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Plan 33 UE07: the checks of a replication saved from a screen. The section is written from the forms and the whole file is read again by the strict reader; what the file has outside the section stays as written (comments, line ends),

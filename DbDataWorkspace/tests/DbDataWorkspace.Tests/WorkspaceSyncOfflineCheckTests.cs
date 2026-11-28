@@ -276,8 +276,20 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var found = CheckOf(Draft(sourceEngine: "flightsql"));
         var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
         Assert.Contains("the flightsql driver's type map", unknown.Message);
+        Assert.Single(found, d => d.Code == SyncOfflineCheck.UnknownType && d.Message.Contains("'status'", StringComparison.Ordinal));
         Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
         Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("filter names 'regoin_code'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_flight_sql_connection_with_a_dialect_reads_a_name_ansi_does_not_have_as_that_engines()
+    {
+        var crm = "schema: connection/1\nname: crm\nengine: flightsql\ndialect: sqlserver\naddress:\n  host: crm.example.com\n  database: crm";
+        var found = CheckOf(Draft(files: [("config/connections/crm.yaml", crm)]));
+        // nvarchar is not an ANSI name (the test above finds it unknown with no dialect); geography is not one SQL Server's type map reads either
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.UnknownType && d.Message.Contains("'status'", StringComparison.Ordinal));
+        Assert.Contains("(with the sqlserver dialect)", One(found, SyncOfflineCheck.UnknownType, "'location'").Message);
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
     }
 
     // the replication reads by watermark, so its writer is the default behind an incremental reader: ChangeApply, which matches rows on the target's key
@@ -362,6 +374,17 @@ public sealed class WorkspaceSyncOfflineCheckTests
 
         var stated = CheckOf(Draft(Unkeyed, cache: NoSourceKey, task: Edited(scd2, "    kind: Scd2", "    kind: Scd2\n    options:\n      naturalKey: id")));
         Assert.DoesNotContain(stated, d => d.Code == SyncOfflineCheck.Key && d.Message.Contains("would refuse", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_delete_sweep_on_a_cached_target_with_no_primary_key_is_a_finding_in_the_writers_words()
+    {
+        var sweeping = WatermarkTask + "\nreconcile:\n  enabled: true";
+        var unkeyedTarget = Cache.Replace("{name: order_no, type: bigint, nullable: false, key: true}", "{name: order_no, type: bigint, nullable: false}");
+        var key = One(CheckOf(Draft(NoStatedKey, cache: unkeyedTarget, task: sweeping)), SyncOfflineCheck.Key, "'KeyReconcileDelete' would refuse");
+        Assert.Contains("Table mapping 'orders' target has no cached primary key", key.Message);
+
+        Assert.DoesNotContain(CheckOf(Draft(NoStatedKey, task: sweeping)), d => d.Message.Contains("'KeyReconcileDelete' would refuse", StringComparison.Ordinal));
     }
 
     [Fact]

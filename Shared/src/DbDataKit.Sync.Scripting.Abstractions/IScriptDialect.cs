@@ -1,14 +1,14 @@
 using DbDataKit.Dialect;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// What a script is told about the engine it is generating SQL for.
 /// <para>
 /// Deliberately narrower than the driver layer's own <c>SqlDialect</c>, and deliberately not that type:
-/// the dialect lives in <c>DbDataSync.Drivers.Generic</c>, which references this project, so taking it
+/// the dialect lives in <c>DbDataKit.Sync.Drivers.Generic</c>, which references this project, so taking it
 /// here would be circular. It is also a moving target — it gained four hooks across three phases — and
 /// a script written today should still compile when it gains a fifth.
 /// </para>
@@ -16,7 +16,7 @@ namespace DbDataSync.Scripting.Abstractions;
 public interface IScriptDialect
 {
     /// <summary>The engine's name, for a script that has to branch: <c>MsSql</c>, <c>Postgres</c>.
-    /// Matches <see cref="DbDataSync.Core.Config.DriverIds"/>'s built-in values.</summary>
+    /// Matches <see cref="DbDataKit.Sync.Core.Config.DriverIds"/>'s built-in values.</summary>
     string EngineName { get; }
 
     string QuoteIdentifier(string identifier);

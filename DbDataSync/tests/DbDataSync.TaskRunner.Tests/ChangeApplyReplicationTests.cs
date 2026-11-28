@@ -1,10 +1,10 @@
 using System.Data.Common;
 using System.Globalization;
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
 using DbDataSync.TaskRunner.Runner;

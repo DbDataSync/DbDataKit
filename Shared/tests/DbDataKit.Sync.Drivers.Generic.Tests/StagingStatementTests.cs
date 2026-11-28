@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// The staging provider's generated SQL and — the part with a known defect behind it — its batching

@@ -1,7 +1,7 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>SQL Server's answers to the mechanical variations in <see cref="SqlDialect"/>: bracket
 /// quoting and <c>@</c>-prefixed parameters, both in statement text and when binding.</summary>

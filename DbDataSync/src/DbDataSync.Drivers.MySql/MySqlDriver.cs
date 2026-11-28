@@ -1,11 +1,11 @@
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataKit.Connections.MySql;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using MySqlConnector;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.MySql;
 
@@ -13,7 +13,7 @@ namespace DbDataSync.Drivers.MySql;
 /// MySQL and MariaDB, on MySqlConnector.
 /// <para>
 /// It registers nothing of its own beyond the trigger-audit DDL: every reader, staging provider and
-/// writer here is <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="MySqlDialect"/> — the same
+/// writer here is <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="MySqlDialect"/> — the same
 /// claim <c>PostgresDriver</c>'s own doc comment makes, now proven a second time. The binlog-based
 /// native alternative (<c>change-tracking-mysql.md</c>) is a later phase; nothing here is waiting on it.
 /// </para>

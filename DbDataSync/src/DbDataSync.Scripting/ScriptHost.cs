@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using DbDataSync.Core.Config;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.Scripting;
 

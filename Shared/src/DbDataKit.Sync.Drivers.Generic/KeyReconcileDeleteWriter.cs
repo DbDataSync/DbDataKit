@@ -1,9 +1,9 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Deletes target rows within a segment's scope whose key is absent from the staged key set — never
@@ -44,10 +44,7 @@ public sealed class KeyReconcileDeleteWriter(SqlDialect dialect, ITableCatalog c
         await dialect.UseDatabaseAsync(targetConnection, target.Database, cancellationToken);
 
         var shape = TargetShape.FromCachedColumns(dialect, mappingName, targetColumns, target, columnMappings);
-        if (shape.PrimaryKeyColumns.Count == 0)
-            throw new InvalidOperationException(
-                $"Table mapping '{mappingName}' target has no cached primary key — the KeyReconcileDelete " +
-                "writer needs one to anti-join staged keys against. Use Refresh metadata on this mapping.");
+        RequireKey(shape, mappingName);
 
         var segment = SegmentSerializer.ReadOptional(options);
         var guard = DeleteGuardOption.Read(options);
@@ -121,6 +118,17 @@ public sealed class KeyReconcileDeleteWriter(SqlDialect dialect, ITableCatalog c
                     ? $"Guarded: rolled back if this would delete more than {ratio.MaxRatio:P0} of the scope's rows."
                     : "Unguarded — every row in scope absent from the staged set is deleted."),
         ];
+    }
+
+    /// <summary>The target's primary key, which the sweep anti-joins the staged keys against; throws, saying what to do, when the cached target has none.
+    /// The offline check of a sync project calls this too.</summary>
+    public static IReadOnlyList<string> RequireKey(TargetShape shape, string mappingName)
+    {
+        if (shape.PrimaryKeyColumns.Count == 0)
+            throw new InvalidOperationException(
+                $"Table mapping '{mappingName}' target has no cached primary key — the KeyReconcileDelete " +
+                "writer needs one to anti-join staged keys against. Use Refresh metadata on this mapping.");
+        return shape.PrimaryKeyColumns;
     }
 }
 

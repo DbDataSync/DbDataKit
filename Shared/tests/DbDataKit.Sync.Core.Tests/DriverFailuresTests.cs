@@ -1,10 +1,10 @@
 using System.Data.Common;
 using DbDataKit.Connections;
 using DbDataKit.Dialect;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>A driver's failure reaches an operator as the shared classifier's message, never as the driver's own text (plan 13, A10).</summary>
 [Collection("DriverFailures")]

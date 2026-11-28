@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 /// <summary>
 /// The one piece of logic every one of phase 91's six run-time consumers routes through: look a column

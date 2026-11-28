@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Descriptor;
+namespace DbDataKit.Sync.Drivers.Descriptor;
 
 /// <param name="Id">A stable id an operator names with <c>config driver install --from &lt;id&gt;</c>,
 /// or the web console's one-click "add" (phase 120's <c>POST /api/drivers/from-catalog</c>) names as

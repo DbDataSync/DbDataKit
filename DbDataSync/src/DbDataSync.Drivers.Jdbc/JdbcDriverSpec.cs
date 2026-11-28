@@ -1,6 +1,6 @@
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Jdbc;
 
@@ -33,7 +33,7 @@ namespace DbDataSync.Drivers.Jdbc;
 /// present in the template, or carried as a JDBC property under <see cref="ConnectionStringKeys"/>'s own
 /// key name if the template doesn't reference it, so a resolved value is never silently dropped. Never
 /// <c>{password}</c> — a credential is always a property, never a template placeholder (matching the
-/// "never in the URL" rule <see cref="DbDataSync.Core.Config.ConnectionConfig.ConnectionString"/>'s own
+/// "never in the URL" rule <see cref="DbDataKit.Sync.Core.Config.ConnectionConfig.ConnectionString"/>'s own
 /// doc comment already documents). Null (the pre-175M default) preserves the original contract exactly: an operator
 /// must supply the complete, final JDBC URL via <c>ConnectionConfig.ConnectionString</c> — see
 /// <see cref="JdbcGenericDriver.CreateConnection"/>'s own check.</param>

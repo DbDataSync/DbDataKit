@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>The four points around one unit of work's staging and loading — see phase 26. A list per
 /// point runs in declared order; the config key names never renumber, the same reason

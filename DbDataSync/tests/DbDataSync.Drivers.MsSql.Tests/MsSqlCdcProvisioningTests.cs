@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 
 namespace DbDataSync.Drivers.MsSql.Tests;

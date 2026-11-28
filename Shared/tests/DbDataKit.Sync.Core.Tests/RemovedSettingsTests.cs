@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Plan 13, X05 and plan 13a, X06 (clean break): the passkey settings, <c>App:AlternateUrls</c> (their one reader), Windows sign-in and network trust are refused with a message that names the setting, never ignored.

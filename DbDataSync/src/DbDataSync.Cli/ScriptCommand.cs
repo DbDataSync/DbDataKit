@@ -2,8 +2,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using DbDataKit.Cli;
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.Scripting;
 
 namespace DbDataSync.Cli;

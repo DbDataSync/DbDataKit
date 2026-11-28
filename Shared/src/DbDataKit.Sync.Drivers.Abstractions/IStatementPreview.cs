@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>Where a statement in a preview came from, which is the first thing an operator wants to
 /// know about one they did not expect to see.</summary>
@@ -70,7 +70,7 @@ public sealed record GeneratedColumnExpression(string Column, string Expression)
 /// The source side's columns, resolved once by <c>PreviewService</c> before any component's
 /// <see cref="IStatementPreview.DescribeAsync"/> runs — phase 167V. Preview stays live on purpose (it
 /// shows an operator today's real table, not a possibly-stale cache — see
-/// <c>DbDataSync.Drivers.Generic.TargetShape</c>'s own doc comment for the target-side version of this
+/// <c>DbDataKit.Sync.Drivers.Generic.TargetShape</c>'s own doc comment for the target-side version of this
 /// same reasoning), but it goes live through <c>ScriptedMetadata</c>, the same path browsing and mapping
 /// refresh already use, rather than a component calling its driver's native catalog directly and
 /// silently ignoring a bound <c>metadataProvider</c> script. A component that needs the source's columns
@@ -78,7 +78,7 @@ public sealed record GeneratedColumnExpression(string Column, string Expression)
 /// </param>
 /// <param name="TargetColumns">As <paramref name="SourceColumns"/>, for the target side — what a writer's
 /// own <c>DescribeAsync</c> reads instead of asking its catalog, via
-/// <c>DbDataSync.Drivers.Generic.TargetShape.FromColumns</c>.</param>
+/// <c>DbDataKit.Sync.Drivers.Generic.TargetShape.FromColumns</c>.</param>
 /// <param name="Relationships">This mapping's own declared <see cref="RelationshipConfig"/>s — phase
 /// 186J, the same list <see cref="IChangeReader.ReadChangesAsync"/> receives. A reader's own preview has
 /// to show the real statement it would run, joins included, so it needs the same input the real read

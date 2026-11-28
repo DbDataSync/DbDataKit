@@ -1,9 +1,9 @@
 using System.Data.Common;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Libraries;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.State;
 
 namespace DbDataSync.Scripting;

@@ -1,9 +1,9 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Sql;
-using MySqlDialect = DbDataSync.Core.Sql.MySqlDialect;
-using OracleDialect = DbDataSync.Core.Sql.OracleDialect;
+using DbDataKit.Sync.Core.Sql;
+using MySqlDialect = DbDataKit.Sync.Core.Sql.MySqlDialect;
+using OracleDialect = DbDataKit.Sync.Core.Sql.OracleDialect;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Sync's dialects answer from the shared type tables (<c>DbDataKit.Dialect</c>): what a column read on one engine becomes on another.

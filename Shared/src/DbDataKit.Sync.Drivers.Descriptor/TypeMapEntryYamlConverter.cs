@@ -2,7 +2,7 @@ using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization;
 
-namespace DbDataSync.Drivers.Descriptor;
+namespace DbDataKit.Sync.Drivers.Descriptor;
 
 /// <summary>
 /// Reads a <c>typeMap</c> value in either of its two shapes — a bare scalar (<c>datetime: Timestamp</c>)

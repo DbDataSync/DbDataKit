@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 /// <summary>
 /// The chokepoint is only worth having if everything goes through it, and nothing about the type

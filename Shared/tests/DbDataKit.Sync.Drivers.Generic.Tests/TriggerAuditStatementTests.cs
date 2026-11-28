@@ -1,6 +1,6 @@
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// The read against a trigger-maintained shadow table, which is the engine-neutral half of this

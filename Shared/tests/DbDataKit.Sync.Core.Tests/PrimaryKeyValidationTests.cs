@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Phase 201M: a mapping's stated primary key names each column once and only columns it maps.</summary>
 public sealed class PrimaryKeyValidationTests

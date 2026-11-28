@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Which key a reader or writer matches rows on, and so refuses a mapping without: what a screen and an offline check can ask of a Kind before

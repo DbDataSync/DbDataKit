@@ -1,5 +1,5 @@
 using DbDataSync.Drivers.Postgres;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Postgres.Tests;
 

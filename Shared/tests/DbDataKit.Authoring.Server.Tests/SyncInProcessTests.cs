@@ -1,9 +1,9 @@
 using DbDataKit.Authoring.Server;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Provisioning;
 
 namespace DbDataKit.Authoring.Server.Tests;
 

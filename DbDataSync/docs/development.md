@@ -67,9 +67,12 @@ dotnet test --filter "Category=Integration"    # needs the engines from step 1 a
 
 - `src/DbDataSync.Cli` — the `dbdatasync` command line.
 - `../Shared/src/DbDataKit.Sync.Core` — config models, git-backed config store, secrets. It is a shared library because the Workspace reads a
-  sync project with it too. `src/DbDataSync.Core` forwards to it, so code built against `DbDataSync.Core` still runs. The other libraries in
-  `../Shared/src/DbDataKit.Sync.*` (`Drivers.Abstractions`, `Drivers.Generic`, `Drivers.Descriptor`, `Scripting.Abstractions`, `Provisioning`)
-  have a forwarding project of the same name under `src/` too. Their tests are in `../Shared/tests/DbDataKit.Sync.*.Tests`.
+  sync project with it too. The other libraries in `../Shared/src/DbDataKit.Sync.*` are `Drivers.Abstractions`, `Drivers.Generic`,
+  `Drivers.Descriptor`, `Scripting.Abstractions` and `Provisioning`. Each library's namespace is its assembly's name (`DbDataKit.Sync.Core.Config`,
+  `DbDataKit.Sync.Scripting.Abstractions`), and Sync's projects reference them with `<DbDataKitReference Include="Sync.Core" />`. Their tests are in
+  `../Shared/tests/DbDataKit.Sync.*.Tests`.
+- `src/DbDataSync.Drivers.Descriptor` — what loads a driver: the library behind a `driver.yaml` (`DriverDescriptorReader.BuildDriver`,
+  `DriverLoader`) and the compiler of a `driver.csx` (`DriverScriptHost`). Reading a `driver.yaml` is the shared `DbDataKit.Sync.Drivers.Descriptor`.
 - `src/DbDataSync.State` — the engine's records (drain requests, batches, positions) kept in a Runner's state.
 - `src/DbDataSync.Scripting` — the script compiler and host, and the script test, schema browsing and opener of a configured connection a program composes.
 - `../Shared/src/DbDataKit.Sync.Drivers.Abstractions` — the driver interfaces and capability discovery.

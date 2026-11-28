@@ -1,9 +1,9 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using System.Text.Json;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 /// <summary>
 /// Segments cross two round-trip boundaries — the per-work-item options channel and a standalone

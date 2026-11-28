@@ -214,3 +214,5 @@ backup/work/ci-24
 # --- group 26: an earlier session-start hook (2026-11-14 and 15, .claude/hooks/session-start.sh, never on main), replaced by CLAUDE.md's Docker steps and CLOUDDEV-6 (deletion approved by the owner)
 claude/gifted-wozniak-8lddde
 claude/keen-davinci-rqddww
+# --- group 27: planning/connections (2026-11-28), contained in main at 2276588b2 (git rev-list <branch> --not main is empty); no pull request deletes it
+planning/connections

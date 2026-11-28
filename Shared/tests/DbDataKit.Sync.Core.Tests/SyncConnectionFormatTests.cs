@@ -1,11 +1,11 @@
 using DbDataKit.Config.Git;
 using DbDataKit.Connections;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
-using AuthMode = DbDataSync.Core.Config.AuthMode;
+using AuthMode = DbDataKit.Sync.Core.Config.AuthMode;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Plan 13, E01: a Sync connection is a <c>connection/1</c> file, with what only Sync has under <c>extensions.sync</c>; the form of earlier releases is refused with a message naming the file.</summary>
 public sealed class SyncConnectionFormatTests : IDisposable

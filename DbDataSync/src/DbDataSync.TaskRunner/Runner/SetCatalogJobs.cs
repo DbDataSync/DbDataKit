@@ -6,12 +6,12 @@ using DbDataKit.Metadata;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Libraries;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.Scripting;
 using MetadataTableRef = DbDataKit.Metadata.TableRef;
 

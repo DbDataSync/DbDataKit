@@ -6,6 +6,7 @@ weekly full runs since.
 
 | Test | Signature of the failure | First seen | Fix |
 | --- | --- | --- | --- |
+| `ConsoleDeployTests.Deploying_a_build_to_prod_runs_its_preflight_on_the_staged_version...` (and any console or Workspace test that runs a staged version's task) | about 2 minutes, then `The preflight (run ...) has not ended after 120 seconds.`, or a staged run that never leaves `Pending` | 2026-11-28 | fix on `backup/syncauthoring-8` (the Runner's loop could forget the package of a run of a version that is not served, queued while it ticked; see `docs/ci-lessons.md`) |
 | Runner `SchedulerTests.A_loop_that_stalled_and_wakes_up...(Sqlite)`, Windows | `TimeoutException: Gave up waiting for 1 runs to have started` | 2026-11-26 | cause not found; the test now names the items in flight and each loop's problems when it fails (CI flakes, #492) |
 | `workspace-publish.spec.ts:130` | 420 s timeout waiting for `getByTestId('wsp-build')` | 2026-11-24 | fix merged (#492: the Workspace page kept the tab picked while a Delete was refreshing) |
 | `DataChangeNotifierTests.The_call_is_signed_as_the_server_itself...` | `ArgumentOutOfRangeException: Index was out of range` | 2026-11-24 | fix merged (#492: the test's fake records calls under a lock) |

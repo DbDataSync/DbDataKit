@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Verification;
 
 namespace DbDataSync.Verification.Tests;

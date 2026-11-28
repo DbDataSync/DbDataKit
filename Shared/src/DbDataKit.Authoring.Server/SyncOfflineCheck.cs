@@ -4,13 +4,13 @@ using DbDataKit.Catalog;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Descriptor;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Provisioning;
-using Sql = DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Provisioning;
+using Sql = DbDataKit.Sync.Core.Sql;
 
 namespace DbDataKit.Authoring.Server;
 
@@ -24,7 +24,7 @@ namespace DbDataKit.Authoring.Server;
 /// Types are read by Sync's own code, so the check and the engine agree on a type: a side's columns through Sync's column reader over the cache
 /// (<see cref="MappingColumnReader"/>, <see cref="SyncCatalogColumns"/>), each native type through the driver's Sync dialect (the built-in engines' dialects
 /// over the shared type tables, the type map of a <c>driver.yaml</c>, ANSI first for a Flight SQL server), then the two sides compared by the shared
-/// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataSync.Drivers.Generic</c>), in their own
+/// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataKit.Sync.Drivers.Generic</c>), in their own
 /// words; an engine's own reader or writer (change tracking, a logical slot, an engine's merge) by the key the built-in drivers' table
 /// (<see cref="BuiltInDriverCapabilities"/>) says it needs. A Kind of a driver the project carries is reported as not checked offline.
 /// </para>
@@ -221,11 +221,11 @@ public static class SyncOfflineCheck
                 return new(engine, builtIn, builtIn.ReadColumnType, FilterReader.Of(DialectCatalog.Builtin.Get(engine)), $"the {engine} driver's type map", null);
             if (engine == "flightsql")
             {
-                // A Flight SQL column reports an ANSI type name, whatever engine the server fronts; a name ANSI does not have is read as that engine's.
                 if (dialectName is null)
-                    return new(engine, Sql.AnsiDialect.Instance, Sql.AnsiDialect.Instance.ReadColumnType, FilterReader.Of(ansi), "the flightsql driver's type map", null);
+                    return new(engine, Sql.AnsiDialect.Instance, native => Sql.FlightSqlTypes.Read(Sql.AnsiDialect.Instance, native), FilterReader.Of(ansi),
+                        "the flightsql driver's type map", null);
                 if (BuiltInEngines.TryGetValue(dialectName, out var inner))
-                    return new(engine, inner, native => Sql.AnsiDialect.Instance.ReadColumnType(native) is { IsMapped: true } read ? read : inner.ReadColumnType(native),
+                    return new(engine, inner, native => Sql.FlightSqlTypes.Read(inner, native),
                         FilterReader.Of(DialectCatalog.Builtin.Get(dialectName)), $"the flightsql driver's type map (with the {dialectName} dialect)", null);
                 return new(engine, null, null, null, "", $"the dialect '{dialectName}' is not one a flightsql connection takes");
             }
@@ -563,22 +563,21 @@ public static class SyncOfflineCheck
                 case GenericDriverKinds.KeyReconcile when sourceColumns is not null:
                     return Refused(() => KeyReconcileReader.KeyColumnMappings(mapping.ColumnMappings, sourceColumns, mapping.Name));
                 case GenericDriverKinds.ChangeApply when targetColumns is not null:
-                    // a mapped column whose source is not in the cache is not in a table provisioning would create; the column checks name it
-                    var written = mapping.ColumnMappings.Where(m => targetColumns.Any(c => string.Equals(c.Name, m.TargetColumn, StringComparison.OrdinalIgnoreCase))).ToList();
-                    return Refused(() => ChangeApplyWriter.RequireKey(
-                        TargetShape.FromCachedColumns(targetInfo?.Dialect ?? Sql.AnsiDialect.Instance, mapping.Name, targetColumns, target.Ref, written), mapping.Name));
+                    return Refused(() => ChangeApplyWriter.RequireKey(Shape(targetColumns), mapping.Name));
                 case GenericDriverKinds.KeyReconcileDelete when targetColumns is not null:
-                    // the words of KeyReconcileDeleteWriter, which refuses a target with no key when the sweep applies
-                    return targetColumns.Any(c => c.IsPrimaryKey) ? null
-                        : $"Table mapping '{mapping.Name}' target has no cached primary key — the KeyReconcileDelete writer needs one to anti-join staged keys against. Use Refresh metadata on this mapping.";
+                    return Refused(() => KeyReconcileDeleteWriter.RequireKey(Shape(targetColumns), mapping.Name));
                 case GenericDriverKinds.Scd2 or GenericDriverKinds.KeyReconcileScd2Close when sourceColumns is not null:
-                    // the words of Scd2Writer, which refuses a pass with no natural key, stated or derived from the source's key
-                    if (options.TryGetValue(Scd2Writer.NaturalKeyOption, out var stated) && !string.IsNullOrWhiteSpace(stated)) return null;
-                    return NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings).Count > 0 ? null
-                        : $"The SCD Type 2 writer needs a '{Scd2Writer.NaturalKeyOption}': the column(s) that identify a row across its versions. None was derived — the source table has no primary key, or its key columns are not all mapped. Set it on this table mapping's Pipeline tab.";
+                    // the run derives the natural key from the source's key when it is not stated, before the writer asks for it
+                    return NaturalKeyDerivation.Derive(sourceColumns, mapping.ColumnMappings).Count > 0 ? null : Refused(() => Scd2Writer.RequireNaturalKey(options));
                 default:
                     return null;
             }
+
+            // The target as the writer sees it. A mapped column whose source is not in the cache is not in a table provisioning would create; the
+            // column checks name it.
+            TargetShape Shape(List<CachedColumn> columns) =>
+                TargetShape.FromCachedColumns(targetInfo?.Dialect ?? Sql.AnsiDialect.Instance, mapping.Name, columns, target.Ref,
+                    [.. mapping.ColumnMappings.Where(m => columns.Any(c => string.Equals(c.Name, m.TargetColumn, StringComparison.OrdinalIgnoreCase)))]);
         }
 
         private static string? Refused(Action rule)

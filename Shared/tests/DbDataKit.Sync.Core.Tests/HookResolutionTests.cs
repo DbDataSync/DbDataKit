@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Mapping, then replication, then connection — the same walk as <see cref="ScriptResolution"/>
 /// (via the shared <see cref="HierarchicalBinding"/> helper), applied to a hook point's list instead of

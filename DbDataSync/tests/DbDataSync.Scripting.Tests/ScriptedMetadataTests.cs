@@ -1,10 +1,10 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -26,7 +26,7 @@ public sealed class ScriptedMetadataTests : IDisposable
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
         var host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
         _metadata = new ScriptedMetadata(host, _configRepository);
@@ -80,8 +80,8 @@ public sealed class ScriptedMetadataTests : IDisposable
             using System.Linq;
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class HideAudit : IMetadataProvider
             {
@@ -114,8 +114,8 @@ public sealed class ScriptedMetadataTests : IDisposable
             using System.Linq;
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class FullName : IMetadataProvider
             {
@@ -148,8 +148,8 @@ public sealed class ScriptedMetadataTests : IDisposable
             using System.Collections.Generic;
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Invented : IMetadataProvider
             {
@@ -178,8 +178,8 @@ public sealed class ScriptedMetadataTests : IDisposable
             using System.Collections.Generic;
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Boom : IMetadataProvider
             {
@@ -217,8 +217,8 @@ public sealed class ScriptedMetadataTests : IDisposable
             using System.Collections.Generic;
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Named : IMetadataProvider
             {

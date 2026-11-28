@@ -1,9 +1,9 @@
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// CW01: the writer a pipeline gets when no writer is named. Behind an incremental reader it is <c>ChangeApply</c> (every engine), behind a reload reader

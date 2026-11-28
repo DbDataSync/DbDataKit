@@ -1,8 +1,8 @@
 using System.Data.Common;
 using System.Runtime.CompilerServices;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// The resolved connect and command timeouts for a source or target connection, and the one place a

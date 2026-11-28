@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Microsoft.Data.SqlClient;
 using Xunit;
 

@@ -1,7 +1,7 @@
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>One column a generated <c>CREATE TABLE</c> should carry, already translated into its
 /// *target* dialect's rendering — see <see cref="SqlDialect.WriteColumnType"/>. Identity/generated

@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespaces (DbDataSync.Core.*): DbDataSync's project of the same name forwards to this assembly. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Core</PackageId>
     <Description>Sync's configuration model: a replication, a table mapping, a connection and a script as their files say, the strict readers of those files, the configuration repository, the SQL dialects of the built-in engines and the secret references a connection names. Read by the replication engine and by the Workspace's authoring of a sync project.</Description>

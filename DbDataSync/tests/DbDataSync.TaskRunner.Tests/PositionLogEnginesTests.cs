@@ -1,5 +1,5 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
 namespace DbDataSync.TaskRunner.Tests;

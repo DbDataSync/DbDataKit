@@ -1,11 +1,11 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 using Microsoft.Data.SqlClient;
 using Xunit;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.MsSql.Tests;
 
@@ -31,7 +31,7 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
 
         var host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
@@ -84,8 +84,8 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
     /// </summary>
     private const string AuditQuery = """
         using System.Collections.Generic;
-        using DbDataSync.Drivers.Abstractions;
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Drivers.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class AuditQuery : ISourceQueryBuilder
         {
@@ -231,7 +231,7 @@ public sealed class ScriptedQueryReaderTests(MsSqlTestDatabase db) : IClassFixtu
             {
                 Manifest = new ScriptConfig { Name = "wrong-op", Kind = ScriptSlots.SqlColumnExpression },
                 Code = """
-                    using DbDataSync.Scripting.Abstractions;
+                    using DbDataKit.Sync.Scripting.Abstractions;
 
                     public sealed class WrongOp : ISourceQueryBuilder
                     {

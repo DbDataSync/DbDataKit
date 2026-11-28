@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 public static class SqlTypeName
 {

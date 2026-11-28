@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The Bulk Load pipeline — a second pipeline beside <see cref="ChangeProcessingConfig"/>, used for an

@@ -1,6 +1,6 @@
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// What staging can tell about a value from its runtime type alone, per target engine: the types a target column of a given canonical kind refuses

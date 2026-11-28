@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// A pass found its mapping's target table missing, the mapping has no target column cache, and the replication may not create the table itself (create-if-missing is off). Plan 28c E21, owner decision

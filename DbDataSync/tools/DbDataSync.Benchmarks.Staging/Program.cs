@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Data.Common;
 using DbDataSync.Benchmarks;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
 using Microsoft.Data.SqlClient;

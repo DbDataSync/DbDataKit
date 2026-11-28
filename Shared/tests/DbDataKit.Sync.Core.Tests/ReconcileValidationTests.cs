@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Phase 125's <see cref="ConfigValidation.ValidateReconcile"/> — mirrors
 /// <see cref="KeyReconcilePairingValidationTests"/>'s own shape, one level up. Phase 129 widens both

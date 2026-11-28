@@ -1,6 +1,6 @@
 using System.Data.Common;
 using DbDataKit.State.Tracking;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.Tracking;
 

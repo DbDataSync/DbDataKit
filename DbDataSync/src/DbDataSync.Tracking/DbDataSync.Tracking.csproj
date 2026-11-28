@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataSync.State.StateDatabase" Alias="StateDatabase" />   <!-- Sync's own, as in the API (plan 13, U04) -->

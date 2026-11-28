@@ -1,18 +1,18 @@
 using System.Data.Common;
 using System.Diagnostics;
 using DbDataKit.Connections.Oracle;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Oracle.ManagedDataAccess.Client;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Oracle;
 
 /// <summary>
 /// Oracle, on Oracle.ManagedDataAccess.Core (ODP.NET Core).
 /// <para>
-/// Every reader but one is <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="OracleDialect"/> —
+/// Every reader but one is <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="OracleDialect"/> —
 /// the same claim <c>PostgresDriver</c>'s and <c>MySqlDriver</c>'s own doc comments make.
 /// <see cref="OracleFlashbackReader"/> is the exception: Flashback Version Query syntax belongs to
 /// Oracle alone, so it is this phase's one genuinely new reader rather than a per-engine DDL class

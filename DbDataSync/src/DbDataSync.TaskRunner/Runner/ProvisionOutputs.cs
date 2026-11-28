@@ -1,5 +1,5 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Provisioning;
 
 namespace DbDataSync.TaskRunner.Runner;
 

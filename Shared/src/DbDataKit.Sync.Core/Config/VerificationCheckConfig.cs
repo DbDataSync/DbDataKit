@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>How a check's two queries are produced.</summary>
 public enum VerificationCheckKind

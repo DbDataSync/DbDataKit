@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// A <c>Primary</c> pass resolved against a mapping whose <see cref="ReadHold"/> is

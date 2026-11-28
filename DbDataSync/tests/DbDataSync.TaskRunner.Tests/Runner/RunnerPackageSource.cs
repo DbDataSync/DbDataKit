@@ -16,7 +16,7 @@ internal static class RunnerPackageSource
     /// The same for a replication between two engines (plan 28c E06d): the client library of each driver is installed beside the definition. SQL Server's and PostgreSQL's are seeded the way the product seeds them; MySQL's
     /// (which MariaDB uses too) and Oracle's are installed the way <c>config library install</c> does it, by the library id the driver names.
     /// </summary>
-    public static Task<string> CreateAsync(string repoRoot, params DbDataSync.Drivers.Abstractions.IDriver[] drivers) =>
+    public static Task<string> CreateAsync(string repoRoot, params DbDataKit.Sync.Drivers.Abstractions.IDriver[] drivers) =>
         CreateAsync(repoRoot, drivers.Select(d => d.DriverType).Distinct().ToList(), drivers.Select(d => d.RequiredLibraryId).OfType<string>().Distinct().ToList());
 
     private static async Task<string> CreateAsync(string repoRoot, IReadOnlyList<string> driverIds, IReadOnlyList<string> libraryIds)

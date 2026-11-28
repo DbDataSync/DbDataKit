@@ -47,7 +47,7 @@
     <ProjectReference Include="..\DbDataSync.Libraries\DbDataSync.Libraries.csproj" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
     <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />   <!-- the script test (plan 33 SC23d1) -->
-    <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />   <!-- provisioning plan -->
+    <DbDataKitReference Include="Sync.Provisioning" />   <!-- provisioning plan -->
     <!-- the replication set's package (package publish) is the engine's own; its build output is the dbdatasync-runtime package of a Runner -->
     <ProjectReference Include="..\DbDataSync.TaskRunner\DbDataSync.TaskRunner.csproj" />
   </ItemGroup>

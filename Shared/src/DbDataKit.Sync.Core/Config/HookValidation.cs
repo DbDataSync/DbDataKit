@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The token/parameter check that is the SQL equivalent of compiling — see phase 26's "identifiers are

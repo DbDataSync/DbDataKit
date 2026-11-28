@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// Brackets a write with <c>SET IDENTITY_INSERT ... ON/OFF</c> when the target's identity column is

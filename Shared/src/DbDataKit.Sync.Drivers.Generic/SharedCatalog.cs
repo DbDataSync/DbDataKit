@@ -1,9 +1,9 @@
 using System.Data.Common;
 using DbDataKit.Metadata;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Reads a table's columns through a shared <c>DbDataKit.Metadata</c> reader (plan 13, A11) and returns them in the shape Sync's drivers use. The reader runs on the

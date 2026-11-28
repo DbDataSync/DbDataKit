@@ -1,11 +1,11 @@
 using DbDataKit.Connections.Postgres;
 using System.Data.Common;
 using System.Diagnostics;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Npgsql;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Postgres;
 
@@ -13,7 +13,7 @@ namespace DbDataSync.Drivers.Postgres;
 /// PostgreSQL, on Npgsql.
 /// <para>
 /// Most of this is not its own. Every writer, four of the five readers and one of the two staging
-/// providers is <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="PostgresDialect"/>. That is
+/// providers is <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="PostgresDialect"/>. That is
 /// the claim phases 17 and 18 made — a new engine is a dialect, a connection factory and a catalog —
 /// and it held unbroken for twenty phases.
 /// </para>

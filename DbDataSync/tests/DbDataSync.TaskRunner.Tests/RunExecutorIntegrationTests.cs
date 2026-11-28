@@ -1,11 +1,11 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 using DbDataSync.Scripting;
 using DbDataKit.Config.Git;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Libraries;
 using DbDataSync.State;
 using DbDataSync.TaskRunner;

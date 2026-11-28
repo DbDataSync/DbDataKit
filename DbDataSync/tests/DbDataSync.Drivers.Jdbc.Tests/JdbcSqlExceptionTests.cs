@@ -1,5 +1,5 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 using DbDataSync.Drivers.Jdbc.Ado;
 
 namespace DbDataSync.Drivers.Jdbc.Tests;

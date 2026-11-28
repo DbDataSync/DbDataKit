@@ -1,7 +1,7 @@
 using DbDataKit.Connections.Inventory;
-using DbDataSync.Core.Lineage;
+using DbDataKit.Sync.Core.Lineage;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The connections of a Sync server and who uses them (plan 28c ED17, E23): the server itself (its metadata browsing, tests and previews need the <c>read</c> login) and every replication that names the connection as a source or a target (a drain needs the

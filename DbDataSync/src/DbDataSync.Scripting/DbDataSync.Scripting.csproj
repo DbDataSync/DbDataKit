@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
-    <ProjectReference Include="..\DbDataSync.Scripting.Abstractions\DbDataSync.Scripting.Abstractions.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Generic" />
+    <DbDataKitReference Include="Sync.Scripting.Abstractions" />
     <!-- plan 33 SC23d1: the script test, schema browsing and the opener of a configured connection moved here from DbDataSync.Api, so the
          command line (script test) and any program that composes them reach them without the server. The opener implements Provisioning's
          IConnectionFactory and IColumnCatalog, and seeds a built-in driver's library through State's BuiltInDriverLibraries. No driver project:
          a program brings the drivers it registers. -->
-    <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />
+    <DbDataKitReference Include="Sync.Provisioning" />
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
   </ItemGroup>
 

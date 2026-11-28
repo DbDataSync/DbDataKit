@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// How a reader's SELECT list is joined together — one column per line rather than a single run-on

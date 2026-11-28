@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Microsoft.Data.SqlClient;
 using Xunit;
 

@@ -33,7 +33,7 @@ internal static class ScriptSyntaxGuard
     /// <para>
     /// <c>System.Threading</c> is deliberately **not** here, though it was until the row-transform
     /// contract was written against it. <c>ValueTask</c>, <c>Task</c> and <c>CancellationToken</c> live
-    /// there, so banning it makes <see cref="Abstractions.IRowTransform"/> literally unimplementable —
+    /// there, so banning it makes <see cref="DbDataKit.Sync.Scripting.Abstractions.IRowTransform"/> literally unimplementable —
     /// a guard that forbids the shape of the contract it is guarding is just broken. What it would have
     /// bought (<c>Thread.Sleep</c>) is a script blocking itself, which is a bug in that script and not
     /// a way out of the process.

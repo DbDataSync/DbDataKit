@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The format version Sync writes into each kind of file that has one, and the range it reads (the current format and the one before it, plan 33 section 6d): one number per kind, named here and nowhere else.

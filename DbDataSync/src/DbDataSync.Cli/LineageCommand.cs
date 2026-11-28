@@ -2,9 +2,9 @@ using DbDataKit.Cli;
 using DbDataKit.Config.Git;
 using DbDataKit.Lineage;
 using DbDataKit.Lineage.Cli;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Lineage;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Lineage;
+using DbDataKit.Sync.Core.Secrets;
 
 namespace DbDataSync.Cli;
 

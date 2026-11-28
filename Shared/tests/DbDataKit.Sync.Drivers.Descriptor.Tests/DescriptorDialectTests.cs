@@ -1,10 +1,10 @@
 using CanonicalKind = DbDataKit.Dialect.CanonicalKind;
 using CanonicalType = DbDataKit.Dialect.CanonicalType;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Descriptor;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Descriptor;
 using Xunit;
 
-namespace DbDataSync.Drivers.Descriptor.Tests;
+namespace DbDataKit.Sync.Drivers.Descriptor.Tests;
 
 public sealed class DescriptorDialectTests
 {
@@ -339,7 +339,7 @@ public sealed class DescriptorDialectTests
     }
 
     /// <summary>The other half of the same fix: an empty database is "nothing to switch to" (see
-    /// <c>DbDataSync.Core.Config.TableRef.Database</c>'s own doc comment), not a request this engine
+    /// <c>DbDataKit.Sync.Core.Config.TableRef.Database</c>'s own doc comment), not a request this engine
     /// refuses — so it never reaches the <c>supportsChangeDatabase: false</c> check at all. Passes a
     /// null connection deliberately: if this touched the connection in any way, it would throw a
     /// NullReferenceException instead of completing.</summary>

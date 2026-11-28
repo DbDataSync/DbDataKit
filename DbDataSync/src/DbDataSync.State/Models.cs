@@ -44,7 +44,7 @@ public enum RunKind
 /// The two lanes a replication's worker process drains in parallel, each with its own bounded channel,
 /// its own pool of consumers and its own configured degree of parallelism — so a long-running reload
 /// can never occupy a slot an incremental pass needs. See
-/// <c>DbDataSync.Core.Config.ChangeProcessingConfig</c> and phase-108.
+/// <c>DbDataKit.Sync.Core.Config.ChangeProcessingConfig</c> and phase-108.
 /// </summary>
 public enum RunLane
 {

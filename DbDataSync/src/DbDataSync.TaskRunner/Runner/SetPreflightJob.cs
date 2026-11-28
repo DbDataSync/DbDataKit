@@ -2,10 +2,10 @@ using System.Text.Json.Nodes;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Runner.Protocol;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.Libraries;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.Scripting;
 
 namespace DbDataSync.TaskRunner.Runner;

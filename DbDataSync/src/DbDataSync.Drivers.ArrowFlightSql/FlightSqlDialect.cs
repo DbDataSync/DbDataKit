@@ -1,5 +1,5 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.ArrowFlightSql;
 
@@ -98,7 +98,7 @@ public sealed class FlightSqlDialect(SqlDialect inner, char quoteOpen = '"', cha
             connection, transaction, qualifiedTable, overrideRequired, write, cancellationToken);
 
     public override DbDataKit.Dialect.TypeMapping<DbDataKit.Dialect.CanonicalType> ReadColumnType(string nativeType) =>
-        AnsiDialect.Instance.ReadColumnType(nativeType) is { IsMapped: true } ansi ? ansi : inner.ReadColumnType(nativeType);
+        FlightSqlTypes.Read(inner, nativeType);
 
     public override RenderedColumnType WriteColumnType(DbDataKit.Dialect.CanonicalType type, string? sourceNote = null) =>
         inner.WriteColumnType(type, sourceNote);

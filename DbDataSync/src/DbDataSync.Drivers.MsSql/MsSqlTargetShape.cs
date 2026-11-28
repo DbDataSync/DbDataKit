@@ -1,9 +1,9 @@
 using System.Data.Common;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.MsSql;
 
@@ -23,7 +23,7 @@ internal sealed class MsSqlTargetShape
     public const string OperationColumn = "__Operation";
 
     /// <summary>The staging table's per-pass row ordinal, which a chunked apply ranges over. Same
-    /// column, same purpose and same name as <see cref="Generic.BatchInsertStagingProvider.OrdinalColumn"/>
+    /// column, same purpose and same name as <see cref="DbDataKit.Sync.Drivers.Generic.BatchInsertStagingProvider.OrdinalColumn"/>
     /// — restated here because this driver stages into its own temp table rather than through the
     /// generic provider.</summary>
     public const string OrdinalColumn = "__Ordinal";
@@ -80,7 +80,7 @@ internal sealed class MsSqlTargetShape
     }
 
     /// <summary>The cache-only path every MERGE/delete-insert writer's real <c>ApplyAsync</c> uses as of
-    /// phase 91 — see <see cref="DbDataSync.Drivers.Generic.TargetShape.FromCachedColumns"/>, which this
+    /// phase 91 — see <see cref="DbDataKit.Sync.Drivers.Generic.TargetShape.FromCachedColumns"/>, which this
     /// mirrors exactly for the reason the two types exist side by side in the first place.</summary>
     public static MsSqlTargetShape FromCachedColumns(
         string mappingName,

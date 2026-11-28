@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
+    <DbDataKitReference Include="Sync.Drivers.Generic" />
     <!-- Phase 168V: for DriverDescriptorYaml, so JdbcGenericDriver.FromDescriptor can read one directly.
          One-directional — DbDataSync.Drivers.Descriptor does not reference this project back; it finds
          JdbcGenericDriver at runtime via Type.GetType on driver.yaml's own `base` type name, which only

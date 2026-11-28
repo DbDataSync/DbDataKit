@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Oracle.ManagedDataAccess.Client;
 using Xunit;
 

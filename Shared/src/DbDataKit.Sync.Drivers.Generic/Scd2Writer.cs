@@ -1,9 +1,9 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Slowly Changing Dimension Type 2: keeps every version of every key, rather than the current one.
@@ -295,13 +295,13 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
     /// assembly.
     /// </para>
     /// </summary>
-    internal static (IReadOnlyList<string> Keys, IReadOnlyList<string> Values) SplitColumns(
-        IReadOnlyDictionary<string, string> options,
-        IReadOnlyList<ColumnMapping> columnMappings,
-        TableRef target)
+    /// <summary>
+    /// The columns of the <see cref="NaturalKeyOption"/> setting, which a pass cannot run without: the option is stated, or the run derived it
+    /// from the source's key before the writer is called. Throws, saying what to set and where, when it is absent or blank. The offline check of
+    /// a sync project calls this too, when no key can be derived from the cached source.
+    /// </summary>
+    public static IReadOnlyList<string> RequireNaturalKey(IReadOnlyDictionary<string, string> options)
     {
-        var mapped = columnMappings.Select(m => m.TargetColumn).ToList();
-
         if (!options.TryGetValue(NaturalKeyOption, out var configured) || string.IsNullOrWhiteSpace(configured))
             throw new InvalidOperationException(
                 $"The SCD Type 2 writer needs a '{NaturalKeyOption}': the column(s) that identify a row " +
@@ -310,9 +310,16 @@ public sealed class Scd2Writer(SqlDialect dialect, ITableCatalog catalog) : ICha
                 $"{HistorizedColumns.SurrogateKey}, which says nothing about identity. Set it on this " +
                 "table mapping's Pipeline tab.");
 
-        var keys = configured
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
+        return configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
+    internal static (IReadOnlyList<string> Keys, IReadOnlyList<string> Values) SplitColumns(
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyList<ColumnMapping> columnMappings,
+        TableRef target)
+    {
+        var mapped = columnMappings.Select(m => m.TargetColumn).ToList();
+        var keys = RequireNaturalKey(options);
 
         var unmapped = keys.Where(k => !mapped.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
         if (unmapped.Count > 0)

@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Column names a reader appends to its own <see cref="ChangeSchema"/>, beyond the mapped business

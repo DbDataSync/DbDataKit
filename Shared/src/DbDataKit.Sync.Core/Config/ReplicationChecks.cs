@@ -1,7 +1,7 @@
 using DbDataKit.Config.Yaml;
 using DbDataKit.Quality;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The <c>checks:</c> section of a replication's <c>task.yaml</c> (plan 23a FQ04, format 2 of Sync's files). The strict check (<see cref="StrictConfigFile"/>) already reported every fault of the section with file and line; this reads what is valid

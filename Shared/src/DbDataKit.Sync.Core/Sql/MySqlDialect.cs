@@ -1,5 +1,5 @@
 using DbDataKit.Dialect;
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// MySQL and MariaDB, on MySqlConnector.

@@ -1,9 +1,9 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 using DuckDB.NET.Data;
 
 namespace DbDataSync.Scripting;

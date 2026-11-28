@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.Scripting;
 
 namespace DbDataSync.Scripting.Tests;
@@ -18,7 +18,7 @@ public sealed class SegmentingStrategyRunnerTests
         Sql = sql,
     };
 
-    private static Task<IReadOnlyList<Abstractions.SegmentCandidate>> RunAsync(
+    private static Task<IReadOnlyList<DbDataKit.Sync.Scripting.Abstractions.SegmentCandidate>> RunAsync(
         SegmentingStrategyConfig strategy, string? column = "OrderDate") =>
         Runner.RunAsync(strategy, column, null!, null, null, CancellationToken.None);
 

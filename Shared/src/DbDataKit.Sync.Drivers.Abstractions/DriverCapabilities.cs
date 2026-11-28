@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>What one registered driver can actually do, derived entirely from the declarative
 /// properties its readers/staging providers/writers expose — never from string-matching Kind values.

@@ -425,6 +425,58 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_run_of_a_version_not_served_asked_for_while_the_loop_ticks_is_always_claimed(string engine)
+    {
+        // the loop ticks on its own thread while a person's call queues the run: a tick that looks at the package between the call's steps must not forget it, or the run waits on the queue for ever
+        using var h = new SchedulerHarness(engine);
+        h.Versions.Add(Package, "3", Manifest(Package, Def("preflight", allowOverlap: true)));   // stored, not served: no projection row
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner);
+        var task = new TaskRef(Package, Channel, "preflight");
+        using var stop = new CancellationTokenSource();
+        var ticking = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested) await scheduler.TickAsync();
+        });
+        try
+        {
+            for (var i = 0; i < 60; i++)
+            {
+                var id = await scheduler.RunVersionAsync(task, "3", requestedBy: "Ada");
+                Assert.NotNull(id);
+                await Until(() => runner.Requests.Any(r => r.RunId == id), $"run {i + 1} ({id}) to be claimed", seconds: 10, h.Explain);
+            }
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await ticking;
+            await scheduler.WhenIdleAsync();
+        }
+    }
+
+    [Theory, MemberData(nameof(Engines))]
+    public async Task A_run_whose_record_has_ended_is_not_cancelled_again_while_its_loop_has_not_finished_its_item(string engine)
+    {
+        // the executor writes the run's end, then returns to the loop, which finishes the queue item: a cancel asked in between is told the run has ended, not that a stop was asked
+        using var h = new SchedulerHarness(engine);
+        h.Activate(Manifest(Package, Def("job")), "1");
+        var release = new TaskCompletionSource();
+        var runner = new FakeRunner(h.Database) { Behaviour = async (_, _) => { await release.Task; return new TaskEnd(TaskEndState.Succeeded); } };
+        var scheduler = h.NewScheduler(runner);
+        var id = scheduler.RunNow(new TaskRef(Package, Channel, "job"))!.Value;
+        await scheduler.TickAsync();
+        await FakeStarted(h, runner, 1);
+
+        Assert.Equal(RunCancelOutcome.Requested, scheduler.CancelRun(id).Outcome);
+        Assert.True(h.Runs.Finish(id, RunOutcome.Stopped));                // the executor recorded the end; the item still reads as held
+        Assert.Equal(RunCancelOutcome.AlreadyEnded, scheduler.CancelRun(id).Outcome);
+        release.SetResult();
+        await scheduler.WhenIdleAsync();
+        Assert.Equal(RunCancelOutcome.AlreadyEnded, scheduler.CancelRun(id).Outcome);
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_task_marked_by_hand_is_manual_only_and_runs_from_a_version_not_served_while_a_task_with_another_trigger_is_refused(string engine)
     {
         // the packages the products make say "manual: true" on a person's task (Sync's provision, a Store model's deploy and contract); that marks it as by hand, which starts nothing of its own

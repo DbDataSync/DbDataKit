@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Whether the segments of one reload of a mapping take turns or may run together (plan 13, M03). Chosen when the work is queued; a connection, a replication or a

@@ -1,7 +1,7 @@
 using DbDataKit.Runner.Kit;
 using DbDataKit.State.Tracking;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.State;
 using DbDataSync.Tracking;
 using Microsoft.Extensions.Logging;

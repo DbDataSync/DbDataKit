@@ -5,7 +5,7 @@ namespace DbDataKit.State;
 
 /// <summary>
 /// Where a <see cref="StateDialect"/> is looked up by its <see cref="StateEngineIds"/>-style string id
-/// — mirrors <c>DbDataSync.Drivers.Abstractions.DriverRegistry</c>'s own shape one layer down.
+/// — mirrors <c>DbDataKit.Sync.Drivers.Abstractions.DriverRegistry</c>'s own shape one layer down.
 /// <para>
 /// **SQLite registers into <see cref="Default"/> automatically**, not via an explicit call from each
 /// composition root — the option the phase doc's own "open questions" section left undecided between a

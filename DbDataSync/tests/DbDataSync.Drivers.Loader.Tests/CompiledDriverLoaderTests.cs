@@ -1,5 +1,6 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Drivers.Descriptor;
 using Xunit;
 
@@ -63,7 +64,7 @@ public sealed class CompiledDriverLoaderTests : IDisposable
         DriverLoader.LoadCompiledDrivers(_repoRoot, registry);
 
         Assert.True(registry.TryGet("fixture.loadertest", out var driver));
-        // The script is compiled against the host's DbDataSync.Drivers.Abstractions and its load context hands that name back to the default context; a private copy would make this a second IDriver.
+        // The script is compiled against the host's DbDataKit.Sync.Drivers.Abstractions and its load context hands that name back to the default context; a private copy would make this a second IDriver.
         Assert.IsAssignableFrom<IDriver>(driver);
     }
 

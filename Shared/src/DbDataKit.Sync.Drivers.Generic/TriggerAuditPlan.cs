@@ -1,6 +1,6 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <param name="ShadowTableExists">Whether the shadow table is already there.</param>
 /// <param name="TriggerExists">Whether the trigger that fills it is already there.</param>

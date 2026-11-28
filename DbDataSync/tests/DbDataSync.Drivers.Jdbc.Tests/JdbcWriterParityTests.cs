@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.Postgres;
 using Npgsql;
 
@@ -13,7 +13,7 @@ namespace DbDataSync.Drivers.Jdbc.Tests;
 /// writes the same change set into two target tables — one through <see cref="PostgresDialect"/>'s own
 /// native path, one through <see cref="JdbcGenericDriver"/>'s <c>java.sql.Connection</c> — and asserts the
 /// two targets end up identical. Every writer component (<see cref="BatchInsertStagingProvider"/>,
-/// <see cref="DeleteInsertWriter"/>) is <c>DbDataSync.Drivers.Generic</c>'s own, unchanged — this phase's
+/// <see cref="DeleteInsertWriter"/>) is <c>DbDataKit.Sync.Drivers.Generic</c>'s own, unchanged — this phase's
 /// entire scope was making <see cref="Ado.JdbcConnection.BeginDbTransaction"/> real, so what these
 /// tests actually pin is that a real <c>java.sql.Connection</c> transaction round-trips through it
 /// correctly, not any new SQL-generation logic.
