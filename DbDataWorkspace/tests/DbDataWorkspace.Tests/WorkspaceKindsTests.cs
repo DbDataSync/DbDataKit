@@ -78,6 +78,25 @@ public sealed class WorkspaceKindsTests
     }
 
     [Fact]
+    public async Task A_draft_that_imports_a_bun_macro_fails_its_check_naming_the_file_and_line()
+    {
+        await using var server = await WorkspaceHarness.StartAsync();
+        Assert.Equal(HttpStatusCode.Created, (await server.AsAdmin(HttpMethod.Post, "/api/v1/projects", """{"id":"orders"}""")).Response.StatusCode);
+        var id = (string)(await server.AsAda(HttpMethod.Post, "/api/v1/projects/orders/workspaces", """{"name":"draft"}""")).Body!["id"]!;
+        var root = $"/api/v1/projects/orders/workspaces/{id}";
+        await server.AsAda(HttpMethod.Put, root + "/files/src/stamp.ts", new JsonObject { ["content"] = "export const stamp = () => Date.now();\n" }.ToJsonString());
+        var main = (string)(await server.AsAda(HttpMethod.Get, root + "/files/src/main.tsx")).Body!["content"]!;
+        await server.AsAda(HttpMethod.Put, root + "/files/src/main.tsx", new JsonObject { ["content"] = "import { stamp } from './stamp.ts' with { type: 'macro' };\n" + main }.ToJsonString());
+
+        var checkedDraft = await server.AsAda(HttpMethod.Get, root + "/check");
+
+        Assert.False((bool)checkedDraft.Body!["ok"]!);
+        var found = Assert.Single(checkedDraft.Body!["diagnostics"]!.AsArray(), d => (string)d!["code"]! == "DBD-APP-028")!;
+        Assert.Equal(("error", "src/main.tsx", 1), ((string)found["severity"]!, (string)found["file"]!, (int)found["line"]!));
+        Assert.StartsWith("src/main.tsx:1: imports './stamp.ts' with { type: \"macro\" }, a Bun macro.", (string)found["message"]!);
+    }
+
+    [Fact]
     public async Task One_project_says_the_package_it_becomes_on_a_runner_to_a_person_who_may_read_it()
     {
         await using var server = await WorkspaceHarness.StartAsync();

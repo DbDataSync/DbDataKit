@@ -140,17 +140,39 @@ Example: on the replication `orders`, Ana picks the target `dw` and the database
 
 The Workspace holds no login of a customer database and never opens one. What a project's databases hold is read on a Runner, as a task run as the person who asked, with the login a channel binds to the project's slot: discovery of databases, schemas, tables and columns, a query's columns, the connection test, and each package's `preflight` before it is served in production. Before anything is published, **Set up for development** binds a slot in a non-production channel on the Runner with a login the person types once (it is sent to the Runner and kept nowhere in the Workspace). What discovery finds is committed in the draft as `catalog-cache.yaml` with the channel and Runner group it was read from, refreshed only on request with the difference shown, and read offline by the pickers and the draft's check; no row, sample, value statistic, login or address is kept. The design, with what is built and examples: [docs/authoring-metadata.md](../docs/authoring-metadata.md).
 
+## Where the Workspace connects
+
+The `outbound:` setting of `server.yaml` lists the places the Workspace server's own code may connect to. List the package sources and the git remotes of the projects:
+
+```yaml
+outbound:
+  - https://api.nuget.org
+  - https://nuget.example.com
+  - ssh://github.com
+```
+
+- `server.yaml` has no `outbound:` line: the server connects anywhere.
+- `outbound: []`: the server connects nowhere.
+- `outbound:` lists destinations: the server connects only to them. A call to any other address, such as a Runner's, fails before it connects. The server logs a warning and writes a line to `management-audit.log` with the command `outbound.refused`, the host and port, and the operation (for example `refused: git.push`). The line never holds the address's path, query or login.
+- An entry that is not valid stops the start, and the message names `server.yaml` and the entry.
+
+When a project has a git remote, the server pushes a draft only to a listed remote. An entry is `scheme://host[:port]`; the full form is in [`DbDataKit.Outbound`](../Shared/src/DbDataKit.Outbound/README.md).
+
+The programs the server starts (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, `dotnet` and Bun) open their own connections, and the list does not limit them. The NuGet restores of an integration and of a Sync set's driver libraries run in those programs.
+
+Three connections of the server's own process are not checked against the list either: the join to a console (`join-request.yaml`), the announcement to a console (`DBDATAKIT_ANNOUNCE_URL`) and the telemetry export (the `telemetry:` section). They connect to the addresses their settings name, whether or not the list has them.
+
 ## The server's directory
 
 | Path | What |
 | --- | --- |
-| `server.yaml` | the `state:` section (engine and connection) and the `apps:` section (how an app is built: `packageStore`, `allowedPackages`, `packageStoreSha256`, `isolation: required\|auto`, `buildTimeoutSeconds`, `bun`; a server with no `packageStore` does not build) |
+| `server.yaml` | the `state:` section (engine and connection), the `outbound:` list (where the server's own code may connect) and the `apps:` section (how an app is built: `packageStore`, `allowedPackages`, `packageStoreSha256`, `isolation: required\|auto`, `buildTimeoutSeconds`, `bun`; a server with no `packageStore` does not build) |
 | `state.db` | the state database on SQLite (the default); `DBDATAKIT_STATE_WORKSPACE_ENGINE` and `DBDATAKIT_STATE_WORKSPACE_CONNECTION`, or the `state:` section, name SQL Server or PostgreSQL |
 | `projects/<id>/` | a project the server made (a git repository); a project added by path stays where it is |
 | `workspaces/<project>/<id>/` and `<id>.json` | a workspace's worktree and the record that says whose it is (the layout Build's server has always had; `DbDataKit.Authoring`) |
 | `builds/<project>/<id>/` | a build: `app/` (the built folder) or `artifact/`, and `result.json` |
 | `secrets/` | the server's own secret store: the login of its state connection, when the state is on SQL Server or PostgreSQL |
-| `management-audit.log` | who made a project, requested a build or changed a draft, never a value |
+| `management-audit.log` | who made a project, requested a build or changed a draft, and each connection the outbound list refused; never a value |
 
 `DBDATAKIT_DATA_WORKSPACE` (or the folder `workspace` under `DBDATAKIT_DATA`) names the directory for every command; the service's own is `%ProgramData%\DbDataKit\workspace` (`/var/lib/dbdatakit/workspace`).
 

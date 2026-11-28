@@ -27,5 +27,6 @@
     <PackageVersion Include="DbDataKit.Secrets.Store" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets.Cli" Version="$(DbDataKitVersion)" />
     <PackageVersion Include="DbDataKit.Secrets" Version="$(DbDataKitVersion)" />
+    <PackageVersion Include="DbDataKit.Outbound" Version="$(DbDataKitVersion)" />
   </ItemGroup>
 </Project>
