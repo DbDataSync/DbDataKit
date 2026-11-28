@@ -221,6 +221,35 @@ public sealed class WorkspaceBuildTests
     }
 
     [Fact]
+    public async Task A_draft_that_imports_a_bun_macro_fails_its_build_naming_the_file_and_line_and_bun_is_not_started()
+    {
+        if (!OperatingSystem.IsLinux()) Assert.Skip("a shell script stands in for Bun");
+        // a Bun that leaves a mark when it is started
+        var folder = Directory.CreateTempSubdirectory("ddw-bun-").FullName;
+        var fake = Path.Combine(folder, "bun");
+        var mark = Path.Combine(folder, "started");
+        File.WriteAllText(fake, $"#!/bin/sh\ntouch '{mark}'\nexit 1\n");
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        await using var server = await WorkspaceHarness.StartAsync(apps: new WorkspaceAppSettings(AppStoreSupport.Require(), null, null, NetworkIsolation.IfAvailable, 60, fake));
+        var (_, workspace) = await DraftAsync(server);
+        var root = $"/api/v1/projects/orders/workspaces/{workspace}";
+        await server.AsAda(HttpMethod.Put, root + "/files/src/stamp.ts", new JsonObject { ["content"] = "export const stamp = () => Date.now();\n" }.ToJsonString());
+        var main = (string)(await server.AsAda(HttpMethod.Get, root + "/files/src/main.tsx")).Body!["content"]!;
+        await server.AsAda(HttpMethod.Put, root + "/files/src/main.tsx", new JsonObject { ["content"] = "import { stamp } from './stamp.ts' with { type: 'macro' };\n" + main }.ToJsonString());
+
+        var id = (string)(await server.AsAda(HttpMethod.Post, root + "/builds")).Body!["id"]!;
+        var done = await FinishedAsync(server, workspace, id);
+
+        Assert.Equal("failed", (string)done["build"]!["status"]!);
+        var found = done["result"]!["diagnostics"]!.AsArray().Select(d => d!).Single(d => d["file"] is not null && ((string)d["message"]!).Contains("Bun macro", StringComparison.Ordinal));
+        Assert.Equal(("src/main.tsx", 1), ((string)found["file"]!, (int)found["line"]!));
+        Assert.StartsWith("imports './stamp.ts' with { type: \"macro\" }", (string)found["message"]!);
+        Assert.Contains(done["result"]!["diagnostics"]!.AsArray(), d => (string)d!["message"]! == "The source imports a Bun macro; nothing was built.");
+        Assert.False(File.Exists(mark), "bun was started");
+        Directory.Delete(folder, true);
+    }
+
+    [Fact]
     public async Task A_machine_that_cannot_isolate_refuses_a_required_build_and_with_auto_builds_and_says_it_was_not_isolated()
     {
         if (NetworkIsolator.IsAvailable) Assert.Skip("this machine can make a network namespace, so the fallback is not reached here (CI sets DBDATAKIT_TEST_REQUIRE_NETNS)");

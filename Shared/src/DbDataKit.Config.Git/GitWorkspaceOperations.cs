@@ -108,15 +108,17 @@ public static class GitWorkspaceOperations
 
     /// <summary>
     /// Pushes <paramref name="branch"/> to the remote <c>origin</c>, as <paramref name="credential"/> when the remote needs a login (plan 13, W12; presented through libgit2's callback, never written anywhere). A refusal says which
-    /// credential was refused, in words and without the token.
+    /// credential was refused, in words and without the token. <paramref name="beforeConnect"/> is given the address the push connects to (the remote's push address, else its address) before anything connects:
+    /// a service's outbound list checks it there, and what it throws stops the push.
     /// </summary>
-    public static void Push(string worktree, string branch, GitCredential? credential = null)
+    public static void Push(string worktree, string branch, GitCredential? credential = null, Action<string>? beforeConnect = null)
     {
         var session = new CredentialSession(credential);
         try
         {
             using var repo = new Repository(worktree);
             var remote = repo.Network.Remotes["origin"] ?? throw new GitOperationException("The repository has no remote called origin.");
+            beforeConnect?.Invoke(remote.PushUrl ?? remote.Url);
             repo.Network.Push(remote, $"refs/heads/{branch}:refs/heads/{branch}", new PushOptions { CredentialsProvider = session.Handler });
         }
         catch (Exception ex) when (ex is LibGit2SharpException || CredentialSession.IsRefusal(ex))

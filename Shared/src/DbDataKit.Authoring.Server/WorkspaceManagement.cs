@@ -58,7 +58,7 @@ public static class WorkspaceManagement
         ("POST", "/api/v1/publisher-keys/{name}/pair", ConsoleDoesIt + ConsoleSigns),
     ];
 
-    public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds)
+    public static void Map(IEndpointRouteBuilder app, string instanceId, string product, string version, WorkspaceStore store, WorkspaceProjects projects, IAuditLog audit, Action<string> log, Workspaces workspaces, WorkspaceBuilds builds, DbDataKit.Outbound.OutboundGate? outbound = null)
     {
         app.MapGet("/api/v1/info", () => Results.Json(new JsonObject
         {
@@ -117,7 +117,7 @@ public static class WorkspaceManagement
 
         // ---- workspaces: the shared calls, and the history this server keeps ----
 
-        DbDataKit.Authoring.WorkspaceApi.Map(app, projects, workspaces, new WorkspaceApiOptions("dbdataworkspace.local", Changed: change =>
+        DbDataKit.Authoring.WorkspaceApi.Map(app, projects, workspaces, new WorkspaceApiOptions("dbdataworkspace.local", Outbound: outbound, Changed: change =>
         {
             try
             {

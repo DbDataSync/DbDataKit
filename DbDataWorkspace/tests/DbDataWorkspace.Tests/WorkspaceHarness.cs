@@ -26,17 +26,20 @@ internal sealed class WorkspaceHarness : IAsyncDisposable
     private WorkspaceHarness(ScratchStateDatabase? scratch) => Scratch = scratch;
 
     /// <summary>Starts the server on <paramref name="engine"/> (<c>sqlite</c>, <c>postgres</c> or <c>mssql</c>; the test is skipped when that engine is not set up).</summary>
-    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, WorkspaceAppSettings? apps = null, string? buildExecutable = null, string? syncExecutable = null, string? runnerExecutable = null, string? dotnetExecutable = null, IReadOnlyList<string>? integrationSources = null, StateHousekeepingSettings? housekeeping = null)
+    public static async Task<WorkspaceHarness> StartAsync(string engine = "sqlite", ServerRole ceiling = ServerRole.Admin | ServerRole.Author | ServerRole.Approver, WorkspaceAppSettings? apps = null, string? buildExecutable = null, string? syncExecutable = null, string? runnerExecutable = null, string? dotnetExecutable = null, IReadOnlyList<string>? integrationSources = null, StateHousekeepingSettings? housekeeping = null, IReadOnlyList<string>? outbound = null)
     {
         var harness = new WorkspaceHarness(engine == "sqlite" ? null : ScratchStateDatabase.For(engine));
-        await harness.StartAsync(ceiling, apps, buildExecutable, syncExecutable, runnerExecutable, dotnetExecutable, integrationSources, housekeeping);
+        await harness.StartAsync(ceiling, apps, buildExecutable, syncExecutable, runnerExecutable, dotnetExecutable, integrationSources, housekeeping, outbound);
         return harness;
     }
 
-    private async Task StartAsync(ServerRole ceiling, WorkspaceAppSettings? apps, string? buildExecutable, string? syncExecutable, string? runnerExecutable, string? dotnetExecutable, IReadOnlyList<string>? integrationSources, StateHousekeepingSettings? housekeeping)
+    private async Task StartAsync(ServerRole ceiling, WorkspaceAppSettings? apps, string? buildExecutable, string? syncExecutable, string? runnerExecutable, string? dotnetExecutable, IReadOnlyList<string>? integrationSources, StateHousekeepingSettings? housekeeping, IReadOnlyList<string>? outbound)
     {
         if (Scratch is not null || housekeeping is not null)
             new StateSettingsWriter().Write(Path.Combine(Directory, "server.yaml"), new StateSettings(Scratch?.Engine, Scratch?.Connection) { Housekeeping = housekeeping ?? StateHousekeepingSettings.Defaults });
+        // the outbound list is read from server.yaml, as a started server reads it
+        if (outbound is not null)
+            File.AppendAllText(Path.Combine(Directory, "server.yaml"), "outbound:" + (outbound.Count == 0 ? " []\n" : "\n" + string.Concat(outbound.Select(e => $"  - {e}\n"))));
         var resolved = WorkspaceState.Resolve(Directory, Scratch is null ? null : Scratch.Environment);
         Settings = new WorkspaceSettings(Directory, new Uri("https://127.0.0.1:0")) { State = resolved.Settings, StateSources = resolved.Sources, Apps = apps, BuildExecutable = buildExecutable, SyncExecutable = syncExecutable, RunnerExecutable = runnerExecutable, DotnetExecutable = dotnetExecutable, IntegrationSources = integrationSources };
         app = WorkspaceServer.Build(Settings, WorkspaceServer.Certificate(Directory), Log.Add);
@@ -68,6 +71,9 @@ internal sealed class WorkspaceHarness : IAsyncDisposable
 
     /// <summary>A store over the server's own state, to read what the server wrote.</summary>
     public WorkspaceStore Store() => new(WorkspaceState.Open(Directory, Settings.State, Scratch is null ? null : Scratch.Environment));
+
+    /// <summary>The server's outbound gate, the one its own code connects through.</summary>
+    public DbDataKit.Outbound.OutboundGate Outbound => Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<DbDataKit.Outbound.OutboundGate>(app.Services);
 
     public IReadOnlyList<AuditEntry> Audit() => new FileAuditLog(Path.Combine(Directory, "management-audit.log")).Read();
 
