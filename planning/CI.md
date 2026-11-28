@@ -9,6 +9,8 @@ touches, and of the projects that depend on them, found from the projects' refer
 release: every suite on every engine (including the previous release of each state engine), Windows and Linux, the browser stories, the installers, and
 the conformance suites and their test servers. A stable release waits for a green full run of the commit it ships.
 
+CI covers the builds, the test runs and the releases in GitHub Actions; which tests exist and what they cover is TESTING's.
+
 A flaky test is tracked, not just rerun. It is on a list until it is fixed, and the list stays short.
 
 Example: Ana changes a method in `DbDataKit.Connections.Http`.
@@ -106,7 +108,6 @@ reruns it once. A failure in the same test with `ArgumentOutOfRangeException` ma
 | CI-2 | **The weekly run and the release gate.** One workflow runs tier 3 on `main` every week, and by hand on any commit; Build's nightly conformance run moves into it. A failed weekly run opens a tracked item naming the failed suites. The stable release workflow refuses a commit without a green tier 3 run | none | M | a run started by hand covers every suite in tier 3; a stable release on a commit with no green run is refused, naming the missing run |
 | CI-3 | **The flake list.** `docs/ci-flakes.md` holds every flake rerun in the last month, each with its fix task; the weekly run reports the list; the CI docs (`docs/ci-lessons.md`, `docs/agent-workflow.md`, the release docs) describe the tiers | CI-1, CI-2 | S | the list holds every flake rerun in the last month; the docs name the workflows that exist |
 | CI-4 | The compatibility job runs the previous release's programs against the current build (waits for the first stable release); the release workflows write `release.json` with the compatibility generation, so the console's "outside N-1" mark shows for a release from GitHub, not only from a mirror | none | M | the `compatibility` job pairs the previous stable console with the current Gateway and Runner and the reverse, and a publish and a query pass; a snapshot release carries `release.json` with its generation and the console's Upgrades page marks a release outside N-1 from it |
-| CI-5 | An installed suite as a test fixture (not urgent; manual tests from a snapshot release meanwhile): a CI job on Linux installs the packaged suite with `install.sh`, runs `dbdatakit setup single-server`, enrols the first administrator from the setup link in `FIRST-RUN.txt` with a virtual passkey authenticator (as `tests/people.ts` does) and saves the signed-in browser state, the console's address and the testenv engines' addresses; any later story starts from that state instead of starting services from their build folders. Linux first; Windows (the MSI) later | none | M | the job installs, joins all four services, signs in, and a trivial story reusing the saved state opens the Servers page with four services joined |
 | CI-6 | Run the other products' suites on the 2025 engines (SQL Server 2025, pgvector PostgreSQL) | none | S | the Gateway, Runner and Build conformance jobs pass on the 2025 profiles |
 
 ## Shared areas touched

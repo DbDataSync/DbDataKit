@@ -44,6 +44,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 34 | [INTEGRATIONS](INTEGRATIONS.md) | The integration product's features: the kit, its sources and targets, triggers and screens | open design | unassigned |
 | 35 | [ACTIONS](ACTIONS.md) | Scripts that apps and agents call to do something: the format, where they run, the editor; elevated actions wait for the security model | queued | unassigned |
 | 36 | [AGENTS](AGENTS.md) | Agents authored, tested and run: definitions, providers, test conversations, evaluation, the console's chat, the Gateway, integrations | queued | unassigned |
+| 37 | [TESTING](TESTING.md) | Every screen has a browser story that runs in CI; the installed suite as one test fixture | queued | unassigned |
 
 ## Parked
 
