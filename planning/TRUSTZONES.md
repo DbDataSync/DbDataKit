@@ -61,53 +61,6 @@ crippled for everyone else; a setting is a hardening follow-up an administrator 
 (the project's approvers, an administrator) or turns the action off; which server enforces it (the Runner, which runs the read, so a caller cannot skip
 it, and the Workspace, which hides or explains the button); how a refused person learns who may do it; and that the audit records a change of the setting.
 
-### Outbound rules applied by the operating system
-
-**What.** The install applies each service's outbound list (`DbDataKit.Outbound`, the `outbound:` setting) as rules the service cannot get around: firewall rules for the service's
-account on Windows and Linux, and egress rules for its container. The rules cover programs the service starts (git, `dotnet restore`, npm), which
-the library cannot see. The install applies them automatically, and `service check` reports when they are missing or out of date.
-
-**Why.** The outbound list stops our own code. Only the operating system or the container platform stops a program that ignores it. The rules are also a
-partial mitigation of supply chain attacks: a compromised package or build tool running in a service cannot send data to, or fetch code from, an
-address that is not on the list.
-
-**Open questions.**
-
-- Firewall rules match addresses, and the lists name hosts. A host such as a cloud provider's endpoint changes addresses often, so a list of addresses
-  kept by hand is not workable. Options: rules that the platform keeps in step with DNS (Windows Firewall's FQDN-based dynamic keywords, an nftables
-  set filled from DNS, a container network policy that matches DNS names), or one forward proxy that the firewall makes the only way out.
-- Which platforms come first: Windows services, Linux systemd units, containers.
-- How a list item that is a package source with mirrors and CDNs (NuGet, npm) is written.
-
-### Outbound list: what the first form leaves out
-
-**What.** The outbound list (`DbDataKit.Outbound`) ships with the simplest form: an entry is `scheme://host[:port]`, and a service with no `outbound:` line
-connects anywhere. This design keeps what that form defers, so it is reviewed later.
-
-**Why.** The first form fits the lists people can write today (package sources, git remotes, a database host). Two choices were taken for now and may not
-hold once installs use the lists in earnest.
-
-**Open questions.**
-
-- Paths: whether an entry may name a path prefix (`https://github.com/org/`), so a list can allow one organisation of a host rather than all of it.
-- Address ranges: whether an entry may be a range such as `10.0.0.0/8`, for internal servers that have no name worth listing, and how names and ranges
-  meet in the operating-system rules of the design above.
-- Closed by default: whether a service with no `outbound:` line should connect nowhere, so a new install is closed until an administrator lists what it
-  needs (the installer could write the list), and what an upgrade of an install without the line does then.
-
-### The outbound list behind an HTTP proxy
-
-**What.** How the outbound list (`DbDataKit.Outbound`) behaves when a service sends its traffic through an HTTP proxy. Nothing about proxies is built: the
-gate's HTTP handler checks the address each connection is opened to and does not read the proxy settings, so behind a proxy it sees only the proxy.
-
-**Why.** A service that reaches `https://api.nuget.org` through `proxy.corp:3128` can list the proxy (`tcp://proxy.corp:3128`), but then the list no longer
-limits which sites the proxy fetches. The alternative is for the handler to read the proxy settings and check the request's own address first and the
-proxy second, so the list holds `https://api.nuget.org` and the proxy.
-
-**Open questions.** Whether the handler should read the proxy settings at all, and from where (the service's settings, the environment, the system);
-whether a proxy changes what an entry means; and how this meets the operating-system rules of the design above, one of which is a forward proxy that is the
-only way out.
-
 ## Shared areas touched
 
 - `DbDataKit.Web` (link credential), `DbDataKit.Serving.Notify` (deleted pairing), `DbDataKit.Runner.Api` (start grants, run route), `DbDataKit.Views`
