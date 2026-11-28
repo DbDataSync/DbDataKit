@@ -164,6 +164,14 @@ anything changes, the session:
    contradiction with a decided design is a proposed decision, never a silent change;
 5. writes that planning on a branch for the owner to review, and only then starts workers.
 
+**One subject, one place.** Planning is broken up by subject before it is committed. Each task, open design and proposal goes in the subject that
+owns its work, never in the nearest subject or the one a conversation happened in. A piece of work that fits no subject goes to a new subject, not into
+a catch-all. A subject's goal names what it covers and what it leaves to other subjects. When a subject gathers work that belongs elsewhere, a session
+moves that work to its subject before adding anything new.
+
+Example: while planning knowledge, a session finds work on actions, agents, connections and the CI engines. Each goes to its own subject (ACTIONS,
+AGENTS, CONNECTIONS, CI) before the knowledge plan is committed.
+
 **Architecture directions are in `docs/architecture.md`.** A subject that changes the suite's architecture (a service, a program, how the parts call each
 other, where code runs, how people or agents connect) adds its direction to the section "Planned architecture changes" of `docs/architecture.md` in the
 same branch as the subject, marked **Planned**. The first task that starts marks it **In progress**. Each task that lands shortens that entry and
