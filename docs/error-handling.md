@@ -32,7 +32,28 @@ catch (OdbcException ex) when (cancellationToken.IsCancellationRequested)
 }
 ```
 
-A `catch` that must replace an error without the original goes on the `REVIEWED` list in the script, with the reason the original must not be kept.
+**A message that can hold a secret still keeps the original.** The new exception's message is the one people see, so it uses the classified words
+or the redacted text. The original goes in as the inner exception unchanged, even when its message quotes a password, a key or a connection
+string:
+
+```csharp
+catch (Exception e) when (e is SshException or FormatException)
+{
+    // SSH.NET's message can hold part of the private key
+    throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Login, "ssh-private-key", FileFailures.Engine), e);
+}
+```
+
+Secrets are taken out where a failure's detail is written: a log line, the stored detail of a failure, an answer. The code that writes it passes
+the whole text, inner exceptions included, through a redactor.
+
+Example: a state move to PostgreSQL with `Password=secret:state-db` fails, and the driver's message quotes the resolved connection string. The
+person running the move sees the message after the state redactor has replaced the password with `***`. The inner exception keeps the driver's
+message as the driver wrote it.
+
+**Planned:** each process will have one redactor that knows every secret value the process resolves, and the hosting library's logging will pass
+every message and exception text (`ex.ToString()`, inner exceptions included) through it. Until then, a log that writes `ex.ToString()` of such
+an exception prints the secret; the subject [ERRORDETAILS](../planning/ERRORDETAILS.md) tracks it.
 
 The files that held such catches when the check was added are listed in `scripts/caught_exceptions_baseline.txt`, each with its count, for example
 `Shared/src/DbDataKit.State/UserStore.cs: 3`. A listed file may hold up to that many. The list only shrinks:
