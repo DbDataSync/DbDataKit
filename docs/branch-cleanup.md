@@ -39,8 +39,14 @@ subject into `work/<slug>`, whose pull request goes into `main` (`planning/ROLES
   request that carries the rest, or by the cleanup above.
 
 When a `work/<slug>` pull request merges, both of them run and can delete the same task branches; whichever comes second finds them gone.
-A branch the remote no longer has is reported as `already deleted` and does not fail the job (in both workflows, and for the head branch the
-workflow **Delete merged branch** deletes); any other failure to delete a branch, such as a refused push, still fails it.
+GitHub's error for a delete of a branch that is gone has more than one wording (`remote ref does not exist`, `cannot lock ref
+'refs/heads/backup/installer-15': unable to resolve reference`), so after a failed delete each workflow asks GitHub whether the branch is still there:
+
+- The branch is gone: the delete is reported as `already deleted` and does not fail the job.
+- The branch is still there, or GitHub cannot be asked: the job fails, and its log shows the delete's error.
+
+`scripts/backup_branches.py` asks with `git ls-remote --heads`, for the task branches and the backups. The head-branch step of **Delete merged
+branch** reads the branch with `gh api`, and a 404 means it is gone.
 
 By hand, from a clone: `python3 scripts/backup_branches.py tasks --base <base commit> --head <head commit>` is a dry run; `--apply` deletes. `work/<slug>`
 itself goes with its pull request, like any merged branch.
