@@ -822,7 +822,10 @@ How much a finding weighs:
 - What could not be checked offline (no cache, a connection with no entry in it, a filter the lexer cannot read) is a note.
 
 A type is judged by the same code the Sync engine reads it with: the connection's dialect over the shared type tables (`DbDataKit.Dialect`), or a YAML
-driver's type map from its `driver.yaml`. So the check and a run never disagree about what a column's type is.
+driver's type map from its `driver.yaml`. So the check and a run never disagree about what a column's type is. A Flight SQL connection's column is
+read as an ANSI type name first. When the name is not an ANSI one, it is read as a type of the engine the connection's `dialect` names. Example:
+with `dialect: sqlserver`, a column of type `nvarchar(20)` is read as SQL Server's `nvarchar`, and with no `dialect` the check says the driver does
+not know it.
 
 Example: Ana's cache of `crm` was read in `dev` a month ago. A DBA has since added `shipped_on` to `dbo.orders`, and Ana maps it. Her check fails with
 "The source column 'shipped_on' is not a column of crm.dbo.orders in catalog-cache.yaml". She presses **Refresh** on `orders`, accepts "1 column
@@ -853,7 +856,8 @@ processing, its bulk load, and its reconcile sweep when that is on. It asks each
   delete by the table's replica identity, which is the primary key unless a DBA set another.
 - `MsSqlMerge` and `MsSqlMergeReconcile` need the target's primary key, with every key column mapped.
 
-Which key a reader or writer needs comes from the built-in drivers' table (`BuiltInDriverCapabilities` in `DbDataKit.Sync.Drivers.Generic`), the
+A warning about a generic reader or writer (`ChangeApply`, `KeyReconcileDelete`, `KeyReconcile`, `TriggerAudit`, `Scd2`) quotes its own
+refusal: the check calls the rule the engine runs before it reads or writes, so a run that refuses the mapping says the same words. Which key a reader or writer needs comes from the built-in drivers' table (`BuiltInDriverCapabilities` in `DbDataKit.Sync.Drivers.Generic`), the
 same table the Workspace answers a connection's capabilities from. Example: Ana picks `MsSqlChangeTracking` for `crm.dbo.audit_log`, which the cache shows without a
 primary key. The check warns on the mapping's source table: "The reader 'MsSqlChangeTracking' would refuse this mapping: the source table
 crm.dbo.audit_log has no primary key in catalog-cache.yaml".

@@ -276,6 +276,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
         var found = CheckOf(Draft(sourceEngine: "flightsql"));
         var unknown = One(found, SyncOfflineCheck.UnknownType, "'location'");
         Assert.Contains("the flightsql driver's type map", unknown.Message);
+        Assert.Single(found, d => d.Code == SyncOfflineCheck.UnknownType && d.Message.Contains("'status'", StringComparison.Ordinal));
         Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
         Assert.Contains(found, d => d.Code == SyncOfflineCheck.Column && d.Message.Contains("filter names 'regoin_code'", StringComparison.Ordinal));
     }
@@ -285,7 +286,9 @@ public sealed class WorkspaceSyncOfflineCheckTests
     {
         var crm = "schema: connection/1\nname: crm\nengine: flightsql\ndialect: sqlserver\naddress:\n  host: crm.example.com\n  database: crm";
         var found = CheckOf(Draft(files: [("config/connections/crm.yaml", crm)]));
-        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.UnknownType && d.Message.Contains("'location'", StringComparison.Ordinal));
+        // nvarchar is not an ANSI name (the test above finds it unknown with no dialect); geography is not one SQL Server's type map reads either
+        Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.UnknownType && d.Message.Contains("'status'", StringComparison.Ordinal));
+        Assert.Contains("(with the sqlserver dialect)", One(found, SyncOfflineCheck.UnknownType, "'location'").Message);
         Assert.DoesNotContain(found, d => d.Code == SyncOfflineCheck.NotChecked);
     }
 
@@ -376,7 +379,7 @@ public sealed class WorkspaceSyncOfflineCheckTests
     [Fact]
     public void A_delete_sweep_on_a_cached_target_with_no_primary_key_is_a_finding_in_the_writers_words()
     {
-        var sweeping = WatermarkTask + "reconcile:\n  enabled: true\n";
+        var sweeping = WatermarkTask + "\nreconcile:\n  enabled: true";
         var unkeyedTarget = Cache.Replace("{name: order_no, type: bigint, nullable: false, key: true}", "{name: order_no, type: bigint, nullable: false}");
         var key = One(CheckOf(Draft(NoStatedKey, cache: unkeyedTarget, task: sweeping)), SyncOfflineCheck.Key, "'KeyReconcileDelete' would refuse");
         Assert.Contains("Table mapping 'orders' target has no cached primary key", key.Message);
