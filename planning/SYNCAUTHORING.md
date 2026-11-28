@@ -10,10 +10,10 @@ project; the person moves between them by clicking. Sync is the first kind with 
 two areas: Files and Designer").
 
 This pass is authoring only, and only what lives inside a replication. The screens are taken from the code as it was before the Sync server was deleted (`96601f27^`), with everything that
-watched or operated a running replication taken out; those screens come back in a second pass reading the Runner (the open design "Monitoring and
+watched or operated a running replication taken out; those screens come back in a second pass reading the Runner (SYNCNEXT's open design "Monitoring and
 operations, second pass" below). The old Version Control tab is not restored: history and diffs are the Files area's History, Changes and earlier
 texts. The old screens outside a replication (the Replications list, the Connections and Scripts pages) are not restored either: a replication is
-reached from the Designer's navigation, and connections and scripts are edited in Files until the open design "Outside a replication, later" becomes
+reached from the Designer's navigation, and connections and scripts are edited in Files until SYNCNEXT's open design "Outside a replication" (and SANDBOX's connection pages) becomes
 tasks.
 
 Owner, 2026-11-18: "We need to restore the overall look and feel of the old Sync authoring UI. The new workspace file-format-driven UI needs to remain as
@@ -59,20 +59,20 @@ Under `96601f27^:Shared/web/sync/src/`, with the old Sync API call each used and
 
 ### What is left out of this pass
 
-- **Monitoring and operations** (the open design below): `StatusCard.tsx`, `MetricsCard.tsx`, `RefreshCountdown.tsx`, `MonitoringPanel.tsx`, `lag.ts`,
+- **Monitoring and operations** (SYNCNEXT's open design): `StatusCard.tsx`, `MetricsCard.tsx`, `RefreshCountdown.tsx`, `MonitoringPanel.tsx`, `lag.ts`,
   `holdState.ts`, `readIntent.ts`, `components/ReadIntentSetting.tsx`, `MappingReadStateDialog.tsx`, `MappingPositionHistory.tsx`, `RunsPanel.tsx`,
   `RunDetailsDialog.tsx`, `RunFigures.tsx`, `runTimes.ts`, `PauseHistoryPanel.tsx`, `PauseDialog.tsx`, `BulkLoadHistoryPanel.tsx`,
   `BulkLoadProgressCard.tsx`, `BulkLoadForm.tsx`, `ReconcileDeletesForm.tsx`, `JoinedRunNotice.tsx`,
   `RunnerHistoryNotice.tsx`, `RunnerStatusRow.tsx`, `RunningCounts.tsx`, `ReplicationRunnerPanel.tsx`, `pages/RunnerPage.tsx`, `RunnerLinkCard.tsx`,
   `runnerPublish.ts`, `VerificationPanel.tsx`'s results and `VerificationResultPage.tsx`, `api/useRunHub.ts` (SignalR), the tracking card's live state
   and catch-up, and the connection list's reachable column and **Test all**.
-- **Outside a replication** (the open design "Outside a replication, later"): the Replications list's table (`pages/ReplicationsPage.tsx` apart from
+- **Outside a replication** (SYNCNEXT's open design "Outside a replication"; the connection pages are SANDBOX's): the Replications list's table (`pages/ReplicationsPage.tsx` apart from
   its form), the Connections list and page (`ConnectionsPage.tsx`, `ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`,
   `connection-edit/ConnectionTestCard.tsx`), the Scripts list and page (`ScriptsPage.tsx`, `ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`).
   Connections and scripts are edited in Files (the generated forms, the Scripts tab) meanwhile.
 - **Row previews**: `PreviewGrid.tsx` is not restored; **Preview rows** on a mapping (`MappingRowsPreview.tsx`) shows a mapping's or a query source's first rows, read by a Runner task and never kept.
 - **Version Control** (`HistoryPanel.tsx`, `components/DiffViewer.tsx` as used there): the Files area's History, Changes and a file's earlier texts.
-- **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; an open design below.
+- **Preview SQL** (`MappingPreview.tsx`): the statements of a pass need the drivers with a connection and the read position; SYNCNEXT's open design.
 - The product frame and admin pages (`App.tsx`, `SyncModule.tsx`, `adminHost.tsx`, `components/AppShell.tsx`, Drivers, Libraries, Files, Docs, Admin):
   the Workspace's frame replaces them.
 
@@ -92,7 +92,7 @@ replication, a mapping or `checks:`, and reading the draft's connections and scr
 Left on the old server: everything in `Runner/`, `Hubs/`, `RunsController`, `ReplicationLagController`, `MetricsController`, `VerificationController`,
 `ReplicationTrackingController`, the read-state and position routes of `TableMappingsController`, `PreviewController`, `QualityController`,
 `LineageController`, the admin, driver, library and files controllers. Not ported in this pass because only the screens outside a replication used them
-(the open design "Outside a replication, later"): a script's compile (`ScriptsController` compile) and where each script is bound
+(SYNCNEXT's open design "Outside a replication"): a script's compile (`ScriptsController` compile) and where each script is bound
 (`Services/ScriptUsageScanner.cs`), a driver's capabilities by type (`/api/drivers/{type}/capabilities`), a driver's connection parameters
 (`connection-parameters`, `Services/ParameterCheck.cs`) and a connection's credential source (`credential-source`). The ported services run in the
 Workspace's process on Sync's libraries in `Shared/src/DbDataKit.Sync.*` (`DbDataWorkspace/README.md`).
@@ -160,15 +160,14 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 | --- | --- | --- | --- | --- |
 | SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
-| SYNCAUTHORING-24 | A Playwright story on the installed suite (INSTALLER-34's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | INSTALLER-34 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
 
 ## Needs from other subjects
 
 - AUTHORING: the other project kinds (build, store, integration, app) adopt the two areas (`registerDesigner`, `DbDataWorkspace/README.md`) as their Designers are built: each
   kind's designed screens register as its Designer (its routes and navigation entries) rather than as tabs of the Files area, and a task that builds one
   says so.
-- WORKSPACEISOLATION-1: the sync draft's `script-test` runs the author's code in a child process of the Workspace service; the Workspace's `sync/` routes leave
-  it as it is (they compile and run no script), and the list says where it goes.
+- SANDBOX (step 2): a script's Test runs on a Runner today (the set's task `script-test`, staged through the console); SANDBOX moves it into the
+  Workspace's sandbox.
 - COMMANDLINES (needs review): if it is accepted, COMMANDLINES-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and COMMANDLINES-3 builds on
   those projects. COMMANDLINES-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
@@ -180,87 +179,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   `POST /api/workspace-catalog/{workspace}/{project}/binding-test` (`docs/authoring-metadata.md`, "Testing a connection").
 - AUTHORING-9: its stories of the Sync forms stay the stories of the Files area; this subject's stories cover the Designer (no story is written twice).
 - AUTHORING-12: reconcile deletes and resync stay paused; they come back with the monitoring pass, not in the Designer's authoring screens.
-
-## Open designs
-
-### One connection, several databases
-
-A connection names one database (`address.database`), and the set's reads, the Designer's pickers and the run all use it. Some sources hold the same tables in several databases on one server (one per plant, one per company), and the old Sync server let the person pick a database per mapping on one connection. Whether the suite needs a way for one connection to serve several databases (a database per mapping, a list on the connection, or a connection per database as today), and how its tracking state and change positions are kept per database, is not decided. AUTHORING-25 lists every database a SQL Server login can open for the pickers; it does not change what a mapping reads. Example: `erp` on `sql01` holds `plant_a` and `plant_b`; today Ben makes two connections, `erp-a` and `erp-b`.
-
-### The preflight reads privileges on MySQL and Oracle
-
-The set's preflight reads the target login's privileges on SQL Server and PostgreSQL only. When a set writes to MySQL or Oracle in production, it reads them there too (`information_schema.table_privileges` and `SHOW GRANTS`; `session_privs` and `all_tab_privs`), each with a conformance test on its engine.
-
-### A YAML driver names the dialect that reads its filters
-
-The offline check reads a YAML driver's source filter with the ANSI lexer and the driver's identifier quoting, so a filter in a grammar ANSI does not have (a `#` comment, a `$$` string) can be misread. When a driver's filters are misread, `driver.yaml` gains a `lexer:` key naming the shared dialect that reads them (`sqlserver`, `mysql`, ...), ANSI when absent.
-
-### Monitoring and operations, second pass
-
-What the old screens did to watch and operate a running replication, removed from this pass, and what they would read now that the Runner runs the set
-and the console relays to it. The second pass designs where they live (the Designer reading the Runner through the console's relay as the signed-in
-person, or the console's Runner screens with a link from the Designer) before it becomes tasks.
-
-- **Run controls in the chrome**: Run Now, Pause and Resume (with a note asked in a dialog), Bulk Load…, Reconcile deletes…. Now: the Runner's task
-  actions (`POST .../tasks/{...}/run|pause|resume`), the console's run calls as the person (`POST /api/deploys/{id}/runs`,
-  `docs/publishing.md`, "Runs of a deployed build"); reconcile and resync paused by the owner. Open: how **Enabled** in the draft and a
-  pause on the Runner are told apart on one screen (the draft's setting takes effect when published, a pause at once).
-- **The rail's Replication status and Last 24h**: running or idle in words, next due, the last run; passes, failures, rows read and written,
-  p50/p95/max, a bar per hour, 1h/24h/7d, a refresh countdown. Now: the Runner's task and its runs (`GET /api/v1/tasks/{package}/{channel}/{task}`,
-  `GET /api/v1/runs` and their pass records).
-- **Current Status**: per mapping the read position, its time and age, intent and hold, lag (exact or estimated), **Manage…** to rewind. Now: the drain's
-  checkpoint `watermark` on the Runner (one item per mapping and source table), `GET .../checkpoints`, its history and rewind. Open: what lag means with
-  no Sync server measuring it: the age of the position (no read of the source, but a quiet table looks behind), a read-only Runner task that measures it
-  on demand, or the drain writing each mapping's lag into its pass record (exact for change tracking and logical slots, estimated otherwise, one query per
-  mapping per pass, as the old server paid).
-- **Run History, Pause History, Bulk Load History**: filters, paging, a run's dialog with its timing and log. Now: the Runner's runs, steps, logs and
-  units, its decisions.
-- **Verification results** of a mapping and **quality check results** of a replication: now the Runner's run steps and the console's Quality page.
-- **The Runner tab and page**: the version served and staged per channel, slots and bindings, instances. Now: the Builds tab and `PublishForm.tsx`, and
-  the Runner's own screens.
-- **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is TASKENGINE's).
-- **Live updates**: the old screens followed runs over SignalR; the Runner's screens poll.
-
-### Outside a replication, later
-
-The old Sync screens outside a replication's page, left out of this pass by the owner. Meanwhile a replication is reached from the Designer's navigation
-(the draft's replications and **New replication**), and connections and scripts are edited in Files (the generated forms of `config/connections/` and
-`config/scripts/`, and Files' Scripts tab, which lists the scripts and tests one against generated input). Where these screens live (Designer pages of
-a sync project with their own navigation entries, or Designer pages shared by every kind that has connections) is designed before they become tasks.
-
-- **The Replications list** (`pages/ReplicationsPage.tsx`): a table of every replication with its reader, its schedule as a sentence and its mapping
-  count, a row opening the replication, and the form that makes a new one. Needs: nothing beyond the draft model (the files of
-  `config/replications/`) and the check's findings per replication; the form itself is restored in this pass as the navigation's **New replication**.
-- **The Connections list** (`ConnectionsPage.tsx`): driver, host, database and authentication per connection, **New connection**, and (monitoring) the
-  reachable column and **Test all**. Needs: the draft's connection files; the engine list of **New connection** from the engine registry (`useSyncEngines`);
-  the reachable column and Test all wait on the monitoring pass; the connection test they would run is the shared `BindingTest`, which the
-  endpoint cards of a replication's Overview use.
-- **A connection's page** (`ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`, `connection-edit/ConnectionTestCard.tsx`): engine, address,
-  database, timeouts, the driver's own parameters with their check, the login by secret reference and the run login, custom transforms and hooks, the
-  test. Needs: the driver's connection parameters and the parameter check (`connection-parameters`, `Services/ParameterCheck.cs`), a driver's
-  capabilities by type (`/api/drivers/{type}/capabilities`), a connection's credential source (`credential-source`), ported as the services above are
-  (on the shared libraries in `Shared/src/DbDataKit.Sync.*`); the secret findings of the draft's check; a link to the project's secrets overview (the AUTHORING subject's); the test as the binding test
-  in a channel (`docs/authoring-metadata.md`, "Testing a connection"), without the old test's sample rows.
-- **The Scripts list** (`ScriptsPage.tsx`): kind, language, where each script is bound, enabled, **New script**. Needs: the draft's `config/scripts/`
-  (the `scripts` route exists) and where each script is bound (`Services/ScriptUsageScanner.cs`).
-- **A script's page** (`ScriptEditPage.tsx`, `script-edit/ScriptTestPanel.tsx`): the manifest's fields, the code in the code editor, compile
-  diagnostics at their lines, the test against generated input, where it is bound. Needs: a script's compile (`ScriptsController` compile, which runs
-  the person's code and so stays a child process), where it is bound, and the `script-test` route the Workspace has.
-
-### Preview SQL of a mapping
-
-The old **Preview SQL** tab listed every statement a pass of a mapping would run, in order (the reader's, the staging's and the writer's built-in
-statements, the operator's SQL, the scripts' output, the hooks), built by the drivers from the mapping, the tables' metadata and the position the next
-pass reads from. The likely authoring shape is a command run by the Workspace on a copy of the draft, as the provisioning plan is, with the catalog cache
-as the metadata and "from the first position" as the position. Open: whether every driver builds its statements without a connection (the change
-tracking reader asks the server for its version functions), and whether a statement that needs the live server is shown as "built on the Runner" or left
-out.
-
-### Drivers and libraries
-
-The old rail had **Drivers** (driver YAML files) and **Libraries** (NuGet packages). A sync project's package carries the drivers its connections need
-(`package publish` adds them) and the platform comes from the Runner. Open: whether a project may carry its own driver YAML (`config/drivers/`) and so
-needs a Designer page, or drivers stay a command on the repository with a `none (reason)` row in `docs/ui-editors.md`.
 
 ## Shared areas touched
 
