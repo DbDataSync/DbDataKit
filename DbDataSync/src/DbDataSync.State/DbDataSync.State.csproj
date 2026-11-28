@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
     <!-- Phase 109g: MsSql/PostgresStateDialect resolve their DbConnection through LibraryRegistry
          instead of a direct Microsoft.Data.SqlClient/Npgsql PackageReference — see those two classes'
          own doc comments. -->

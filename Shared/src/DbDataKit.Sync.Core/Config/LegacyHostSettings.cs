@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The host settings files of earlier releases, which are refused and never read (plan 13, E04; clean break, D10). Sync's settings are

@@ -1,15 +1,15 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using MySqlConnector;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.MySql.Tests;
 
 /// <summary>
 /// MySQL/MariaDB → MySQL/MariaDB, to isolate driver bugs from cross-engine ones — the same purpose
 /// <c>PostgresPipelineTests</c> serves for Postgres. Every reader/staging/writer here is
-/// <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="MySqlDialect"/>; this driver registers
+/// <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="MySqlDialect"/>; this driver registers
 /// nothing of its own beyond the trigger-audit DDL exercised separately in
 /// <see cref="MySqlFamilyTriggerAuditReaderTestsBase{TFixture}"/>. Run against both
 /// <see cref="MySqlTestDatabase"/> and <see cref="MariaDbTestDatabase"/> from one shared body.

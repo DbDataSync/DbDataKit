@@ -3,7 +3,7 @@ using System.Reflection;
 using DbDataKit.Config.Yaml;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>A configuration file that cannot be read as written: a syntax error, a repeated key, or a key the file kind does not have. The message names the file, the position and the key's path.</summary>
 public sealed class ConfigFileException(string file, IReadOnlyList<ConfigDiagnostic> diagnostics, Exception? inner = null)

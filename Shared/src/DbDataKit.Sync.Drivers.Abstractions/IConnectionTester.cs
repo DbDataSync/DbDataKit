@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// A driver that can prove a configured connection actually reaches its engine.

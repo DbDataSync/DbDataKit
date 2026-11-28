@@ -1,9 +1,9 @@
 using System.Data.Common;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Cli;
 
@@ -58,7 +58,7 @@ public static class LibraryValidationRunner
         try
         {
             // the check creates and drops tables of its own: the run login writes (plan 28c, E20)
-            connection = connection.ForRole(DbDataSync.Core.Config.CredentialRole.Run);
+            connection = connection.ForRole(DbDataKit.Sync.Core.Config.CredentialRole.Run);
             var credential = connection.AuthMode == AuthMode.SqlAuth
                 ? secretStore.Resolve(connection.CredentialSecretRef!)
                 : null;
@@ -335,7 +335,7 @@ public static class LibraryValidationRunner
 
     /// <summary>
     /// **Must be real, engine-native type spellings, not placeholder words** — a real bug found running
-    /// this against the real Postgres container: <see cref="DbDataSync.Drivers.Generic.BatchInsertStagingProvider"/>
+    /// this against the real Postgres container: <see cref="DbDataKit.Sync.Drivers.Generic.BatchInsertStagingProvider"/>
     /// (Postgres's own first-registered, "native" staging provider — it has no bespoke one, see 109h's
     /// own table) reads <see cref="CachedColumn.NativeType"/> directly into its staging table's DDL,
     /// unlike <c>MsSqlStagingTableProvider</c>, which re-discovers the *real* target table's column

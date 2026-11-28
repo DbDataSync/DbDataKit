@@ -1,6 +1,6 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Stable identifier for a source table within a replication, used as the "SourceTable" key in

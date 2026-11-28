@@ -3,7 +3,7 @@ using DbDataKit.Config.Yaml;
 using DbDataKit.Connections;
 using YamlDotNet.Serialization;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// What Sync keeps in a connection file beside the shared fields, under <c>extensions.sync</c> (plan 13, E01). The keys are written like the shared ones, snake_case (D28; the camelCase spelling of E01's first form is refused as an unknown key); the nested script and hook bindings are the shapes they always were.

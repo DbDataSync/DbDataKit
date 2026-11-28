@@ -1,11 +1,11 @@
 using DbDataKit.Config.Git;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Quality;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Plan 23a FQ04: the <c>checks:</c> section of a replication's <c>task.yaml</c> (Sync's configuration format 2). It is read by Sync's strict loader through <c>DbDataKit.Quality</c>, a bad part is refused with file and line,

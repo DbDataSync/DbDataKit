@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Table mapping, then replication, then connection — and the one thing endpoints never needed: a way

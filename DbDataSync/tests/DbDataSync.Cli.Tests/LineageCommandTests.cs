@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using DbDataKit.Cli;
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 
 namespace DbDataSync.Cli.Tests;
 

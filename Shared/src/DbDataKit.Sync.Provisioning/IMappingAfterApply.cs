@@ -1,7 +1,7 @@
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Provisioning;
+namespace DbDataKit.Sync.Provisioning;
 
 /// <summary>
 /// What an apply records about a mapping once its DDL ran (plan 28c E21, Sync half step b): the renames the target has caught up with and the columns

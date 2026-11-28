@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Kinds for engine-neutral implementations. Unlike a driver-specific Kind these carry no engine

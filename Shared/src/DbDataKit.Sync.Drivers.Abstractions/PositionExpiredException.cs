@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// The source discarded the history this reader needed: the stored position is older than the oldest

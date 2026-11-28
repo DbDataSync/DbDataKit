@@ -1,7 +1,7 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Opt-in capability for readers that can turn an <see cref="AutoSegment"/> into concrete

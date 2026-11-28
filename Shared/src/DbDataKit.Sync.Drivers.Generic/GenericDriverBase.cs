@@ -1,10 +1,10 @@
 using System.Data.Common;
 using System.Diagnostics;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// What <see cref="GenericDriverBase{TSpec}"/> needs from a spec — the fields that don't depend on how a
@@ -30,7 +30,7 @@ public interface IGenericDriverSpec
 }
 
 /// <summary>
-/// Everything a driver built entirely from <c>DbDataSync.Drivers.Generic</c>'s engine-neutral components
+/// Everything a driver built entirely from <c>DbDataKit.Sync.Drivers.Generic</c>'s engine-neutral components
 /// needs, regardless of how its connection gets made — phase 168V, extracted from what was
 /// <see cref="GenericDriver"/> alone. <see cref="GenericDriver"/> (ADO.NET, via a <see
 /// cref="DbProviderFactory"/>) and <c>JdbcGenericDriver</c> (<c>DbDataSync.Drivers.Jdbc</c>, via IKVM)

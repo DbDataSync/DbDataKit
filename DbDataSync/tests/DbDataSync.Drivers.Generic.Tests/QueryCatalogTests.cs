@@ -1,5 +1,6 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 using Npgsql;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Generic.Tests;
 

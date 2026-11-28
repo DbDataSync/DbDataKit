@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 using Apache.Arrow;
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// The seam between Sync's rows and the shared bulk writers (<c>DbDataKit.Transfer.SqlServer</c>, <c>DbDataKit.Transfer.Postgres</c>): a stream of

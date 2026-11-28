@@ -3,7 +3,7 @@ using DbDataKit.Secrets;
 using DbDataKit.Secrets.Store;
 using DbDataKit.Secrets.Windows;
 
-namespace DbDataSync.Core.Secrets;
+namespace DbDataKit.Sync.Core.Secrets;
 
 /// <summary>
 /// The secrets Sync reads and writes, by name (<see cref="SecretRefs"/>), over the shared encrypted store

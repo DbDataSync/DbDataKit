@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Where a replication's tracking state (its positions, the record of what each entry moved) lives (plan 28c E17, plan 29 section 4a.2): the optional

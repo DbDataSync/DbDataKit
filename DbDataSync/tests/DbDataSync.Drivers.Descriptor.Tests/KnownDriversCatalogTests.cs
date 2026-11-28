@@ -1,11 +1,13 @@
 using System.Data.Common;
 using DbDataSync.Libraries;
 using Xunit;
+using DbDataKit.Sync.Drivers.Descriptor;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Descriptor.Tests;
 
 /// <summary>A bundled descriptor can't rot: every <see cref="KnownDrivers"/> entry has to keep parsing
-/// and standing up a <see cref="Drivers.Generic.GenericDriverSpec"/>, and every catalog cross-reference
+/// and standing up a <see cref="GenericDriverSpec"/>, and every catalog cross-reference
 /// (a driver's bound library, a library's factory type) has to keep resolving syntactically — these
 /// run against the actual embedded resources and catalog tables, not a copy of them.</summary>
 public sealed class KnownDriversCatalogTests

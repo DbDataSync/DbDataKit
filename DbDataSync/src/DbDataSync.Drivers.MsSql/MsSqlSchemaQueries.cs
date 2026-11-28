@@ -1,9 +1,9 @@
 using DbDataKit.Metadata;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.MsSql;
 

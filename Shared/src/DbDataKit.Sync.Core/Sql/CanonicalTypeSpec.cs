@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// Splits a native type spec string (e.g. <c>"nvarchar(50)"</c>, <c>"numeric(18,2)"</c>,

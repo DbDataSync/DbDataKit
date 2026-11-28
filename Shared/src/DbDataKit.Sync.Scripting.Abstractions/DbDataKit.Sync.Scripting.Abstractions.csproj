@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespace (DbDataSync.Scripting.Abstractions): DbDataSync's project of the same name forwards to this assembly. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Scripting.Abstractions</PackageId>
     <Description>The slots a Sync script can be bound to (ScriptSlots), the levels it may be bound at, and the interfaces a script of each slot implements. It compiles and runs no script.</Description>

@@ -1,9 +1,9 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Phase 125's <see cref="ReconcileConfig"/> — specifically its two abstract fields,

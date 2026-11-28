@@ -2,9 +2,9 @@ using System.Data.Common;
 using DbDataKit.Connections;
 using DbDataKit.Dialect;
 using DbDataKit.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// What an operator sees when a database says no (plan 13, A10). A failure that came from a driver is classified by the shared

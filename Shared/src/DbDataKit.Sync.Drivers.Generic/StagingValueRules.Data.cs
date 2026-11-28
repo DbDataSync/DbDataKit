@@ -1,7 +1,7 @@
 using System.Numerics;
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 // GENERATED from the two checked-in matrices (tests/DbDataSync.Drivers.MsSql.Tests/StagingMatrix.mssql.expected.tsv and
 // tests/DbDataSync.Drivers.Postgres.Tests/StagingMatrix.postgres.expected.tsv; see architecture/staging-value-types.md section 2): per target engine

@@ -1,9 +1,9 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Plan 28c E17: the <c>tracking:</c> section of a replication file, its words, its round trip and what it resolves to per target engine.</summary>
 public sealed class TrackingConfigTests : IDisposable

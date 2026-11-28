@@ -3,9 +3,9 @@ using System.Data;
 using System.Reflection;
 using Apache.Arrow;
 using Apache.Arrow.Types;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.Drivers.ArrowFlightSql.Tests;
 

@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 public sealed record TableMetadata(string Schema, string Table);
 

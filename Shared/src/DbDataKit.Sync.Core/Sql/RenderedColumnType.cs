@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <param name="Sql">The DDL-ready type spec for the target dialect, e.g. <c>"varchar(50)"</c>,
 /// <c>"numeric(18,2)"</c>. Never populated for an unmappable type: a caller checks the type's kind before

@@ -1,7 +1,7 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 public sealed class ChangeSchemaTests
 {

@@ -2,11 +2,11 @@ using System.Text;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
 using DbDataKit.Scheduling;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Lineage;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Lineage;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.TaskRunner.Runner;
@@ -77,6 +77,16 @@ public static class ReplicationSetPackage
         var marker = "Version=v";
         var at = framework?.IndexOf(marker, StringComparison.Ordinal) ?? -1;
         return at >= 0 && Version.TryParse(framework![(at + marker.Length)..], out var v) ? $"{v.Major}.{v.Minor}" : $"{Environment.Version.Major}.{Environment.Version.Minor}";
+    }
+
+    /// <summary>The C# the set compiles where it runs: its scripts (<c>config/scripts/*.csx</c>) and its compiled drivers (<c>drivers/&lt;id&gt;/driver.csx</c>).</summary>
+    private static IEnumerable<string> CSharpFiles(string repoRoot, string configRoot)
+    {
+        var scripts = Path.Combine(configRoot, "scripts");
+        var drivers = Path.Combine(repoRoot, "drivers");
+        return (Directory.Exists(scripts) ? Directory.EnumerateFiles(scripts, "*.csx") : [])
+            .Concat(Directory.Exists(drivers) ? Directory.EnumerateDirectories(drivers).Select(d => Path.Combine(d, "driver.csx")).Where(File.Exists) : [])
+            .Order(StringComparer.Ordinal);
     }
 
     private static class Paths
@@ -217,6 +227,11 @@ public static class ReplicationSetPackage
             published.Add(new PublishedReplication(task.Name, taskName, task.Scheduling.Mode.ToString(), task.Scheduling.CronExpression, task.Scheduling.FrequencySeconds, [.. slots.Select(s => s.Name)], mappings.Count, new Dictionary<string, string>(slotNames, StringComparer.Ordinal)));
         }
 
+        // a script or a driver.csx that names the namespaces Sync's libraries had before: it would not compile where the set runs
+        foreach (var code in CSharpFiles(repoRoot, configRoot))
+            foreach (var old in RenamedNamespaces.Find(File.ReadAllText(code)))
+                problems.Add($"{code}: {old}");
+
         if (tasks.Count == 0 && problems.Count == before)
             problems.Add($"{Paths.ReplicationsDir(configRoot)}: the repository has no enabled replication to publish.");
         if (problems.Count > before) return null;
@@ -326,7 +341,7 @@ public static class ReplicationSetPackage
             if (file.Path.StartsWith(RepoDir + "/", StringComparison.Ordinal) && Path.GetExtension(file.Path) == ".yaml" && !bytes.Contains((byte)0))
             {
                 var text = new UTF8Encoding(false).GetString(bytes);
-                var current = DbDataSync.Core.Config.PublishedConfigText.Current(file.Path[(RepoDir.Length + 1)..], text);
+                var current = DbDataKit.Sync.Core.Config.PublishedConfigText.Current(file.Path[(RepoDir.Length + 1)..], text);
                 if (current != text) bytes = new UTF8Encoding(false).GetBytes(current);
             }
             File.WriteAllBytes(target, bytes);

@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespace (DbDataSync.Drivers.Abstractions): DbDataSync.Drivers.Abstractions, the package a compiled driver references,
-       forwards to this assembly, so a driver built against it still loads. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Drivers.Abstractions</PackageId>
     <Description>The contract of a Sync driver (IDriver, its readers, staging providers and writers, its capabilities) and the registry of the drivers a process knows (DriverRegistry).</Description>

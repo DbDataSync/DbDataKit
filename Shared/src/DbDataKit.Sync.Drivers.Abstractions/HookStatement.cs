@@ -1,10 +1,10 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// One statement a lifecycle hook wants run, with its parameters — never a finished string with
-/// values interpolated into it. Lives here (rather than in <c>DbDataSync.Core.Config</c>, beside
-/// <c>HookConfig</c>) so <c>DbDataSync.Scripting.Abstractions</c>'s <c>ILifecycleHook</c> (phase 27) can
-/// reference it without that project taking a dependency on <c>DbDataSync.Drivers.Generic</c>, which is
+/// values interpolated into it. Lives here (rather than in <c>DbDataKit.Sync.Core.Config</c>, beside
+/// <c>HookConfig</c>) so <c>DbDataKit.Sync.Scripting.Abstractions</c>'s <c>ILifecycleHook</c> (phase 27) can
+/// reference it without that project taking a dependency on <c>DbDataKit.Sync.Drivers.Generic</c>, which is
 /// where the config-driven renderer that also produces one of these lives.
 /// </summary>
 /// <param name="Name">The bare name, as written in the hook body (<c>@rowsWritten</c> is written as

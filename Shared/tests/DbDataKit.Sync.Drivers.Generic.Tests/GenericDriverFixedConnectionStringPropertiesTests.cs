@@ -1,8 +1,8 @@
 using System.Data;
 using System.Data.Common;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// <see cref="GenericDriverSpec.FixedConnectionStringProperties"/> — the motivating case is an

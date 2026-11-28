@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Persisted as config/replications/&lt;name&gt;/task.yaml. Table mappings for this replication are

@@ -1,4 +1,4 @@
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// The names a script binding is keyed by, in config and in the resolution hierarchy. Constants rather
@@ -22,7 +22,7 @@ public static class ScriptSlots
     public const string RowTransform = "rowTransform";
 
     /// <summary>A reusable SQL hook body's <c>Kind</c> — <c>Language = Sql</c>, no <c>EntryType</c>,
-    /// bound by *name* from a hook point's list (<c>HookPoints</c> in <c>DbDataSync.Core.Config</c>),
+    /// bound by *name* from a hook point's list (<c>HookPoints</c> in <c>DbDataKit.Sync.Core.Config</c>),
     /// never from the hierarchy below. Deliberately **not** in <see cref="All"/>: that list also drives
     /// the SPA's generic per-slot <c>ScriptBindingsCard</c>, and a hook has no binding hierarchy of its
     /// own to show there — see phase 26. <c>ScriptsController</c> checks this one separately.</summary>

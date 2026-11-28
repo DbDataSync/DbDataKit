@@ -1,8 +1,8 @@
 using DbDataKit.Quality;
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Secrets;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The single read/write path for replication config: validates, serializes to YAML, writes to disk

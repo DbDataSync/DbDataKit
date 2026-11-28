@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Postgres;
 
@@ -6,7 +6,7 @@ namespace DbDataSync.Drivers.Postgres;
 /// The Kinds this driver defines, and the generic ones it re-exports.
 /// <para>
 /// There was no such class until phase 38, because until phase 38 this driver defined nothing of its
-/// own — every reader, staging provider and writer it registers is <c>DbDataSync.Drivers.Generic</c>'s,
+/// own — every reader, staging provider and writer it registers is <c>DbDataKit.Sync.Drivers.Generic</c>'s,
 /// driven by <c>PostgresDialect</c>. <see cref="CopyStaging"/> is the first exception, and it is one
 /// because <c>COPY … FROM STDIN (FORMAT BINARY)</c> is a protocol rather than a statement: there is no
 /// dialect hook that could have expressed it.

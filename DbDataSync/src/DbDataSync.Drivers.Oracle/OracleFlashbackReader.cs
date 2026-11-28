@@ -1,10 +1,10 @@
 using System.Data.Common;
 using System.Runtime.CompilerServices;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Oracle.ManagedDataAccess.Client;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Oracle;
 
@@ -18,7 +18,7 @@ public static class OracleDriverKinds
 /// <summary>
 /// Reads changes via Oracle's Flashback Version Query — <c>SELECT ... FROM t VERSIONS BETWEEN SCN a AND
 /// b</c> — the one genuinely new reader this phase adds; every other reader the Oracle driver registers
-/// is <c>DbDataSync.Drivers.Generic</c>'s.
+/// is <c>DbDataKit.Sync.Drivers.Generic</c>'s.
 /// <para>
 /// **Non-consuming by construction.** Unlike the trigger-audit options, there is no shadow table to
 /// prune — this reader implements no <see cref="IPositionAcknowledging"/> at all, because there is

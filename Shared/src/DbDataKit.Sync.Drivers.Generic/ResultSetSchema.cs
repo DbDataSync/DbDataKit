@@ -1,7 +1,7 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>Builds a <see cref="ChangeSchema"/> from a result set's own column names, and reads a row
 /// straight into a positional array. Used by every reader whose result set *is* the source row.</summary>

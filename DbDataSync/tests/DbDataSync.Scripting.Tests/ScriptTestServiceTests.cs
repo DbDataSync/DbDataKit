@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -25,7 +25,7 @@ public sealed class ScriptTestServiceTests : IDisposable
         var repository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
         _service = new ScriptTestService(repository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache")), repository.ScriptsDirectory));
     }
 
@@ -46,7 +46,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     public async Task ASqlColumnExpression_ShowsTheExpressionItWouldGenerateForEachColumn()
     {
         var result = await TestAsync("sqlColumnExpression", "Upper", """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : ISqlColumnExpression
             {
@@ -74,7 +74,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     {
         var result = await TestAsync("valueColumnExpression", "Trim", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Trim : IValueColumnExpression
             {
@@ -104,8 +104,8 @@ public sealed class ScriptTestServiceTests : IDisposable
         var result = await TestAsync("rowTransform", "Passthrough", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Passthrough : IRowTransform
             {
@@ -130,8 +130,8 @@ public sealed class ScriptTestServiceTests : IDisposable
         var result = await TestAsync("rowTransform", "DropDeletes", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class DropDeletes : IRowTransform
             {
@@ -156,7 +156,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     {
         var result = await TestAsync("valueColumnExpression", "Careless", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Careless : IValueColumnExpression
             {
@@ -200,7 +200,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     public async Task WithoutAConnection_TheResultSaysItIsGenerated()
     {
         var result = await TestAsync("sqlColumnExpression", "Nothing", """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
             public sealed class Nothing : ISqlColumnExpression
             {
                 public string? RenderSql(SqlColumnExpressionContext c) => null;
@@ -221,8 +221,8 @@ public sealed class ScriptTestServiceTests : IDisposable
     {
         var result = await TestAsync("lifecycleHook", "Truncate", """
             using System.Collections.Generic;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Truncate : ILifecycleHook
             {
@@ -250,7 +250,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     public async Task ASourceQueryBuilder_ShowsBothStatementsAndHowItSaysToReadTheResult()
     {
         var result = await TestAsync("sourceQueryBuilder", "Audit", """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Audit : ISourceQueryBuilder
             {
@@ -290,7 +290,7 @@ public sealed class ScriptTestServiceTests : IDisposable
     public async Task AVerificationQueryBuilder_ShowsBothSidesStatementsAndTheShapeTheyComeBackIn()
     {
         var result = await TestAsync("verificationQueryBuilder", "Counts", """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Counts : IVerificationQueryBuilder
             {
@@ -329,8 +329,8 @@ public sealed class ScriptTestServiceTests : IDisposable
                     using System.Collections.Generic;
                     using System.Threading;
                     using System.Threading.Tasks;
-                    using DbDataSync.Drivers.Abstractions;
-                    using DbDataSync.Scripting.Abstractions;
+                    using DbDataKit.Sync.Drivers.Abstractions;
+                    using DbDataKit.Sync.Scripting.Abstractions;
 
                     public sealed class X : IMetadataProvider
                     {

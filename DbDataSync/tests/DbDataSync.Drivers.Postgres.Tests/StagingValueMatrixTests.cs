@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.TestSupport;
 using Npgsql;
 using Xunit;

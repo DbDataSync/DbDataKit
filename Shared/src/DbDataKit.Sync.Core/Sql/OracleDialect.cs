@@ -1,5 +1,5 @@
 using DbDataKit.Dialect;
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// Oracle, on Oracle.ManagedDataAccess.Core (ODP.NET Core).
@@ -22,7 +22,7 @@ namespace DbDataSync.Core.Sql;
 /// the connected database's real name, <c>OracleConnection.Database</c> is confirmed (by reflection and
 /// by a live connection) to be an empty string regardless of what the connection is actually pointed
 /// at. The value that *is* populated, <c>OracleConnection.ServiceName</c>, is Oracle-specific and
-/// reaching it would mean <c>DbDataSync.Core</c> referencing <c>Oracle.ManagedDataAccess.Core</c> — a
+/// reaching it would mean <c>DbDataKit.Sync.Core</c> referencing <c>Oracle.ManagedDataAccess.Core</c> — a
 /// package dependency no dialect in this project has, and a real layering line worth keeping. So this
 /// override does not validate at all, rather than fabricate a check against a property that carries
 /// nothing.

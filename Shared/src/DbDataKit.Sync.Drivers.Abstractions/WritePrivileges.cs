@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// The changes a writer makes to the target table, and so the privileges its run login needs there: what a preflight asks the engine for before

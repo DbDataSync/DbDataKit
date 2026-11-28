@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// Both sides of a check are generated from one declaration, and the whole point is that the operator

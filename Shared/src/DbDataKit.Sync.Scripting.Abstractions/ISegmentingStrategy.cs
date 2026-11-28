@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// Proposes how a table divides for a reload — see phase 58.

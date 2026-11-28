@@ -1,5 +1,5 @@
 using DbDataKit.Scheduling;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
 namespace DbDataSync.Planning;
 

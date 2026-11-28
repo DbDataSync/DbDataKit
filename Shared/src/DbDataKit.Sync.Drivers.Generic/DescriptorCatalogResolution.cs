@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Resolves a <c>driver.yaml</c> descriptor's <c>catalog</c> strategy to the actual

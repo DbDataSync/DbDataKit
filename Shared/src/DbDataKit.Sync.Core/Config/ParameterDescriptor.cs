@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// What kind of value a parameter takes, and therefore what control an operator gets for it.

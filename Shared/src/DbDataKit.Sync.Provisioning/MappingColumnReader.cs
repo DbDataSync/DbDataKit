@@ -1,7 +1,7 @@
-using DbDataSync.Core.Sql;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Provisioning;
+namespace DbDataKit.Sync.Provisioning;
 
 /// <summary>
 /// Reads one side of a mapping's catalog and says either what is there or why it could not look —

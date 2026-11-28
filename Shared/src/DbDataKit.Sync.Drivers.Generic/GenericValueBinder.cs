@@ -2,10 +2,10 @@ using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using DbDataKit.Dialect;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// The <see cref="ISegmentValueBinder"/> a <see cref="GenericDriver"/> falls back to when its

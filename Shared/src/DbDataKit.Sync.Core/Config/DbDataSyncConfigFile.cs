@@ -1,7 +1,7 @@
 using System.Text;
 using YamlDotNet.Serialization;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Reads and writes <c>&lt;RepoRoot&gt;/server.yaml</c> — the git-tracked, human-editable home for the

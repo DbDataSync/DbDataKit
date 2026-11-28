@@ -1,7 +1,7 @@
 using System.Data;
 using System.Globalization;
 using System.Text;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using DuckDB.NET.Data;
 using Parquet;
 

@@ -6,7 +6,7 @@ namespace DbDataSync.Drivers.Jdbc.Ado;
 
 // Adapted from ClrKernel.Database.Provider.Jdbc (Apache-2.0, github.com/ClrKernel/ClrKernel,
 // src/ClrKernel.Database.Provider.Jdbc/JdbcConnection.cs) — phase 165V. Wraps a java.sql.Connection as
-// an ADO.NET DbConnection so DbDataSync.Drivers.Generic's readers can drive it exactly like any other
+// an ADO.NET DbConnection so DbDataKit.Sync.Drivers.Generic's readers can drive it exactly like any other
 // DbConnection.
 //
 // Public — phase 167V. There is no reason a metadataProvider script (compiled in a different assembly,
@@ -29,7 +29,7 @@ public sealed class JdbcConnection : DbConnection
     /// <summary>
     /// <c>java.sql.Connection.setCatalog</c> is only ever called here for a database an operator
     /// actually named — <c>SqlDialect.UseDatabaseAsync</c>'s own empty-database check (see
-    /// <c>DbDataSync.Core.Config.TableRef.Database</c>'s doc comment) means this method is simply never
+    /// <c>DbDataKit.Sync.Core.Config.TableRef.Database</c>'s doc comment) means this method is simply never
     /// reached for a mapping that doesn't need a switch at all, so there is no dependency on
     /// <see cref="Database"/> (<c>getCatalog()</c>) here to decide whether to call this.
     /// <para>
@@ -63,7 +63,7 @@ public sealed class JdbcConnection : DbConnection
 
     /// <summary>
     /// Phase 171V — this was <c>throw new NotImplementedException(...)</c>, "deferred to a connection-testing
-    /// phase," until <see cref="DbDataSync.Drivers.Generic.GenericDriverBase{TSpec}.TestAsync"/> (phase 168V)
+    /// phase," until <see cref="DbDataKit.Sync.Drivers.Generic.GenericDriverBase{TSpec}.TestAsync"/> (phase 168V)
     /// started calling <see cref="ServerVersion"/> unconditionally on a successful test — a
     /// <c>NotImplementedException</c> isn't a <see cref="DbException"/>, so it wasn't caught there, and
     /// every JDBC "Test Connection" crashed after the query that proved the connection worked. Both reads
@@ -120,7 +120,7 @@ public sealed class JdbcConnection : DbConnection
     };
 
     /// <summary>
-    /// Phase 175M. Not <see cref="DbDataSync.Core.Sql.ConnectionTimeouts.DefaultConnectSeconds"/> reused
+    /// Phase 175M. Not <see cref="DbDataKit.Sync.Core.Sql.ConnectionTimeouts.DefaultConnectSeconds"/> reused
     /// — <c>isValid</c>'s own <c>timeout</c> parameter means "0 = block with no limit" per the JDBC spec
     /// (not "skip the check"), and it pays its own round trip on top of the connect that already
     /// happened, so reusing the full connect timeout would double worst-case latency for no reason.

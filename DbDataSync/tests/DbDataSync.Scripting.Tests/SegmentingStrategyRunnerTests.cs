@@ -1,4 +1,4 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.Scripting;
 
 namespace DbDataSync.Scripting.Tests;

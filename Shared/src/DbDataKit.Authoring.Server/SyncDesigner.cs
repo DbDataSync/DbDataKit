@@ -4,13 +4,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using DbDataKit.Catalog;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Drivers.Descriptor;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Provisioning;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Provisioning;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataKit.Authoring.Server;
 

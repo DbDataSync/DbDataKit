@@ -1,6 +1,6 @@
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 
-namespace DbDataSync.Scripting.Tests;
+namespace DbDataKit.Sync.Scripting.Abstractions.Tests;
 
 /// <summary>
 /// <see cref="ScriptSlots.Hook"/> is a known script <c>Kind</c> — a reusable SQL hook must save — but

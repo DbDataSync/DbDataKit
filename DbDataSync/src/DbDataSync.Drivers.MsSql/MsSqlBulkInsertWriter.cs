@@ -2,10 +2,10 @@ using System.Data.Common;
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
 using DbDataKit.Transfer.SqlServer;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Microsoft.Data.SqlClient;
 
 namespace DbDataSync.Drivers.MsSql;

@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.Drivers.MsSql.Tests;
 
@@ -113,8 +113,8 @@ public sealed class MsSqlProvisionerTests
     }
 
     [Theory]
-    [InlineData(DbDataSync.Drivers.Generic.GenericDriverKinds.Watermark)]
-    [InlineData(DbDataSync.Drivers.Generic.GenericDriverKinds.BatchReload)]
+    [InlineData(DbDataKit.Sync.Drivers.Generic.GenericDriverKinds.Watermark)]
+    [InlineData(DbDataKit.Sync.Drivers.Generic.GenericDriverKinds.BatchReload)]
     [InlineData(MsSqlDriverKinds.BatchReload)]
     public async Task AReaderKindNeedingNoSourceCooperation_IsSatisfiedWithoutTouchingTheConnection(string readerKind)
     {
@@ -142,6 +142,6 @@ public sealed class MsSqlProvisionerTests
         Assert.NotEmpty(plan.Warnings);
     }
 
-    private static DbDataSync.Core.Config.TableRef Table() =>
+    private static DbDataKit.Sync.Core.Config.TableRef Table() =>
         new() { ConnectionName = "c", Database = Database, Schema = "dbo", Table = "Orders" };
 }

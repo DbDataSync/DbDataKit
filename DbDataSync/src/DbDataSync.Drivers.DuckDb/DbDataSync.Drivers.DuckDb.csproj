@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
     <!-- For ResultSetSchema only. This driver shares none of Generic's readers or writers — a
          query-first source has no statement for them to build — but "read a result set into a
          ChangeRow" is the same problem every reader in the repo already solved once. -->
-    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <DbDataKitReference Include="Sync.Drivers.Generic" />
   </ItemGroup>
 
   <ItemGroup>

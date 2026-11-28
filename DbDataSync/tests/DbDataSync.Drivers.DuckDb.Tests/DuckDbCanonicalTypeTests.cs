@@ -1,5 +1,5 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.DuckDb.Tests;
 

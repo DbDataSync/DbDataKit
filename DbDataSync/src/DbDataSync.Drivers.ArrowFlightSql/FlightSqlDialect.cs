@@ -1,5 +1,5 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.ArrowFlightSql;
 

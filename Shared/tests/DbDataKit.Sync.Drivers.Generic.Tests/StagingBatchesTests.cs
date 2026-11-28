@@ -1,8 +1,8 @@
 using DbDataKit.Dialect;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// The seam between Sync's rows and the shared bulk writers (plan 13, A14 and A15): what the writers are handed is the staging table's columns in the

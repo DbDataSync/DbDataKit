@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespace (DbDataSync.Provisioning): DbDataSync's project of the same name forwards to this assembly. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Provisioning</PackageId>
     <Description>A replication's database setup: the plans of the DDL a table mapping or a whole replication needs on its source and target and their apply, and the column reader (MappingColumnReader) a mapping's columns, inferred types and key are read through.</Description>

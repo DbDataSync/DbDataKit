@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Oracle.ManagedDataAccess.Client;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Oracle.Tests;
 
@@ -10,7 +10,7 @@ namespace DbDataSync.Drivers.Oracle.Tests;
 /// Oracle → Oracle, to isolate driver bugs from cross-engine ones — the same purpose
 /// <c>PostgresPipelineTests</c>/<c>MySqlPipelineTests</c> serve for their own engines. Every
 /// reader/staging/writer here but <see cref="OracleFlashbackReader"/> (tested separately) is
-/// <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="OracleDialect"/>.
+/// <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="OracleDialect"/>.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class OraclePipelineTests(OracleTestDatabase db) : IClassFixture<OracleTestDatabase>, IAsyncLifetime

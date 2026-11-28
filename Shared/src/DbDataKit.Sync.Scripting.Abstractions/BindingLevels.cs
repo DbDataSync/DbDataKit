@@ -1,8 +1,8 @@
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// The three levels a script binding can sit at, as strings — they appear in the API's slot list and in
-/// the SPA, and <c>DbDataSync.Core.Config</c>'s own <c>BindingLevel</c> enum is not visible from here.
+/// the SPA, and <c>DbDataKit.Sync.Core.Config</c>'s own <c>BindingLevel</c> enum is not visible from here.
 /// </summary>
 public static class BindingLevels
 {

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using DbDataKit.Secrets;
 
-namespace DbDataSync.Core.Secrets;
+namespace DbDataKit.Sync.Core.Secrets;
 
 /// <summary>A store that keeps its secrets in this process only. For tests, and for a host that must not touch disk.</summary>
 public sealed class InMemorySecretProvider : ISecretProvider, ISecretStore

@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using DbDataKit.Config.Git;
 using DbDataKit.Runner;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.TaskRunner.Runner;
 using Xunit;
 
@@ -66,6 +66,23 @@ public sealed class ReplicationSetPackageTests : IDisposable
     {
         problems = [];
         return ReplicationSetPackage.Build(_root, package, "2026.11.x", problems)!;
+    }
+
+    [Fact]
+    public void A_script_or_driver_with_a_using_of_an_old_namespace_is_refused_naming_the_new_one()
+    {
+        var scripts = Path.Combine(_root, "config", "scripts");
+        Directory.CreateDirectory(scripts);
+        File.WriteAllText(Path.Combine(scripts, "upper.csx"), "using System;\nusing DbDataSync.Scripting.Abstractions;\n\nnew Upper()\n");
+        var driver = Path.Combine(_root, "drivers", "acme");
+        Directory.CreateDirectory(driver);
+        File.WriteAllText(Path.Combine(driver, "driver.csx"), "using DbDataSync.Drivers.Abstractions;\nnew AcmeDriver()\n");
+
+        var problems = new List<string>();
+        Assert.Null(ReplicationSetPackage.Build(_root, "sales", "2026.11.x", problems));
+
+        Assert.Contains(problems, p => p.EndsWith("upper.csx: line 2: `using DbDataSync.Scripting.Abstractions;` names a namespace that is now `DbDataKit.Sync.Scripting.Abstractions`; change the using.", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("driver.csx: line 1:", StringComparison.Ordinal) && p.Contains("`DbDataKit.Sync.Drivers.Abstractions`", StringComparison.Ordinal));
     }
 
     [Fact]

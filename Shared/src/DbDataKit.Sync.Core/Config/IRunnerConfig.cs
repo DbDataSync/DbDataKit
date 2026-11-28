@@ -1,6 +1,6 @@
 using DbDataKit.Config.Git;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The config writes a TaskRunner performs — the whole boundary between a run and the config

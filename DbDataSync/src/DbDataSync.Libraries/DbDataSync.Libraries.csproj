@@ -31,8 +31,8 @@
   <ItemGroup>
     <!-- Phase 109j: DriverLibraryCompatibility.Check takes an IDriver directly (RequiredLibraryId,
          and the driver's own compiled assembly to extract IL from) — no circular reference, since
-         DbDataSync.Drivers.Abstractions depends only on DbDataSync.Core. -->
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+         DbDataKit.Sync.Drivers.Abstractions depends only on DbDataKit.Sync.Core. -->
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
   </ItemGroup>
 
 </Project>

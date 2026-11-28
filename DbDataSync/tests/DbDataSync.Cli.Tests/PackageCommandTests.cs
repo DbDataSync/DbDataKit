@@ -41,7 +41,7 @@ public sealed class PackageCommandTests : IDisposable
     [Fact]
     public async Task AMappingWithNoColumnCacheIsRefusedInTheWordsOfTheMetadataException_AndNothingElseIsPrinted()
     {
-        _repo.Replication("returns", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *", cached: false);
+        _repo.Replication("returns", DbDataKit.Sync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *", cached: false);
 
         var (exit, output, error) = await RunAsync("--to", "runner", "--check", "--json", "--repo", _repo.Root);
 
@@ -56,8 +56,8 @@ public sealed class PackageCommandTests : IDisposable
     public async Task TwoReplicationsThatMakeOneTaskNameAreRefusedNamingBoth()
     {
         // names that differ by punctuation, not case: a case-insensitive file system (Windows) makes two folders that differ only by case one folder
-        _repo.Replication("sales.orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
-        _repo.Replication("sales-orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
+        _repo.Replication("sales.orders", DbDataKit.Sync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
+        _repo.Replication("sales-orders", DbDataKit.Sync.Core.Config.ScheduleMode.Periodic, cron: "0 3 * * *");
 
         var (exit, _, error) = await RunAsync("--to", "runner", "--check", "--json", "--repo", _repo.Root);
 

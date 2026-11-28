@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Whether a mapping's <see cref="ReconcileConfig"/> should sweep in response to changes a Primary pass

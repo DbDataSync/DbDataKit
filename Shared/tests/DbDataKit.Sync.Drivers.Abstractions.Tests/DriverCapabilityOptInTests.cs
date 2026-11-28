@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 /// <summary>
 /// The capability flags are opt-in by interface, not by a list maintained here. This asserts the

@@ -1,6 +1,6 @@
 /**
  * The parts of a replication set's files the Designer's screens read and write, typed as Sync's configuration reader reads them
- * (`DbDataSync.Core.Config`): a replication's `task.yaml` (format 2), a table mapping (format 1) and a connection (read only).
+ * (`DbDataKit.Sync.Core.Config`): a replication's `task.yaml` (format 2), a table mapping (format 1) and a connection (read only).
  * A view holds every key of its file, the ones not typed here included, so writing a view back changes only what a screen changed.
  */
 

@@ -56,7 +56,7 @@ public sealed partial class SyncProjectKind(SyncTool tool) : IProjectKind
             + "`config/scripts/` holds the C# scripts a mapping can name (`<name>.yaml` the manifest, `<name>.csx` the code); the Scripts tab compiles and tests one against generated input, offline.\n";
         var scriptManifest = string.Join("\n", "schemaVersion: 1", "name: upper-name", "kind: sqlColumnExpression", "language: CSharp",
             "description: Upper-cases the Name column. A starting point; a mapping uses it once its column names it.", "parameters: []", "enabled: true", "");
-        var scriptCode = string.Join("\n", "using DbDataSync.Scripting.Abstractions;", "",
+        var scriptCode = string.Join("\n", "using DbDataKit.Sync.Scripting.Abstractions;", "",
             "public sealed class UpperName : ISqlColumnExpression", "{", "    // Return null to leave the column exactly as it would have been.",
             "    public string? RenderSql(SqlColumnExpressionContext context) => context.SourceColumn == \"Name\" ? $\"UPPER({context.ColumnReference})\" : null;", "}", "",
             "// The script ends with an expression, with no semicolon after it: the implementation the slot asks for.", "new UpperName()", "");

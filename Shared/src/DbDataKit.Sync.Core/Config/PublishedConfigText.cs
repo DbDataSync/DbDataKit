@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The text of a configuration file as a publish sends it (plan 33 section 6d, rule 5): the file of a kind that has a format number, in the current format, the rest as written. A replication's <c>task.yaml</c> read as format 1 leaves

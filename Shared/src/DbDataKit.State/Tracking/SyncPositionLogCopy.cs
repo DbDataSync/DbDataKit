@@ -21,7 +21,7 @@ public sealed record SyncPositionLogResolveResult(SyncPositionLogResolveOutcome 
 /// Sync's copy of the entries a replication recorded on its target (plan 28c E17), as the two hosts that can hold it see it: the Sync server (its own state) and the runner (the state of a runner-owned replication, written
 /// through the runner protocol by the drain's follower). The one stream <c>entry</c>, its identities (<c>syncposition:&lt;engine&gt;://&lt;server&gt;/&lt;database&gt;/&lt;replication&gt;@&lt;connection&gt;</c>), the document of the
 /// <c>GET /api/v1/tracking</c> answer for such copies and the resolve of a divergence live here so that the two apply the same rules. The entries themselves (<c>dbdatasync.position_log</c> on the target) are Sync's
-/// (<c>DbDataSync.Drivers.Abstractions.TargetPositionLog</c>); nothing here reads a target.
+/// (<c>DbDataKit.Sync.Drivers.Abstractions.TargetPositionLog</c>); nothing here reads a target.
 /// </summary>
 public static class SyncPositionLogCopy
 {

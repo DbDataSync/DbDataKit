@@ -1,6 +1,6 @@
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 // Written by hand (A14b), unlike StagingValueRules.Data.cs: the pairs below are the "Proposed refusals" table of architecture/staging-value-types.md
 // section 3a. Each is a (target kind, runtime type) the provider takes and stores as something that is not the source's value, whatever the value.

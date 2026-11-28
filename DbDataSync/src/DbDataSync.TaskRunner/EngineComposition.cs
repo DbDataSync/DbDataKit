@@ -1,12 +1,13 @@
 using DbDataKit.Connections;
 using DbDataKit.Dialect;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.ArrowFlightSql;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Drivers.Descriptor;
 using DbDataSync.Drivers.DuckDb;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.MySql;
 using DbDataSync.Drivers.Oracle;

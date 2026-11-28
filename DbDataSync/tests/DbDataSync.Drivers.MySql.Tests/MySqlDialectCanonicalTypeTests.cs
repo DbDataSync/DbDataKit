@@ -1,7 +1,7 @@
 using DbDataKit.Dialect;
-using MySqlDialect = DbDataSync.Core.Sql.MySqlDialect;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using MySqlDialect = DbDataKit.Sync.Core.Sql.MySqlDialect;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.MySql.Tests;
 

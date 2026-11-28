@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using NpgsqlTypes;
 
 namespace DbDataSync.Drivers.Postgres;

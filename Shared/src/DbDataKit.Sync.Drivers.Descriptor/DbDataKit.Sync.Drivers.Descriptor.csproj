@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespace (DbDataSync.Drivers.Descriptor): DbDataSync's project of the same name forwards to this assembly and keeps what
-       loads a library or compiles a driver.csx. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Drivers.Descriptor</PackageId>
     <Description>The reader of a Sync driver.yaml (its dialect, type map, catalog queries and capabilities) and the catalog of ready-made descriptors, with no library loaded and no script compiled.</Description>

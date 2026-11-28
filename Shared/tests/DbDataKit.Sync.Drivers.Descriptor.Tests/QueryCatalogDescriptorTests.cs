@@ -1,12 +1,12 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using Xunit;
 
-namespace DbDataSync.Drivers.Descriptor.Tests;
+namespace DbDataKit.Sync.Drivers.Descriptor.Tests;
 
 /// <summary>Phase 167V's <c>catalog: query</c> strategy, at the descriptor-parsing level — the row
 /// contract itself (required/optional fields, defaults, column-name matching) is
-/// <c>DbDataSync.Drivers.Generic.Tests.QueryCatalogTests</c>, against a real connection.</summary>
+/// <c>DbDataKit.Sync.Drivers.Generic.Tests.QueryCatalogTests</c>, against a real connection.</summary>
 public sealed class QueryCatalogDescriptorTests
 {
     private sealed class StubDbProviderFactory : DbProviderFactory;

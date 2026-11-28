@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// A connection addresses its engine one way or the other, and a credential never reaches the file that

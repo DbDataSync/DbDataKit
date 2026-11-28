@@ -1,4 +1,4 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.TaskRunner;
 
 namespace DbDataSync.TaskRunner.Tests;

@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// Deletes a temp directory that a test pointed <c>LibGit2Sharp.Repository.Init</c> at.

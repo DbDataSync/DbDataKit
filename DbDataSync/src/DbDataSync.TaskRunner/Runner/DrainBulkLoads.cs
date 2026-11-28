@@ -1,5 +1,5 @@
 using DbDataKit.Runner.Kit;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.State;
 using Microsoft.Extensions.Logging;
 

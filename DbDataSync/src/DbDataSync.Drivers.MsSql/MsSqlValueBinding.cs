@@ -1,9 +1,9 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Microsoft.Data.SqlClient;
 
 namespace DbDataSync.Drivers.MsSql;

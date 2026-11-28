@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -26,7 +26,7 @@ public sealed class ScriptCompilerTests : IDisposable
     };
 
     private const string ValidCode = """
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class Upper : ISqlColumnExpression
         {
@@ -56,10 +56,21 @@ public sealed class ScriptCompilerTests : IDisposable
     }
 
     [Fact]
+    public void A_using_of_an_old_namespace_fails_naming_the_new_one()
+    {
+        var compilation = _compiler.Compile(Script(ValidCode.Replace("DbDataKit.Sync.Scripting.Abstractions", "DbDataSync.Scripting.Abstractions")));
+
+        Assert.False(compilation.Success);
+        var diagnostic = Assert.Single(compilation.Diagnostics);
+        Assert.Equal(1, diagnostic.Line);
+        Assert.Contains("`DbDataKit.Sync.Scripting.Abstractions`", diagnostic.Message);
+    }
+
+    [Fact]
     public void BrokenCode_ReportsDiagnosticsWithALineNumber()
     {
         var compilation = _compiler.Compile(Script("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : ISqlColumnExpression
             {
@@ -83,7 +94,7 @@ public sealed class ScriptCompilerTests : IDisposable
         // production incident.
         var compilation = _compiler.Compile(Script("""
             using System.Net.Http;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : ISqlColumnExpression
             {
@@ -106,7 +117,7 @@ public sealed class ScriptCompilerTests : IDisposable
         // string, so there is no reference set that admits one and not the other. The guard catches a
         // spelled-out qualified name, which is the shape the accident actually takes.
         var compilation = _compiler.Compile(Script("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : ISqlColumnExpression
             {
@@ -124,7 +135,7 @@ public sealed class ScriptCompilerTests : IDisposable
     {
         var compilation = _compiler.Compile(Script("""
             using System.IO;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : ISqlColumnExpression
             {
@@ -143,7 +154,7 @@ public sealed class ScriptCompilerTests : IDisposable
     {
         // The guard matches namespaces, not identifiers. Someone's own `File` class is their business.
         var compilation = _compiler.Compile(Script("""
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class File { public static string Name => "ok"; }
 
@@ -224,7 +235,7 @@ public sealed class ScriptCompilerTests : IDisposable
         File.WriteAllText(Path.Combine(_cacheRoot, "outside.csx"), "int Secret() => 1;");
         var compiler = new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_cacheRoot, "cache2")), scripts);
         const string Body = """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Wrapped : ISqlColumnExpression
             {
@@ -249,7 +260,7 @@ public sealed class ScriptCompilerTests : IDisposable
         var version = Directory.EnumerateDirectories(folder).Select(Path.GetFileName).Where(v => v is not null && !v.Contains('-')).Order().Last();
         var compiler = new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_cacheRoot, "cache3")), packageSource: packages);
         const string Body = """
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class UsesNpgsql : ISqlColumnExpression
             {
@@ -274,12 +285,12 @@ public sealed class ScriptCompilerTests : IDisposable
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
         public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Sync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 
     /// <summary>
     /// A script must be able to read what its contract hands it. <c>ColumnMapping</c>,
-    /// <c>SourceTableRef</c> and <c>TableRef</c> live in DbDataSync.Core, and until phase 41 that
+    /// <c>SourceTableRef</c> and <c>TableRef</c> live in DbDataKit.Sync.Core, and until phase 41 that
     /// assembly was not in the reference set — so a lifecycle hook could implement the interface and
     /// not touch <c>context.Target</c>, which is exactly what phase 27's motivating example does.
     /// Nothing had run one, so nothing had found out.
@@ -296,8 +307,8 @@ public sealed class ScriptCompilerTests : IDisposable
             Code = """
                 using System.Collections.Generic;
                 using System.Linq;
-                using DbDataSync.Drivers.Abstractions;
-                using DbDataSync.Scripting.Abstractions;
+                using DbDataKit.Sync.Drivers.Abstractions;
+                using DbDataKit.Sync.Scripting.Abstractions;
 
                 public sealed class ReadsItsContext : ILifecycleHook
                 {

@@ -1,5 +1,6 @@
 using System.Text;
 using DbDataKit.Scripting;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.Drivers.Descriptor;

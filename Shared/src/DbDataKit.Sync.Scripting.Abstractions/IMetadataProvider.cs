@@ -1,7 +1,7 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// Answers "what databases, tables and columns does this connection have", in place of the driver's own

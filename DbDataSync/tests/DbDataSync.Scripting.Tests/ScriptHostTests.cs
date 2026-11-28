@@ -1,5 +1,5 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -27,7 +27,7 @@ public sealed class ScriptHostTests : IDisposable
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
         _host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
     }
@@ -35,7 +35,7 @@ public sealed class ScriptHostTests : IDisposable
     public void Dispose() => GitTempDirectory.DeleteRecursively(_repoRoot);
 
     private static string Code(string upperOrLower) => $$"""
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class Expr : ISqlColumnExpression
         {
@@ -110,6 +110,6 @@ public sealed class ScriptHostTests : IDisposable
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
         public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Sync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 }

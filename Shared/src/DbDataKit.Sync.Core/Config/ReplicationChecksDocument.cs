@@ -1,6 +1,6 @@
 using DbDataKit.Quality;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>The checks of a replication as a screen edits them: <see cref="Checks"/> as forms, <see cref="Text"/> the section as the file has it, <see cref="Version"/> what a save quotes (plan 33 UE07).</summary>
 public sealed record ReplicationChecksDocument(IReadOnlyList<CheckForm> Checks, string Text, string Version)

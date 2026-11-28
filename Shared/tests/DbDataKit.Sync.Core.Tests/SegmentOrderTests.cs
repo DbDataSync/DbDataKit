@@ -1,9 +1,9 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>The segment order setting (plan 13, M03): the request, the table mapping, the replication and the target connection each may set it, the most specific wins, and every level survives a save and a load.</summary>
 public sealed class SegmentOrderTests : IDisposable

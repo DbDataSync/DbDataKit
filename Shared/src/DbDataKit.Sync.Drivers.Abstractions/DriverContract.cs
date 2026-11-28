@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// The versioning policy for the compiled-plugin contract (<see cref="IDriver.ContractVersion"/>) —

@@ -1,7 +1,7 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.Scripting;
 

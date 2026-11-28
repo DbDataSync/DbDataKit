@@ -1,14 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Describes which slice of a source table one batch-reload unit of work covers. Engine-neutral: a
 /// segment is a column plus bounds, never a SQL fragment — each driver renders its own predicate (see
 /// DbDataSync.Drivers.MsSql.MsSqlSegmentScope for the v1 MSSQL rendering).
 /// <para>
-/// **In <c>DbDataSync.Core.Config</c> rather than beside the drivers that consume it**, because a table
+/// **In <c>DbDataKit.Sync.Core.Config</c> rather than beside the drivers that consume it**, because a table
 /// mapping now stores its own default segmenting as one of these lists — and config cannot depend on
 /// the driver layer, which depends on config. The type was always engine-neutral; this only moves it
 /// to where its neutrality is structurally enforced.

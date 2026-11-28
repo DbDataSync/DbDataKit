@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Phase 124's delete-diff sweep guard — pure arithmetic, and the JSON round trip its
 /// options-bag channel relies on. No YAML converter yet: that's phase 125's, once

@@ -1,5 +1,5 @@
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.Scripting;
 

@@ -13,9 +13,9 @@
   <ItemGroup>
     <DbDataKitReference Include="Runner.Kit" />   <!-- the kit a drain is written against, and the protocol client it speaks; plan 28c, E03 -->
     <DbDataKitReference Include="Catalog.Cache" />   <!-- the answer of the set's `discover`: one connection of catalog-cache/2 -->
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
     <ProjectReference Include="..\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
     <ProjectReference Include="..\DbDataSync.Drivers.MsSql\DbDataSync.Drivers.MsSql.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.ArrowFlightSql\DbDataSync.Drivers.ArrowFlightSql.csproj" />
     <ProjectReference Include="..\DbDataSync.Drivers.DuckDb\DbDataSync.Drivers.DuckDb.csproj" />
@@ -32,7 +32,7 @@
     <ProjectReference Include="..\DbDataSync.State\DbDataSync.State.csproj" />
     <ProjectReference Include="..\DbDataSync.Tracking\DbDataSync.Tracking.csproj" />   <!-- the follower of a runner-owned replication's units; plan 28c, E17 -->
     <ProjectReference Include="..\DbDataSync.Planning\DbDataSync.Planning.csproj" />   <!-- the planner a drain runs at the start of each cycle; plan 28c, E11 -->
-    <ProjectReference Include="..\DbDataSync.Provisioning\DbDataSync.Provisioning.csproj" />   <!-- a replication's database setup as a manual task; plan 28c, E21 -->
+    <DbDataKitReference Include="Sync.Provisioning" />   <!-- a replication's database setup as a manual task; plan 28c, E21 -->
     <!-- the shared state types come with the project reference; StateDatabase is Sync's own (plan 13, U04) -->
     <Using Include="DbDataKit.State" />
     <Using Include="DbDataKit.Monitoring" />

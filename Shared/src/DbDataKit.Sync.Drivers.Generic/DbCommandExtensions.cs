@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 public static class DbCommandExtensions
 {

@@ -1,9 +1,9 @@
 using System.Data.Common;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.MsSql;
 
@@ -80,7 +80,7 @@ internal sealed class MsSqlTargetShape
     }
 
     /// <summary>The cache-only path every MERGE/delete-insert writer's real <c>ApplyAsync</c> uses as of
-    /// phase 91 — see <see cref="DbDataSync.Drivers.Generic.TargetShape.FromCachedColumns"/>, which this
+    /// phase 91 — see <see cref="DbDataKit.Sync.Drivers.Generic.TargetShape.FromCachedColumns"/>, which this
     /// mirrors exactly for the reason the two types exist side by side in the first place.</summary>
     public static MsSqlTargetShape FromCachedColumns(
         string mappingName,

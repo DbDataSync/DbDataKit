@@ -1,7 +1,7 @@
 using DbDataKit.Dialect;
-using OracleDialect = DbDataSync.Core.Sql.OracleDialect;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using OracleDialect = DbDataKit.Sync.Core.Sql.OracleDialect;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Oracle.Tests;
 

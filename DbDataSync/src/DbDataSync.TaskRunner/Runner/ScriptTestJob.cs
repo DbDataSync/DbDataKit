@@ -1,8 +1,8 @@
 using System.Globalization;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Kit;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.Scripting;
 
 namespace DbDataSync.TaskRunner.Runner;

@@ -31,7 +31,7 @@ dialect:
     connectTimeout: "Login Timeout"
 
 # Native type name -> canonical. Same shape and same names SQL Server's own compiled dialect already
-# maps (DbDataSync.Core.Sql.MsSqlDialect.ToCanonicalType) — copied rather than shared, since a descriptor
+# maps (DbDataKit.Sync.Core.Sql.MsSqlDialect.ToCanonicalType) — copied rather than shared, since a descriptor
 # driver's typeMap is data, not code, and duplicating a well-understood table is cheaper than a runtime
 # dependency between the two for one engine that happens to overlap.
 typeMap:
@@ -61,7 +61,7 @@ typeMap:
   uniqueidentifier: Guid
   xml:              Xml
 
-# Engine-neutral strategies to offer. All already exist in DbDataSync.Drivers.Generic.
+# Engine-neutral strategies to offer. All already exist in DbDataKit.Sync.Drivers.Generic.
 capabilities:
   readers: [Watermark, BatchReload]
   staging: [StagingTable]

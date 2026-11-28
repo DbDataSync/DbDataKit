@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbDataSync.Scripting\DbDataSync.Scripting.csproj" />
-    <ProjectReference Include="..\..\src\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
     <!-- Test-only: proving phase 27's ILifecycleHook contract against both real dialects (the
          cross-engine schema-evolution case it exists for), without pulling either driver into
          DbDataSync.Scripting itself. -->

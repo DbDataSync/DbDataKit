@@ -1,6 +1,6 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.Jdbc.Ado;
 
 namespace DbDataSync.Drivers.Jdbc;

@@ -1,5 +1,5 @@
 using DbDataKit.Dialect;
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// Phase 165V's reader spike, generic JDBC over IKVM — scoped to exactly what that spike's one Postgres
