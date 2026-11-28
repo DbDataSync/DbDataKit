@@ -73,18 +73,27 @@ public static class ServerJoin
 
     /// <summary>
     /// Joins the console when a join request waits; null when there is none. <paramref name="self"/> is asked only when there is a request, so a server
-    /// that has none does not make a key for nothing.
+    /// that has none does not make a key for nothing. <c>keep</c> keeps what the console handed over about the server's group (its key, its ports) before the console
+    /// becomes a client; when it fails, the token is spent, so the request is deleted and the join fails naming what could not be kept.
     /// </summary>
     /// <exception cref="JoinRequestFileException">The request cannot be used; the message names the file.</exception>
     /// <exception cref="ServerJoinException">The console refused the join, or could not be reached.</exception>
     public static async Task<JoinedConsole?> RunAsync(string dataFolder, Func<JoiningServer> self, PendingJoins pending, IPairedClientStore clients, JoinedConsoles consoles,
-        CancellationToken ct = default, TimeSpan? timeout = null)
+        CancellationToken ct = default, TimeSpan? timeout = null, Action<JoinedConsole>? keep = null)
     {
         var path = RequestPath(dataFolder);
         if (JoinRequestFile.Read(path) is not { } file) return null;
         JoinedConsole joined;
+        var console = JoinRequestFile.Text(file.Console);
         try { joined = await JoinClient.JoinAsync(file, self(), pending, ct, timeout: timeout).ConfigureAwait(false); }
-        catch (JoinFailedException ex) { throw new ServerJoinException(JoinRequestFile.Text(file.Console), ex.Message, ex.Answer, ex); }
+        catch (JoinFailedException ex) { throw new ServerJoinException(console, ex.Message, ex.Answer, ex); }
+        try { keep?.Invoke(joined); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            JoinRequestFile.Delete(path);
+            throw new ServerJoinException(console, $"{console} accepted the join, but this server could not keep what it handed over about its group: {ex.Message} " +
+                "The join token is used; make a new command on the console once this is fixed.", null, ex);
+        }
         clients.Upsert(joined.AsPairedClient());
         consoles.Save(joined);
         JoinRequestFile.Delete(path);

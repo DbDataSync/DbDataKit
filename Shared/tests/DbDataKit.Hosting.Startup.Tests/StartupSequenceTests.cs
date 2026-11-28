@@ -207,6 +207,18 @@ public sealed class StartupSequenceTests : StartupTestBase
     }
 
     [Fact]
+    public async Task A_join_refused_inside_the_ports_step_is_the_join_step_s_failure()
+    {
+        var result = await Sequence().Step(StartupStep.Ports, _ => throw StartupStepException.Join("https://console.example.com:7800", "the join token was already used"))
+            .RunAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupStep.Join, result.FailedStep);
+        var text = Read(FailureFile);
+        Assert.Contains("failed at the join step", text);
+        Assert.Contains($"Step: {StartupStep.Join.Name()}", text);
+    }
+
+    [Fact]
     public async Task A_port_refused_in_a_step_that_did_not_name_it_still_gets_the_excluded_ranges_and_the_hint()
     {
         var sequence = Sequence(excluded: [new PortRange(7840, 7859)])

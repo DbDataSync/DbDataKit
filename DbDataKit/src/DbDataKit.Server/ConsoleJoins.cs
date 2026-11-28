@@ -13,7 +13,9 @@ namespace DbDataKit.Server;
 /// <param name="keys">The key the console signs with; needed to answer a join, not to make a token.</param>
 /// <param name="registry">Where a joined server is recorded; needed to answer a join, not to make a token.</param>
 /// <param name="certificateFingerprint">The fingerprint of the certificate the console presents; needed to make the command of a token (<see cref="Invite"/>).</param>
-public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = null, InstanceRegistry? registry = null, TimeProvider? clock = null, string? certificateFingerprint = null)
+/// <param name="groupKeys">The console's encrypted store, where the keys of the groups it manages are kept; null: a join hands no group anything.</param>
+public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = null, InstanceRegistry? registry = null, TimeProvider? clock = null, string? certificateFingerprint = null,
+    DbDataKit.Secrets.Store.EncryptedFileSecretStore? groupKeys = null)
 {
     /// <summary>The products a token can be made for, as <c>setup invite</c> names them, and the program each runs <c>pair</c> with.</summary>
     public static readonly IReadOnlyDictionary<string, string> Products = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -31,6 +33,9 @@ public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = nu
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     public IJoinTokenStore Tokens { get; } = new StateJoinTokenStore(state);
+
+    /// <summary>The groups of the servers that joined: what a further instance is handed, and which instance a named group is; null when the console was opened without its store.</summary>
+    public ConsoleJoinGroups? Groups { get; } = groupKeys is null ? null : new ConsoleJoinGroups(state, groupKeys);
 
     private ConsoleKeyStore Keys => keys ?? throw new InvalidOperationException("This console's joins were opened to make tokens only.");
 
@@ -89,14 +94,22 @@ public sealed class ConsoleJoins(StateDatabase state, ConsoleKeyStore? keys = nu
     public async Task<JoinService> ServiceAsync(Func<string> certificateFingerprint, CancellationToken ct)
     {
         var identity = await Keys.GetOrCreateAsync(ct);
-        return new JoinService(identity, ConsoleInstances.ClientName, certificateFingerprint, Tokens, new HttpJoinCallback(), new JoinAudit(state), _clock);
+        return new JoinService(identity, ConsoleInstances.ClientName, certificateFingerprint, Tokens, new HttpJoinCallback(), new JoinAudit(state), _clock, groups: Groups);
     }
 
-    /// <summary>Records a server that joined, with its certificate pinned and the console key it now holds.</summary>
+    /// <summary>
+    /// Records a server that joined, with its certificate pinned and the console key it now holds. A further instance of a registered group (the same instance id,
+    /// joining from another address) leaves the group's entry as it is: the console keeps calling the group at the address and certificate it registered, and the
+    /// instances share the console as a client through their state. The server that joined first, joining again from its address, replaces its entry.
+    /// </summary>
     public async Task RecordAsync(JoinedServer server, CancellationToken ct)
     {
         var identity = await Keys.GetOrCreateAsync(ct);
-        (registry ?? throw new InvalidOperationException("This console's joins were opened to make tokens only.")).Add(server, identity.Key.Fingerprint);
+        var instances = registry ?? throw new InvalidOperationException("This console's joins were opened to make tokens only.");
+        var registered = instances.All().FirstOrDefault(i => i.InstanceId == server.InstanceId);
+        if (registered is null || string.Equals(registered.Url.GetLeftPart(UriPartial.Authority), server.Address.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase))
+            instances.Add(server, identity.Key.Fingerprint);
+        Groups?.Record(server);
     }
 
     /// <summary>The join's audit entries in the console's audit: <c>server.join</c>, the person who made the token as actor, the token's id and the outcome in the detail.</summary>

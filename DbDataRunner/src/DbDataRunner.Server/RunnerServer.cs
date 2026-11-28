@@ -32,7 +32,7 @@ public static class RunnerServer
     /// <summary>The server's instance id, made the first time and kept in its state database.</summary>
     /// <summary>
     /// The join step of the start: joins the console a <c>join-request.yaml</c> in the server's directory names, while the server listens, so it answers
-    /// the console's callback. The Runner's own group is sent when it is not the default one.
+    /// the console's callback. The Runner's own group is sent when it is not the default one. The group's key the console hands over is kept in the instance's own store.
     /// </summary>
     public static async Task JoinAsync(WebApplication app, RunnerSettings settings, X509Certificate2 certificate, StateDatabase state, CancellationToken ct)
     {
@@ -41,7 +41,9 @@ public static class RunnerServer
             await ServerJoin.RunAsync(settings.Directory,
                 () => new JoiningServer("runner", InstanceId(state), System.Net.Dns.GetHostName(), ServerJoin.AddressFor(settings.Listen),
                     PairingProof.CertificateFingerprint(certificate), ConsoleSigningKey.Generate(), settings.Group == RunnerState.DefaultGroup ? null : settings.Group),
-                app.Services.GetRequiredService<PendingJoins>(), new PairingFiles(settings.ServerYaml, Group: state).Clients(), new JoinedConsoles(new GroupSettings(state)), ct);
+                app.Services.GetRequiredService<PendingJoins>(), new PairingFiles(settings.ServerYaml, Group: state).Clients(), new JoinedConsoles(new GroupSettings(state)), ct,
+                // the group's key, made by the console and handed over in the join's answer: every instance of the group resolves the logins sent to any of them
+                keep: joined => { if (joined.GroupKey is { } key) app.Services.GetRequiredService<RunnerGroupSecrets>().Key.Join(key); });
         }
         catch (ServerJoinException ex) { throw DbDataKit.Hosting.Startup.StartupStepException.JoinFailed(ex.Console, ex.Answer, ex.Message, ex); }
     }
@@ -112,6 +114,7 @@ public static class RunnerServer
 
         // the joins this server is waiting on, which the console's callback confirms during the join step of its start
         builder.Services.AddSingleton<PendingJoins>();
+        builder.Services.AddSingleton(groupSecrets);
         builder.Services.AddSingleton(state);
         builder.Services.AddSingleton(sp => new RunnerEngine(settings, state, sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbDataRunner.Engine")));
         builder.Services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<RunnerEngine>());

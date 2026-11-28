@@ -93,6 +93,16 @@ not right, and the message names the file. `Delete` removes the file.
    (`JoinAnswer`), and hands the host the `JoinedServer` to record and pin. The server gets back a `JoinedConsole`; `AsPairedClient()` turns it
    into the paired client that validates the console's tokens.
 
+**The server's group.** A console that passes `IJoinGroups` to `JoinService` is asked about the server's group once the token's checks passed and
+before the callback (`PrepareAsync`): it refuses (`JoinGroupDecision.Refuse`, which counts as a refused try and tells the server why) or says what
+to hand over (`JoinGroupHandover`). The answer then carries the group's key (`GroupKey`, base64 of 32 bytes), the listen settings of the group's first
+instance for a further instance to take (`Listeners`, by their name in the server's settings file, such as `public.listen`) and the link of the group
+with its partner group (`Link`, null while there is none), and `JoinedConsole` has the same three. The request carries what the console needs for
+that: the server's own listen settings (`JoiningServer.Listeners`) and the key its group already holds, if any (`JoiningServer.GroupKey`). A server
+that does not send them, and a console that answers without them, join as before. `ServerJoin.RunAsync` takes `keep`, which keeps what was handed
+over (the product puts the key in its own store, a Gateway writes the ports) before the console becomes a client; when it fails, the token is spent, so
+the request is deleted and the join step fails naming what could not be kept. The console's own groups are `ConsoleJoinGroups` in `DbDataKit.Server`.
+
 The join route takes no credentials, because a joining server has nothing but its signature: the console's host maps it where its sign-in does not
 apply.
 

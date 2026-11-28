@@ -62,18 +62,72 @@ public static class GatewayListeners
     /// Writes each chosen address to its setting in <paramref name="settingsFile"/> (made when it is not there), leaving the rest of the file, comments and all, as it is. The next start reads them as configured.
     /// </summary>
     /// <exception cref="InvalidOperationException">The file cannot be written or edited; the message names it.</exception>
-    public static void Pin(string settingsFile, IReadOnlyList<ChosenListener> chosen)
+    public static void Pin(string settingsFile, IReadOnlyList<ChosenListener> chosen) =>
+        Write(settingsFile, [.. chosen.Select(c => (c.FilePath, new YamlValue(c.Url.ToString())))], "which it chose at this start");
+
+    /// <summary>The listen settings of the three listeners a group's instances share, by their name in <c>server.yaml</c>: what a Gateway reports when it joins a console.</summary>
+    public static Dictionary<string, string[]> Reported(GatewayOptions options)
     {
-        if (chosen.Count == 0) return;
+        var reported = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var (setting, listen, _) in Shared(options))
+            if (Parsed(listen).Select(u => u.ToString()).ToArray() is { Length: > 0 } addresses) reported[setting] = addresses;
+        return reported;
+    }
+
+    /// <summary>
+    /// The addresses this instance takes from its group's first instance (<paramref name="handed"/>, as the console handed them over at the join): for each of the three shared listeners, the group's schemes and
+    /// ports, on the address this instance's own setting names (the listener's default address when it has none), so the instance listens on the group's ports on its own machine. A setting the group did not hand
+    /// over is left out.
+    /// </summary>
+    public static IReadOnlyList<(string Setting, IReadOnlyList<ListenUrl> Urls)> FromGroup(GatewayOptions own, IReadOnlyDictionary<string, string[]> handed)
+    {
+        var taken = new List<(string, IReadOnlyList<ListenUrl>)>();
+        foreach (var (setting, listen, defaultHost) in Shared(own))
+        {
+            if (!handed.TryGetValue(setting, out var addresses)) continue;
+            var host = Parsed(listen).FirstOrDefault()?.Host ?? defaultHost;
+            var urls = Parsed(addresses).Select(u => ListenUrl.Parse($"{u.Scheme}://{(host.Contains(':') ? $"[{host}]" : host)}:{u.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}")).ToList();
+            if (urls.Count > 0) taken.Add((setting, urls));
+        }
+        return taken;
+    }
+
+    /// <summary>
+    /// Writes the group's ports (<see cref="FromGroup"/>) to <paramref name="settingsFile"/> as this instance's <c>listen</c>, <c>public.listen</c> and <c>management.listen</c>. Returns true when that changes an
+    /// address the instance listens on now, so the instance starts again to listen on the group's.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The file cannot be written or edited; the message names it.</exception>
+    public static bool TakeGroup(string settingsFile, GatewayOptions own, IReadOnlyDictionary<string, string[]> handed)
+    {
+        var taken = FromGroup(own, handed);
+        if (taken.Count == 0) return false;
+        Write(settingsFile, [.. taken.Select(t => (t.Setting, t.Urls.Count == 1
+            ? new YamlValue(t.Urls[0].ToString())
+            : YamlValue.Raw("[" + string.Join(", ", t.Urls.Select(u => YamlText.FlowScalar(u.ToString()))) + "]")))], "which its group listens on");
+        var now = Shared(own).ToDictionary(l => l.Setting, l => Parsed(l.Listen).Select(u => u.ToString()).ToList());
+        return taken.Any(t => !now[t.Setting].SequenceEqual(t.Urls.Select(u => u.ToString())));
+    }
+
+    // the listeners every instance of a group has on the same ports, with the address one takes when its setting names none
+    private static IEnumerable<(string Setting, IReadOnlyList<string> Listen, string DefaultHost)> Shared(GatewayOptions o) =>
+    [
+        ("public.listen", o.Public.Listen, "0.0.0.0"),
+        ("listen", o.Listen, "0.0.0.0"),
+        ("management.listen", o.Management.Listen, "127.0.0.1"),
+    ];
+
+    private static void Write(string settingsFile, IReadOnlyList<(string Path, YamlValue Value)> settings, string why)
+    {
+        if (settings.Count == 0) return;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(settingsFile))!);
             var text = File.Exists(settingsFile) ? File.ReadAllText(settingsFile) : "";
-            foreach (var c in chosen)
+            foreach (var (path, value) in settings)
             {
-                var edit = YamlEditor.Set(text, c.FilePath, new YamlValue(c.Url.ToString()), settingsFile);
+                var edit = YamlEditor.Set(text, path, value, settingsFile);
                 if (edit.Text is null)
-                    throw new InvalidOperationException($"The Gateway listens on {c.Url}, which it chose at this start, and cannot write it to {settingsFile} as `{c.FilePath}` to keep it: {edit.Problem?.Message ?? "the edit was refused"}");
+                    throw new InvalidOperationException($"The Gateway listens on {value.Text}, {why}, and cannot write it to {settingsFile} as `{path}` to keep it: {edit.Problem?.Message ?? "the edit was refused"}");
                 text = edit.Text;
             }
             var temp = settingsFile + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
@@ -82,7 +136,7 @@ public static class GatewayListeners
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            throw new InvalidOperationException($"The Gateway listens on ports it chose at this start, and cannot write them to {settingsFile} to keep them: {e.Message}", e);
+            throw new InvalidOperationException($"The Gateway listens on ports {why}, and cannot write them to {settingsFile} to keep them: {e.Message}", e);
         }
     }
 

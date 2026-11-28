@@ -59,11 +59,13 @@ public sealed class StartupSequence(StartupOptions options)
             }
             catch (Exception error)
             {
-                var report = Describe(step, error, since, Options.Time.GetUtcNow(), file);
+                // a server that joins the console before its listeners start (the Gateway) joins inside the ports step: a refused join is still the join step's
+                var failed = Find<StartupStepException>(error) is { Step: StartupStep.Join } ? StartupStep.Join : step;
+                var report = Describe(failed, error, since, Options.Time.GetUtcNow(), file);
                 file.WriteFailure(report);
                 if (file.IsUsable) Options.Failed(report);
                 else Options.Unreportable(report);
-                return new StartupResult(step, error, report, file.FilePath) { FailureFileWritten = file.IsUsable };
+                return new StartupResult(failed, error, report, file.FilePath) { FailureFileWritten = file.IsUsable };
             }
         }
         file.Delete();
