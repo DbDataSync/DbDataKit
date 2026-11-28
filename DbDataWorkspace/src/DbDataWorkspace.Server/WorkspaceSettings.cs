@@ -45,6 +45,9 @@ public sealed record WorkspaceSettings(string Directory, Uri Listen)
     /// <summary>Where the packages of csx integrations are kept; null: <c>integration-cache</c> in the server's directory.</summary>
     public string? IntegrationCache { get; init; }
 
+    /// <summary>The destinations the server's own code may connect to, when something other than the file says (tests); null: the <c>outbound:</c> setting of <c>server.yaml</c>, read when the server is built (<see cref="WorkspaceOutbound"/>).</summary>
+    public DbDataKit.Outbound.OutboundList? Outbound { get; init; }
+
     public const string Product = "dbdataworkspace";
     /// <summary>The address a first start listens on when no port is configured: the first port of the Workspace's sub-block, or the next free one (<see cref="DbDataKit.Hosting.Startup.ListenPorts"/>).</summary>
     public const string DefaultListen = "https://127.0.0.1:7860";

@@ -22,6 +22,9 @@ public sealed class BunAppBundler(string bunPath = "bun") : IAppBundler
         var entry = Path.GetFullPath(Path.Combine(source, request.EntryPoint));
         if (!entry.StartsWith(source + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return AppBundleResult.Failed(started.Elapsed, $"The entry point {request.EntryPoint} is outside the app's source folder.");
         if (!File.Exists(entry)) return AppBundleResult.Failed(started.Elapsed, $"The entry point {request.EntryPoint} does not exist.");
+        // a Bun macro runs its code while Bun bundles, so it is refused before Bun starts, on every kind of build
+        var macros = BunMacros.Find(source);
+        if (macros.Count > 0) return AppBundleResult.Failed(started.Elapsed, ["The source imports a Bun macro; nothing was built.", .. macros.Select(m => m.Message)]);
 
         var output = Path.GetFullPath(request.OutputDirectory);
         if (output == source || source.StartsWith(output + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return AppBundleResult.Failed(started.Elapsed, "The output folder must not be the source folder or hold it.");

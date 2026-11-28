@@ -119,12 +119,35 @@ public class SampleTests
         Assert.Contains("could not be read as `staging.orders`", bad.Tables.Single(t => t.Name == "staging.orders").Error);
     }
 
-    [Fact]
-    public void A_model_cannot_read_files_while_it_runs_on_sample_data()
+    /// <summary>Queries a model must not run on sample data, with the start of DuckDB's refusal of each: a file, an address, external access turned back on, an extension
+    /// loaded. External access is off, so the Workspace can run a draft's Sample and model tests without running anything that reaches outside the in-memory database.</summary>
+    public static TheoryData<string, string> OutsideReads => new()
     {
-        var model = Model("marts.m", "SELECT * FROM read_csv('/etc/hostname')");
+        { "SELECT * FROM read_csv('/etc/passwd')", "Permission Error: Cannot access file" },
+        { "SELECT * FROM read_parquet('https://example.com/data.parquet')", "Permission Error: Cannot access file" },
+        { "SELECT 1 AS x; SET enable_external_access = true; SELECT * FROM read_csv('/etc/passwd')", "Invalid Input Error: Cannot enable external access" },
+        { "SELECT 1 AS x; SET autoload_known_extensions = true; LOAD httpfs", "Permission Error: Loading external extension" },
+    };
+
+    [Theory]
+    [MemberData(nameof(OutsideReads))]
+    public void A_model_cannot_read_files_or_addresses_or_turn_external_access_back_on_while_it_runs_on_sample_data(string sql, string refusal)
+    {
+        var model = Model("marts.m", sql);
         var r = SampleRun.Run([], [model], ["marts.m"], new SampleOptions());
-        Assert.NotNull(r.Tables.Single(t => t.Name == "marts.m").Error);
+        Assert.StartsWith(refusal, r.Tables.Single(t => t.Name == "marts.m").Error);
+    }
+
+    [Theory]
+    [MemberData(nameof(OutsideReads))]
+    public void The_sample_command_fails_a_model_that_reads_outside_the_sample_database_with_duckdbs_refusal(string sql, string refusal)
+    {
+        var dir = Project();
+        TestFiles.WriteAllText(Path.Combine(dir, "models/marts/by_customer.sql"), sql + "\n");
+        var (exit, output, err) = Cli("project", "sample", "--project", dir);
+        Assert.Equal(CliApp.ExitFindings, exit);
+        Assert.Contains("marts.by_customer failed on sample data", err);
+        Assert.Contains(refusal, output + err);
     }
 
     // ---- the command ----

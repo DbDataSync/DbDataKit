@@ -29,5 +29,6 @@
     <DbDataKitReference Include="Secrets.Store" />   <!-- this server's own store: the state connection's login -->
     <DbDataKitReference Include="Secrets.Windows" />
     <DbDataKitReference Include="Web" />   <!-- pairing, key rotation, the version header and the token check -->
+    <DbDataKitReference Include="Outbound" />   <!-- the outbound list: package sources and the projects' git remotes -->
   </ItemGroup>
 </Project>

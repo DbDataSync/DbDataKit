@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using DbDataKit.Authoring.Server;
 using DbDataKit.Hosting;
 using DbDataKit.Hosting.Certificates;
+using DbDataKit.Outbound;
 using DbDataKit.State;
 using DbDataKit.State.Api;
 using DbDataKit.Web.Trust;
@@ -81,6 +82,11 @@ public static class WorkspaceServer
         builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(new DbDataKit.State.Engines.Housekeeping.StateHousekeeping(state, WorkspaceState.Modules, WorkspaceState.Scope, WorkspaceState.ServiceId,
             settings.State ?? WorkspaceState.Resolve(settings.Directory).Settings, settings.Directory));
 
+        // the outbound list: the destinations the server's own code may connect to (package sources, the projects' git remotes); a refusal is written to the management audit
+        var audit = new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log"));
+        builder.Services.AddSingleton<IOutboundAudit>(new WorkspaceOutbound.Audit(audit));
+        builder.Services.AddOutboundGate(settings.Outbound ?? WorkspaceOutbound.Load(settings.ServerYaml), WorkspaceOutbound.Service);
+
         // what the join step of the start needs: the joins this server waits on (the console's callback confirms them) and where the joined console is kept
         builder.Services.AddSingleton<PendingJoins>();
         builder.Services.AddSingleton(new JoinTarget(state, clients, instanceId, fingerprint));
@@ -105,7 +111,8 @@ public static class WorkspaceServer
             new RunnerTool(settings.RunnerExecutable, sources: settings.IntegrationSources, cache: settings.IntegrationCache ?? Path.Combine(settings.Directory, "integration-cache")), new DotnetTool(settings.DotnetExecutable));
         var builds = new WorkspaceBuilds(settings.Directory, store, workspaces, () => settings.Apps ?? WorkspaceAppSettings.Load(settings.Directory), log, kinds);
         app.Lifetime.ApplicationStopping.Register(builds.Dispose);
-        WorkspaceManagement.Map(app, instanceId, WorkspaceSettings.Product, Version, store, new WorkspaceProjects(settings.Directory, store, kinds), new FileAuditLog(Path.Combine(settings.Directory, "management-audit.log")), log, workspaces, builds);
+        WorkspaceManagement.Map(app, instanceId, WorkspaceSettings.Product, Version, store, new WorkspaceProjects(settings.Directory, store, kinds), audit, log, workspaces, builds,
+            app.Services.GetRequiredService<OutboundGate>());
         return app;
     }
 
