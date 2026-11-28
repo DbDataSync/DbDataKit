@@ -336,6 +336,18 @@ The join token was made for group night, and this server is not an instance of i
 its own. Point this server's state at the group's database, or make a command for a group of its own on the console.
 ```
 
+**Which instance of a group the console calls.** The console calls a group at the address of the instance that joined first. `instances.yaml` has one
+entry per instance id, and every instance of a group has the group's id:
+
+- A further instance joins from another address: the entry keeps the first instance's address and certificate. The further instance accepts the
+  console's calls through what the group's state holds about the console.
+- The first instance joins again from its own address, for example with a renewed certificate: its entry is replaced.
+- A token that names no group is used by an instance the console already knows: the instance joins under the group the console knows it by.
+
+Example: Gateways `gw-a` and `gw-b` are instances of `sales`, and the Servers page lists `sales` at `gw-a`'s address. When `gw-a` moves to a new
+address, the console keeps calling the old one. To move it, remove the server on the Servers page, make a new command for `sales`, and run it on
+`gw-a`.
+
 Runner and Gateway groups never pair with each other directly. Linking a Gateway group with a Runner group is a console action (`docs/architecture.md`,
 "What runs where"); a new instance of a linked group gets the link with its join.
 

@@ -132,23 +132,6 @@ rules are in [docs/install.md](../docs/install.md).
 
 ## Proposed decisions
 
-### INSTALLER-P68: the console keeps calling a group at its first instance (default, awaiting the owner)
-
-`instances.yaml` has one entry per instance id, and every instance of a group has the group's id. A further instance that joins from another address
-does not replace the entry: the console keeps the first instance's address and certificate, and the further instance holds the console as a client
-through the group's state. The instance that joined first, joining again from its own address, replaces the entry (a renewed certificate). A token
-that names no group joins an instance under the group the console already knows it by. Example: Gateways `gw-a` and `gw-b` of `sales`; the Servers page
-lists `sales` at `gw-a`'s address. If `gw-a` moves to a new address and joins again, the console still calls the old address until the server is
-removed from the Servers page and joined again.
-
-Options:
-
-- A, as built.
-- B: the last join's address wins, so the console follows a moved server but calls whichever instance joined last.
-- C: the console lists each instance of a group (the group as one node with its instances, TRUSTZONES-11) and calls any live one.
-
-Recommendation: A until TRUSTZONES-11 gives a group its instances, then C.
-
 ### INSTALLER-P69: a Gateway joins before its listeners start (default, awaiting the owner)
 
 The Runner and the Workspace join after their ports step, because the console calls them back on their own listener. A Gateway with a join request
