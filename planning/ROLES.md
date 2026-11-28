@@ -223,6 +223,25 @@ owner's word), and the reviewer checks it the way it checks a removed proposal.
 Parked work is in `planning/PARKED.md`, one section per item, with its whole design: what it does, how, why, and why it is parked. Parked work is
 never kept in a subject file, so a subject can close without it. Un-parking an item moves its section into a subject as an open design or tasks.
 
+## Plans
+
+A plan groups work toward one outcome. It is a file `planning/plans/<NAME>.md` with the outcome in one or two sentences and the tasks that reach it, in
+order, by their ids from any subject. A task stays in its subject; a plan only lists it. A plan holds no statuses:
+`python3 -I scripts/plan_status.py <NAME>` prints each task's status:
+
+- **merged:** its row has left its subject, and a commit on `main` starts with its id;
+- **in progress:** a `backup/<slug>-<n>` branch exists;
+- **blocked:** a task in its "Depends on" cell is not merged;
+- **not started:** otherwise.
+
+When a task moves to another subject, the move updates the plans that list it. `scripts/check_plans.py` fails when a plan names a task that is neither
+in a subject nor merged. The owner decides which plans exist and their order. The session proposes a plan's outcome and its task list, and keeps the
+list in order as work moves.
+
+Example: the plan `SYNCREADY` says "A person installs the suite on Linux, authors a Sync project in the Designer, deploys it and runs it, with no step
+done by hand", and lists INSTALLER-21, INSTALLER-7, SYNCAUTHORING-6, TESTING-4 and SYNC-1. The command shows the first two merged and the rest not
+started.
+
 ## Statuses in the index
 
 The index states order, status, assignment and a goal, never a judgment: a line never says that something is overtaken, obsolete or dropped unless it
