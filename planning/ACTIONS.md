@@ -14,10 +14,10 @@ than the caller, wait for the security model.
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| ACTIONS-1 | `action/1` and callable actions: one script format (C# or SQL) with parameters and traits, a spec like a command, published as the kind `action` with the administrator's approval of the exact version | KNOWLEDGE-13 | L | an action is published, refused unapproved, approved, and offered as a command spec |
+| ACTIONS-1 | `action/1` and callable actions: one script format (C# or SQL) with parameters and traits, a spec like a command, published as the kind `action` with the administrator's approval of the exact version | AUTHORING-32 | L | an action is published, refused unapproved, approved, and offered as a command spec |
 | ACTIONS-2 | The action host: declarative actions answered in Serving; code actions as a Runner run through path 1 (the caller waits 10 seconds, then gets the run's link); apps and agents call actions through it | ACTIONS-1, TRUSTZONES-4 | L | an app's call of a code action returns its result within the wait or the run's link; a declarative action writes a Store row as the person |
 | ACTIONS-3 | Elevated actions: an action principal per channel, grants to it approved by two people, run grants to people, the declarative form (`where`, `from_state`, `to_state`, `fields`), audit and limits | ACTIONS-2 | L | a person with run but no data grant changes a row only through the action; the audit names the action, its version, the principal and the person |
-| ACTIONS-4 | The action editor's run with a sample input, and the console's approvals and grants of actions | ACTIONS-3, KNOWLEDGE-13 | M | Playwright: run an action with a sample; approve an exact version; grant run to a group |
+| ACTIONS-4 | The action editor's run with a sample input, and the console's approvals and grants of actions | ACTIONS-3, AUTHORING-32 | M | Playwright: run an action with a sample; approve an exact version; grant run to a group |
 
 ## Open designs
 

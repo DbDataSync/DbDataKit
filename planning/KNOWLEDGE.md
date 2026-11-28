@@ -37,7 +37,6 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 | KNOWLEDGE-10 | `@dbdatakit/knowledge-ui`: the client, Search, Subject panel, Suggest edit, Approvals, Verified badge, Verify this answer, Context view | KNOWLEDGE-6 | L | vitest per component; Playwright: search, open a subject, suggest an edit |
 | KNOWLEDGE-11 | The knowledge app shipped with the suite and served by the apps module | KNOWLEDGE-10 | M | Playwright: the app searches, shows a subject's page and its verified queries |
 | KNOWLEDGE-12 | The console's knowledge screens, the rest: bind the built-in embedding model per channel, index progress, chunking and embedding defaults | KNOWLEDGE-2 | M | Playwright: bind the built-in model to a channel and see the index rebuilt |
-| KNOWLEDGE-13 | One shared step that makes registering a Workspace project kind a recipe (schema, check, build, publish, editor), before the agent, action and knowledge editors | none | M | a test kind registered by the recipe alone gets the editor, check, build and publish |
 
 ## Needs from other subjects
 
