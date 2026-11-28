@@ -36,8 +36,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
-| WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | none | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
-| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-9 | S | the owner approves the text |
+| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | none | S | the owner approves the text |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 
@@ -209,8 +208,8 @@ restores (`package build`, `package publish --platform`) reach package sources, 
   the console's `POST /api/deploys/{id}/contract`.
 - What the Workspace's keys published on a Gateway is owned by the key's client until an administrator hands it to the console
   (`POST /api/deploys/handover`); -3's test of a publish over a model published before does that first.
-- Not for the deploy: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
-  the Workspace's process) does not see.
+- Not for the deploy: the child programs' NuGet restores leave from a child process, which the Workspace's outbound list (`outbound:` in
+  `server.yaml`, `WorkspaceOutbound`, an `OutboundGate` in the Workspace's process) does not see.
 
 ## Proposed decisions
 
@@ -249,12 +248,40 @@ Options:
 
 Recommendation: A; B only if teams stage review versions in `dev`.
 
+### WORKSPACEISOLATION-P40: the Workspace's calls to the console and its telemetry, outside the outbound list (default, awaiting the owner)
+
+The Workspace's outbound list (`outbound:` in `server.yaml`) checks the push of a draft and every connection made through the server's
+`OutboundGate`. Three connections of the shared host code do not go through it: the join to a console (`join-request.yaml`), the announcement to a
+console (`DBDATAKIT_ANNOUNCE_URL`, `ConsoleAnnouncer`) and the telemetry export (the `telemetry:` section). Example: Ana writes
+
+```yaml
+outbound:
+  - https://api.nuget.org
+  - ssh://github.com
+```
+
+and starts the Workspace with a `join-request.yaml` naming `https://console.example.com:7800`. As built, the join works, and so does the telemetry
+export to `http://otel.internal:4318`; neither address is on the list.
+
+Options:
+
+- A, as built: the console's join and announcement and the telemetry export are not checked; the list covers what the Workspace connects to for its
+  projects (package sources, git remotes).
+- B: they go through the gate, and the server adds the console it joined and the telemetry endpoint of `server.yaml` to the list by itself, so Ana
+  writes only package sources and remotes.
+- C: they go through the gate and Ana lists the console and the collector by hand; a join to an unlisted console fails at start, naming the entry to add.
+
+Recommendation: B, done in the shared host code by TRUSTZONES-14 for every service at once, so the four services behave the same; A until then.
+
 ## Needs from other subjects
 
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
 - PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
   Gateway keeps the record, as it does for the other kinds.
 - COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
+- TRUSTZONES-14: the settings screen that edits the outbound list also edits the Workspace's (`outbound:` in its `server.yaml`, read by
+  `WorkspaceOutbound`); today it is edited by hand. When COMMANDLINES-8 restores an integration's packages in the Workspace's process, its NuGet client
+  takes the gate's handler (`OutboundGate.CreateHttpHandler("nuget.restore")`), so the restore follows the list.
 
 ## Shared areas touched
 

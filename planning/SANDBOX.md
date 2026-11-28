@@ -52,7 +52,8 @@ Each scenario says what code runs, where it runs, and what it may reach. "Today"
    Today: Bun runs in a network namespace on Linux. `dotnet` runs with the server's own access.
 2. **Git on the Workspace.** Clone, fetch and push a project's workspace. Git reaches the project's remotes only, with the remote's own credential and
    no others.
-   Today: git runs with the server's own access. WORKSPACEISOLATION-9 limits our own code's connections to the outbound list.
+   Today: git runs with the server's own access. The Workspace's own code, such as its push of a draft (libgit2, in its process), connects only to
+   the destinations of its outbound list (`outbound:` in `server.yaml`).
 3. **Develop, test and debug on the Workspace.** An integration's tests, a Sync script's Test, a Sync driver or metadata script, and a data model's build
    and tests. These run in a sandbox with no network, no real source or target, and no secrets. They reach fakes, recorded or generated responses,
    sample data and DuckDB through hosted connections.
