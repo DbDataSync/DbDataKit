@@ -100,7 +100,7 @@ public static class ConsoleHost
         builder.Services.AddSingleton<ConsoleInstances>();
         // servers that join by a single-use token: the tokens are rows of the console's state, a joined server is pinned in instances.yaml
         builder.Services.AddSingleton(sp => new ConsoleJoins(sp.GetRequiredService<StateDatabase>(), sp.GetRequiredService<ConsoleKeyStore>(), sp.GetRequiredService<InstanceRegistry>(), sp.GetService<TimeProvider>(),
-            PairingProof.CertificateFingerprint(certificate)));
+            PairingProof.CertificateFingerprint(certificate), sp.GetRequiredService<EncryptedFileSecretStore>()));
         builder.Services.AddSingleton<ConsoleUpgrades>(sp => new ConsoleUpgrades(settings, sp.GetRequiredService<ConsoleInstances>()));
         // state databases as connections of kind state, and the move of a server's state onto one (plan 29b, C06)
         builder.Services.AddSingleton(settings);

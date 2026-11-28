@@ -73,6 +73,10 @@ step looks the same in every product, and a fix reaches all four. The library is
 | ports | binds each listener: the configured port, or a pinned one, or a free one of its sub-block ("Ports" below) | the port, who holds it if Windows says, the excluded ranges |
 | join | consumes `join-request.yaml` if there is one and joins the console ("Pairing" below); otherwise checks it is paired | the console's address, what it answered |
 
+A Gateway with a join request waiting joins at the start of its ports step, before its listeners start: a listener of its own on the management API's
+address, with the certificate the management API presents, answers the console's call back and then stops. The Gateway then starts its listeners on the
+ports and with the key the join handed over, and an instance of a group serves the group's certificate. A refused join still fails the join step.
+
 The `logs` subfolder and the failure file come before the first step. A step that fails writes the failure file and the process exits non-zero (the
 service manager records the failure); `service check` and `setup single-server` print the file.
 
@@ -207,8 +211,9 @@ The ports step of the start checks every address of every listener. A port that 
 names the port and the excluded ranges; the Gateway never moves a port it was given. A container sets the ports it publishes itself (`DBDATAKIT_Gateway__Listen=https://0.0.0.0:7821` in the image). The image does not set the public
 listener, so inside the container it takes 7820 and is not published.
 
-When a further Gateway joins an existing group, the join hands over the group's pinned ports and they become that instance's exact
-configuration: if one is taken on the new machine, the instance fails at the ports step naming the port, and never picks another. So every instance of a
+When a further Gateway joins an existing group, the join hands over the group's pinned ports (those of `public.listen`, `listen` and
+`management.listen`) and they become that instance's exact configuration: the instance writes them to its `config/server.yaml` and its listeners start on
+them. If one is taken on the new machine, the instance fails at the ports step naming the port, listens on nothing, and never picks another. So every instance of a
 group listens on the same ports, and a client or a balancer set for one instance is right for all of them.
 
 Example: the first Gateway of group `sales` takes 7820, 7821 and 7822 for its public, Flight SQL and management listeners (or the next free values) and
@@ -294,9 +299,22 @@ product, role ceiling and group, who made it and when it ends. The verifier is t
 signature and cannot make one, so a copy of the console's state is not enough to join a server. The console's Add a server screen lists the tokens still waiting, never their values, and
 cancels them.
 
-**Groups.** Runner and Gateway groups never pair with each other directly. The token names the group (a new Gateway group X, or join Runner group Y);
-the console makes the group key when it makes the group and hands it over during the join. Linking a Gateway group with a Runner group is a console
-action (`docs/architecture.md`, "What runs where"); a new instance of a linked group gets the link with its join.
+**Groups.** The instances of a Gateway group or a Runner group share one state database, and with it one instance id. The token names the group
+(`dbdatakit setup invite gateway --group sales`). The console keeps one key per group in its own secret store and hands it over in the join's answer: it
+makes the key at the first instance's join, and every further instance that joins with a token for the group gets the same key, so nobody copies a key
+by hand. The instance keeps the key in its own secret store. A key that does not open what the group's state already holds is refused, naming the
+secret, and the join step fails. A Gateway that starts with a join request waiting makes no key of its own until the join has given it the group's.
+
+A token for a named group is refused for a server whose state is another database than the group's (it would be a group of its own), and for an
+instance the console already knows under another group. The joining server is told why:
+
+```
+The join token was made for group night, and this server is not an instance of it: the instances of a group share one state database, and this one has
+its own. Point this server's state at the group's database, or make a command for a group of its own on the console.
+```
+
+Runner and Gateway groups never pair with each other directly. Linking a Gateway group with a Runner group is a console action (`docs/architecture.md`,
+"What runs where"); a new instance of a linked group gets the link with its join.
 
 **Networks where a server cannot reach the console.** The console can start the pairing instead. It still generates the command for the remote machine,
 code included; it then either takes the remote's address up front, or waits for the user to run the command there and enter the address the command

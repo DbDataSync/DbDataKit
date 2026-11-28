@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace DbDataKit.Web.Trust;
@@ -18,7 +19,35 @@ namespace DbDataKit.Web.Trust;
 /// <param name="ProgramVersion">The server's program version.</param>
 public sealed record JoinedServer(
     string InstanceId, string Name, string Product, Uri Address, string CertificateFingerprint, byte[] PublicKey, ServerRole Ceiling, string? Group,
-    string TokenId, string MadeBy, DateTimeOffset JoinedAt, int? Generation = null, string? ProgramVersion = null);
+    string TokenId, string MadeBy, DateTimeOffset JoinedAt, int? Generation = null, string? ProgramVersion = null)
+{
+    /// <summary>The listen settings the server reported (<see cref="JoinRequest.Listeners"/>); null when it reported none.</summary>
+    public IReadOnlyDictionary<string, string[]>? Listeners { get; init; }
+}
+
+/// <summary>What the console hands a joining server about its group, in the join's answer.</summary>
+/// <param name="GroupKey">The group's key; null for a product that keeps none.</param>
+/// <param name="Listeners">The listen settings the server takes from its group's first instance; null when it keeps its own.</param>
+/// <param name="Link">The link of the group with its partner group; null when there is none.</param>
+/// <param name="Group">The group the console knows the server's instance under, when neither the server nor the token named one.</param>
+public sealed record JoinGroupHandover(string? GroupKey, IReadOnlyDictionary<string, string[]>? Listeners = null, JsonObject? Link = null, string? Group = null);
+
+/// <summary>The console's answer about the joining server's group: what to hand it, or why it is refused (<see cref="Reason"/> for the audit, <see cref="Told"/> for the server).</summary>
+public sealed record JoinGroupDecision(JoinGroupHandover? Handover, string? Reason = null, string? Told = null)
+{
+    public bool Refused => Reason is not null;
+
+    public static JoinGroupDecision Refuse(string reason, string told) => new(null, reason, told);
+}
+
+/// <summary>
+/// The console's groups, asked during a join once the token's checks passed and before the console calls the server back: whether the server may join the group
+/// the token names, and what it is handed (the group's key, its first instance's ports, a link). A refusal counts as a refused try of the token.
+/// </summary>
+public interface IJoinGroups
+{
+    Task<JoinGroupDecision> PrepareAsync(JoinRequest request, JoinTokenRecord token, CancellationToken ct);
+}
 
 /// <summary>How a join ended. <see cref="Told"/> is what the joining server is told; <see cref="Reason"/> is the full reason, for the console's audit and log. Neither holds the token.</summary>
 /// <param name="Status">200 joined, 400 a request that is not one, 403 refused, 409 too far apart in version.</param>
@@ -56,9 +85,10 @@ public interface IJoinCallback
 /// <param name="clock">The time source.</param>
 /// <param name="generation">The console's compatibility generation; tests replace it.</param>
 /// <param name="programVersion">The console's program version; the running program's by default.</param>
+/// <param name="groups">The console's groups: what a joining server is handed about its group, and whether it may join it; null hands nothing.</param>
 public sealed partial class JoinService(
     ConsoleIdentity console, string consoleName, Func<string> certificate, IJoinTokenStore tokens, IJoinCallback callback, IAuditLog audit,
-    TimeProvider? clock = null, int generation = SuiteCompatibility.Generation, string? programVersion = null)
+    TimeProvider? clock = null, int generation = SuiteCompatibility.Generation, string? programVersion = null, IJoinGroups? groups = null)
 {
     public const string AuditCommand = "server.join";
     private const string Unknown = "unknown";
@@ -104,6 +134,14 @@ public sealed partial class JoinService(
         if (request.Group is { } group && group != record.Group)
             return Refuse(403, $"token {record.Id} is for {GroupText(record.Group)}, the server is in group {group}", $"The join token was made for {GroupText(record.Group)}, and this server is in group {group}. Make a command for group {group} on the console.", counts: true);
 
+        JoinGroupHandover? handover = null;
+        if (groups is not null)
+        {
+            var decision = await groups.PrepareAsync(request, record, ct);
+            if (decision.Refused) return Refuse(403, decision.Reason!, decision.Told ?? NotAccepted, counts: true);
+            handover = decision.Handover;
+        }
+
         var address = new Uri(request.Address!);
         var serverKey = Base64Url.Decode(request.PublicKey!)!;
         var call = new JoinCallbackCall(address, request.Address!, request.CertificateFingerprint!, serverKey, request.JoinId!, console.Id, ownFingerprint);
@@ -122,10 +160,12 @@ public sealed partial class JoinService(
         }) ?? record;
         if (!spentNow) return Refuse(403, $"token {record.Id} was used by another join at the same time", "The join token was already used. Make a new command on the console (dbdatakit setup invite).", counts: false);
 
-        var joinedGroup = request.Group ?? record.Group;
+        var joinedGroup = request.Group ?? record.Group ?? handover?.Group;
         var server = new JoinedServer(request.InstanceId!, string.IsNullOrWhiteSpace(request.Name) ? request.InstanceId! : request.Name!, record.Product, address,
-            request.CertificateFingerprint!, serverKey, record.Ceiling, joinedGroup, record.Id, record.MadeBy, now, request.Generation, request.ProgramVersion);
-        var answer = new JoinAnswer(console.Id, consoleName, Base64Url.Encode(console.Key.PublicKey), [.. ServerRoles.Names(record.Ceiling)], joinedGroup, server.InstanceId);
+            request.CertificateFingerprint!, serverKey, record.Ceiling, joinedGroup, record.Id, record.MadeBy, now, request.Generation, request.ProgramVersion)
+        { Listeners = request.Listeners };
+        var answer = new JoinAnswer(console.Id, consoleName, Base64Url.Encode(console.Key.PublicKey), [.. ServerRoles.Names(record.Ceiling)], joinedGroup, server.InstanceId,
+            handover?.GroupKey, handover?.Listeners is { } listeners ? new Dictionary<string, string[]>(listeners) : null, handover?.Link);
         Audit(now, record, target, "joined");
         return new JoinOutcome(200, server, answer, null, null);
     }
@@ -162,6 +202,22 @@ public sealed partial class JoinService(
         : AddressProblem(r.Address) is { } a ? a
         : r.CertificateFingerprint is not { } f || !FingerprintPattern().IsMatch(f) ? "the certificate fingerprint is not 64 lower-case hex digits"
         : r.PublicKey is null || Base64Url.Decode(r.PublicKey) is not { Length: ConsoleSigningKey.PublicKeyLength } ? "the public key is missing or not a 32-byte Ed25519 key"
+        : ListenersProblem(r.Listeners) is { } l ? l
+        : r.GroupKey is { } k && !IsKey(k) ? "the group key is not base64 of 32 bytes"
+        : null;
+
+    private static bool IsKey(string text)
+    {
+        try { _ = GroupCipher.Parse(text); return true; }
+        catch (FormatException) { return false; }
+    }
+
+    // a handful of settings, each a short list of addresses: the console keeps them and hands them on, so nothing larger is taken
+    private static string? ListenersProblem(Dictionary<string, string[]>? listeners) =>
+        listeners is null ? null
+        : listeners.Count > 16 ? "the listeners are more than 16 settings"
+        : listeners.Any(l => !SettingPattern().IsMatch(l.Key)) ? "a listener's setting is not a lower-case name such as public.listen"
+        : listeners.Values.Any(v => v is null || v.Length is 0 or > 8 || v.Any(a => a is null || a.Length > 300 || a.Any(char.IsControl))) ? "a listener has no address, more than 8, or one that is not an address"
         : null;
 
     /// <summary>Null when <paramref name="address"/> is an https address with a host and no user, path, query or fragment; otherwise why not.</summary>
@@ -185,4 +241,7 @@ public sealed partial class JoinService(
 
     [GeneratedRegex("^[0-9a-f]{64}$")]
     private static partial Regex FingerprintPattern();
+
+    [GeneratedRegex("^[a-z][a-z0-9._-]{0,63}$")]
+    private static partial Regex SettingPattern();
 }

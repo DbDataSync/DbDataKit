@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace DbDataKit.Web.Trust;
 
@@ -12,7 +13,10 @@ namespace DbDataKit.Web.Trust;
 /// <param name="Group">The group the server already belongs to; null to take the token's.</param>
 /// <param name="InstanceId">The server's instance id.</param>
 /// <param name="Name">The name the console lists it under; the instance id when null.</param>
-public sealed record JoiningServer(string Product, string InstanceId, string? Name, Uri? Address, string CertificateFingerprint, ConsoleSigningKey Key, string? Group = null);
+/// <param name="Listeners">The server's listen settings by their name in its settings file, which the console hands on to further instances of its group; null for none.</param>
+/// <param name="GroupKey">The key the server's group already holds, sent so a console that holds none for the group keeps it; null when the server holds none.</param>
+public sealed record JoiningServer(string Product, string InstanceId, string? Name, Uri? Address, string CertificateFingerprint, ConsoleSigningKey Key, string? Group = null,
+    IReadOnlyDictionary<string, string[]>? Listeners = null, string? GroupKey = null);
 
 /// <summary>The console a server joined: whom it trusts from now on, and the console's certificate it pins.</summary>
 /// <param name="Url">The console's address.</param>
@@ -25,6 +29,15 @@ public sealed record JoiningServer(string Product, string InstanceId, string? Na
 /// <param name="JoinedAt">When the join happened.</param>
 public sealed record JoinedConsole(string ConsoleId, string Name, byte[] PublicKey, Uri Url, string CertificateFingerprint, ServerRole Ceiling, string? Group, DateTimeOffset JoinedAt)
 {
+    /// <summary>The key of this server's group, which it keeps in its own secret store; null when the console handed none.</summary>
+    public string? GroupKey { get; init; }
+
+    /// <summary>The listen settings of the group's first instance, which this server takes as its own; null when it keeps its own.</summary>
+    public IReadOnlyDictionary<string, string[]>? Listeners { get; init; }
+
+    /// <summary>The link of this server's group with its partner group; null when the console made none.</summary>
+    public JsonObject? Link { get; init; }
+
     /// <summary>The console as a paired client of this server, which validates the console's tokens.</summary>
     public PairedClient AsPairedClient(int? generation = null) => new(ConsoleId, Name, PublicKey, Ceiling, ClientKind.Console, JoinedAt, generation);
 }
@@ -57,7 +70,8 @@ public static class JoinClient
         var address = (file.Address ?? self.Address) is { } a ? JoinRequestFile.Text(a) : throw new JoinFailedException("The join needs the address the console can call this server at.", refused: false);
         var joinId = Base64Url.Encode(RandomNumberGenerator.GetBytes(16));
         var unsigned = new JoinRequest(joinId, Base64Url.Encode(key.PublicKey), null, self.Product, self.Group, self.InstanceId, self.Name, address,
-            self.CertificateFingerprint, Base64Url.Encode(self.Key.PublicKey), ownGeneration, ownProgramVersion ?? SuiteCompatibility.ProgramVersion);
+            self.CertificateFingerprint, Base64Url.Encode(self.Key.PublicKey), ownGeneration, ownProgramVersion ?? SuiteCompatibility.ProgramVersion,
+            self.Listeners is { } listeners ? new Dictionary<string, string[]>(listeners) : null, self.GroupKey);
         var request = unsigned with { Proof = Base64Url.Encode(key.Sign(JoinProof.Request(file.ConsoleThumbprint, unsigned))) };
         var console = JoinRequestFile.Text(file.Console);
 
@@ -90,7 +104,8 @@ public static class JoinClient
             if (answer?.ConsoleId is null || consoleKey is not { Length: ConsoleSigningKey.PublicKeyLength } || !ServerRoles.TryParse(answer.Ceiling ?? [], out var ceiling))
                 throw new JoinFailedException($"{console} answered the join with something that is not a join's answer.", refused: false);
             return new JoinedConsole(answer.ConsoleId, answer.ConsoleName ?? answer.ConsoleId, consoleKey, new Uri(console), file.ConsoleThumbprint, ceiling, answer.Group,
-                (clock ?? TimeProvider.System).GetUtcNow());
+                (clock ?? TimeProvider.System).GetUtcNow())
+            { GroupKey = answer.GroupKey, Listeners = answer.Listeners, Link = answer.Link };
         }
     }
 }

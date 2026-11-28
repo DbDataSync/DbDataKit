@@ -147,6 +147,8 @@ public sealed class JoinByTokenTests
                 "--Gateway:Management:Enabled=true", $"--Gateway:Management:Listen=https://127.0.0.1:{management}", "--Gateway:Management:LocalChannel=false"]);
             started.Add(gateway);
             var gatewayListed = await ListedAsync(registry, i => i.Url.Port == management, gateway);
+            // the Gateway joins before its listeners start, on a listener that answers only the console's call back: it serves once that one has stopped
+            await gateway.WaitUntilAsync(new Uri($"https://127.0.0.1:{management}/health"), TimeSpan.FromSeconds(90));
 
             // each listed with the address and certificate it reported, and the console's calls succeed through that pin
             foreach (var (listed, product) in new[] { (runnerListed, "dbdatarunner"), (workspaceListed, "dbdataworkspace"), (gatewayListed, "dbdatagateway") })

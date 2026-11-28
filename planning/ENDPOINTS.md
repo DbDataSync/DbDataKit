@@ -32,7 +32,7 @@ listens on the same ports (`docs/install.md`, "Ports"). A client set to an old p
 
 ## Needs from other subjects
 
-- INSTALLER-15: the join that hands a group's pinned ports to a further Gateway instance.
+- The join hands a group's pinned ports to a further Gateway instance by the settings' names in `server.yaml` (`GatewayListeners.Reported` and `TakeGroup`: `public.listen`, `listen`, `management.listen`).
 
 ## Open designs
 

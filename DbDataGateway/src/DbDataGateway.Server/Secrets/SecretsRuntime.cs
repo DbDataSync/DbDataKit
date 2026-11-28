@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace DbDataGateway.Server.Secrets;
 
 /// <summary>A secret reference in configuration cannot be used (unresolvable, unreadable). Names keys and references, never values.</summary>
-public class SecretConfigurationException(string configKey, string message) : InvalidOperationException(message)
+public class SecretConfigurationException(string configKey, string message, Exception? inner = null) : InvalidOperationException(message, inner)
 {
     public string ConfigKey { get; } = configKey;
 }

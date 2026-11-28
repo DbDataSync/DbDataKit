@@ -18,7 +18,7 @@ public sealed record GroupJoin(int Status, string? Error, string Instance, bool 
 /// instance holds. The console makes the key the first time it joins an instance of the group and keeps it in its own encrypted store (<c>dbdatakit:server:group-key:&lt;group id&gt;</c>); joining hands it to the instance over the
 /// paired channel (<c>PUT /api/v1/group/key</c>, as the signed-in administrator), so nobody copies a key by hand. Pairing a runner joins the instance paired with; another instance of the same group is joined by its address and a
 /// pairing code made on it, which proves it serves the group (the pairing answer carries the group's id) and pins its certificate before the key is sent. The key is in no log, argument, audit entry or answer; the audit
-/// (<see cref="JoinVerb"/>) names who joined which instance of which group. Only groups that take their key from the console are joined: the Runner today (a Gateway group makes its own until plan 36 IS13, which has the console make every group key).
+/// (<see cref="JoinVerb"/>) names who joined which instance of which group. Only a Runner group is joined this way: a server that joins by a token gets its group's key in the join's answer (<see cref="ConsoleJoinGroups"/>, the same key).
 /// </summary>
 public sealed class ConsoleGroupKeys(EncryptedFileSecretStore store, ConsoleInstances instances, ConsoleRelay relay, ConsoleKeyStore keys, AuditLog audit, CurrentUser current)
 {
@@ -27,25 +27,10 @@ public sealed class ConsoleGroupKeys(EncryptedFileSecretStore store, ConsoleInst
     /// <summary>The products whose groups take their key from the console.</summary>
     public static bool TakesKey(string? product) => product == ServerProducts.Runner;
 
-    public static SecretName NameFor(string groupId) => new("server", "group-key", groupId);
+    public static SecretName NameFor(string groupId) => ConsoleGroupKeyRing.NameFor(groupId);
 
-    private readonly SemaphoreSlim _gate = new(1, 1);
-
-    /// <summary>The group's key, made the first time.</summary>
-    private async Task<string> KeyOfAsync(string groupId, CancellationToken ct)
-    {
-        await _gate.WaitAsync(ct);
-        try
-        {
-            using (var held = await store.TryResolveAsync(NameFor(groupId).ToRef(), ct))
-                if (held is not null) return held.RevealString();
-            var made = GroupCipher.NewKey();
-            using var value = SecretValue.From(made);
-            await store.SetAsync(NameFor(groupId), value, ct);
-            return made;
-        }
-        finally { _gate.Release(); }
-    }
+    /// <summary>The group's key, made the first time (the same key a join by token hands an instance of the group).</summary>
+    private Task<string> KeyOfAsync(string groupId, CancellationToken ct) => ConsoleGroupKeyRing.KeyOfAsync(store, store, groupId, null, ct);
 
     /// <summary>
     /// Joins an instance of <paramref name="group"/> (a registered server): the one at its registered address when <paramref name="url"/> is null, else the instance at <paramref name="url"/>, paired first with

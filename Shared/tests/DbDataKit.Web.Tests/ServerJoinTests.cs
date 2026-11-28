@@ -190,6 +190,24 @@ public sealed class ServerJoinStepTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task What_the_server_cannot_keep_of_its_group_fails_the_step_and_the_spent_request_goes()
+    {
+        var token = Mint();
+        var clients = new PairedClientsFile(Path.Combine(_folder.FullName, "server.yaml"));
+        await Pair("--host", _consoleHost.Url.ToString(), "--token", token, "--console-thumbprint", Thumbprints.Format(_consoleHost.Fingerprint));
+
+        var failed = await Assert.ThrowsAsync<ServerJoinException>(() => ServerJoin.RunAsync(_folder.FullName,
+            () => new JoiningServer("runner", "runner-1", "Runner one", _serverHost.Url, _serverHost.Fingerprint, ConsoleSigningKey.Generate()),
+            _pending, clients, new JoinedConsoles(_settings), Ct, TimeSpan.FromSeconds(20), keep: _ => throw new InvalidOperationException("The group's values are protected with another key.")));
+
+        Assert.Contains("accepted the join, but this server could not keep", failed.Message);
+        Assert.Contains("another key", failed.Message);
+        Assert.IsType<InvalidOperationException>(failed.InnerException);
+        Assert.False(File.Exists(ServerJoin.RequestPath(_folder.FullName)));
+        Assert.Null(clients.Find(_console.Id));
+    }
+
+    [Fact]
     public async Task A_console_that_cannot_be_reached_fails_the_step_without_an_answer()
     {
         var token = Mint();
