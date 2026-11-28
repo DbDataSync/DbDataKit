@@ -36,6 +36,11 @@ One pull request at a time across the whole repository.
    and the proposals it adds or removes.
 2. With branch protection and the merge queue on, enqueue it: they prove it merges cleanly and CI is green on the combined result. Until they are on,
    merge `origin/main` into `work/<slug>`, push, wait until CI is green on that head, then merge. If `main` moves meanwhile, repeat.
+   When a job fails, compare its failure with `docs/ci-flakes.md`:
+   - It matches an entry: rerun that job once. If it fails again, treat it as real.
+   - It matches no entry: treat it as real. Report it to the session with the failing test and the log excerpt, and do not rerun it.
+   - A test that failed and then passed on a rerun the reviewer made anyway (for example, before this rule): report it to the session as a new
+     flake, so it gets an entry and a fix task.
 3. Merge with a merge commit (not a squash), so the task branches stay contained in `main`.
 
 ## Checklist (before the merge)
