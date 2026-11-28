@@ -56,6 +56,6 @@ SQL Server Change Tracking into each target (`ChangeApplyReplicationTests`, the 
 - SQL Server CDC, `TriggerAudit` (MySQL, MariaDB, Oracle, SQL Server) and Oracle Flashback as the reader on the runner: the readers have their own driver tests; no replication ends to end through the runner with them.
 - A Watermark reader cannot see deletes, so no pair here deletes a row; Change Tracking deletes are proven in `ChangeApplyReplicationTests`.
 - A verification result the old path recorded before a move is not listed for a runner-owned replication (it stays in this server's state until the owner moves back).
-- What the runner does not do yet, and what stops the old paths from being retired: the open work is in `planning/TASKENGINE.md`.
+- What the runner does not do yet, and what stops the old paths from being retired: the open work is in `planning/RUNNER.md`.
 - Reverse-ring pairs on the supervisor; same-engine pairs (postgres to postgres, and so on).
 - Other tests of `RunExecutorIntegrationTests` (provisioning, reconcile, timing, trace) stay supervisor-only: they assert on Sync's own stores.

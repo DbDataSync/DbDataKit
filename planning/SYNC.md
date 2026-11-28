@@ -1,4 +1,4 @@
-# SYNCNEXT: Sync's next pass after the Designer
+# SYNC: Sync after the Designer
 
 ## Goal
 
@@ -20,7 +20,11 @@ script's Test moves into the Workspace's sandbox with SANDBOX step 2.
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| SYNCNEXT-1 | A Playwright story on the installed suite (CI-5's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | CI-5 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
+| SYNC-1 | A Playwright story on the installed suite (TESTING-4's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | TESTING-4 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
+| SYNC-2 | A sync package is built for the target Runner's platform: when the control service deploys a sync build (`POST /api/deploys`, `ConsoleDeploys`), it reads the target Runner's platform from its `/version` and asks the Workspace service for the package built for that platform; the Workspace service never calls the Runner; `WorkspaceSettings.SyncPlatform` goes | none | S | a test deploys a sync build through the control service to a fake Runner reporting `linux-x64` and the package the control service pulls is built for it; the setting is refused naming the file |
+| SYNC-3 | Resync and reconcile-deletes buttons on a sync project's Runs tab, started through the control service (the console's run calls, `/api/deploys/{id}/runs`) (paused, owner 2026-11-16; queued until the drain works out a mapping's source key) | none | M | Sync conformance: resync of one mapping reloads it; reconcile removes target rows the source lost |
+| SYNC-4 | A replication on a Windows Runner: the Windows job installs SQL Server and PostgreSQL and runs `SyncOnRunner` | INSTALLER-22 | M | the Windows job runs a drain on the Runner against both engines |
+| SYNC-5 | Sync's state on the target for a Runner-owned Sync: the follower to the Runner's state, the persisted divergence and its resolve, retention, the console's Sync half | none | L | Sync conformance on SQL Server and PostgreSQL: a restored target shows diverged with the common point; resolve archives the copy's later rows |
 
 ## Open designs
 
@@ -52,7 +56,7 @@ person, or the console's Runner screens with a link from the Designer) before it
 - **Verification results** of a mapping and **quality check results** of a replication: now the Runner's run steps and the console's Quality page.
 - **The Runner tab and page**: the version served and staged per channel, slots and bindings, instances. Now: the Builds tab and `PublishForm.tsx`, and
   the Runner's own screens.
-- **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is TASKENGINE's).
+- **Tracking state**: the target's units, catch-up and divergences (the target's tracking state is RUNNER's).
 - **Live updates**: the old screens followed runs over SignalR; the Runner's screens poll.
 
 

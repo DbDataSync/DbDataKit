@@ -26,20 +26,27 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 16 | [CHANNELS](CHANNELS.md) | Build test targets and Sync trial runs from the Workspace; previews removed on merge | queued | unassigned |
 | 17 | [SEMANTICS](SEMANTICS.md) | Semantic models checked, typed, described and configurable; SSAS bounded | queued | unassigned |
 | 18 | [MASTERDATA](MASTERDATA.md) | A change feed on the store module, native entity ids, instances, entities over Flight SQL | queued | unassigned |
-| 19 | [TASKENGINE](TASKENGINE.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
+| 19 | [RUNNER](RUNNER.md) | Runner limits and accounts, Sync state on the target, lineage retention, availability tests | queued | unassigned |
 | 20 | [CODECLEANUP](CODECLEANUP.md) | No dead code or stale docs of the deleted servers; the old state path gone | queued | unassigned |
 | 21 | [FABRICSERVING](FABRICSERVING.md) | A Fabric warehouse as a Gateway data source, signed in with Entra; close to working, low priority until the product is consistent | open design | unassigned |
-| 22 | [AGENTACCESS](AGENTACCESS.md) | Agents drive the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, provider and MCP client | needs review | unassigned |
-| 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
+| 22 | [AGENTTOOLS](AGENTTOOLS.md) | What an agent can do in the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, the MCP endpoints and their tools | queued | unassigned |
+| 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | queued | unassigned |
 | 24 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
-| 25 | [CLI](CLI.md) | The programs we ship keep only the commands that run and configure the services; Build, Sync and the Store are called as libraries; one program or four | needs review | unassigned |
+| 25 | [CLI](CLI.md) | Fewer programs for a person to run, each keeping only the commands that run and configure the services; Build, Sync and the Store are called as libraries | queued | unassigned |
 | 26 | [DOCSREVIEW](DOCSREVIEW.md) | Reference docs the owner approves, and every doc and plan checked against them | queued | unassigned |
 | 27 | [WORKSPACEISOLATION](WORKSPACEISOLATION.md) | The Workspace service calls no other service and holds no login to a data system; the control service deploys what it builds | queued | unassigned |
 | 28 | [ERRORDETAILS](ERRORDETAILS.md) | An administrator can investigate every failure: its full detail is kept and shown to administrators; everyone else sees the classified words and an id | queued | unassigned |
 | 29 | [PLUGINS](PLUGINS.md) | Each kind of project is a plugin with parts per role, compiled in first and loaded from a feed later | open design | unassigned |
 | 30 | [SANDBOX](SANDBOX.md) | Author code runs sandboxed and reaches outside systems only through hosted connections; testable on the Workspace with no live system (draft) | open design | unassigned |
 | 31 | [CI](CI.md) | A pull request runs only what its change touches; everything runs weekly and on demand; a stable release needs a green full run; flakes are tracked to a fix (draft) | queued | unassigned |
-| 32 | [SYNCNEXT](SYNCNEXT.md) | Sync after the Designer: watching and operating runs, the replication and script pages, Preview SQL, MySQL and Oracle privileges, the installed-suite story | queued | unassigned |
+| 32 | [SYNC](SYNC.md) | Sync after the Designer: watching and operating runs, the replication and script pages, Preview SQL, MySQL and Oracle privileges, the installed-suite story | queued | unassigned |
+| 33 | [CONNECTIONS](CONNECTIONS.md) | Every connection kind has a form with Test, a channel never reaches production's connection, each kind proven on a real system | queued | unassigned |
+| 34 | [INTEGRATIONS](INTEGRATIONS.md) | The integration product's features: the kit, its sources and targets, triggers and screens | open design | unassigned |
+| 35 | [ACTIONS](ACTIONS.md) | Scripts that apps and agents call to do something: the format, where they run, the editor; elevated actions wait for the security model | queued | unassigned |
+| 36 | [AGENTS](AGENTS.md) | Agents authored, tested and run: definitions, providers, test conversations, evaluation, the console's chat, the Gateway, integrations | queued | unassigned |
+| 37 | [TESTING](TESTING.md) | Every screen has a browser story that runs in CI; the installed suite as one test fixture | queued | unassigned |
+| 38 | [BUILD](BUILD.md) | Build's remaining work as a Workspace project and a Runner package, starting with its tracking | queued | unassigned |
+| 39 | [LINEAGE](LINEAGE.md) | Lineage the suite cannot see on its own: declared entries, OpenLineage export, tracing a value back | queued | unassigned |
 
 ## Parked
 

@@ -4,7 +4,7 @@
 
 Knowledge (curated and generated items, verified queries, access-filtered search) is served by the Gateway's `knowledge` module and authored in
 Workspace projects. Agents run in the console (administrators and authors) and in the Gateway (end users), each over MCP or embedded, as the person
-(AGENTACCESS), and in Runner tasks when unattended.
+(AGENTTOOLS), and in Runner tasks when unattended.
 Actions (one script format) are declarative in Serving and run trusted code as a Runner run through path 1. The design of what is built is in
 `docs/knowledge.md`, `docs/agent-tools.md`, `docs/agents/` and `docs/integrations.md`.
 
@@ -26,7 +26,6 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| KNOWLEDGE-1 | Run the other products' suites on the 2025 engines (SQL Server 2025, pgvector PostgreSQL) | none | S | the Gateway, Runner and Build conformance jobs pass on the 2025 profiles |
 | KNOWLEDGE-2 | The Gateway's `knowledge` module: follows the group's knowledge definitions, stages and embeds a version per index, switches and rolls back, answers search and show as the caller with the access filter | none | L | `DbDataGateway.Tests`: a published knowledge project is searchable through the module; a person who may not read a subject finds nothing of it; a rollback serves the previous index |
 | KNOWLEDGE-3 | Generated knowledge in the module: one item per published subject (semantic models and members, Store models, data sources), re-checked when a semantic model version is staged (verified queries) | KNOWLEDGE-2 | M | publishing a semantic model adds its items; a staged version that removes a member flags the verified query that uses it |
 | KNOWLEDGE-4 | Build metadata as knowledge: a Workspace build publishes the `build-metadata` kind per project and connection, and the module indexes it | KNOWLEDGE-3 | M | a Workspace build's publish makes items for its models; a search finds a model by its description |
@@ -38,24 +37,11 @@ Actions (one script format) are declarative in Serving and run trusted code as a
 | KNOWLEDGE-10 | `@dbdatakit/knowledge-ui`: the client, Search, Subject panel, Suggest edit, Approvals, Verified badge, Verify this answer, Context view | KNOWLEDGE-6 | L | vitest per component; Playwright: search, open a subject, suggest an edit |
 | KNOWLEDGE-11 | The knowledge app shipped with the suite and served by the apps module | KNOWLEDGE-10 | M | Playwright: the app searches, shows a subject's page and its verified queries |
 | KNOWLEDGE-12 | The console's knowledge screens, the rest: bind the built-in embedding model per channel, index progress, chunking and embedding defaults | KNOWLEDGE-2 | M | Playwright: bind the built-in model to a channel and see the index rebuilt |
-| KNOWLEDGE-13 | One shared step that makes registering a Workspace project kind a recipe (schema, check, build, publish, editor), before the agent, action and knowledge editors | none | M | a test kind registered by the recipe alone gets the editor, check, build and publish |
-| KNOWLEDGE-14 | The agent project editor's scripted test conversations, the knowledge file preview of the subjects and agents it reaches, on the recipe | KNOWLEDGE-13 | M | Playwright: run a scripted conversation of an agent project; a knowledge file's preview lists the agents an instruction reaches |
-| KNOWLEDGE-15 | The chat over a real model, providers and usage per channel, fallback lists, the console agent that offers the view-drafting tools | none | M | a recorded provider conversation in the console's chat shows usage and falls back to the second connection when the first fails |
-| KNOWLEDGE-16 | Evaluation runs as a Runner task: an agent's evaluation set runs on a Runner with the agent's model slot bound there; the promotion check (`EvaluationGate`) asks for the score | none | M | a Runner task runs a set and records scores; a promotion below the minimum is refused naming the score |
-| KNOWLEDGE-17 | Front-end agents in the Gateway's `mcp` module acting as the signed-in person, with the operations and agent data rules of AGENTACCESS-10 as their tools; an app's assistant panel; a published agent as one MCP tool | KNOWLEDGE-2, AGENTACCESS-10 | L | an MCP client calls a published agent through the module as a person and gets only what that person may read; Playwright of the assistant panel |
-| KNOWLEDGE-18 | Unattended agents in integrations: the agent runtime as a library in a task's process, the agent definition a dependency of the package, its model connection a slot | none | M | a Runner task runs an agent step with a recorded provider and records the turn |
-| KNOWLEDGE-19 | `action/1` and callable actions: one script format (C# or SQL) with parameters and traits, a spec like a command, published as the kind `action` with the administrator's approval of the exact version | KNOWLEDGE-13 | L | an action is published, refused unapproved, approved, and offered as a command spec |
-| KNOWLEDGE-20 | The action host: declarative actions answered in Serving; code actions as a Runner run through path 1 (the caller waits 10 seconds, then gets the run's link); apps and agents call actions through it | KNOWLEDGE-19, TRUSTZONES-4 | L | an app's call of a code action returns its result within the wait or the run's link; a declarative action writes a Store row as the person |
-| KNOWLEDGE-21 | Elevated actions: an action principal per channel, grants to it approved by two people, run grants to people, the declarative form (`where`, `from_state`, `to_state`, `fields`), audit and limits | KNOWLEDGE-20 | L | a person with run but no data grant changes a row only through the action; the audit names the action, its version, the principal and the person |
-| KNOWLEDGE-22 | The action editor's run with a sample input, and the console's approvals and grants of actions | KNOWLEDGE-21, KNOWLEDGE-13 | M | Playwright: run an action with a sample; approve an exact version; grant run to a group |
-| KNOWLEDGE-23 | Integration remainders: outbound steps in a non-production channel use the channel's connection or are refused (the rest), the console's connection form per kind with Test, the Store change trigger | MASTERDATA-1 | M | an outbound step in `test` with no binding is refused naming the slot; a Store change starts a task once; Playwright of the SFTP form's Test |
-| KNOWLEDGE-24 | The command-surface audit and the golden of MCP tools for every product, as the console has them (`ConsoleCommandSurfaceTests` over `CommandSurface.Audit` and `CommandSurface.Golden`): the Gateway, the Runner, the Workspace, Sync and Store each in its own test project, Build through its spec table, so a command that starts offering something to an agent (a secret, a write) is a line in a review; the goldens become goldens of operations with AGENTACCESS-1, and CLOUDDEV-5's tool list is generated from them | none | S | each product's test passes on its `golden/mcp-tools.txt`; a fake verb with no schema fails naming product and verb; adding a verb an agent may call changes the golden |
-| KNOWLEDGE-25 | SMB with Windows sign-in (Kerberos) proven on a Windows host in a domain: the `smb` connection kind lists, reads and writes a real share, and a ticket failure, a clock skew and an unreachable share are each classified as on Linux | none | S | by hand, because no domain is in CI: on a domain-joined Windows host, list, read, write and a failing ticket against a real share, with SMB signing on; the steps and the result in `docs/integrations.md`; anything found fixed with a unit test |
 
 ## Needs from other subjects
 
 - TRUSTZONES-4: path 1, for code actions.
-- AGENTACCESS-10: the Gateway's operations and agent data rules, the tools of KNOWLEDGE-17.
+- AGENTTOOLS-10: the Gateway's operations and agent data rules, the tools of AGENTS-4.
 - MASTERDATA-1: the Store change feed, for the change trigger.
 
 ## Proposed decisions
@@ -149,51 +135,6 @@ notifications, audit, suggestions, work items) stay with their own systems and s
 groups the results: knowledge always; workspace search in the console for people with rights to projects; Store records in an app that has them. Each
 source applies its own access rules; nothing is copied between them.
 
-### Actions and elevated actions
-
-Confirmed by the owner on 2026-11-03, who approves grants decided on 2026-11-04.
-
-- **An action is one typed operation:** an input schema, an output schema, an effect class and a body; it may have side effects. Actions are agents'
-  custom tools and apps' custom server-side logic. One script format, `action/1`, generalises Sync's script manifest (a name, a kind, C# or SQL, declared
-  parameters, beside its code and lock file), adding the schemas, traits and the caller's context; Sync's slots stay kinds of it, and an old manifest is
-  refused naming the file. A body is a `.csx` script, SQL against a suite connection, a call to a command, or, for an elevated action, the declarative
-  form. A callable action has a spec like a command, so it is an MCP tool, an agent tool and an endpoint apps call, under the same access rules. Python
-  for actions is left out for now.
-- **Where it runs:** declarative actions in Serving, in process; code actions as a Runner run through path 1 (KNOWLEDGE-20). An action that needs an
-  outside system or a long job enqueues a task and returns a status. A published version of an action is trusted code and needs the administrator's
-  approval of that exact version.
-- **Elevated actions: the permission is held by the action, not the person.** Some workflows let a person make one specific change to Store data they
-  may not write directly. Two grants: (1) to the action, through an **action principal** of its own in the identity home **per channel** (no password or
-  token a person can obtain): the entities and operations (read, create, update, change request) it may use, declared in the action's file
-  (`grants:`, versioned with the code) and effective only when **an administrator and the data's owner** (the Store model's owner) both approve that
-  exact version, with an audit; in the first version the grants carry entity and operation, and the field and row limits are the action's own
-  declarative checks; (2) to people: **run** on the action, given to people and groups in the identity home like any role assignment, by the action's
-  owner or an administrator. An action not marked elevated has no grants and runs as the person. It is not tied to an app: an app's manifest names the
-  actions it calls and grants nothing. This keeps "an app's token is never wider than the person": elevation exists only inside server-side trusted
-  code, the pattern of a stored procedure granted `EXECUTE`.
-- **The action decides: validate, then apply or reject.** The caller's identity and attributes are part of the input; the action reads the current
-  state with its own grants and checks the request (the row exists, is in the right state, the caller may make this transition, the values are
-  acceptable); it rejects with a reason the person or agent can act on and changes nothing, or applies through the Store's normal write path in one
-  transaction, so the model's own validation still runs after the action's checks. The declarative form makes the common checks one line each
-  (`where: owner = caller.id`, `from_state: Draft`, `to_state: Submitted`, `fields: [status, comment]`); more needs a `.csx` body.
-- **The four worked examples** (each a test): a requester moves their own expense claim from Draft to Submitted, and may not edit it afterwards or write
-  to the claims entity at all; an approver sets the status and a comment on a claim, no other field, only on claims of their own team; a manager adds a
-  new starter to an HR entity through an onboarding app without general write access to it; anyone sees how many tickets are open per team without
-  being able to read the tickets.
-- **Rules that keep it safe:** a person receives the action's result shaped by its output schema, never its grants, a token or rows it was not written
-  to return; no escalation by default (it cannot change grants, roles, definitions or structure, or call another elevated action its definition does
-  not name; an administrator can lift this for one action as a recorded choice); the audit always names the action and its version, its principal, the
-  person and the app or agent it came through ("Alice ran submit-claim v3, from the Expense app"), and that is fixed, not a setting; an agent acting for
-  a person may call an elevated action only if that person may run it, and elevated actions ask the person first by default; grants are per channel,
-  and a write in a non-production channel goes to that channel's own data or the preview's draft layer, never production (refused with a message
-  until the draft layer exists, except on a channel bound to its own copy of the model's storage); per-caller rate limits, and every rejection logged
-  with its reason.
-- **When not to use it:** "a person proposes, someone with the role approves" is the Store's change requests. Elevated reads of semantic models (an
-  aggregate without row access) follow the same pattern later; the first version covers Store entities.
-
-**Open questions.** Where the approval records live if access grants move to the identity home; whether grants gain field and row conditions after the
-first version.
-
 ### A back-end agent reads its branch's knowledge
 
 An agent working on a branch of a Workspace project reads that branch's `knowledge/` files laid over the published ones, so an instruction it is
@@ -201,14 +142,6 @@ editing applies to its own work before it is merged; the published item is uncha
 otherwise an agent editing an instruction cannot see its effect until a merge and a publish. **Open questions:** whether the Workspace serves the overlay
 to the console's agent runtime or the runtime reads the branch itself; how the overlay's items are checked (the same `knowledge check`) and whether a
 broken one falls back to the published item. Proven by a scripted run: the agent edits an instruction and its next turn is given the edited text.
-
-### A semantic query as an outbound source of the integration kit
-
-Wanted, not urgent (owner, 2026-11-18). The kit's outbound push (`DbDataKit.Runner.Kit.Outbound`) sends the records of a table, a view, a query of a
-connection or a Store entity to an API or a file, batch by batch with idempotency keys, resuming after a failure without repeating what was sent. A
-semantic query as a source would let an integration send governed numbers (a measure by region) rather than re-deriving them from tables. **Open
-questions:** it goes through the Gateway's Flight SQL, which no kit library calls today, so as whom it runs (the task's service account through a
-Runner-to-Gateway link, TRUSTZONES) and how its rows get stable keys for the ledger.
 
 ## Shared areas touched
 
