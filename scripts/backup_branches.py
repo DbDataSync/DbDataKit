@@ -10,7 +10,8 @@
           BASE..HEAD names one, and it is deleted when HEAD (the pull request's head) or origin/main carries its tip; one with commits the pull request
           did not carry is kept and listed. Dry run unless --apply. The workflow `delete-merged-branch.yml` runs it when a `work/<slug>` pull request merges.
 
-In clean and tasks, a branch the remote no longer has (another workflow deleted it first) is reported as already deleted, not as a failure.
+In clean and tasks, a delete that fails on a branch the remote no longer has (another workflow deleted it first) is reported as already deleted, not
+as a failure; whether it is gone is asked of the remote after the failure, whatever the error said.
 Only committed work is backed up: an agent's uncommitted files are not. Intent: docs/agent-workflow.md ("Backups").
 Run from a clone of the repository: python3 scripts/backup_branches.py push | clean [--apply] [--hours N] | tasks --base BASE --head HEAD [--apply] [--remote origin]
 """
@@ -117,13 +118,20 @@ def remote_backups(remote):
 
 def delete_remote(remote, name):
     """Delete a remote branch and say how it went. A branch that is already gone counts as deleted: on a merge of a `work/<slug>` pull request,
-    `delete-merged-branch.yml` (tasks) and `backup-branch-cleanup.yml` (clean) both delete its task branches, and the second finds them gone."""
+    `delete-merged-branch.yml` (tasks) and `backup-branch-cleanup.yml` (clean) both delete its task branches, and the second finds them gone.
+    After a failed delete the remote is asked whether the branch is still there, because the error's wording for a branch that is gone differs
+    between servers and versions (`remote ref does not exist`, `cannot lock ref ...: unable to resolve reference`); only a branch the remote
+    still has, or a remote that cannot be asked, is a failure, and it names the delete's error."""
     result = git("push", remote, "--delete", name, check=False)
     if result.returncode == 0:
         return "deleted"
-    if "remote ref does not exist" in result.stderr:
+    error = result.stderr.strip()
+    listed = git("ls-remote", "--heads", remote, f"refs/heads/{name}", check=False)
+    if listed.returncode != 0:
+        return f"FAILED: {error} (and asking {remote} whether the branch is still there failed: {listed.stderr.strip()})"
+    if not listed.stdout.strip():
         return "already deleted"
-    return "FAILED: " + result.stderr.strip()
+    return "FAILED: " + error
 
 
 def clean(remote, hours, apply, now=None):
