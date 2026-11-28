@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// Owns a source read outright: the script supplies the statement, and the host runs it, binds its

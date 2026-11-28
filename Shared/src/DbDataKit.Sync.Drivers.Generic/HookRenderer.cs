@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Everything a hook body can reference at render time — the identifiers behind the five built-in

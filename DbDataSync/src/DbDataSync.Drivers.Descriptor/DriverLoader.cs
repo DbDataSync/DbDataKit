@@ -1,5 +1,6 @@
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.Drivers.Descriptor;

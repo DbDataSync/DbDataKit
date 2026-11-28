@@ -1,7 +1,7 @@
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// A staged value whose type no column of the target's kind takes, or that the target would store as a different value. Names the table, the column, the

@@ -1,6 +1,6 @@
 using DbDataKit.Scripting;
-using DbDataSync.Core.Config;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.Scripting;
 
@@ -30,7 +30,7 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
     private static readonly string[] Imports =
     [
         "System", "System.Linq", "System.Collections.Generic", "System.Threading", "System.Threading.Tasks",
-        "DbDataSync.Core.Config", "DbDataSync.Scripting.Abstractions", "DbDataSync.Drivers.Abstractions", "DbDataKit.Dialect",
+        "DbDataKit.Sync.Core.Config", "DbDataKit.Sync.Scripting.Abstractions", "DbDataKit.Sync.Drivers.Abstractions", "DbDataKit.Dialect",
     ];
 
     public ScriptCompilation Compile(ScriptDefinition script)
@@ -42,6 +42,10 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         if (script.Manifest.Language != ScriptLanguage.CSharp)
             throw new InvalidOperationException(
                 $"Script '{script.Manifest.Name}' is not a C# script and cannot be compiled — ScriptCompiler.Compile is only for ScriptLanguage.CSharp scripts.");
+
+        // a script written for the namespaces Sync's libraries had before: each old using is named with the one that replaces it
+        if (RenamedNamespaces.Find(script.Code) is { Count: > 0 } renamed)
+            return ScriptCompilation.Failed([.. renamed.Select(u => new ScriptDiagnostic(u.Line, 1, u.ToString()))]);
 
         IReadOnlyList<PackageRequest> requests;
         string source;
@@ -60,7 +64,7 @@ public sealed class ScriptCompiler(ScriptCacheDirectory cache, string? scriptsDi
         {
             CacheDirectory = Path.Combine(cache.Root, "csx"),
             LoadRoot = scriptsDirectory,
-            HostReferences = [typeof(ISqlColumnExpression).Assembly.Location, typeof(DbDataSync.Drivers.Abstractions.ColumnMetadata).Assembly.Location, typeof(ColumnMapping).Assembly.Location,
+            HostReferences = [typeof(ISqlColumnExpression).Assembly.Location, typeof(DbDataKit.Sync.Drivers.Abstractions.ColumnMetadata).Assembly.Location, typeof(ColumnMapping).Assembly.Location,
                 typeof(DbDataKit.Dialect.CanonicalType).Assembly.Location],
             Imports = Imports,
             AllowedFrameworkAssembly = name => AllowedAssemblies.Contains(name, StringComparer.OrdinalIgnoreCase),

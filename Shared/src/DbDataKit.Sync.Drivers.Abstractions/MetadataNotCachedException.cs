@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// A reader, writer or staging provider needed a column's cached shape and the mapping's cache
@@ -49,9 +49,9 @@ public sealed class MetadataNotCachedException(string mappingName, string side, 
 /// rather than returning null — every one of phase 91's six consumers needs the column it asks for or
 /// it cannot run at all, so there is no caller that wants an optional answer here to check itself.
 /// <para>
-/// Lives beside the exception it throws rather than in <c>DbDataSync.Core.Config</c> (where
+/// Lives beside the exception it throws rather than in <c>DbDataKit.Sync.Core.Config</c> (where
 /// <see cref="CachedColumn"/> itself lives) because the reverse reference already exists —
-/// <c>DbDataSync.Drivers.Abstractions</c> references <c>DbDataSync.Core</c>, not the other way round (see
+/// <c>DbDataKit.Sync.Drivers.Abstractions</c> references <c>DbDataKit.Sync.Core</c>, not the other way round (see
 /// <see cref="CachedColumn"/>'s own doc comment) — and because converting to <see cref="ColumnMetadata"/>
 /// is exactly the shape every consumer here already works in.
 /// </para>

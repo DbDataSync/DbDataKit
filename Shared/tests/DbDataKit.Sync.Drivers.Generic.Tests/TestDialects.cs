@@ -1,12 +1,12 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>SQL Server's dialect, restated here rather than referenced. These tests exist to pin the
 /// generic layer's output against more than one dialect, and depending on the MSSQL driver to do it

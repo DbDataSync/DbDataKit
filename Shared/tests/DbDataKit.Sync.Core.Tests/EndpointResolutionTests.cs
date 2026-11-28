@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// A replication owns its endpoints and a table mapping inherits them unless it says otherwise. These

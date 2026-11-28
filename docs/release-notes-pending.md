@@ -209,6 +209,10 @@ release moves the entries into its notes and empties this file.
   replication may no longer be named `discover` or `describe`. What to do: rename a replication with one of those names before you build the set
   again; build and stage the set in a channel before you read such a connection there.
 
+## Sync's libraries are named DbDataKit.Sync
+
+- **Changed: the namespaces a Sync script and a `driver.csx` use are `DbDataKit.Sync.*`.** `DbDataSync.Scripting.Abstractions` is now `DbDataKit.Sync.Scripting.Abstractions`, and the same for `DbDataSync.Core`, `.Drivers.Abstractions`, `.Drivers.Generic`, `.Drivers.Descriptor` and `.Provisioning`. A script or a `driver.csx` with a `using` of an old name does not compile; the set's check (`dbdatasync package publish --to runner --check`, the Workspace's Check tab), a script's Test and the driver's load name the file, the line and the new name. The package `DbDataSync.Drivers.Abstractions` is no longer built: a compiled driver references `DbDataKit.Sync.Drivers.Abstractions`. What to do: change each such `using` to the new name, or delete it, since the scripts' namespaces are imported for every script.
+
 ## Column types: one set of answers for every product
 
 - **Fixed: Sync no longer reads SQL Server's `tinyint` (0 to 255) as a signed 8-bit integer, nor MySQL's unsigned integers as signed ones.** A

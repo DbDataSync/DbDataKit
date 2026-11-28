@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Phase 125's after-change trigger — pure, and its JSON/YAML round trips.</summary>
 public sealed class AfterChangeEvaluatorTests

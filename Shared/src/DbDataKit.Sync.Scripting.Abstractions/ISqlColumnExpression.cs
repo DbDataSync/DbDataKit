@@ -1,6 +1,6 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// Generates a SQL expression, in the *source's* dialect, for one column of a table mapping. The source

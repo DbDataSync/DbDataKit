@@ -1,10 +1,10 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -124,7 +124,7 @@ public sealed class LifecycleHookContractTests
     /// <summary>Wraps a real <see cref="SqlDialect"/> the way <c>RunnerScriptDialect</c> does in
     /// production — proving the contract against the actual translation tables phase 25 built, not a
     /// stand-in that would accept a spelling neither engine uses.</summary>
-    private sealed class FakeScriptDialect(string engineName, DbDataSync.Core.Sql.SqlDialect dialect) : IScriptDialect
+    private sealed class FakeScriptDialect(string engineName, DbDataKit.Sync.Core.Sql.SqlDialect dialect) : IScriptDialect
     {
         public string EngineName => engineName;
         public string QuoteIdentifier(string identifier) => dialect.QuoteIdentifier(identifier);

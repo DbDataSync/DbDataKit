@@ -1,5 +1,5 @@
 using DbDataKit.Dialect;
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// Plain SQL-standard answers to the mechanical variations in <see cref="SqlDialect"/>, for an engine

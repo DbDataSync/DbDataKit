@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// One row of a <c>driver.yaml</c> <c>metadataQueries.tableQuery</c> result, matched to the query's

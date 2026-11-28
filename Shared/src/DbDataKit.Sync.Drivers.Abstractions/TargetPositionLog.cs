@@ -1,10 +1,10 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>The engines whose target can hold the state table (plan 28c E17). <see cref="MySql"/> is MySQL and MariaDB.</summary>
 public enum PositionLogEngine

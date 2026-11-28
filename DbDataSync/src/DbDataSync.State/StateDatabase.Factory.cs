@@ -1,4 +1,4 @@
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.State;
@@ -13,7 +13,7 @@ public sealed partial class StateDatabase
     /// <remarks>
     /// <para>
     /// Takes the settings as fields; <see cref="SecretStore"/> is already on this project's graph through the
-    /// <c>DbDataSync.Core</c> project reference, so nothing new is added to <c>DbDataSync.State.csproj</c> for this.
+    /// <c>DbDataKit.Sync.Core</c> project reference, so nothing new is added to <c>DbDataSync.State.csproj</c> for this.
     /// </para>
     /// <para>
     /// <paramref name="libraryRegistry"/> is phase 109g's addition, required (not optional) rather than

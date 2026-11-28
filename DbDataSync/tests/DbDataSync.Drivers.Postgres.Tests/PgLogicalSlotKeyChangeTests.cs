@@ -1,5 +1,5 @@
 using System.Text.Json;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.Drivers.Postgres.Tests;
 

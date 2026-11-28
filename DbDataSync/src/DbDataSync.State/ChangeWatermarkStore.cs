@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
 namespace DbDataSync.State;
 

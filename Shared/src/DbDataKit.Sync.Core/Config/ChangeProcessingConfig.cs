@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// A reader/cache/writer "Kind" is a driver-advertised identifier (e.g. "MsSqlChangeTracking",

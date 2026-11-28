@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Applies a mapping's stated <see cref="TableMappingConfig.PrimaryKey"/> over the source's own

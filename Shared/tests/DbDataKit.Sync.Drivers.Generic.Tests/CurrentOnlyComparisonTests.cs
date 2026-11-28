@@ -1,6 +1,6 @@
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// A check against a historized target reports the feature working as a defect: an SCD Type 2 or

@@ -1,6 +1,6 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.TestSupport;
 
 namespace DbDataSync.Drivers.MsSql.Tests;
@@ -30,7 +30,7 @@ public sealed class MsSqlChangeApplyThroughBatchStagingTests(MsSqlTestDatabase d
     private static readonly MsSqlDriver Driver = new();
 
     protected override DbConnection OpenConnection() => db.OpenConnection();
-    protected override IStagingProvider Staging { get; } = Driver.StagingProviders.Single(p => p.Kind == DbDataSync.Drivers.Generic.GenericDriverKinds.StagingTable);
+    protected override IStagingProvider Staging { get; } = Driver.StagingProviders.Single(p => p.Kind == DbDataKit.Sync.Drivers.Generic.GenericDriverKinds.StagingTable);
     protected override IChangeWriter Writer { get; } = Driver.Writers.Single(w => w.Kind == "ChangeApply");
     protected override TableRef TargetRef(string table) => new() { ConnectionName = "t", Database = db.DatabaseName, Schema = "dbo", Table = table };
     protected override string IntType => "int";

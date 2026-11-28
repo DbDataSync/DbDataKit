@@ -1,8 +1,8 @@
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Sync's <see cref="SqlDialect"/> as the callbacks the shared statement builders take (<see cref="StatementSyntax"/>; plan 13, A16). Sync keeps its own dialect

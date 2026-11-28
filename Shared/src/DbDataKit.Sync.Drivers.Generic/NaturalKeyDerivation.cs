@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Which target columns identify a row across its versions, derived from the source's primary key —

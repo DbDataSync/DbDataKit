@@ -1,11 +1,11 @@
 using DbDataKit.Connections.SqlServer;
 using System.Data.Common;
 using System.Diagnostics;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Microsoft.Data.SqlClient;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.MsSql;
 

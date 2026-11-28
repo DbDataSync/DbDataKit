@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Secrets;
+namespace DbDataKit.Sync.Core.Secrets;
 
 /// <summary>
 /// The names of Sync's secrets in the shared store: <c>dbdatakit:sync:&lt;kind&gt;:&lt;name&gt;</c> (see <c>DbDataKit.Secrets.SecretName</c>).

@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// The cache that is not one: no staging table, no second copy of the data. The reader's rows go to the

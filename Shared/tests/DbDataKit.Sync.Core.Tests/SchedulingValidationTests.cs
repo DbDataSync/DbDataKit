@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// A continuous worker exits when it has gone a whole idle timeout without a pass finding anything.

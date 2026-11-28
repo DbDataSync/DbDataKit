@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 using DbDataSync.Tests.Shared;
 
 namespace DbDataSync.Scripting.Tests;
@@ -24,7 +24,7 @@ public sealed class ScriptPackagePinTests : IDisposable
     }
 
     private const string Body = """
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class Upper : ISqlColumnExpression
         {
@@ -70,7 +70,7 @@ public sealed class ScriptPackagePinTests : IDisposable
         Directory.CreateDirectory(repoRoot);
         LibGit2Sharp.Repository.Init(repoRoot);
         var repository = new ConfigRepository(Path.Combine(repoRoot, "config"), new DbDataKit.Config.Git.GitCommitService(repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
         var compiler = new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_root, "cache")), repository.ScriptsDirectory, _feed.Directory);
         var repoLock = Path.Combine(repository.ScriptsDirectory, "upper.lock");
         var author = new DbDataKit.Config.Git.GitAuthor("Ada", "ada@example.test");

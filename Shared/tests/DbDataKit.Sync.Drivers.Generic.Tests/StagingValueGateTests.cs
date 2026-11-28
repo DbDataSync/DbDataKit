@@ -1,9 +1,9 @@
 using System.Net;
 using DbDataKit.Dialect;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// The conversion layer's gate (A14a): refuses only what the measured table (<c>architecture/staging-value-types.md</c>) shows is refused for every column

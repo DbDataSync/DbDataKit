@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// What a mapping's next pass is meant to do — a request the reader interprets as best it can, not an

@@ -2,9 +2,9 @@ using CanonicalKind = DbDataKit.Dialect.CanonicalKind;
 using CanonicalType = DbDataKit.Dialect.CanonicalType;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Descriptor;
+namespace DbDataKit.Sync.Drivers.Descriptor;
 
 /// <summary>
 /// A <see cref="SqlDialect"/> built entirely from a <c>driver.yaml</c>'s <c>dialect</c> and
@@ -71,7 +71,7 @@ public sealed class DescriptorDialect : SqlDialect
     /// only surfaces the first time a mapping actually reads — <c>ConfigValidation</c>-adjacent
     /// but stated here, since only the dialect knows whether its engine has the notion at all. Checked
     /// only when a switch is actually being asked for: an empty <paramref name="database"/> (a
-    /// deliberate "nothing to switch to" — see <c>DbDataSync.Core.Config.TableRef.Database</c>'s own
+    /// deliberate "nothing to switch to" — see <c>DbDataKit.Sync.Core.Config.TableRef.Database</c>'s own
     /// doc comment) skips straight past it, the same as the base class's own check — this override
     /// exists to refuse a *real* request this engine can't honour, not an absent one.
     /// </summary>

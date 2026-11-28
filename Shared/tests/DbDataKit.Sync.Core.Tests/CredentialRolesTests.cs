@@ -1,10 +1,10 @@
 using DbDataKit.Config.Git;
 using DbDataKit.Connections.Inventory;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Plan 28c, E20: a connection's two logins, <c>read</c> and <c>run</c>. One login serves both; a second is its own user and its own secret, kept in the file as a reference and never as a value.</summary>
 public sealed class CredentialRolesTests : IDisposable

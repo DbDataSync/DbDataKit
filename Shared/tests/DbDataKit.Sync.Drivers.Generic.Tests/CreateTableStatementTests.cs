@@ -1,7 +1,7 @@
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>The generated <c>CREATE TABLE</c>'s shape — column order, nullability, and the primary key
 /// clause — from already-rendered column types, independent of which dialect rendered them.</summary>

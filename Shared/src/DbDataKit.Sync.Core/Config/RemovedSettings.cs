@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// The settings Sync no longer has, which are refused by name and never ignored in silence (plan 13, X05 and plan 13a, X06; a clean break is never a silent one).

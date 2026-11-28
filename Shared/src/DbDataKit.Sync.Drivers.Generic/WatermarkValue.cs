@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Formats a watermark for storage, and it has to round-trip: the value goes into the work queue as

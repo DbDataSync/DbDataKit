@@ -1,6 +1,7 @@
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Libraries;
 using Xunit;
+using DbDataKit.Sync.Drivers.Descriptor;
 
 namespace DbDataSync.Drivers.Descriptor.Tests;
 

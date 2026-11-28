@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Provisioning;
+namespace DbDataKit.Sync.Provisioning;
 
 /// <summary>
 /// What <c>DriverConnectionFactory</c> does, named so a caller can depend on the behaviour

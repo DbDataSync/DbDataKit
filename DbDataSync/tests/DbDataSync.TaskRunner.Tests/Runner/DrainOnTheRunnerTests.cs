@@ -3,10 +3,10 @@ using System.Text.RegularExpressions;
 using DbDataKit.Config.Git;
 using DbDataKit.Runner;
 using DbDataKit.Runner.Execution;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Libraries;
 using DbDataSync.Planning;
@@ -432,10 +432,10 @@ public sealed class DrainOnTheRunnerTests(Xunit.Abstractions.ITestOutputHelper o
                 RunLogin = new RunLoginInput { UserId = "sa", Password = TestSupport.TestEngines.MsSql.Password },
                 Name = name,
             }, Author);
-        var logins = new[] { "src-conn", "tgt-conn" }.Select(name => DbDataSync.Core.Secrets.SecretRefs.ForConnectionRun(name))
+        var logins = new[] { "src-conn", "tgt-conn" }.Select(name => DbDataKit.Sync.Core.Secrets.SecretRefs.ForConnectionRun(name))
             .ToDictionary(reference => _secrets.EnvName(reference), reference => _secrets.Resolve(reference));
         Assert.DoesNotContain(logins.Values, v => v == readPassword);
-        Assert.DoesNotContain(logins.Keys, k => k == _secrets.EnvName(DbDataSync.Core.Secrets.SecretRefs.ForConnection("src-conn")));
+        Assert.DoesNotContain(logins.Keys, k => k == _secrets.EnvName(DbDataKit.Sync.Core.Secrets.SecretRefs.ForConnection("src-conn")));
 
         var start = await CurrentVersionAsync();
         await InsertRowsAsync(5);

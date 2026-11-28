@@ -1,10 +1,10 @@
 using System.Data.Common;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// A rendered <see cref="BatchReloadSegment"/>: the SQL predicate limiting a statement to that

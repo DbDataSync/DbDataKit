@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>
 /// Phase 132's actual fix, as phase 145 rebuilt it: a CDC pass that stages more than one row for the
@@ -276,7 +276,7 @@ public sealed class Scd2WriterTests
     public void TheSurrogateKey_AgainstTheRealMsSqlDialect_ConcatenatesWithPlus()
     {
         var sql = HistorizedStatement.BuildOpenDuplicateKeyVersions(
-            DbDataSync.Core.Sql.MsSqlDialect.Instance, "[dbo].[Hist]", "#staging", ["Id"], ["Name"], Mappings);
+            DbDataKit.Sync.Core.Sql.MsSqlDialect.Instance, "[dbo].[Hist]", "#staging", ["Id"], ["Name"], Mappings);
 
         Assert.Contains("b.__DS_Ordering + '|' + CAST(b.[Id] AS VARCHAR(4000))", sql);
     }

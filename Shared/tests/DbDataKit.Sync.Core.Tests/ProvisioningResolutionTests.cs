@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// The replication says what its mappings may do to their targets; a mapping overrides it. Same shape

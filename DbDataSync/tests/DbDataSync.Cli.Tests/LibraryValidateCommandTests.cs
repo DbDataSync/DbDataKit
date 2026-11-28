@@ -1,5 +1,5 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using DbDataSync.Libraries;
 using Microsoft.Data.SqlClient;

@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Scripting.Tests;
 
@@ -25,7 +25,7 @@ public sealed class TransformPipelineTests : IDisposable
         _configRepository = new ConfigRepository(
             Path.Combine(_repoRoot, "config"),
             new DbDataKit.Config.Git.GitCommitService(_repoRoot),
-            DbDataSync.Core.Secrets.SecretStore.ForProviders(new DbDataSync.Core.Secrets.InMemorySecretProvider()));
+            DbDataKit.Sync.Core.Secrets.SecretStore.ForProviders(new DbDataKit.Sync.Core.Secrets.InMemorySecretProvider()));
         _host = new ScriptHost(
             _configRepository, new ScriptCompiler(new ScriptCacheDirectory(Path.Combine(_repoRoot, "cache"))));
     }
@@ -92,7 +92,7 @@ public sealed class TransformPipelineTests : IDisposable
     {
         Register("upper", ScriptSlots.ValueColumnExpression, "Upper", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : IValueColumnExpression
             {
@@ -118,7 +118,7 @@ public sealed class TransformPipelineTests : IDisposable
         // forty costs a delegate call on all forty for every row — and losing it later would be silent.
         Register("spy", ScriptSlots.ValueColumnExpression, "Spy", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Spy : IValueColumnExpression
             {
@@ -141,7 +141,7 @@ public sealed class TransformPipelineTests : IDisposable
         // operation rather than the values.
         Register("marker", ScriptSlots.ValueColumnExpression, "Marker", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Marker : IValueColumnExpression
             {
@@ -163,8 +163,8 @@ public sealed class TransformPipelineTests : IDisposable
         Register("no-eu", ScriptSlots.RowTransform, "NoEu", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class NoEu : IRowTransform
             {
@@ -193,8 +193,8 @@ public sealed class TransformPipelineTests : IDisposable
         Register("drop-deletes", ScriptSlots.RowTransform, "DropDeletes", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class DropDeletes : IRowTransform
             {
@@ -217,8 +217,8 @@ public sealed class TransformPipelineTests : IDisposable
         Register("shout", ScriptSlots.RowTransform, "Shout", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Shout : IRowTransform
             {
@@ -250,7 +250,7 @@ public sealed class TransformPipelineTests : IDisposable
     {
         Register("upper", ScriptSlots.ValueColumnExpression, "Upper", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Upper : IValueColumnExpression
             {
@@ -262,8 +262,8 @@ public sealed class TransformPipelineTests : IDisposable
         Register("keep-upper", ScriptSlots.RowTransform, "KeepUpper", """
             using System.Threading;
             using System.Threading.Tasks;
-            using DbDataSync.Drivers.Abstractions;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Drivers.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class KeepUpper : IRowTransform
             {
@@ -287,7 +287,7 @@ public sealed class TransformPipelineTests : IDisposable
     {
         Register("boom", ScriptSlots.ValueColumnExpression, "Boom", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Boom : IValueColumnExpression
             {
@@ -310,7 +310,7 @@ public sealed class TransformPipelineTests : IDisposable
     {
         Register("idle", ScriptSlots.ValueColumnExpression, "Idle", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Idle : IValueColumnExpression
             {
@@ -333,7 +333,7 @@ public sealed class TransformPipelineTests : IDisposable
         // that has nothing to transform would be worse than doing nothing.
         Register("absent", ScriptSlots.ValueColumnExpression, "Absent", """
             using System.Collections.Generic;
-            using DbDataSync.Scripting.Abstractions;
+            using DbDataKit.Sync.Scripting.Abstractions;
 
             public sealed class Absent : IValueColumnExpression
             {
@@ -355,6 +355,6 @@ public sealed class TransformPipelineTests : IDisposable
         public string QuoteIdentifier(string identifier) => $"[{identifier}]";
         public string ParameterReference(string name) => $"@{name}";
         public DbDataKit.Dialect.CanonicalType ToCanonicalType(string nativeType) => throw new NotSupportedException();
-        public DbDataSync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
+        public DbDataKit.Sync.Core.Sql.RenderedColumnType RenderColumnType(DbDataKit.Dialect.CanonicalType type) => throw new NotSupportedException();
     }
 }

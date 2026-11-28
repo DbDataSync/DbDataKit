@@ -5,11 +5,11 @@ using DbDataKit.Runner;
 using DbDataKit.Runner.Execution;
 using DbDataKit.State.Tracking;
 using DbDataKit.Tracking.Build;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
 using DbDataSync.TaskRunner.Tests.Runner;
@@ -483,14 +483,14 @@ public sealed class ReplicationPairsTests : IAsyncLifetime
         await ClearOldEntriesAsync();
         var task = _config.LoadReplicationTask(Replication);
         task.Tracking = new TrackingConfig { Mode = "both", Primary = "target" };
-        if (!DbDataSync.Core.Config.TrackingResolution.TargetWriterEngines.Contains(_target.DriverType))
+        if (!DbDataKit.Sync.Core.Config.TrackingResolution.TargetWriterEngines.Contains(_target.DriverType))
         {
             // the owner decided (2026-11-14, S3) that MySQL, MariaDB and Oracle keep the state on the runner only (`mode: state`): the save-time check refuses `tracking: target|both` for them, naming the plan row, and a file that got there anyway
             // is resolved to the runner's state; the follow below runs for these pairs again when the engine joins TrackingResolution.TargetWriterEngines
-            var refused = Assert.Throws<ConfigValidationException>(() => DbDataSync.Core.Config.TrackingResolution.Validate(task.Tracking, Replication, _target.DriverType));
+            var refused = Assert.Throws<ConfigValidationException>(() => DbDataKit.Sync.Core.Config.TrackingResolution.Validate(task.Tracking, Replication, _target.DriverType));
             Assert.Contains("plan 28c E17", refused.Message);
             Assert.Contains("keeps the state on the target", refused.Message);
-            Assert.Equal("state", DbDataSync.Core.Config.TrackingResolution.Resolve(task.Tracking, _target.DriverType).EffectiveMode);
+            Assert.Equal("state", DbDataKit.Sync.Core.Config.TrackingResolution.Resolve(task.Tracking, _target.DriverType).EffectiveMode);
             return;
         }
         _config.SaveReplicationTask(task, Author);

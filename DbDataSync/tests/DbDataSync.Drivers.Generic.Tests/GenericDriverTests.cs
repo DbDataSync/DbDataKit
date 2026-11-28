@@ -1,14 +1,15 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Npgsql;
 using Xunit;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Generic.Tests;
 
 /// <summary>
 /// Proves <see cref="GenericDriver"/> against PostgreSQL — a real, non-trivial engine — with nothing
-/// but <see cref="NpgsqlFactory"/> and <see cref="PostgresDialect"/> from <c>DbDataSync.Core.Sql</c>.
+/// but <see cref="NpgsqlFactory"/> and <see cref="PostgresDialect"/> from <c>DbDataKit.Sync.Core.Sql</c>.
 /// This project has no reference to <c>DbDataSync.Drivers.Postgres</c>: the assertion that matters is
 /// that <see cref="GenericDriver"/>'s behaviour is byte-identical to that driver's own generic Kinds,
 /// proving the extraction (phase 109a's doc comment: "a new engine is a dialect, a connection factory

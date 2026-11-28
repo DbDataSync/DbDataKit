@@ -17,7 +17,7 @@ public sealed class DbDataSyncRootTests : IDisposable
     {
         var elsewhere = Path.Combine(_root, "elsewhere");
         Directory.CreateDirectory(elsewhere);
-        File.WriteAllText(Path.Combine(_root, DbDataSync.Core.Config.DbDataSyncConfigFile.FileName), "");
+        File.WriteAllText(Path.Combine(_root, DbDataKit.Sync.Core.Config.DbDataSyncConfigFile.FileName), "");
 
         var resolved = DbDataSyncRoot.Resolve(["--repo", elsewhere], _root);
 
@@ -29,7 +29,7 @@ public sealed class DbDataSyncRootTests : IDisposable
     {
         var deep = Path.Combine(_root, "a", "b", "c");
         Directory.CreateDirectory(deep);
-        File.WriteAllText(Path.Combine(_root, DbDataSync.Core.Config.DbDataSyncConfigFile.FileName), "");
+        File.WriteAllText(Path.Combine(_root, DbDataKit.Sync.Core.Config.DbDataSyncConfigFile.FileName), "");
 
         var elsewhere = Path.Combine(_root, "elsewhere");
         var resolved = DbDataSyncRoot.Resolve(["--repo", elsewhere], deep);
@@ -40,7 +40,7 @@ public sealed class DbDataSyncRootTests : IDisposable
     [Fact]
     public void CwdHasTheFile_ResolvesToCwd()
     {
-        File.WriteAllText(Path.Combine(_root, DbDataSync.Core.Config.DbDataSyncConfigFile.FileName), "");
+        File.WriteAllText(Path.Combine(_root, DbDataKit.Sync.Core.Config.DbDataSyncConfigFile.FileName), "");
 
         var resolved = DbDataSyncRoot.Resolve([], _root);
 
@@ -50,7 +50,7 @@ public sealed class DbDataSyncRootTests : IDisposable
     [Fact]
     public void AParentSeveralLevelsUp_HasTheFile_WalksUpToFindIt()
     {
-        File.WriteAllText(Path.Combine(_root, DbDataSync.Core.Config.DbDataSyncConfigFile.FileName), "");
+        File.WriteAllText(Path.Combine(_root, DbDataKit.Sync.Core.Config.DbDataSyncConfigFile.FileName), "");
         var deep = Path.Combine(_root, "a", "b", "c");
         Directory.CreateDirectory(deep);
 
@@ -87,7 +87,7 @@ public sealed class DbDataSyncRootTests : IDisposable
             var explicitRoot = Path.Combine(_root, "explicit-root");
             Assert.Equal(explicitRoot, DbDataSyncRoot.Resolve(["--repo", explicitRoot], deep));
 
-            File.WriteAllText(Path.Combine(_root, DbDataSync.Core.Config.DbDataSyncConfigFile.FileName), "");
+            File.WriteAllText(Path.Combine(_root, DbDataKit.Sync.Core.Config.DbDataSyncConfigFile.FileName), "");
             Assert.Equal(_root, DbDataSyncRoot.Resolve([], deep));
         }
         finally

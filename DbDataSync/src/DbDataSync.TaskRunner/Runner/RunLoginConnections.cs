@@ -1,12 +1,12 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Libraries;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 
 namespace DbDataSync.TaskRunner.Runner;
 

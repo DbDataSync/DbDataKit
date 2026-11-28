@@ -1,4 +1,4 @@
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Secrets;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.State.Tests;

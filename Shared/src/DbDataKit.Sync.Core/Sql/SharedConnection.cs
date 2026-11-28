@@ -1,11 +1,11 @@
 using System.Data.Common;
 using DbDataKit.Connections;
 using DbDataKit.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using KitAuth = DbDataKit.Connections.AuthMode;
-using SyncAuth = DbDataSync.Core.Config.AuthMode;
+using SyncAuth = DbDataKit.Sync.Core.Config.AuthMode;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>What one engine's driver tells <see cref="SharedConnection"/> about its connection-string dialect.</summary>
 public sealed class SharedConnectionOptions

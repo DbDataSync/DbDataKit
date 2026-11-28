@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>Token substitution (identifiers, quoted, textual) and parameter substitution (values,
 /// bound, only the ones actually referenced) — see phase 26's "identifiers are substituted; values are

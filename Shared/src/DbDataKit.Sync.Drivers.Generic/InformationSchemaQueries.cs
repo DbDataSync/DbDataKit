@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Catalog lookups over <c>information_schema</c>, which Postgres, MySQL and SQL Server all provide.

@@ -1,9 +1,9 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Slowly Changing Dimension Type 2: keeps every version of every key, rather than the current one.

@@ -1,13 +1,13 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Diagnostics;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Provisioning;
+namespace DbDataKit.Sync.Provisioning;
 
 /// <summary>
 /// Plans (and, once an operator confirms, applies) the DDL a table mapping's Setup card previews —

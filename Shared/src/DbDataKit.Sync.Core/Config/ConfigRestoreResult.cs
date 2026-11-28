@@ -1,6 +1,6 @@
 using DbDataKit.Config.Git;
 
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// What a restore did — phase 35.

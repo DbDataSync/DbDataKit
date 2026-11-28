@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// What a writer that carries the replication's state calls just before it commits the entry's transaction (plan 28c E17): the hook writes the entry's state row

@@ -1,6 +1,6 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Opt-in capability, in the same shape as <see cref="ISegmentExpandingReader"/> and

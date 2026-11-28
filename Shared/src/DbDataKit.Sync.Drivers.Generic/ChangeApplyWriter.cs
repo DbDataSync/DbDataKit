@@ -1,10 +1,10 @@
 using System.Data.Common;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// **The change writer of every engine** (plan 28c, CW01): applies the staged changes of an incremental pass to the target with a DELETE, an UPDATE and an

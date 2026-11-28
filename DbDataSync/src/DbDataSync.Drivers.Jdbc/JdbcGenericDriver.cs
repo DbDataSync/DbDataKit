@@ -1,9 +1,10 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Drivers.Descriptor;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.Jdbc.Ado;
 using DbDataSync.Libraries;
 

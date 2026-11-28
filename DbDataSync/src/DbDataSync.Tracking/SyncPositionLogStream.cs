@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.State.Tracking;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.State;
 
 namespace DbDataSync.Tracking;

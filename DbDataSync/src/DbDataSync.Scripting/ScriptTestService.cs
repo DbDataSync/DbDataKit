@@ -1,12 +1,12 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Scripting.Abstractions;
-using DbDataSync.Core.Sql;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Scripting.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Provisioning;
 
 namespace DbDataSync.Scripting;
 

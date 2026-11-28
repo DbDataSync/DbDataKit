@@ -1,7 +1,8 @@
 using System.Runtime.Loader;
 using DbDataKit.Scripting;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
 using DbDataSync.Libraries;
 
 namespace DbDataSync.Drivers.Descriptor;
@@ -17,7 +18,7 @@ public static class DriverScriptHost
     private static readonly string[] DefaultImports =
     [
         "System", "System.Linq", "System.Collections.Generic", "System.Threading", "System.Threading.Tasks", "System.Data", "System.Data.Common",
-        "DbDataSync.Core.Config", "DbDataSync.Drivers.Abstractions", "DbDataKit.Dialect",
+        "DbDataKit.Sync.Core.Config", "DbDataKit.Sync.Drivers.Abstractions", "DbDataKit.Dialect",
     ];
 
     /// <param name="driverDir">The driver's folder.</param>
@@ -36,6 +37,9 @@ public static class DriverScriptHost
             throw new InvalidOperationException($"Driver '{manifest.Id}' is not restored ({ex.Message}): run `dbdatasync driver sync {manifest.Id}`.", ex);
         }
         DefaultContextBinder.Bind(closure, [libDir]);
+
+        if (RenamedNamespaces.Find(manifest.Source) is { Count: > 0 } renamed)
+            throw new InvalidOperationException($"Driver '{manifest.Id}' does not compile:{Environment.NewLine}{string.Join(Environment.NewLine, renamed)}");
 
         var (_, source) = ScriptDirectives.Extract(manifest.Source, exactOnly: true);
         var compiler = new CsxCompiler(new CsxCompilerOptions

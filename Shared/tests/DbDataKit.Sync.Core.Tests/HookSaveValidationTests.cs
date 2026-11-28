@@ -1,9 +1,9 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// "Referencing an unavailable token or parameter is a validation error at save time — naming the
@@ -103,7 +103,7 @@ public sealed class HookSaveValidationTests : IDisposable
         _repository.SaveScript(new ScriptDefinition
         {
             Manifest = new ScriptConfig { Name = "not-sql", Kind = "sqlColumnExpression", Language = ScriptLanguage.CSharp },
-            Code = "public sealed class X : DbDataSync.Scripting.Abstractions.ISqlColumnExpression { public string? RenderSql(DbDataSync.Scripting.Abstractions.SqlColumnExpressionContext c) => null; }" + "\nnew X()\n",
+            Code = "public sealed class X : DbDataKit.Sync.Scripting.Abstractions.ISqlColumnExpression { public string? RenderSql(DbDataKit.Sync.Scripting.Abstractions.SqlColumnExpressionContext c) => null; }" + "\nnew X()\n",
         }, Author);
 
         var ex = Assert.Throws<ConfigValidationException>(() => _repository.SaveConnection(Connection(new()

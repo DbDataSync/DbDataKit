@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>The Kinds of the built-in drivers that are an engine's own, beside the generic ones of <see cref="GenericDriverKinds"/>. The drivers take
 /// their Kinds from here, so the capability table and the drivers spell each one once.</summary>

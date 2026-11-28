@@ -1,12 +1,12 @@
 using System.Data.Common;
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 using DbDataSync.TaskRunner.Runner;
 using DbDataSync.TestSupport;
 using LibGit2Sharp;
@@ -73,8 +73,8 @@ public sealed class SetCatalogScriptedDatabaseTests : IAsyncLifetime
                 using System.Collections.Generic;
                 using System.Threading;
                 using System.Threading.Tasks;
-                using DbDataSync.Drivers.Abstractions;
-                using DbDataSync.Scripting.Abstractions;
+                using DbDataKit.Sync.Drivers.Abstractions;
+                using DbDataKit.Sync.Scripting.Abstractions;
 
                 public sealed class ByDatabase : IMetadataProvider
                 {

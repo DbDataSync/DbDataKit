@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 public sealed class ConfigValidationException(string message, Exception? inner = null) : Exception(message, inner);
 
@@ -264,7 +264,7 @@ public static class ConfigValidation
     /// Phase 124's <c>KeyReconcile</c>/<c>KeyReconcileDelete</c> pair, save-time, widened by phase 129
     /// to also accept <c>KeyReconcileScd2Close</c> as the paired writer — and, only for that ending,
     /// two more checks that need the mapping's own primary writer. Plain string literals rather than
-    /// <c>DbDataSync.Drivers.Generic.GenericDriverKinds</c> constants — Core cannot reference the
+    /// <c>DbDataKit.Sync.Drivers.Generic.GenericDriverKinds</c> constants — Core cannot reference the
     /// driver layer, which is what keeps config depending on drivers and not the other way round;
     /// <see cref="ValidateHistorizedTarget"/> makes the same choice for "Snapshot"/"Scd2".
     /// <para>
@@ -450,7 +450,7 @@ public static class ConfigValidation
     /// <c>MsSqlBatchReload</c> Kind string, which resolves to the same reader — phase 191S) know how to
     /// read a query-shaped source at all; every other reader still assumes a real table it can address
     /// directly (Change Tracking, CDC, trigger-audit, Flashback, logical decoding, KeyReconcile). These are
-    /// bare string literals rather than a reference to <c>DbDataSync.Drivers.Generic</c>'s own Kind
+    /// bare string literals rather than a reference to <c>DbDataKit.Sync.Drivers.Generic</c>'s own Kind
     /// constants, matching <see cref="PipelineResolution"/>'s own precedent (its Reconcile-Kind defaults) —
     /// this project is upstream of the driver projects that define those constants and cannot reference them.
     /// </para>

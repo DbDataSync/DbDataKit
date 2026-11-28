@@ -1,7 +1,7 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Opt-in capability for a driver that can put an approximate row count on one of its tables from the

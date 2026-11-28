@@ -1,9 +1,9 @@
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
 using DbDataKit.Config.Git;
 using LibGit2Sharp;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// The cached column metadata phase 90 added, through the YAML it is actually stored as.

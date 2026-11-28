@@ -1,6 +1,6 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 using Xunit;
 
 namespace DbDataSync.Drivers.Postgres.Tests;

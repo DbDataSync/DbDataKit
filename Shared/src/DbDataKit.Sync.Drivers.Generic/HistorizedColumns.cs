@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// The bookkeeping columns the snapshot and SCD Type 2 writers add beyond the mapped ones.

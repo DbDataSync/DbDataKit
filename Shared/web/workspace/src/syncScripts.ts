@@ -9,7 +9,7 @@ export const scriptCodePath = (name: string) => `config/scripts/${name}.csx`
 export const scriptsOf = (paths: readonly string[]): string[] =>
   paths.map((p) => /^config\/scripts\/([^/]+)\.ya?ml$/i.exec(p)?.[1]).filter((n): n is string => !!n).sort()
 
-const USINGS = 'using System;\nusing System.Collections.Generic;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing DbDataSync.Scripting.Abstractions;\n\n'
+const USINGS = 'using System;\nusing System.Collections.Generic;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing DbDataKit.Sync.Scripting.Abstractions;\n\n'
 
 /** The starting code of each slot: a script ends with an expression (no semicolon), the implementation the slot asks for. */
 export const SKELETONS: Record<ScriptKind, string> = {

@@ -1,15 +1,15 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Npgsql;
 using Xunit;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.Drivers.Postgres.Tests;
 
 /// <summary>
 /// Postgres → Postgres, to isolate driver bugs from cross-engine ones. Every component here is
-/// <c>DbDataSync.Drivers.Generic</c>'s, driven by <see cref="PostgresDialect"/> — this driver registers
+/// <c>DbDataKit.Sync.Drivers.Generic</c>'s, driven by <see cref="PostgresDialect"/> — this driver registers
 /// nothing of its own.
 /// </summary>
 [Trait("Category", "Integration")]

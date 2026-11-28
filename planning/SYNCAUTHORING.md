@@ -84,9 +84,9 @@ replication, a mapping or `checks:`, and reading the draft's connections and scr
 | Old service or controller | What it answered | Composed from |
 | --- | --- | --- |
 | `ScriptsController` slots | the script slots a binding can name (Custom Transforms, `ScriptBindings.tsx`) | `DbDataSync.Scripting` (`ScriptHost`) |
-| `ConnectionsController` capabilities; `Services/SyncEngines.cs` | what a connection's driver can do: its readers, staging providers and writers (the Overview's and a mapping's Pipeline, `useReplicationCapabilities`) | `DbDataSync.Drivers.Abstractions` (`DriverRegistry`), `DbDataSync.Drivers.Descriptor`, `DbDataKit.Connections.Descriptor` (the engine registry) |
+| `ConnectionsController` capabilities; `Services/SyncEngines.cs` | what a connection's driver can do: its readers, staging providers and writers (the Overview's and a mapping's Pipeline, `useReplicationCapabilities`) | `DbDataKit.Sync.Drivers.Abstractions` (`DriverRegistry`), `DbDataKit.Sync.Drivers.Descriptor`, `DbDataKit.Connections.Descriptor` (the engine registry) |
 | `MetadataController` (databases, tables, columns) | a connection's metadata | the draft's catalog cache (`DbDataKit.Catalog.Cache`); how the cache is filled and refreshed is `docs/authoring-metadata.md`, what is checked live its section "A sync project" |
-| `ProvisioningController` inferred column types and natural key; `Services/MappingMetadataService.cs`, `MappingMetadataCapture.cs`; `TableMappingsController` bulk create | the target types and key of a mapping from its source columns; a mapping file per ticked table with its columns and key | `DbDataSync.Provisioning` (`MappingColumnReader`) over the catalog cache |
+| `ProvisioningController` inferred column types and natural key; `Services/MappingMetadataService.cs`, `MappingMetadataCapture.cs`; `TableMappingsController` bulk create | the target types and key of a mapping from its source columns; a mapping file per ticked table with its columns and key | `DbDataKit.Sync.Provisioning` (`MappingColumnReader`) over the catalog cache |
 | `ProvisioningController` and `ReplicationProvisioningController` plan | a mapping's and a replication's provisioning plan | the Workspace's `provisioning-plan` route (exists) |
 
 Left on the old server: everything in `Runner/`, `Hubs/`, `RunsController`, `ReplicationLagController`, `MetricsController`, `VerificationController`,
@@ -134,7 +134,7 @@ the slice built and names the slice task it follows. Where a slice task uses som
   opens the Builds tab, whose panel deploys through the console (`POST /api/deploys`).
 - **No ported service.** The slice's screens read the draft's files and `catalog-cache.yaml` in the browser (`catalogCache.ts`, unsaved edits
   included) and fill the cache through the console's catalog read (`api/workspace-catalog/...`), which starts the built-in package's `discover` on the Runner; none of the Workspace's `sync/` routes
-  (`DbDataWorkspace/README.md`) is called, so the slice uses neither Sync's shared libraries (`Shared/src/DbDataKit.Sync.*`) nor SYNCAUTHORING-8. The slice's Create mappings wrote each file through the
+  (`DbDataWorkspace/README.md`) is called, so the slice uses none of Sync's shared libraries (`Shared/src/DbDataKit.Sync.*`). The slice's Create mappings wrote each file through the
   client's mapping writer with the cache's columns and key and no `targetType`; the Designer now asks the Workspace's `sync/bulk-create` for the files
   and `sync/inferred-columns` for the types and key it shows (`DbDataWorkspace/README.md`, "A project's two areas"). The cache stays read in the browser
   with those routes too: the Workspace has no metadata route (`docs/authoring-metadata.md`, "A sync project").
@@ -158,7 +158,6 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| SYNCAUTHORING-8 | Delete the forwarding projects left in `DbDataSync/src` when Sync's libraries moved to `Shared/src/DbDataKit.Sync.*` (`DbDataSync.Core`, `.Drivers.Abstractions`, `.Scripting.Abstractions`, `.Drivers.Generic` and `.Provisioning` hold only `TypeForwards.cs`; `.Drivers.Descriptor` forwards what moved and keeps what loads a library or compiles a `driver.csx`, with `DriverDescriptorReader` as a thin adapter over the shared `DriverDescriptors`): DbDataSync's projects reference `DbDataKit.Sync.*` directly (`<DbDataKitReference>`), the forwarding types and any project left empty are removed, the three engine tests left in `DbDataSync.Drivers.Generic.Tests` reference the shared library, and the tasks and docs that name the old projects are updated in the same pull request; the shared libraries' namespaces become `DbDataKit.Sync.*` (a transform script, a `driver.csx` and the script compiler's imports use the new names), and a set's check names each old `DbDataSync.*` `using` in its scripts with the name that replaces it | none | S | DbDataSync builds and its unit and integration suites pass with no forwarding type left (a test lists the `TypeForwardedTo` attributes of DbDataSync's assemblies and finds none); `scripts/check_solution.py` passes; a script with `using DbDataSync.Scripting.Abstractions;` fails its check naming `DbDataKit.Sync.Scripting.Abstractions` |
 | SYNCAUTHORING-6 | Documentation and coverage: `docs/ui-coverage.md` names every Designer page and its stories; the `docs/ui-editors.md` rows of `sync-task-config`, `sync-mapping-config`, the checks and the verification checks name the Designer screens and Files (the rows of the connections and `sync-script-config` keep Files and say the Designer does not cover them yet); `docs/authoring-parity.md`'s Sync rows; the Sync part of `DbDataWorkspace/README.md` says what the Designer covers (inside a replication), that connections and scripts are edited in Files, and that monitoring is the Runner's screens; the shots under `DbDataSync/screenshots/golden-path/` that show a replication's authoring are retaken from the stories | none | S | `scripts/check_ui_coverage.py` and `scripts/check_ui_editors.py` pass with the new rows; the stories run in CI |
 
 ## Needs from other subjects
@@ -170,7 +169,7 @@ The stories are `sync-designer.spec.ts` in `DbDataKit/tests/DbDataKit.Server.Web
   Workspace's sandbox.
 - CLI (needs review): if it is accepted, CLI-3 moves Sync's engine of check and package from `dbdatasync` into `Shared/src`; Sync's
   configuration model, slot list, driver registry and column reader are there already (`Shared/src/DbDataKit.Sync.*`), and CLI-3 builds on
-  those projects. CLI-6 removes the program `dbdatasync`, which changes what SYNCAUTHORING-8's adapters forward to, and
+  those projects. CLI-6 removes the program `dbdatasync`, which changes what the driver-loading adapter `DriverDescriptorReader` (in `DbDataSync.Drivers.Descriptor`) is part of, and
   CLI-4 changes the form of the runtime package that holds the set's `preflight`, `discover` and `describe` (`SetPreflightJob` and `SetCatalogJobs.cs` in `DbDataSync.TaskRunner`).
 - AUTHORING-17, after the slice: `facts` (`docs/authoring-metadata.md`). **Set up for development** is built: it stores the login, copies the draft's
   connection to the Runner and binds the slot (`docs/authoring-metadata.md`, "Before anything is published: Set up for development"). The Designer

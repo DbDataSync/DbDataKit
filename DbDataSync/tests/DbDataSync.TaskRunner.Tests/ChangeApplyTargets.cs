@@ -1,7 +1,7 @@
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.MySql;
 using DbDataSync.Drivers.Oracle;

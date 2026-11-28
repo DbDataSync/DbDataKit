@@ -1,6 +1,6 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 using Npgsql;
 
 namespace DbDataSync.Drivers.Jdbc.Tests;

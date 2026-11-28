@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using Xunit;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// The two-level stage resolution phase 68 added: the replication's pipeline, unless the mapping

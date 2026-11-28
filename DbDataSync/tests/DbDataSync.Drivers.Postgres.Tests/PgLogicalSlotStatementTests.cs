@@ -1,7 +1,7 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using Xunit;
 
 namespace DbDataSync.Drivers.Postgres.Tests;

@@ -1,9 +1,9 @@
 using DbDataKit.Dialect;
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// A driver that can plan (and, once a human applies it, run) the DDL a replication needs but cannot

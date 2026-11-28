@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>Which side (or sides) a compared row was found on.</summary>
 public enum VerificationRowStatus

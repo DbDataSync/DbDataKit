@@ -1,6 +1,6 @@
 using DbDataKit.Catalog;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Provisioning;
 
 namespace DbDataKit.Authoring.Server;
 

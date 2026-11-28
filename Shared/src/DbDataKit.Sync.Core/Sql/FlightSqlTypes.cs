@@ -1,6 +1,6 @@
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// How a Flight SQL driver reads a column's type. An Arrow schema carries no engine-specific type name, so a Flight SQL column reports an ANSI

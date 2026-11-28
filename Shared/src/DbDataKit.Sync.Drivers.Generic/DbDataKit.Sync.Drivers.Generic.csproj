@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The types keep their namespace (DbDataSync.Drivers.Generic): DbDataSync's project of the same name forwards to this assembly. -->
   <PropertyGroup>
     <PackageId>DbDataKit.Sync.Drivers.Generic</PackageId>
     <Description>The readers, staging providers and writers Sync's SQL drivers share, the driver a driver.yaml describes, and the rules by which a mapping's target table is planned and its natural key derived.</Description>

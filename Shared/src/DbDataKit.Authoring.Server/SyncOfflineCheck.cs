@@ -4,13 +4,13 @@ using DbDataKit.Catalog;
 using DbDataKit.Config.Yaml;
 using DbDataKit.Dialect;
 using DbDataKit.Transfer;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Descriptor;
-using DbDataSync.Drivers.Generic;
-using DbDataSync.Provisioning;
-using Sql = DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Descriptor;
+using DbDataKit.Sync.Drivers.Generic;
+using DbDataKit.Sync.Provisioning;
+using Sql = DbDataKit.Sync.Core.Sql;
 
 namespace DbDataKit.Authoring.Server;
 
@@ -24,7 +24,7 @@ namespace DbDataKit.Authoring.Server;
 /// Types are read by Sync's own code, so the check and the engine agree on a type: a side's columns through Sync's column reader over the cache
 /// (<see cref="MappingColumnReader"/>, <see cref="SyncCatalogColumns"/>), each native type through the driver's Sync dialect (the built-in engines' dialects
 /// over the shared type tables, the type map of a <c>driver.yaml</c>, ANSI first for a Flight SQL server), then the two sides compared by the shared
-/// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataSync.Drivers.Generic</c>), in their own
+/// <see cref="FidelityRules"/>. Which readers and writers need a key is asked of Sync's generic drivers (<c>DbDataKit.Sync.Drivers.Generic</c>), in their own
 /// words; an engine's own reader or writer (change tracking, a logical slot, an engine's merge) by the key the built-in drivers' table
 /// (<see cref="BuiltInDriverCapabilities"/>) says it needs. A Kind of a driver the project carries is reported as not checked offline.
 /// </para>

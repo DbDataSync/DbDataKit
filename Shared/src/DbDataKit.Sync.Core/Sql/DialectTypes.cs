@@ -1,6 +1,6 @@
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>How a built-in dialect reads and writes a column type: through the shared table of its engine, with nothing of Sync's own on top.</summary>
 internal static class DialectTypes

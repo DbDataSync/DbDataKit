@@ -1,6 +1,6 @@
 using DbDataKit.Config.Git;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
 
 namespace DbDataSync.Cli.Tests;
 
@@ -31,7 +31,7 @@ public sealed class ScriptCommandTests : IDisposable
     }
 
     private const string Upper = """
-        using DbDataSync.Scripting.Abstractions;
+        using DbDataKit.Sync.Scripting.Abstractions;
 
         public sealed class Upper : ISqlColumnExpression
         {

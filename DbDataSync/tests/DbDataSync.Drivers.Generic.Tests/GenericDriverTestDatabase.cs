@@ -1,4 +1,5 @@
 using Npgsql;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.Generic.Tests;
 
@@ -7,7 +8,7 @@ namespace DbDataSync.Drivers.Generic.Tests;
 /// <c>DbDataSync.Drivers.Postgres.Tests.PostgresTestDatabase</c> uses, and drops it afterwards. Kept
 /// separate rather than shared: this project has no reference to
 /// <c>DbDataSync.Drivers.Postgres</c> — the whole point of <see cref="GenericDriver"/> is standing up
-/// against an engine through nothing but its ADO.NET provider and a <c>DbDataSync.Core.Sql</c> dialect.
+/// against an engine through nothing but its ADO.NET provider and a <c>DbDataKit.Sync.Core.Sql</c> dialect.
 /// </summary>
 public sealed class GenericDriverTestDatabase : IAsyncLifetime
 {

@@ -1,10 +1,10 @@
 using System.Data.Common;
 using System.Globalization;
 using System.Text.Json.Nodes;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Provisioning;
 
 namespace DbDataSync.TaskRunner.Runner;
 

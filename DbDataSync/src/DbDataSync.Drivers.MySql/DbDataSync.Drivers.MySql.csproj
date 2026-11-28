@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DbDataSync.Core\DbDataSync.Core.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Abstractions\DbDataSync.Drivers.Abstractions.csproj" />
-    <ProjectReference Include="..\DbDataSync.Drivers.Generic\DbDataSync.Drivers.Generic.csproj" />
+    <DbDataKitReference Include="Sync.Core" />
+    <DbDataKitReference Include="Sync.Drivers.Abstractions" />
+    <DbDataKitReference Include="Sync.Drivers.Generic" />
   </ItemGroup>
 
   <ItemGroup>

@@ -33,6 +33,6 @@ public interface IInitialLoadEnqueuer
     /// have them expanded a second time.
     /// </summary>
     Task<string> EnqueueSegmentsAsync(
-        string replicationName, string mappingName, IReadOnlyList<DbDataSync.Core.Config.BatchReloadSegment> segments,
+        string replicationName, string mappingName, IReadOnlyList<DbDataKit.Sync.Core.Config.BatchReloadSegment> segments,
         CancellationToken cancellationToken);
 }

@@ -1,8 +1,8 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
 namespace DbDataSync.Drivers.ArrowFlightSql;
 

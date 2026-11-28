@@ -2,7 +2,7 @@ using System.Data.Common;
 using System.Globalization;
 using DbDataKit.Dialect;
 
-namespace DbDataSync.Core.Sql;
+namespace DbDataKit.Sync.Core.Sql;
 
 /// <summary>
 /// One runtime value a previewed statement would bind, rendered as it would actually be bound right
@@ -141,7 +141,7 @@ public abstract class SqlDialect
     /// unit) override this to validate-and-ignore rather than call
     /// <see cref="DbConnection.ChangeDatabase"/>, which they throw from.
     /// <para>
-    /// An empty <paramref name="database"/> (<see cref="DbDataSync.Core.Config.TableRef.Database"/>'s own
+    /// An empty <paramref name="database"/> (<see cref="DbDataKit.Sync.Core.Config.TableRef.Database"/>'s own
     /// doc comment — a real, resolved "nothing to switch to", not a missing value) always skips the switch, in every
     /// override, checked before anything override-specific: there is nothing to ask the driver for, so
     /// nothing is asked. This is a pure string check against config already in hand, deliberately not a

@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>The key rules the SCD Type 2 and KeyReconcileDelete writers refuse a mapping by, which the offline check of a sync project calls too.</summary>
 public sealed class WriterKeyRuleTests

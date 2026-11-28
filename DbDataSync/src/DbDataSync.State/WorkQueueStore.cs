@@ -1,6 +1,6 @@
 using System.Data.Common;
 using System.Text.Json;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
 namespace DbDataSync.State;
 

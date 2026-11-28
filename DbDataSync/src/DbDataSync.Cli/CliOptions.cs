@@ -37,7 +37,7 @@ public static class CliOptions
     public static string ServiceRoot => DbDataKit.State.SuiteEnvironment.ResolveServiceFolder("sync");
 
     /// <summary>The per-user default this tool used before phase 112 — still checked so an upgrade
-    /// does not silently strand a working install; <see cref="DbDataSync.Core.Config.LegacyHostSettings"/> refuses it, naming the file.</summary>
+    /// does not silently strand a working install; <see cref="DbDataKit.Sync.Core.Config.LegacyHostSettings"/> refuses it, naming the file.</summary>
     public static string LegacyDefaultRoot =>
         Path.Combine(
             Environment.GetFolderPath(

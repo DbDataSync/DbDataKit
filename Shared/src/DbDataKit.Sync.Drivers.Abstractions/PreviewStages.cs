@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// The stages a preview groups statements under, in the order a pass runs them. Constants rather than

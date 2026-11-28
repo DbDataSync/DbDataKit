@@ -1,8 +1,8 @@
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 using Xunit;
 
-namespace DbDataSync.Drivers.Abstractions.Tests;
+namespace DbDataKit.Sync.Drivers.Abstractions.Tests;
 
 /// <summary>
 /// A segment's description becomes the run's SegmentLabel in run history, so it is what an operator

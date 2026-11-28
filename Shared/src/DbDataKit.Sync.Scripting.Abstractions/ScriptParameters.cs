@@ -1,4 +1,4 @@
-namespace DbDataSync.Scripting.Abstractions;
+namespace DbDataKit.Sync.Scripting.Abstractions;
 
 /// <summary>
 /// The parameters a binding supplies, with the reading helpers a script would otherwise write itself.

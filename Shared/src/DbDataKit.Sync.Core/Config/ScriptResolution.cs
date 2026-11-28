@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Which script — if any — is bound to a slot for a given connection, replication and table mapping.

@@ -241,7 +241,7 @@ public sealed class PackagePublishOnRealRunnerTests : IDisposable
         Assert.Equal(0, same["uploaded"]!.GetValue<int>());
         Assert.Equal(v1, same["version"]!.GetValue<int>());
 
-        _repo.Replication("orders", DbDataSync.Core.Config.ScheduleMode.Periodic, cron: "*/15 * * * *", sourceTable: "OrdersRenamed");   // one mapping of one replication changes
+        _repo.Replication("orders", DbDataKit.Sync.Core.Config.ScheduleMode.Periodic, cron: "*/15 * * * *", sourceTable: "OrdersRenamed");   // one mapping of one replication changes
         var second = Ok(await PublishAsync(runner, null));
         var v2 = second["version"]!.GetValue<int>();
 

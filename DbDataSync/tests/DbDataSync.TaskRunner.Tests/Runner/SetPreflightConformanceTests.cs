@@ -1,11 +1,11 @@
 using System.Data.Common;
 using DbDataKit.Runner;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
-using DbDataSync.Provisioning;
+using DbDataKit.Sync.Provisioning;
 using DbDataSync.TaskRunner.Runner;
 using Microsoft.Data.SqlClient;
 using Npgsql;

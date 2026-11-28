@@ -1,6 +1,6 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>A Flight SQL column's type is read as ANSI first, then as the fronted engine's own, by the driver and the offline check alike.</summary>
 public sealed class FlightSqlTypesTests

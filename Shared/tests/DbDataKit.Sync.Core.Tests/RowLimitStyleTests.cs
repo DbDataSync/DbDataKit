@@ -1,6 +1,6 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>
 /// <see cref="SqlDialect.RowLimitStyle"/>/<see cref="SqlDialect.SupportsTieSafeRowLimit"/> are purely

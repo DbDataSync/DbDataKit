@@ -189,7 +189,7 @@ exposes one; the `mysql.generic` starter template is the closest fully worked ex
 | `dialect.defaultDatabase` | no (default `""`) | what to connect to before a mapping names one |
 | `dialect.connectionStringKeys` | no | override the connection-string key names (`host`/`port`/`database`/`username`/`password`/`connectTimeout`) if this provider spells them differently — defaults to `Microsoft.Data.SqlClient`-shaped names |
 | `typeMap` | no (default empty) | native type name (optionally parameterized, e.g. `"decimal(p,s)"`, `"varchar(n)"`) → a canonical kind, either a bare name (`datetime: Timestamp`) or an object (`{ kind: String, length: n, unicode: true }`). Anything not listed maps to `Unmappable`, which provisioning reports as unsupported rather than guessing. |
-| `capabilities.readers`/`.staging`/`.writers` | yes | which of `DbDataSync.Drivers.Generic`'s existing engine-neutral strategies (`Watermark`, `BatchReload`, `StagingTable`, `DeleteInsert`, `ChangeApply`, ...) this driver offers — a descriptor can only opt into strategies that already exist, never introduce a new one |
+| `capabilities.readers`/`.staging`/`.writers` | yes | which of `DbDataKit.Sync.Drivers.Generic`'s existing engine-neutral strategies (`Watermark`, `BatchReload`, `StagingTable`, `DeleteInsert`, `ChangeApply`, ...) this driver offers — a descriptor can only opt into strategies that already exist, never introduce a new one |
 
 **A descriptor driver never auto-provisions a target table.** `WriteColumnType` — the DDL-generation
 path — deliberately throws rather than guess at a `CREATE TABLE` for an engine it only knows through a
@@ -272,7 +272,10 @@ reads and writes them through the same table as the PostgreSQL driver: a `bytea`
 `text`.
 
 **What a script or a `driver.csx` sees.** A lifecycle hook, a `driver.csx` provisioner and a `driver.csx` dialect see a column type as the shared
-`DbDataKit.Dialect.CanonicalType`; the namespace `DbDataKit.Dialect` is imported for every script and `driver.csx`. Its kind is `CanonicalKind`; a string or binary with no length bound has a
+`DbDataKit.Dialect.CanonicalType`; the namespace `DbDataKit.Dialect` is imported for every script and `driver.csx`. So are Sync's own:
+`DbDataKit.Sync.Core.Config` and `DbDataKit.Sync.Drivers.Abstractions` for both, and `DbDataKit.Sync.Scripting.Abstractions` for a script. A
+script or a `driver.csx` that still has a `using` of the names those namespaces had before (`using DbDataSync.Scripting.Abstractions;`) does not
+compile. The set's check, the script's Test and the driver's load name each such line and the namespace that replaces it. Its kind is `CanonicalKind`; a string or binary with no length bound has a
 null `Length`; a zoned timestamp is `Timestamp` with `TimeZone` true; an unsigned integer has `Unsigned` true; a fixed-length binary has `Fixed`
 true. A hook that names, for each source column, the type it would have on the target:
 

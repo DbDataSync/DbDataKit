@@ -1,9 +1,9 @@
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace DbDataSync.Drivers.Descriptor;
+namespace DbDataKit.Sync.Drivers.Descriptor;
 
 /// <summary>Parses <c>driver.yaml</c> and turns it into the spec of a <see cref="GenericDriver"/>, with no library loaded: the dialect, the type map and the
 /// capabilities a descriptor declares can be read without its provider. Standing the driver up (its provider factory from an installed library, or a

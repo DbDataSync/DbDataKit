@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 
-namespace DbDataSync.Drivers.Abstractions;
+namespace DbDataKit.Sync.Drivers.Abstractions;
 
 /// <summary>
 /// Enumerates registered drivers so config validation and the UI's task builder can only offer

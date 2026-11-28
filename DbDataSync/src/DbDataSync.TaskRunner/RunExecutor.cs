@@ -3,18 +3,18 @@ using System.Collections.Immutable;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Threading.Channels;
-using DbDataSync.Core.Secrets;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Secrets;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 using DbDataSync.Drivers.MsSql;
 using DbDataSync.Drivers.Postgres;
 using DbDataSync.Libraries;
 using DbDataSync.Scripting;
-using DbDataSync.Scripting.Abstractions;
+using DbDataKit.Sync.Scripting.Abstractions;
 using DbDataSync.State;
 using DbDataSync.Verification;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
 namespace DbDataSync.TaskRunner;
 

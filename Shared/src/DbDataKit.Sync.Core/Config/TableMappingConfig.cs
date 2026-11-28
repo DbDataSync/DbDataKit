@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Where a replication reads from or writes to: a connection and a database. Owned by the replication
@@ -459,7 +459,7 @@ public sealed class TableMappingConfig
 /// <summary>
 /// One column of a source or target table, as the catalog described it when somebody last looked.
 /// <para>
-/// The same five facts <c>DbDataSync.Drivers.Abstractions.ColumnMetadata</c> carries, restated here
+/// The same five facts <c>DbDataKit.Sync.Drivers.Abstractions.ColumnMetadata</c> carries, restated here
 /// because config cannot reference the driver abstractions — that project references this one, not
 /// the other way round — and because a persisted type has to round-trip: YamlDotNet constructs
 /// through a parameterless constructor and property setters, so a positional record serialises out

@@ -1,10 +1,10 @@
 using DbDataKit.Dialect;
-using DbDataSync.Core.Config;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Drivers.Generic;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Generic;
 
-namespace DbDataSync.Provisioning;
+namespace DbDataKit.Sync.Provisioning;
 
 /// <summary>
 /// What a mapping's source columns become on the target, and the natural key derived from them, worked out from columns already read. The

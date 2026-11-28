@@ -1,8 +1,8 @@
 using System.Data.Common;
-using DbDataSync.Core.Sql;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// The connection-string key spellings a <see cref="GenericDriver"/> assembles its connection string
@@ -24,7 +24,7 @@ public sealed record GenericConnectionStringKeys(
 
 /// <summary>
 /// Everything a <see cref="GenericDriver"/> needs to stand up against one SQL engine: a dialect, a
-/// provider factory, a catalog, which of <c>DbDataSync.Drivers.Generic</c>'s engine-neutral
+/// provider factory, a catalog, which of <c>DbDataKit.Sync.Drivers.Generic</c>'s engine-neutral
 /// readers/staging/writers to register, and the connection-string shape. Phase 109a's "a new engine is
 /// a dialect, a connection factory and a catalog" made concrete and constructible, rather than
 /// re-derived per compiled driver project.
@@ -65,10 +65,10 @@ public sealed record GenericConnectionStringKeys(
 /// constant that names the descriptor's own choice of driver, not something that varies per connection
 /// the way host/port/database do; a DSN-based descriptor's <c>DSN=MyDataSourceName</c> is the same shape.
 /// Applied before <see cref="GenericDriver"/>'s own host/database/credential unification, so an operator's
-/// own <see cref="DbDataSync.Core.Config.ConnectionConfig.Properties"/> — applied last, same as always —
+/// own <see cref="DbDataKit.Sync.Core.Config.ConnectionConfig.Properties"/> — applied last, same as always —
 /// can still override a specific entry if a real connection genuinely needs to (matching the "operator's
 /// own explicit setting wins" precedent already used there). A connection that supplies its own complete
-/// <see cref="DbDataSync.Core.Config.ConnectionConfig.ConnectionString"/> instead of the host/port/database
+/// <see cref="DbDataKit.Sync.Core.Config.ConnectionConfig.ConnectionString"/> instead of the host/port/database
 /// form fields overrides these entries entirely, not just individual keys — the same "a hand-specified
 /// connection string owns the whole string" precedent <c>JdbcGenericDriver</c>'s own URL template already
 /// follows; an operator going that route is expected to include the driver's own fixed entries themselves.

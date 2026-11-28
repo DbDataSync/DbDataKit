@@ -5,7 +5,7 @@ namespace DbDataSync.TaskRunner;
 /// <c>RunKind.Primary</c>, <c>BulkLoad</c> drains <c>RunKind.BulkLoad</c> and
 /// <c>RunKind.Verification</c>. Each lane has its own bounded channel and its own pool of consumers,
 /// so a long reload can never take a slot an incremental pass needs. See
-/// <c>DbDataSync.Core.Config.ChangeProcessingConfig</c> and phase-108.
+/// <c>DbDataKit.Sync.Core.Config.ChangeProcessingConfig</c> and phase-108.
 /// </summary>
 public sealed record WorkerLanes(int ChangeProcessing, int BulkLoad)
 {

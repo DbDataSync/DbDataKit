@@ -1,6 +1,6 @@
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Core.Tests;
+namespace DbDataKit.Sync.Core.Tests;
 
 /// <summary>Sync's built-in dialects quote and split names through the shared dialects (plan 13, A06), so the hostile names the shared conformance suite uses must come back out of a quote-and-split unchanged here too.</summary>
 public sealed class SharedDialectQuotingTests

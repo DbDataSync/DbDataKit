@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Drivers.Abstractions;
 
 namespace DbDataSync.TaskRunner;
 

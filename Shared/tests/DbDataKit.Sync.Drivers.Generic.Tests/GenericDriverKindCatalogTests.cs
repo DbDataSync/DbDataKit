@@ -1,14 +1,14 @@
 using System.Data.Common;
-using DbDataSync.Core.Config;
-using DbDataSync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Config;
+using DbDataKit.Sync.Drivers.Abstractions;
 
-namespace DbDataSync.Drivers.Generic.Tests;
+namespace DbDataKit.Sync.Drivers.Generic.Tests;
 
 /// <summary>Minimal <see cref="IGenericDriverSpec"/> for exercising <see cref="GenericDriverBase{TSpec}"/>'s
 /// reader/staging/writer construction directly, without any of <see cref="GenericDriverSpec"/>'s
 /// ADO.NET-specific fields (a provider factory, connection-string keys) that this has no use for.</summary>
 internal sealed record FakeGenericDriverSpec(
-    string Id, DbDataSync.Core.Sql.SqlDialect Dialect, IDescriptorCatalog Catalog,
+    string Id, DbDataKit.Sync.Core.Sql.SqlDialect Dialect, IDescriptorCatalog Catalog,
     IReadOnlyList<string> Readers, IReadOnlyList<string> Staging, IReadOnlyList<string> Writers,
     ISegmentValueBinder? ValueBinder = null, string? DisplayName = null, string? TestQuery = null) : IGenericDriverSpec;
 

@@ -1,9 +1,9 @@
-using DbDataSync.Core.Config;
+using DbDataKit.Sync.Core.Config;
 using System.Globalization;
-using DbDataSync.Drivers.Abstractions;
-using DbDataSync.Core.Sql;
+using DbDataKit.Sync.Drivers.Abstractions;
+using DbDataKit.Sync.Core.Sql;
 
-namespace DbDataSync.Drivers.Generic;
+namespace DbDataKit.Sync.Drivers.Generic;
 
 /// <summary>
 /// Turns a column's observed MIN/MAX into evenly-sized half-open <see cref="RangeSegment"/> buckets.

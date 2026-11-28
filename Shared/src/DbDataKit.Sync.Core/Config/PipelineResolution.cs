@@ -1,4 +1,4 @@
-namespace DbDataSync.Core.Config;
+namespace DbDataKit.Sync.Core.Config;
 
 /// <summary>
 /// Which reader, staging provider and writer a table mapping actually runs — the replication's, unless

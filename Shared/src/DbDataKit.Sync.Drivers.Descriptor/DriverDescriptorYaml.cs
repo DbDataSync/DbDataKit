@@ -1,4 +1,4 @@
-namespace DbDataSync.Drivers.Descriptor;
+namespace DbDataKit.Sync.Drivers.Descriptor;
 
 /// <summary>
 /// The shape of a <c>&lt;repo&gt;/drivers/&lt;id&gt;/driver.yaml</c> file, exactly as YamlDotNet
@@ -35,7 +35,7 @@ public sealed class DriverDescriptorYaml
     /// Which class to build this descriptor into — an assembly-qualified type name (the same shape
     /// <c>library.json</c>'s own <c>factoryType</c> already uses), resolved via reflection to a public
     /// static <c>FromDescriptor(DriverDescriptorYaml)</c> method. Omitted (the common case) defaults to
-    /// <c>DbDataSync.Drivers.Generic.GenericDriver</c>, built the existing way (through
+    /// <c>DbDataKit.Sync.Drivers.Generic.GenericDriver</c>, built the existing way (through
     /// <see cref="Library"/> and a <see cref="System.Data.Common.DbProviderFactory"/>) — every
     /// pre-phase-168V <c>driver.yaml</c> keeps working unchanged. Phase 168V's other kind is
     /// <c>DbDataSync.Drivers.Jdbc.JdbcGenericDriver, DbDataSync.Drivers.Jdbc</c>, which reads
@@ -110,7 +110,7 @@ public sealed class JdbcConnectionStringKeysYaml
 /// <param name="QuoteIdentifier">backtick | doubleQuote | bracket</param>
 /// <param name="RowLimit">limitOffset (<c>LIMIT n</c>) | offsetFetch (ANSI <c>FETCH FIRST n ROWS ...</c>)
 /// | topN (<c>TOP (n) ...</c> at the front, SQL-Server/Sybase-style) — see
-/// <see cref="DbDataSync.Core.Sql.RowLimitStyle"/>.</param>
+/// <see cref="DbDataKit.Sync.Core.Sql.RowLimitStyle"/>.</param>
 /// <param name="Catalog">Omitted (or <c>default</c>) | <c>query</c> — phase 168V. Omitted means this
 /// descriptor's <c>base</c> kind's own default catalog: <c>information_schema</c> for
 /// <c>GenericDriver</c>, <c>java.sql.DatabaseMetaData</c> for <c>JdbcGenericDriver</c>. <c>query</c> (see
@@ -161,7 +161,7 @@ public sealed class DescriptorDialectYaml
 
     /// <summary>
     /// Whether this engine's <see cref="RowLimit"/> syntax can express "and every row sharing the
-    /// boundary value too" — see <see cref="DbDataSync.Core.Sql.SqlDialect.RenderTieSafeRowLimit"/>'s own
+    /// boundary value too" — see <see cref="DbDataKit.Sync.Core.Sql.SqlDialect.RenderTieSafeRowLimit"/>'s own
     /// doc comment for why that's the whole point of a bounded read. Null (the default, and every
     /// descriptor written before this field existed) means "use <see cref="RowLimit"/>'s own
     /// conventional default": true for <c>offsetFetch</c>/<c>topN</c> (matching every dialect in this
@@ -173,7 +173,7 @@ public sealed class DescriptorDialectYaml
     public bool? SupportsTieSafeRowLimit { get; set; }
 
     /// <summary>
-    /// See <see cref="DbDataSync.Drivers.Generic.GenericDriverSpec.FixedConnectionStringProperties"/>'s
+    /// See <see cref="DbDataKit.Sync.Drivers.Generic.GenericDriverSpec.FixedConnectionStringProperties"/>'s
     /// own doc comment — the motivating case is an ODBC-backed descriptor (<c>library:
     /// system-data-odbc</c>), which needs to name <em>which installed ODBC driver</em> to route through,
     /// a constant the descriptor itself owns rather than something an operator configures per connection:
@@ -212,7 +212,7 @@ public sealed class DescriptorCapabilitiesYaml
 /// <see cref="TableQuery"/> takes neither (it lists every table, the same shape
 /// <c>InformationSchemaQueries.ListTablesAsync</c> already has). Row shapes — which columns are
 /// required, which are optional and what they default to when missing — are
-/// <c>DbDataSync.Drivers.Generic.QueryTableRow</c>/<c>QueryColumnRow</c>'s own doc comments.
+/// <c>DbDataKit.Sync.Drivers.Generic.QueryTableRow</c>/<c>QueryColumnRow</c>'s own doc comments.
 /// </summary>
 public sealed class MetadataQueriesYaml
 {
