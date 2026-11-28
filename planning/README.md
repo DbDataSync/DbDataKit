@@ -43,30 +43,4 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 
 ## Parked
 
-Not scheduled; a line each. The owner un-parks one by adding a subject or scheduling a subject's open design. Where the old plans held design for a
-parked line, the line names where that design is kept.
-
-- **Refinements of the navigation**: whether a tab is always in the address (as `?tab=` is for Agents, Knowledge and Delivery but not for
-  a workspace except `runs`), and how a workspace's up to 11 tabs are grouped (edit, check, run, publish); after the owner has used the navigation.
-- **Data transfer** (the old TR rows): a shared transfer verifier, Sync on the write gate, Arrow-first and Parquet staging (waits on a benchmark), MySQL
-  and Oracle writers, SCD2 and Snapshot, segmenting in shared packages, the Windows access list on the statement log (`Shared/src/DbDataKit.Transfer/README.md`
-  says what is built and the rules that order this work).
-- **MDX, XMLA and the extra protocols**: Excel PivotTables over semantic models, XMLA sign-in, Entra tokens for Power Query, the PostgreSQL wire protocol
-  and Quack (ENDPOINTS-6 only reserves the listener). Their design is SEMANTICS' open designs.
-- **Documents and WebDAV**: the document store, extraction on save, WebDAV and its sign-in; with them the Store's other engines (SQLite, MariaDB, MySQL,
-  Oracle), promotion of ad hoc tables, native temporal tables and the approval model. Their design is MASTERDATA's open designs.
-- **Backlog** (the old BK rows after BK01): the backlog's serving module, links, notifications, automatic items, the assistant; the console's Backlog
-  screen stays as built. **Custom attributes** (the old EA rows): extension models keyed by an object's identity, to be re-planned on the Gateway's store
-  module. Their design: [BACKLOGS](BACKLOGS.md) (open designs only).
-- **Excel add-in** (XL02, XL03): the agent pane and custom functions; the spike is `docs/excel-addin-spike.md`.
-- **Notebooks as a Runner task kind**: decided when it is built, after scripts and compiled projects; first check that a kernel is maintained and runs
-  headless.
-- **RDL without a report server**: rendering RDL files in the suite (Majorsilence Reporting, or FastReport if its spike fails); verifying the Flight SQL
-  ODBC driver on a report server; published semantic views in semantic SQL. Known gaps: Majorsilence refuses matrices, gauges, sparklines, maps and
-  `Lookup`, so a sample of real reports goes through its `rdl-doctor` and renders on Linux and Windows with pushed data before anything is promised; its own
-  data providers stay off and code in a report (`<Code>`, `<Classes>`, `<CodeModules>`) is refused; the decompiled `ReportViewerCore` is not recommended
-  (`docs/bi-tools-on-semantic-models.md` has the routes).
-- **Ad hoc semantic registrations** (SL25 to SL27): registrations and their review, and the combine in a child process, until an app or an agent needs them.
-  Their design is SEMANTICS' open designs.
-- **Upgrading an MSI-installed service from the console** (24a UC09: the console's upgrade applies to folder installs; an MSI install is swapped as a folder,
-  which Windows Installer does not know about): MSI may come back; not near the list (owner, 2026-11-18).
+Work that is not scheduled is in [PARKED.md](PARKED.md), each item with its whole design.

@@ -212,8 +212,8 @@ Nothing is dropped from planning without the owner saying so: a design or a task
 that removes design text from planning or from a doc says in its message where it went (into a product doc, into another subject, or dropped on the
 owner's word), and the reviewer checks it the way it checks a removed proposal.
 
-Parked work keeps its design. A line under "Parked" in the index is one line; where the parked work has real design (what it does, how, why), that
-design lives in an open-design subject (status "open design", or listed from the parked line) or in a product doc, and the parked line names where.
+Parked work is in `planning/PARKED.md`, one section per item, with its whole design: what it does, how, why, and why it is parked. Parked work is
+never kept in a subject file, so a subject can close without it. Un-parking an item moves its section into a subject as an open design or tasks.
 
 ## Statuses in the index
 
@@ -226,7 +226,7 @@ or the reviewer) does so only on the owner's word.
 | active | workers are on it |
 | next | the next to start |
 | queued | in the order, not started |
-| parked | not scheduled (a line under "Parked") |
+| parked | not scheduled (a section of `planning/PARKED.md`) |
 | needs review | written for the owner to accept or change before work starts |
 | open design | only open designs, no tasks yet |
 
