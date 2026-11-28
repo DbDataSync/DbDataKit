@@ -169,10 +169,10 @@ public static class HttpConnections
             return X509CertificateLoader.LoadPkcs12(Convert.FromBase64String(base64.Trim()), password);
         }
         catch (SecretNotSetException) { throw; }
-        // what failed is told by its kind, never by the loader's own message (it can hold a path or part of the file)
+        // the message people see is the kind; the loader's own message (it can hold a path or part of the file) stays in the inner exception
         catch (Exception e) when (e is System.Security.Cryptography.CryptographicException or IOException or FormatException or UnauthorizedAccessException)
         {
-            throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Tls, "client-certificate", HttpFailures.Engine));
+            throw new ConnectionFailureException(new ConnectionFailure(ConnectionFailureKind.Tls, "client-certificate", HttpFailures.Engine), e);
         }
     }
 }

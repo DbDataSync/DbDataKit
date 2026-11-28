@@ -38,9 +38,3 @@ DbDataSync/src/DbDataSync.State/WorkQueueStore.cs: 1
 DbDataSync/src/DbDataSync.TaskRunner/Runner/MappingPreview.cs: 4
 DbDataSync/src/DbDataSync.TaskRunner/Runner/SetCatalogJobs.cs: 4
 DbDataSync/src/DbDataSync.TaskRunner/Runner/StrategyTrial.cs: 3
-Shared/src/DbDataKit.Connections.Files/SshStores.cs: 1
-Shared/src/DbDataKit.Connections.Http/HttpConnections.cs: 1
-Shared/src/DbDataKit.Connections/ComposerBase.cs: 1
-Shared/src/DbDataKit.State.Engines/Snapshots/StateEndpoints.cs: 2
-Shared/src/DbDataKit.State.Engines/Snapshots/StateMoveService.cs: 1
-Shared/src/DbDataKit.State.Engines/Snapshots/StateSnapshotService.cs: 1

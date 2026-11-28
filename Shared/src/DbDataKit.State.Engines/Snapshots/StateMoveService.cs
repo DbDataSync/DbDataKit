@@ -226,7 +226,7 @@ public sealed class StateMoveService(ISecretResolver? secrets = null, TimeProvid
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsFile);
         var redactor = new Redactor(_secrets, from, to);
         try { PreflightCore(from, to, Path.GetFullPath(settingsFile), modules, scope, redactor); }
-        catch (StateServiceException ex) { throw new StateServiceException(ex.Reason, redactor.Apply(ex.Message)); }
+        catch (StateServiceException ex) { throw new StateServiceException(ex.Reason, redactor.Apply(ex.Message), inner: ex); }
         return new MovePreflight(from.Describe(), to.Describe());
     }
 
