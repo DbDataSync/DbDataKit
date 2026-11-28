@@ -43,6 +43,19 @@ Build was first written as a command line in a user's own git workspace; that ha
 - SAMPLEDATA: Build's seeds and generator move to `Shared/` there; their commands (`project seed`, `project sample`, `connection seed`) are listed in
   COMMANDLINES-1 like the others.
 
+## Open designs
+
+### Framework-dependent or self-contained programs
+
+**What.** Whether the programs the suite still ships run on an installed .NET runtime (framework-dependent: smaller downloads, the runtime patched by
+the operating system's updates) or carry their own (self-contained: nothing to install first). The 32-bit ODBC worker stays self-contained. Today
+the packaging is `scripts/publish.sh`, `build/publish.ps1`, `package.ps1` and `requiresDotnet` in `dist.json`.
+
+**Why here.** It is decided once the list says which programs remain: `dbdatabuild` is removed as a program, the Gateway's command line may be, and
+PLUGINS may make one program of the four services.
+
+**Open questions.** Which programs remain; whether an install checks for the runtime and says what to install; the download sizes either way.
+
 ## Shared areas touched
 
 `Shared/src/DbDataKit.Authoring.Server` (the project kinds), the runtime packages and their manifests, `dist/`, `DbDataKit.slnx`, the products'
