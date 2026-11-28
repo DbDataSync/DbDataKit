@@ -340,6 +340,42 @@ Which jobs run when is set by CIPLAN.
 
 ## Open designs
 
+### From SYNCAUTHORING: drivers, dialects, databases and connection pages
+
+These open designs came from SYNCAUTHORING. They belong with hosted connections and connection kinds.
+
+#### One connection, several databases
+
+A connection names one database (`address.database`), and the set's reads, the Designer's pickers and the run all use it. Some sources hold the same tables in several databases on one server (one per plant, one per company), and the old Sync server let the person pick a database per mapping on one connection. Whether the suite needs a way for one connection to serve several databases (a database per mapping, a list on the connection, or a connection per database as today), and how its tracking state and change positions are kept per database, is not decided. AUTHORING-25 lists every database a SQL Server login can open for the pickers; it does not change what a mapping reads. Example: `erp` on `sql01` holds `plant_a` and `plant_b`; today Ben makes two connections, `erp-a` and `erp-b`.
+
+
+#### A YAML driver names the dialect that reads its filters
+
+The offline check reads a YAML driver's source filter with the ANSI lexer and the driver's identifier quoting, so a filter in a grammar ANSI does not have (a `#` comment, a `$$` string) can be misread. When a driver's filters are misread, `driver.yaml` gains a `lexer:` key naming the shared dialect that reads them (`sqlserver`, `mysql`, ...), ANSI when absent.
+
+
+#### Drivers and libraries
+
+The old rail had **Drivers** (driver YAML files) and **Libraries** (NuGet packages). A sync project's package carries the drivers its connections need
+(`package publish` adds them) and the platform comes from the Runner. Open: whether a project may carry its own driver YAML (`config/drivers/`) and so
+needs a Designer page, or drivers stay a command on the repository with a `none (reason)` row in `docs/ui-editors.md`.
+
+
+#### The connection pages of a Sync project
+
+From SYNCAUTHORING's "Outside a replication, later": the Connections list and a connection's page, which become the pages of hosted connections.
+
+- **The Connections list** (`ConnectionsPage.tsx`): driver, host, database and authentication per connection, **New connection**, and (monitoring) the
+  reachable column and **Test all**. Needs: the draft's connection files; the engine list of **New connection** from the engine registry (`useSyncEngines`);
+  the reachable column and Test all wait on the monitoring pass; the connection test they would run is the shared `BindingTest`, which the
+  endpoint cards of a replication's Overview use.
+- **A connection's page** (`ConnectionEditPage.tsx`, `connection-edit/RunLoginCard.tsx`, `connection-edit/ConnectionTestCard.tsx`): engine, address,
+  database, timeouts, the driver's own parameters with their check, the login by secret reference and the run login, custom transforms and hooks, the
+  test. Needs: the driver's connection parameters and the parameter check (`connection-parameters`, `Services/ParameterCheck.cs`), a driver's
+  capabilities by type (`/api/drivers/{type}/capabilities`), a connection's credential source (`credential-source`), ported as the services above are
+  (on the shared libraries in `Shared/src/DbDataKit.Sync.*`); the secret findings of the draft's check; a link to the project's secrets overview (the AUTHORING subject's); the test as the binding test
+  in a channel (`docs/authoring-metadata.md`, "Testing a connection"), without the old test's sample rows.
+
 ### Proposed, not yet approved by the owner
 
 - A **Terms** section fixing: sandbox (vs the Runner's "sandbox run" and apps' "sandboxed frame"), trusted (vs "trusted code" needing the approver's
