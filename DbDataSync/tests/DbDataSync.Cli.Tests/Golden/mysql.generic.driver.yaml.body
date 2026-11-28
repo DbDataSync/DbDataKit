@@ -38,7 +38,7 @@ typeMap:
   json:           Json
   blob:           { kind: Binary, max: true }
 
-# Engine-neutral strategies to offer. All already exist in DbDataSync.Drivers.Generic.
+# Engine-neutral strategies to offer. All already exist in DbDataKit.Sync.Drivers.Generic.
 capabilities:
   readers: [Watermark, BatchReload]
   staging: [StagingTable]
