@@ -25,7 +25,7 @@ public sealed class WorkspaceOutboundTests
     public async Task A_call_to_a_Runner_is_refused_and_audited()
     {
         await using var server = await WorkspaceHarness.StartAsync(outbound: ["https://api.nuget.org", "ssh://github.com"]);
-        using var http = new HttpClient(server.Outbound.CreateHttpHandler("runner.call"));
+        using var http = new HttpClient(server.Outbound.CreateHttpHandler("runner.call", NoProxy()));
 
         var failure = await Assert.ThrowsAsync<HttpRequestException>(() => http.GetAsync(RunnerAddress));
         var refused = Assert.IsType<OutboundRefusedException>(failure.InnerException);
@@ -86,7 +86,7 @@ public sealed class WorkspaceOutboundTests
         var address = new Uri(feed.Urls.First());
 
         await using var server = await WorkspaceHarness.StartAsync(outbound: [$"http://127.0.0.1:{address.Port}", "ssh://github.com"]);
-        using var http = new HttpClient(server.Outbound.CreateHttpHandler("package.fetch"));
+        using var http = new HttpClient(server.Outbound.CreateHttpHandler("package.fetch", NoProxy()));
 
         var index = await http.GetStringAsync(new Uri(address, "/v3/index.json"));
         Assert.Contains("PackageBaseAddress/3.0.0", index);
@@ -164,6 +164,9 @@ public sealed class WorkspaceOutboundTests
             try { Directory.Delete(root, true); } catch (IOException) { }
         }
     }
+
+    /// <summary>A handler that connects directly: behind a proxy (a machine's HTTPS_PROXY) the gate checks the proxy's address, which is not what these tests are about.</summary>
+    private static SocketsHttpHandler NoProxy() => new() { UseProxy = false };
 
     private static int FreePort()
     {
