@@ -32,7 +32,7 @@ Subjects in priority order. The owner sets the order, the status and the assignm
 | 22 | [AGENTTOOLS](AGENTTOOLS.md) | What an agent can do in the console and the Gateway, over MCP or embedded, as the person: one implementation per operation, data rules per channel, the MCP endpoints and their tools | needs review | unassigned |
 | 23 | [CLOUDDEV](CLOUDDEV.md) | A cloud session runs the four services as one development instance, shows the console in the preview and reaches it through a development MCP | needs review | unassigned |
 | 24 | [SAMPLEDATA](SAMPLEDATA.md) | Sample data for every model (by query or generated from structure and hints) to run transforms, build tests and stand in for real data | open design | unassigned |
-| 25 | [CLI](CLI.md) | The programs we ship keep only the commands that run and configure the services; Build, Sync and the Store are called as libraries; one program or four | needs review | unassigned |
+| 25 | [CLI](CLI.md) | Fewer programs for a person to run, each keeping only the commands that run and configure the services; Build, Sync and the Store are called as libraries | needs review | unassigned |
 | 26 | [DOCSREVIEW](DOCSREVIEW.md) | Reference docs the owner approves, and every doc and plan checked against them | queued | unassigned |
 | 27 | [WORKSPACEISOLATION](WORKSPACEISOLATION.md) | The Workspace service calls no other service and holds no login to a data system; the control service deploys what it builds | queued | unassigned |
 | 28 | [ERRORDETAILS](ERRORDETAILS.md) | An administrator can investigate every failure: its full detail is kept and shown to administrators; everyone else sees the classified words and an id | queued | unassigned |
