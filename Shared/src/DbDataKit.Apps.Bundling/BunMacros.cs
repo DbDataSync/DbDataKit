@@ -5,8 +5,9 @@ namespace DbDataKit.Apps.Bundling;
 /// <summary>
 /// Finds Bun macros in an app's source: an import with the attribute <c>with { type: "macro" }</c> (or the older <c>assert</c>). Bun runs a macro's code while it bundles, so a
 /// build would run the app's own code on the machine that builds it; an app build refuses a source that has one before Bun starts, and the Workspace's check of a draft shows the
-/// same finding. A macro inside a package of <c>node_modules</c> is refused by Bun itself, so only the app's own files are read (every script file, hidden folders included,
-/// <c>node_modules</c> and <c>.git</c> left out).
+/// same finding. A macro inside a package of <c>node_modules</c> is refused by Bun itself ("macros cannot be run from node_modules"), so only the app's own files are read (every
+/// script file, hidden folders included, <c>node_modules</c> and <c>.git</c> left out). This check is what stops a macro: the Bun that <c>bun.pin</c> names (1.3.14) accepts
+/// <c>bun build --no-macros</c> and still runs it.
 /// </summary>
 public static partial class BunMacros
 {
