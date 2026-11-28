@@ -68,5 +68,8 @@ parked line, the line names where that design is kept.
   (`docs/bi-tools-on-semantic-models.md` has the routes).
 - **Ad hoc semantic registrations** (SL25 to SL27): registrations and their review, and the combine in a child process, until an app or an agent needs them.
   Their design is SEMANTICS' open designs.
+- **Console-started pairing**: for networks where a server cannot reach the console, `setup invite` and the Add a server screen take the remote's address, or wait for the address the generated command prints, then connect to the server and pin it with the token's scope and single use; low priority, the join by token works.
+- **Creating a service's login and database on request**: `state init --apply` and a button on the console's state settings create them through a temporary administrator connection string given once and never stored, the generated password kept as the service's secret; the administrator creates them (`state grants`) meanwhile.
+- **The console reading other services' runs from their databases**: an option where the console's login gets a read-only grant on a service's runs, audit and notifications schemas; each service's API is the way meanwhile.
 - **Upgrading an MSI-installed service from the console** (24a UC09: the console's upgrade applies to folder installs; an MSI install is swapped as a folder,
   which Windows Installer does not know about): MSI may come back; not near the list (owner, 2026-11-18).
