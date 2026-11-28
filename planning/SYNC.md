@@ -1,4 +1,4 @@
-# SYNCNEXT: Sync's next pass after the Designer
+# SYNC: Sync after the Designer
 
 ## Goal
 
@@ -20,7 +20,7 @@ script's Test moves into the Workspace's sandbox with SANDBOX step 2.
 
 | Task | What | Depends on | Size | Done when |
 | --- | --- | --- | --- | --- |
-| SYNCNEXT-1 | A Playwright story on the installed suite (CI-5's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | CI-5 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
+| SYNC-1 | A Playwright story on the installed suite (CI-5's fixture): a new Sync project, two connections, a login set up from the Designer, the catalog refreshed, a table mapped, built, deployed to `dev` through the console and run; the rows reach the target. A step that fails becomes a task of the subject that owns it (not urgent) | CI-5 | M | the story passes in CI against SQL Server and PostgreSQL from `testenv` |
 
 ## Open designs
 
