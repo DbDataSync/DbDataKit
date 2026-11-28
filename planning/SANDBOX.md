@@ -52,7 +52,8 @@ Each scenario says what code runs, where it runs, and what it may reach. "Today"
    Today: Bun runs in a network namespace on Linux. `dotnet` runs with the server's own access.
 2. **Git on the Workspace.** Clone, fetch and push a project's workspace. Git reaches the project's remotes only, with the remote's own credential and
    no others.
-   Today: git runs with the server's own access. WORKSPACEISOLATION-9 limits our own code's connections to the outbound list.
+   Today: git runs with the server's own access. The Workspace's own code, such as its push of a draft (libgit2, in its process), connects only to
+   the destinations of its outbound list (`outbound:` in `server.yaml`).
 3. **Develop, test and debug on the Workspace.** An integration's tests, a Sync script's Test, a Sync driver or metadata script, and a data model's build
    and tests. These run in a sandbox with no network, no real source or target, and no secrets. They reach fakes, recorded or generated responses,
    sample data and DuckDB through hosted connections.
@@ -340,6 +341,58 @@ Which jobs run when is set by CIPLAN.
 
 ## Open designs
 
+### From TRUSTZONES: outbound rules
+
+These open designs came from TRUSTZONES. They belong with the sandbox's egress rules: one description of an egress rule serves the outbound list of
+a service's own code, the operating system's rules for the programs a service starts, and a sandbox's host list.
+
+#### Outbound rules applied by the operating system
+
+**What.** The install applies each service's outbound list (`DbDataKit.Outbound`, the `outbound:` setting) as rules the service cannot get around: firewall rules for the service's
+account on Windows and Linux, and egress rules for its container. The rules cover programs the service starts (git, `dotnet restore`, npm), which
+the library cannot see. The install applies them automatically, and `service check` reports when they are missing or out of date.
+
+**Why.** The outbound list stops our own code. Only the operating system or the container platform stops a program that ignores it. The rules are also a
+partial mitigation of supply chain attacks: a compromised package or build tool running in a service cannot send data to, or fetch code from, an
+address that is not on the list.
+
+**Open questions.**
+
+- Firewall rules match addresses, and the lists name hosts. A host such as a cloud provider's endpoint changes addresses often, so a list of addresses
+  kept by hand is not workable. Options: rules that the platform keeps in step with DNS (Windows Firewall's FQDN-based dynamic keywords, an nftables
+  set filled from DNS, a container network policy that matches DNS names), or one forward proxy that the firewall makes the only way out.
+- Which platforms come first: Windows services, Linux systemd units, containers.
+- How a list item that is a package source with mirrors and CDNs (NuGet, npm) is written.
+
+#### Outbound list: what the first form leaves out
+
+**What.** The outbound list (`DbDataKit.Outbound`) ships with the simplest form: an entry is `scheme://host[:port]`, and a service with no `outbound:` line
+connects anywhere. This design keeps what that form defers, so it is reviewed later.
+
+**Why.** The first form fits the lists people can write today (package sources, git remotes, a database host). Two choices were taken for now and may not
+hold once installs use the lists in earnest.
+
+**Open questions.**
+
+- Paths: whether an entry may name a path prefix (`https://github.com/org/`), so a list can allow one organisation of a host rather than all of it.
+- Address ranges: whether an entry may be a range such as `10.0.0.0/8`, for internal servers that have no name worth listing, and how names and ranges
+  meet in the operating-system rules of the design above.
+- Closed by default: whether a service with no `outbound:` line should connect nowhere, so a new install is closed until an administrator lists what it
+  needs (the installer could write the list), and what an upgrade of an install without the line does then.
+
+#### The outbound list behind an HTTP proxy
+
+**What.** How the outbound list (`DbDataKit.Outbound`) behaves when a service sends its traffic through an HTTP proxy. Nothing about proxies is built: the
+gate's HTTP handler checks the address each connection is opened to and does not read the proxy settings, so behind a proxy it sees only the proxy.
+
+**Why.** A service that reaches `https://api.nuget.org` through `proxy.corp:3128` can list the proxy (`tcp://proxy.corp:3128`), but then the list no longer
+limits which sites the proxy fetches. The alternative is for the handler to read the proxy settings and check the request's own address first and the
+proxy second, so the list holds `https://api.nuget.org` and the proxy.
+
+**Open questions.** Whether the handler should read the proxy settings at all, and from where (the service's settings, the environment, the system);
+whether a proxy changes what an entry means; and how this meets the operating-system rules of the design above, one of which is a forward proxy that is the
+only way out.
+
 ### From SYNCAUTHORING: drivers, dialects, databases and connection pages
 
 These open designs came from SYNCAUTHORING. They belong with hosted connections and connection kinds.
@@ -383,6 +436,6 @@ From SYNCAUTHORING's "Outside a replication, later": the Connections list and a 
   trust.
 - An open design **"Shared ground with PLUGINS, PUBLISHING and the Runner"**: PLUGINS' SDK connection contract as the hosted-connection API; connection
   kinds and the plugin manifest; load contexts and the connection host; one vocabulary of approval.
-- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (-9, -10, -14, -15; a script's Test), CLI-8, TRUSTZONES (OS outbound rules,
+- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (its outbound list, -10, -14, -15; a script's Test), CLI-8, TRUSTZONES (OS outbound rules,
   -14), TASKENGINE (limits, accounts), PLUGINS, PUBLISHING-3, KNOWLEDGE (-18, -20), APPHOSTING-7, MASTERDATA (extraction), SAMPLEDATA, DATAQUALITY,
   CHANNELS (-3, -7), SYNCAUTHORING, ERRORDETAILS, INSTALLER (labels, Bubblewrap, Windows Server note, testenv), CIPLAN (new).

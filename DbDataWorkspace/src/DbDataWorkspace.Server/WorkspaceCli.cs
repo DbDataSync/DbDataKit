@@ -156,6 +156,7 @@ public static class WorkspaceCli
                 DbDataKit.State.StateSources sources;
                 var settingsFile = Path.Combine(directory, "server.yaml");
                 SkipFolderPermissions skip;
+                DbDataKit.Outbound.OutboundList outbound;
                 try
                 {
                     skip = SkipFolderPermissions.Read(parsed.Has(FolderPermissions.FlagName), settingsFile);
@@ -168,7 +169,13 @@ public static class WorkspaceCli
                     settingsExit = DbDataKit.State.Cli.StateExit.Settings;
                     throw;
                 }
-                settings = new WorkspaceSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = state, StateSources = sources, SkipFolderPermissionsCheck = skip.IsOn };
+                try { outbound = WorkspaceOutbound.Load(settingsFile); }
+                catch (DbDataKit.Outbound.OutboundSettingsException)
+                {
+                    settingsExit = DbDataKit.State.Cli.StateExit.Settings;
+                    throw;
+                }
+                settings = new WorkspaceSettings(directory, listen.Address) { ListenAll = listen.Addresses, State = state, StateSources = sources, SkipFolderPermissionsCheck = skip.IsOn, Outbound = outbound };
                 step.CheckFolderPermissions(settings.Directory, skip, settingsFile);
                 Directory.CreateDirectory(settings.Directory);
             })
