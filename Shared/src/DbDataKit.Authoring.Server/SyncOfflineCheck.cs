@@ -8,7 +8,6 @@ using DbDataKit.Sync.Core.Config;
 using DbDataKit.Sync.Core.Secrets;
 using DbDataKit.Sync.Drivers.Abstractions;
 using DbDataKit.Sync.Drivers.Descriptor;
-using DbDataSync.Drivers.Descriptor;
 using DbDataKit.Sync.Drivers.Generic;
 using DbDataKit.Sync.Provisioning;
 using Sql = DbDataKit.Sync.Core.Sql;
