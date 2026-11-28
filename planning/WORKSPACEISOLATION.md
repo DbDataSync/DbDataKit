@@ -15,7 +15,8 @@ whom" and "Planned architecture changes").
   bindings and reads a Gateway's catalog as the person (`DbDataKit.Deploy`); the Workspace's former routes for these answer 410 naming the console's
   call (`docs/publishing.md`, "Deploying a build from the control service").
 - It starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` as child programs (COMMANDLINES).
-- A sync draft's script is tested on a Runner (the set's task `script-test`); `POST .../script-test` answers 410.
+- A sync draft's script is tested on a Runner (the set's task `script-test`); `POST .../script-test` answers 410. For now: SANDBOX step 2 moves the
+  test into the Workspace's sandbox.
 
 ## What is kept
 
@@ -37,7 +38,7 @@ it. Only the parts that make the Workspace service call another service are remo
 | --- | --- | --- | --- | --- |
 | WORKSPACEISOLATION-1 | The list: every class and route of the Workspace's publish, run, check and catalog paths, each marked stays on the Workspace (building, checking a draft), moves to a shared library for the control service, or is removed (only what calls another service or holds a publisher key); it also says where the sync draft's `script-test` goes, since it runs the author's code | none | S | the list is in this file and the owner has read it |
 | WORKSPACEISOLATION-9 | The Workspace service's outbound list, through `DbDataKit.Outbound` (`OutboundGate`, the `outbound:` setting, `OutboundDestination.FromGitRemote`; built): package sources and the projects' git remotes; any other address is refused and audited (the Workspace gives the library an `IOutboundAudit` that writes to its audit). The rules the operating system applies come with TRUSTZONES' open design "Outbound rules applied by the operating system" | none | S | a test: a call to a Runner's address is refused and audited; a NuGet restore and a git fetch work |
-| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built; `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow; the Workspace row of `docs/architecture.md` says that the code it never executes is code in a general-purpose language (C#, TypeScript): a draft's SQL runs in DuckDB with external access off, and a draft with a Bun macro is refused | WORKSPACEISOLATION-9 | S | the owner approves the text |
+| WORKSPACEISOLATION-10 | Docs: the Planned entries in `docs/architecture.md` become descriptions of what is built (the Workspace service calls no other service, holds only the credentials of git remotes and package sources, and never a login to a data system); `docs/apps.md`, `docs/authoring-parity.md`, `docs/authoring-metadata.md` and the Workspace README follow. Where a project's code runs is left to SANDBOX | WORKSPACEISOLATION-9 | S | the owner approves the text |
 | WORKSPACEISOLATION-14 | Sample and model tests on the Workspace service run the draft's SQL in DuckDB with external access and extension loading off (`SampleRun`, `ModelTestRunner` already set it); a test keeps it so | none | S | a model that reads a file (`read_csv('/etc/passwd')`) or an address (`read_parquet('https://...')`) fails its Sample and its model test with DuckDB's refusal, and so does one that turns external access back on |
 | WORKSPACEISOLATION-15 | An app build refuses a draft that has a Bun macro (an import `with { type: "macro" }`) before `bun build` starts, with a diagnostic naming the file and line; the draft's check shows the same diagnostic | none | S | a draft whose source imports a macro fails its check and its build naming the file and line, and `bun build` is not started |
 
@@ -67,7 +68,7 @@ and `{b}` a build. The role is the one the server and the console's relay table 
 | `POST {ws}/sample` | viewer | `dbdatabuild project sample`: the draft's models run in DuckDB on generated rows | **Stays**, with DuckDB's external access off (WORKSPACEISOLATION-14) |
 | `GET {ws}/scripts` | viewer | `dbdatasync script list` on a copy | **Stays** |
 | `POST {ws}/provisioning-plan` | viewer | `dbdatasync provisioning plan <replication> --from-cache` on a copy | **Stays** |
-| `POST {ws}/script-test` | author | `dbdatasync script test`: compiles the draft's C# script and runs it on generated rows, in a child process | **Removed** from the Workspace service, because it runs the author's code there; it is the Sync set's manual task `script-test` on a Runner, and the route answers 410 saying so (`docs/authoring-metadata.md`, "A script's test runs on a Runner") |
+| `POST {ws}/script-test` | author | `dbdatasync script test`: compiles the draft's C# script and runs it on generated rows, in a child process | **Removed** from the Workspace service, because it runs the author's code there; it is the Sync set's manual task `script-test` on a Runner, and the route answers 410 saying so (`docs/authoring-metadata.md`, "A script's test runs on a Runner"). For now: SANDBOX step 2 moves it into the Workspace's sandbox. |
 | `GET /api/v1/app-build` | viewer | whether this server can build an app, and what it lacks | **Stays** |
 | `POST {ws}/builds` | author | a build: the check, then what the kind makes into `artifact/` (an app: Bun into `app/`) | **Stays** |
 | `GET {ws}/builds` | viewer | the builds of a draft | **Stays** |
@@ -100,7 +101,7 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `StoreProjectKind` | Store models: template, check with `DataModelLoader` in process, the models and one deploy package per model (`ModelDeployPackage`) | **Stays** |
 | `SyncProjectKind` | a Sync set: template, `SecretFindings`, check and package with `dbdatasync package publish` | **Stays** |
 | `SyncDraftTools`: `ScriptsAsync`, `ProvisioningPlanAsync` | `script list` and `provisioning plan --from-cache` on a copy | **Stays** |
-| `SyncDraftTools`: `ScriptTestAsync` | `script test`: runs the draft's C# | **Removed** from the Workspace service: the Sync set's task `script-test` on a Runner |
+| `SyncDraftTools`: `ScriptTestAsync` | `script test`: runs the draft's C# | **Removed** from the Workspace service: the Sync set's task `script-test` on a Runner. For now: SANDBOX step 2 moves it into the Workspace's sandbox. |
 | `IntegrationProjectKind`: `CheckAsync`, the `package build` of `BuildCsxAsync`, `BuildCompiledAsync` | an integration's check and build | **Stays** until COMMANDLINES-8 replaces it; `dotnet publish` runs the project's MSBuild targets, and leaves with COMMANDLINES-8 |
 | `IntegrationProjectKind`: the `package test` of `BuildCsxAsync` | runs the author's tests before the package is made | **Removed** from the Workspace service by COMMANDLINES-8, which makes Test a run on a Runner |
 | `IntegrationTemplates` | the starting points of an integration | **Stays** |
