@@ -425,6 +425,37 @@ public sealed class SchedulerTests
     }
 
     [Theory, MemberData(nameof(Engines))]
+    public async Task A_run_of_a_version_not_served_asked_for_while_the_loop_ticks_is_always_claimed(string engine)
+    {
+        // the loop ticks on its own thread while a person's call queues the run: a tick that looks at the package between the call's steps must not forget it, or the run waits on the queue for ever
+        using var h = new SchedulerHarness(engine);
+        h.Versions.Add(Package, "3", Manifest(Package, Def("preflight", allowOverlap: true)));   // stored, not served: no projection row
+        var runner = new FakeRunner(h.Database);
+        var scheduler = h.NewScheduler(runner);
+        var task = new TaskRef(Package, Channel, "preflight");
+        using var stop = new CancellationTokenSource();
+        var ticking = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested) await scheduler.TickAsync();
+        });
+        try
+        {
+            for (var i = 0; i < 60; i++)
+            {
+                var id = await scheduler.RunVersionAsync(task, "3", requestedBy: "Ada");
+                Assert.NotNull(id);
+                await Until(() => runner.Requests.Any(r => r.RunId == id), $"run {i + 1} ({id}) to be claimed", seconds: 10, h.Explain);
+            }
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await ticking;
+            await scheduler.WhenIdleAsync();
+        }
+    }
+
+    [Theory, MemberData(nameof(Engines))]
     public async Task A_task_marked_by_hand_is_manual_only_and_runs_from_a_version_not_served_while_a_task_with_another_trigger_is_refused(string engine)
     {
         // the packages the products make say "manual: true" on a person's task (Sync's provision, a Store model's deploy and contract); that marks it as by hand, which starts nothing of its own

@@ -384,8 +384,9 @@ public sealed partial class RunnerScheduler
         var held = _holds.Held(DefinitionVersionSource.Kind).Select(h => $"{h.Name}/{h.Channel}").ToHashSet(StringComparer.Ordinal);
         if (held.Count > 0) owners = [.. owners.Where(o => !held.Contains(o))];
         var skip = owners.ToDictionary(o => o, o => (IReadOnlyCollection<string>)served.Where(t => OwnerOf(t.Ref) == o && !RoutingCheck.Serves(t.Row.RequiredLabels, mine)).Select(t => t.Ref.Task).ToList(), StringComparer.Ordinal);
-        foreach (var owner in _pinnedOwners.Keys)
-            if (_queue.ListInFlight(owner).Count == 0) _pinnedOwners.TryRemove(owner, out _);
+        // an owner is forgotten only if nobody pinned it again since its stamp was read: a run queued while this pass looked would otherwise lose its pin and stay Pending for ever
+        foreach (var (owner, stamp) in _pinnedOwners)
+            if (_queue.ListInFlight(owner).Count == 0) _pinnedOwners.TryRemove(new KeyValuePair<string, long>(owner, stamp));
         var claimed = 0;
         var progress = true;
         while (progress && _running.Count < _options.MaxConcurrentRuns && !_stop.IsCancellationRequested)
@@ -895,8 +896,13 @@ public sealed partial class RunnerScheduler
         return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy);
     }
 
-    /// <summary>The packages (owner <c>package/channel</c>) with a run of a named version on the queue, which this loop claims from though it may serve no version of them.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _pinnedOwners = new(StringComparer.Ordinal);
+    /// <summary>
+    /// The packages (owner <c>package/channel</c>) with a run of a named version on the queue, which this loop claims from though it may serve no version of them; each with the stamp of the newest run that pinned it, so a tick
+    /// that found nothing in flight removes the owner only when no run pinned it after the tick read the stamp.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _pinnedOwners = new(StringComparer.Ordinal);
+
+    private long _pinStamp;
 
     /// <summary>
     /// A manual run of a version that is stored but not served, such as a staged one (plan 28c E21, step e: a person applies a draft's database setup before it is published). Only a manual-only task can be run this way (no schedule and no
@@ -918,8 +924,10 @@ public sealed partial class RunnerScheduler
         if (served!.Schedule.HasSchedule || ProjectionDocuments.ParseTriggers(row.Triggers).Any(t => t.Kind != TriggerKind.Manual))
             throw new InvalidOperationException($"{task} of version {version} has a schedule or a trigger: only a manual-only task is run from a version that is not served.");
         if (dryRun) inputs = new Dictionary<string, string>(inputs ?? new Dictionary<string, string>(), StringComparer.Ordinal) { [RunnerProtocol.DryRunInput] = "true" };
-        _pinnedOwners[OwnerOf(task)] = 0;
-        return TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy, pinned: true);
+        // queued first, pinned second: a tick that reads the pin sees the item in flight, and one that read the pin before can no longer remove the new stamp
+        var queued = TryEnqueue(served, WorkPayload.ManualTrigger, inputs, requestedBy, pinned: true);
+        _pinnedOwners[OwnerOf(task)] = Interlocked.Increment(ref _pinStamp);
+        return queued;
     }
 
     /// <summary>
