@@ -212,43 +212,6 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - Not for the deploy: the child programs' NuGet restores leave from a child process, which the outbound list of WORKSPACEISOLATION-9 (`OutboundGate`, in
   the Workspace's process) does not see.
 
-## Proposed decisions
-
-### WORKSPACEISOLATION-P31: a script's Test stages the whole replication set (awaiting the owner)
-
-Test on the Scripts tab builds the draft and stages the whole set's package, so it needs what any staged version needs. Two cases a person meets:
-
-- Ana's new draft has a mapping whose source columns were never read (no cache). The build fails, and Test says "The draft did not build, so the script
-  was not tested: ... has not been cached". Before, she could test the script with no replication at all.
-- Ben's draft builds, but `dev` on `runners-eu` does not bind the slots `source_db` and `target_db`. The Runner refuses the stage naming them, although
-  `script-test` opens no connection. He binds them once (**Set up for development**), and every later Test works.
-
-Options:
-
-- A, as built: Test stages the set's package; the draft must build and the channel must bind the set's slots.
-- B: the Sync kind's build adds a second item, a package with only the scripts and the task `script-test` and no slot, which builds whenever the
-  scripts are there; Test stages that one.
-
-Recommendation: A for now. B is worth it only if authors write scripts before the first replication; it adds a build item and a second package name
-on the Runner.
-
-### WORKSPACEISOLATION-P32: where a Test is staged (default, awaiting the owner)
-
-Beside the Test buttons the tab offers the console's Runners and a channel. It starts on the Runner and channel of the draft's newest deploy to a
-Runner, whatever the channel, and on the first Runner the console lists, in `dev`, when the draft was never deployed. `prod` is a channel like any
-other: picking it shows the production warning, and the Runner's roles decide. Example: Ana last staged the draft in `test` on `runners-eu`; Test
-stages there again.
-
-Each Test stages a new version in that channel (the same content makes no new version), so it replaces what was staged there before: a version Ben
-staged in `dev` for a review is no longer the staged one after Ana's Test.
-
-Options:
-
-- A, as built: the preset above, staging in a shared channel such as `dev`.
-- B: tests stage in a channel kept for them (`script-test`), which every Runner then has to serve, so a staged review version is never replaced.
-
-Recommendation: A; B only if teams stage review versions in `dev`.
-
 ## Needs from other subjects
 
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
