@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using DbDataKit.Authoring;
 using DbDataKit.Config.Git;
+using DbDataKit.Outbound;
 using DbDataKit.Web.Trust;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Builder;
@@ -23,6 +24,7 @@ public sealed partial class WorkspaceApiTests : IAsyncLifetime
     private readonly Dictionary<string, AuthoringProject> served = [];
     private readonly List<string> ending = [];
     private readonly List<WorkspaceChange> changes = [];
+    private readonly RecordingAudit outboundAudit = new();
     private WebApplication app = null!;
     private HttpClient http = null!;
     private string app1 = null!;
@@ -33,6 +35,12 @@ public sealed partial class WorkspaceApiTests : IAsyncLifetime
     {
         public AuthoringProject? Find(string id) => served.GetValueOrDefault(id);
         public GitCredential? CredentialFor(AuthoringProject project) => null;
+    }
+
+    private sealed class RecordingAudit : IOutboundAudit
+    {
+        public List<OutboundRefusal> Refusals { get; } = [];
+        public void Refused(OutboundRefusal refusal) => Refusals.Add(refusal);
     }
 
     private static readonly Signature Who = new("Ada", "ada@example.com", DateTimeOffset.UtcNow);
@@ -67,7 +75,8 @@ public sealed partial class WorkspaceApiTests : IAsyncLifetime
         var clients = new PairedClientsFile(Path.Combine(ServerDir, "server.yaml"));
         clients.Upsert(new PairedClient("console-1", "Console", key.PublicKey, ServerRoles.Close(ServerRole.Approver | ServerRole.Author)));
         app.UseManagementAuthentication(new ConsoleTokenValidator(InstanceId, clients, new MemoryReplayCache()));
-        WorkspaceApi.Map(app, new FakeApps(served), new Workspaces(ServerDir, TimeProvider.System), new WorkspaceApiOptions("dbdataworkspace.local", ending.Add, changes.Add));
+        WorkspaceApi.Map(app, new FakeApps(served), new Workspaces(ServerDir, TimeProvider.System), new WorkspaceApiOptions("dbdataworkspace.local", ending.Add, changes.Add,
+            new OutboundGate(OutboundList.Parse(["https://git.example.com"], "server.yaml"), "workspace", outboundAudit)));
         await app.StartAsync();
         http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
     }
@@ -285,6 +294,26 @@ public sealed partial class WorkspaceApiTests : IAsyncLifetime
 
         using var remote = new Repository(bare);
         Assert.Equal("Push me", remote.Branches["ws/" + id].Tip.Message.Trim());
+    }
+
+    [Fact]
+    public async Task A_push_to_a_remote_that_is_not_on_the_outbound_list_is_refused_before_it_connects_and_audited()
+    {
+        var far = Path.Combine(root, "runner-app");
+        Repository.Clone(app1, far);
+        using (var repo = new Repository(far)) repo.Network.Remotes.Update("origin", r => r.Url = "https://runner.internal:7840/packages/orders.git");
+        served["far"] = new AuthoringProject("far", far, "https://runner.internal:7840/packages/orders.git");
+        var id = await Draft("draft", "far");
+        File.AppendAllText(Path.Combine(FolderOf(id, "far"), "views", "orders.yaml"), "title: Pushed\n");
+        await AsAda(HttpMethod.Post, $"/api/v1/projects/far/workspaces/{id}/commit", """{"message":"Push me"}""");
+
+        var refused = await AsAda(HttpMethod.Post, $"/api/v1/projects/far/workspaces/{id}/push");
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("runner.internal:7840", (string)(await Json(refused))["error"]!);
+        var refusal = Assert.Single(outboundAudit.Refusals);
+        Assert.Equal(("workspace", "git.push", "runner.internal", 7840), (refusal.Service, refusal.Operation, refusal.Host, refusal.Port));
+        Assert.DoesNotContain(changes, c => c.Kind == "pushed");
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DbDataKit.Config.Git;
+using DbDataKit.Outbound;
 using DbDataKit.Web.Trust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -29,7 +30,8 @@ public interface IAuthoringProjects
 /// <param name="MailDomain">The domain of the address a commit carries for a person who has none of their own (<c>ada@dbdatabuild.local</c>).</param>
 /// <param name="Ending">Told before a workspace's folder goes (abandoned or merged): a process that has it open (a warm session) lets go first.</param>
 /// <param name="Changed">Told after something happened to a workspace (see <see cref="WorkspaceChange"/>): a server that keeps a record of them writes it here. What it throws is the host's to catch; the git work is done by then.</param>
-public sealed record WorkspaceApiOptions(string MailDomain, Action<string>? Ending = null, Action<WorkspaceChange>? Changed = null);
+/// <param name="Outbound">The server's outbound list: a push goes only to a remote on it (operation <c>git.push</c>), and a refusal is logged and audited by the gate; null: no check.</param>
+public sealed record WorkspaceApiOptions(string MailDomain, Action<string>? Ending = null, Action<WorkspaceChange>? Changed = null, OutboundGate? Outbound = null);
 
 /// <summary>Something that happened to a workspace, as a host that keeps a history is told.</summary>
 /// <param name="Kind"><c>created</c>, <c>committed</c>, <c>pushed</c>, <c>merged</c>, <c>abandoned</c>, or for a file command (GP35a) <c>file-written</c>, <c>file-moved</c> or <c>file-deleted</c> (the detail is the path, <c>from -&gt; to</c> for a move).</param>
@@ -260,7 +262,7 @@ public static class WorkspaceApi
             try
             {
                 var root = workspaces.RootOf(workspace);
-                GitWorkspaceOperations.Push(root, workspace.Branch, projects.CredentialFor(hosted));
+                GitWorkspaceOperations.Push(root, workspace.Branch, projects.CredentialFor(hosted), options.Outbound is { } outbound ? remote => outbound.CheckGitRemote("git.push", remote) : null);
                 var pusher = context.ManagementToken();
                 options.Changed?.Invoke(new WorkspaceChange("pushed", workspace, pusher.SubjectId, pusher.SubjectName ?? pusher.SubjectId, workspace.Branch));
                 // where the person opens the pull request: a link built from the remote's address (GitHub, Azure DevOps, GitLab), null for any other remote
@@ -268,6 +270,7 @@ public static class WorkspaceApi
             }
             catch (GitOperationException ex) { return Failed(ex); }
             catch (GitRemoteException ex) { return Failed(new GitOperationException(ex.Message, ex)); }
+            catch (OutboundRefusedException ex) { return Failed(new GitOperationException(ex.Message, ex)); }
         });
 
         app.MapPost("/api/v1/projects/{project}/workspaces/{id}/merge", (string project, string id, HttpContext context) =>
