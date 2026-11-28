@@ -12,14 +12,27 @@
   follows    a task named after "Follows" in a row's text is also in the row's "Depends on" cell
   cycles     no tasks depend on each other in a cycle (the "Depends on" cell of each task row); a task that depends on a task of a subject ranked
              lower in the index is printed as a report after the result, not counted as a problem (the order may be meant)
-  links      no markdown file in the repository names `docs/plans/` or links to a file under planning/ that does not exist
+  links      no markdown file in the repository names `docs/plans/` or links to a file under planning/ that does not exist (a link to
+             planning/plans/, a plan of today, is allowed)
+  plans      a file under planning/plans/ is a plan (planning/ROLES.md, "Plans"; its shape is in scripts/plan_status.py), not a subject: it needs no
+             row in the index and its ids are not task rows. A plan has the shape plan_status.py reads, holds no task rows or proposed decisions of
+             its own, and every id it lists is a task row of a subject or is merged: a commit subject on the checked-out history (HEAD) starts with
+             `<ID>:` or `<ID> `. An id that is neither fails, naming the plan and the id
 
 Work-in-progress notes under planning/wip/ are not read here; scripts/check_no_wip.py refuses them on main.
-Run from anywhere: python3 -I scripts/check_plans.py [root]
+
+Run from anywhere: python3 -I scripts/check_plans.py [root] [--history-optional]
+
+The merged ids are read from git history, and a shallow clone (CI's default checkout, fetch-depth 1) or a folder that is not a git repository does
+not have it. Without --history-optional that fails like any other problem, so that a run on a full clone (the "before you push" list) is the real
+check. With --history-optional, a plan's id that is in no subject is a warning, not a problem, when the history is missing; when the history is
+complete it still fails. CI passes the flag (.github/workflows/repo-checks.yml).
 """
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 SLUG = re.compile(r"^[A-Z][A-Z0-9]*$")
 SLUG_MAX = 12
@@ -41,6 +54,8 @@ ID_PREFIX_MIN = 8
 INDEX_LINK = re.compile(r"\[[^\]]*\]\(([^)\s#]+\.md)\)")
 MD_LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
 NOT_SUBJECTS = {"README.md", "ROLES.md"}
+PLANS = "plans"
+HISTORY_OPTIONAL = "--history-optional"
 SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".claude", "wip"}
 
 
@@ -73,7 +88,9 @@ def markdown_files(root):
                 yield os.path.join(folder, name)
 
 
-def problems(root):
+def problems(root, history_optional=False, warnings=None):
+    """The problems of the planning folder under root. With history_optional, a plan's id that only the missing git history could prove merged
+    goes to warnings (a list, when given) instead."""
     out = []
     planning = os.path.join(root, "planning")
     if not os.path.isdir(planning):
@@ -135,6 +152,8 @@ def problems(root):
             if ident not in known:
                 out.append(f"planning/{name}: names {ident}, which is not a {'proposed decision' if p else 'task'} of any subject")
 
+    out.extend(plan_problems(root, tasks, history_optional, warnings if warnings is not None else []))
+
     deps = task_dependencies(planning, subjects)
     out.extend(cycle_problems(deps))
     out.extend(follows_problems(planning, subjects, deps))
@@ -142,7 +161,7 @@ def problems(root):
     for path in markdown_files(root):
         rel = os.path.relpath(path, root).replace(os.sep, "/")
         text = read(path)
-        if "docs/plans/" in text or re.search(r"\]\((?:\.\./)*plans/", text):
+        if "docs/plans/" in text or any(not old_plans_link_is_a_plan(root, path, target) for target in OLD_PLANS_LINK.findall(text)):
             out.append(f"{rel}: names docs/plans/, which is gone (the open work is in planning/)")
         for target in MD_LINK.findall(text):
             if "://" in target:
@@ -151,6 +170,52 @@ def problems(root):
             if os.path.relpath(resolved, root).replace(os.sep, "/").startswith("planning/") and not os.path.exists(resolved):
                 out.append(f"{rel}: links {target}, which does not exist")
     return sorted(set(out))
+
+
+OLD_PLANS_LINK = re.compile(r"\]\(((?:\.\./)*plans/[^)\s]*)\)")
+
+
+def old_plans_link_is_a_plan(root, path, target):
+    """Whether a link to a `plans/` folder resolves to planning/plans/ (a plan of today) rather than the old docs/plans/."""
+    resolved = os.path.relpath(os.path.normpath(os.path.join(os.path.dirname(path), target)), root).replace(os.sep, "/")
+    return resolved.startswith(f"planning/{PLANS}/")
+
+
+def plan_problems(root, tasks, history_optional, warnings):
+    """The problems of each plan under planning/plans/: its shape, task rows or proposed decisions of its own, and ids that are neither a task
+    row of a subject (tasks) nor named by a commit subject on HEAD's history."""
+    import plan_status  # it imports this module; imported here so that neither import runs before the other is complete
+
+    folder = os.path.join(root, "planning", PLANS)
+    if not os.path.isdir(folder):
+        return []
+    out, history, shallow = [], False, None
+    for name in sorted(n for n in os.listdir(folder) if n.endswith(".md")):
+        rel = f"planning/{PLANS}/{name}"
+        text = read(os.path.join(folder, name))
+        if TASK_ROW.search(text):
+            out.append(f"{rel}: a plan holds no task rows; a task stays in its subject and the plan lists its id")
+        if PROPOSAL_HEADING.search(text):
+            out.append(f"{rel}: a plan holds no proposed decisions; they belong to a subject")
+        _, _, listed, shape = plan_status.parse_plan(text)
+        out.extend(f"{rel}: {problem}" for problem in shape)
+        unknown = [ident for ident, _ in listed if ident not in tasks]
+        if not unknown:
+            continue
+        if history is False:
+            history = plan_status.commit_subjects(root, "HEAD")
+            shallow = history is None or plan_status.is_shallow(root)
+        for ident in unknown:
+            if history is not None and plan_status.named_by(ident, history):
+                continue
+            message = f"{rel}: names {ident}, which is neither a task of a subject nor merged (no commit subject starts with '{ident}:')"
+            if shallow and history_optional:
+                warnings.append(message + " - the git history is missing or shallow, so this is a warning")
+            elif shallow:
+                out.append(message + f"; the git history is missing or shallow: run on a full clone, or pass {HISTORY_OPTIONAL}")
+            else:
+                out.append(message)
+    return out
 
 
 def task_dependencies(planning, subjects):
@@ -236,8 +301,14 @@ def priority_report(root):
 
 
 def main(argv):
-    root = os.path.abspath(argv[1]) if len(argv) > 1 else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    found = problems(root)
+    args = argv[1:]
+    history_optional = HISTORY_OPTIONAL in args
+    args = [a for a in args if a != HISTORY_OPTIONAL]
+    root = os.path.abspath(args[0]) if args else os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    warnings = []
+    found = problems(root, history_optional, warnings)
+    for line in warnings:
+        print(f"warning: {line}")
     for line in found:
         print(line)
     print(f"{len(found)} problem(s)" if found else "the planning folder is consistent")
