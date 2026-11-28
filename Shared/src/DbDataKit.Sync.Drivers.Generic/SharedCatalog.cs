@@ -25,7 +25,7 @@ public static class SharedCatalog
     {
         TableShape shape;
         try { shape = await reader.GetShapeAsync(new TableRef(null, schema, table), cancellationToken).ConfigureAwait(false); }
-        catch (KeyNotFoundException) { throw new InvalidOperationException($"Table '{schema}.{table}' was not found."); }
+        catch (KeyNotFoundException ex) { throw new InvalidOperationException($"Table '{schema}.{table}' was not found.", ex); }
 
         var key = shape.PrimaryKey?.Columns ?? [];
         return [.. shape.Columns.Select(c =>

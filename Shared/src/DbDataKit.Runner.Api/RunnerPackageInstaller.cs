@@ -6,7 +6,7 @@ using DbDataKit.State;
 namespace DbDataKit.Runner.Api;
 
 /// <summary>A package could not be put into the runner; the message says why (and names the file and line for a manifest problem).</summary>
-public sealed class PackageInstallException(string message) : InvalidOperationException(message);
+public sealed class PackageInstallException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>What <see cref="RunnerPackageInstaller.Install"/> did.</summary>
 public sealed record PackageInstalled(string Package, string Channel, int Version, bool Changed, int Files, long Bytes, IReadOnlyList<string> Tasks);
@@ -65,7 +65,7 @@ public static class RunnerPackageInstaller
         }
         catch (RunnerPublishException ex)
         {
-            throw new PackageInstallException(ex.Message);
+            throw new PackageInstallException(ex.Message, ex);
         }
 }
 }

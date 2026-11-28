@@ -172,7 +172,7 @@ public sealed partial class AuditLog(StateDatabase database, string serviceId)
         if (entry.Detail is not null)
         {
             try { using var _ = System.Text.Json.JsonDocument.Parse(entry.Detail); }
-            catch (System.Text.Json.JsonException) { throw new ArgumentException("An audit entry's detail is a JSON document.", nameof(entry)); }
+            catch (System.Text.Json.JsonException ex) { throw new ArgumentException("An audit entry's detail is a JSON document.", nameof(entry), ex); }
         }
     }
 }

@@ -58,7 +58,7 @@ public static class SemanticRest
     {
         JsonNode? parsed;
         try { parsed = JsonNode.Parse(requestJson); }
-        catch (JsonException e) { throw new ServingInvalidException($"The request is not valid JSON: {e.Message}"); }
+        catch (JsonException e) { throw new ServingInvalidException($"The request is not valid JSON: {e.Message}", e); }
         if (parsed is not JsonObject document) throw new ServingInvalidException("A semantic request is a JSON object.");
         if (document["kind"]?.GetValue<string>() != "query") throw new ServingInvalidException("This route runs queries: {\"spec_version\": \"0.3\", \"kind\": \"query\", \"query\": {...}}.");
         if (document["query"]?["limit"] is not JsonValue limit || !limit.TryGetValue<int>(out var rows) || rows < 1 || rows > MaxRows)

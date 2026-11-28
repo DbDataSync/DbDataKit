@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace DbDataKit.Runner.Staging;
 
 /// <summary>A staged version cannot be prepared on this instance; the message is what the instance's status says.</summary>
-public sealed class StagingFailedException(string message) : InvalidOperationException(message);
+public sealed class StagingFailedException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 /// <summary>Settings of one instance's staging follower.</summary>
 public sealed class StagingOptions
@@ -191,14 +191,14 @@ public sealed class StagingFollower
         {
             ResolvedRuntime runtime;
             try { runtime = RuntimeResolution.Resolve(_store, _publisher, reference, channel, $"{name}@{version}", platform); }
-            catch (RuntimeUnavailableException ex) { throw new StagingFailedException($"Version {version} of '{name}' cannot be staged: {ex.Message}"); }
+            catch (RuntimeUnavailableException ex) { throw new StagingFailedException($"Version {version} of '{name}' cannot be staged: {ex.Message}", ex); }
             try
             {
                 using var runtimeView = await _cache.MaterializeAsync($"{runtime.Package}@{runtime.Version}", runtime.Content.Files, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                throw new StagingFailedException($"The files of the runtime '{runtime.Package}' (version {runtime.RuntimeVersion}) could not be materialized here: {ex.Message}");
+                throw new StagingFailedException($"The files of the runtime '{runtime.Package}' (version {runtime.RuntimeVersion}) could not be materialized here: {ex.Message}", ex);
             }
         }
 
@@ -215,7 +215,7 @@ public sealed class StagingFollower
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new StagingFailedException($"The files of version {version} could not be materialized here: {ex.Message}");
+            throw new StagingFailedException($"The files of version {version} could not be materialized here: {ex.Message}", ex);
         }
 
         // the dry run of the progress migration, per task, against the progress stored now
@@ -228,7 +228,7 @@ public sealed class StagingFollower
             var newDeclaration = manifest.Tasks.FirstOrDefault(t => t.Name == task)?.Progress ?? ProgressDeclaration.Empty;
             MigrationPlan plan;
             try { plan = ProgressMigration.DryRun(new ProgressStore(_state, new ProgressKey(name, channel, task)), oldDeclaration, newDeclaration); }
-            catch (ProgressMigrationException ex) { throw new StagingFailedException($"The progress of task '{task}' cannot be migrated to version {version}: {ex.Message}"); }
+            catch (ProgressMigrationException ex) { throw new StagingFailedException($"The progress of task '{task}' cannot be migrated to version {version}: {ex.Message}", ex); }
             losses.AddRange(plan.Losses.Select(l => $"{task}: {l.Target}: {l.Detail}"));
             changes.AddRange(plan.Steps.Where(s => !s.LosesProgress).Select(s => $"{task}: {s.Target}: {s.Detail}"));
         }

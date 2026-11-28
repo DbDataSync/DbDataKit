@@ -242,7 +242,7 @@ public sealed class FlightSqlConnection : DbConnection
         System.Security.Cryptography.X509Certificates.X509Certificate2Collection roots;
         try { roots = []; roots.ImportFromPemFile(caFile); }
         catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or UnauthorizedAccessException)
-        { throw new InvalidOperationException("The CA file of the Flight SQL connection could not be read as a PEM file of certificates."); }
+        { throw new InvalidOperationException("The CA file of the Flight SQL connection could not be read as a PEM file of certificates.", ex); }
         return new SslClientAuthenticationOptions
         {
             RemoteCertificateValidationCallback = (_, certificate, _, errors) =>

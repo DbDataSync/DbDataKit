@@ -26,7 +26,7 @@ public static class AppDeploy
         step("Read the built app.");
         AppPackage package;
         try { package = AppPackage.FromFolder(appFolder); }
-        catch (Exception ex) when (ex is AppPackageException or IOException) { throw new DeployException($"The built app cannot be sent: {ex.Message}", 409); }
+        catch (Exception ex) when (ex is AppPackageException or IOException) { throw new DeployException($"The built app cannot be sent: {ex.Message}", 409, inner: ex); }
         var body = new JsonObject { ["manifest"] = package.ManifestYaml, ["files"] = new JsonObject(package.Files.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)Convert.ToBase64String(f.Value)))), ["note"] = note };
         var name = AppManifestLoader.Load(package.ManifestYaml) is { Ok: true } load ? load.Manifest!.Name : throw new DeployException("The built app's manifest is not valid.", 409);
         return new AppToDeploy(name, body);
@@ -43,7 +43,7 @@ public static class AppDeploy
         {
             HttpResponseMessage response;
             try { response = await link.SendAsync(method, path, JsonContent.Create(content ?? app.Body, options: Json), ct); }
-            catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502); }
+            catch (HttpRequestException ex) { throw new DeployException($"{target.Url} could not be reached ({ex.Message}).", 502, inner: ex); }
             using (response)
             {
                 var text = await response.Content.ReadAsStringAsync(ct);

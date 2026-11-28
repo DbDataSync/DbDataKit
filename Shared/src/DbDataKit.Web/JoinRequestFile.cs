@@ -4,7 +4,7 @@ using DbDataKit.Config.Yaml;
 namespace DbDataKit.Web.Trust;
 
 /// <summary>A file that cannot be used as a join request; the message names the file and what is wrong.</summary>
-public sealed class JoinRequestFileException(string message) : Exception(message);
+public sealed class JoinRequestFileException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// The join a server makes at its next start, <c>join-request.yaml</c> in its data folder (format <c>join-request/1</c>): the console's address and the
@@ -58,7 +58,7 @@ public sealed record JoinRequestFile(Uri Console, string ConsoleThumbprint, stri
         if (!File.Exists(path)) return null;
         string text;
         try { text = File.ReadAllText(path).TrimStart('﻿'); }
-        catch (IOException ex) { throw new JoinRequestFileException($"The join request '{path}' cannot be read: {ex.Message}"); }
+        catch (IOException ex) { throw new JoinRequestFileException($"The join request '{path}' cannot be read: {ex.Message}", ex); }
         var diagnostics = new List<ConfigDiagnostic>();
         if (StrictYamlReader.Read(text, path, diagnostics) is not YamlMapping map)
             throw new JoinRequestFileException(diagnostics.Count > 0 ? $"The join request '{path}' is not valid YAML: {diagnostics[0]}" : $"The join request '{path}' is empty.");
@@ -81,7 +81,7 @@ public sealed record JoinRequestFile(Uri Console, string ConsoleThumbprint, stri
         {
             return From(Value("console") ?? throw Missing("console"), Value("console_thumbprint") ?? throw Missing("console_thumbprint"), Value("token") ?? throw Missing("token"), Value("address"));
         }
-        catch (ArgumentException ex) { throw new JoinRequestFileException($"The join request '{path}' cannot be used: {ex.Message.Split(" (Parameter")[0]}"); }
+        catch (ArgumentException ex) { throw new JoinRequestFileException($"The join request '{path}' cannot be used: {ex.Message.Split(" (Parameter")[0]}", ex); }
 
         JoinRequestFileException Missing(string key) => new($"The join request '{path}' has no '{key}'. Run the pair command again.");
     }

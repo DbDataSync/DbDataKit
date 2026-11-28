@@ -3,8 +3,8 @@ using DbDataKit.Secrets;
 namespace DbDataKit.Connections;
 
 /// <summary>A connection-string property or value was refused by policy. The message names the key and rule, never a value.</summary>
-public sealed class ConnectionPolicyException(string rule, string? key = null)
-    : Exception(key is null ? "Connection policy violation: " + rule : $"Connection policy violation: {rule} ('{key}')")
+public sealed class ConnectionPolicyException(string rule, string? key = null, Exception? inner = null)
+    : Exception(key is null ? "Connection policy violation: " + rule : $"Connection policy violation: {rule} ('{key}')", inner)
 {
     public string Rule { get; } = rule;
     public string? Key { get; } = key;

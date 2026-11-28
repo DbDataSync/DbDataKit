@@ -36,7 +36,7 @@ public sealed class DpapiInlineProvider(byte[]? entropy, DataProtectionScope sco
     {
         byte[] blob;
         try { blob = Convert.FromBase64String(reference.Target); }
-        catch (FormatException) { throw new FormatException("dpapi reference is not valid base64."); }
+        catch (FormatException ex) { throw new FormatException("dpapi reference is not valid base64.", ex); }
         return ValueTask.FromResult<SecretValue?>(DpapiProtector.Unprotect(blob, entropy, scope));
     }
 }

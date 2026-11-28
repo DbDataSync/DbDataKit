@@ -6,7 +6,7 @@ namespace DbDataKit.Authoring;
 public sealed record WorkspaceFile(string Path, long Size);
 
 /// <summary>Why a file call was refused, in a sentence a person can read; <see cref="Status"/> is the HTTP status the route answers with.</summary>
-public sealed class WorkspaceFileException(string message, int status) : Exception(message)
+public sealed class WorkspaceFileException(string message, int status, Exception? inner = null) : Exception(message, inner)
 {
     public int Status { get; } = status;
 }
@@ -95,7 +95,7 @@ public static class WorkspaceFiles
         var bytes = File.ReadAllBytes(full);
         if (Array.IndexOf(bytes, (byte)0) >= 0) throw new WorkspaceFileException($"'{Normalize(path)}' is not a text file.", 415);
         try { return Utf8.GetString(bytes); }
-        catch (DecoderFallbackException) { throw new WorkspaceFileException($"'{Normalize(path)}' is not UTF-8 text.", 415); }
+        catch (DecoderFallbackException ex) { throw new WorkspaceFileException($"'{Normalize(path)}' is not UTF-8 text.", 415, ex); }
     }
 
     /// <summary>Writes (makes or replaces) a text file, making its folders. Returns whether the file is new.</summary>

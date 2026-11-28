@@ -55,7 +55,7 @@ public sealed class InstallLayout
             : [];
 }
 
-public sealed class UpdatePlanException(string message) : Exception(message);
+public sealed class UpdatePlanException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>What "current" points at. Real implementations: junction (Windows) / symlink (Unix); marker file as fallback and for tests.</summary>
 public interface ICurrentPointer

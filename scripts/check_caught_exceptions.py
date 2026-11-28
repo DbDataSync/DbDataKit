@@ -10,17 +10,15 @@ not pass the caught exception:
         throw new StateMigrationException("Migration failed.", ex);   // passes
     }
 
-The caught exception counts as passed when its variable is one of the arguments of the `new` (anywhere in the argument list, so a named argument
-`innerException: ex` or `ex.InnerException ?? ex` passes), or when it is passed as `ex.InnerException` (the wrapper of an `AggregateException` or a
-`TargetInvocationException` carries nothing of its own). Its message alone (`ex.Message`, `$"...{ex}"`) does not count: the type, the stack and
-the inner exceptions are lost. A `catch` without a variable (`catch { ... }`, `catch (IOException) { ... }`) that throws a new exception is found
+The caught exception counts as passed when its variable is one of the arguments of the `new` (a named argument `innerException: ex` or
+`ex.InnerException ?? ex` passes), or an argument of another `new` among them (`new RpcException(new Status(..., ex))`), or when it is passed as
+`ex.InnerException` (the wrapper of an `AggregateException` or a `TargetInvocationException` carries nothing of its own). Its message alone
+(`ex.Message`, `$"...{ex}"`) does not count: the type, the stack and the inner exceptions are lost. Nor does the variable passed only to a method
+call or tested with `is`: `new ConnectionFailureException(Classify(ex))` reads the exception and keeps none of it, so it is found too. A `catch` without a variable (`catch { ... }`, `catch (IOException) { ... }`) that throws a new exception is found
 too: it cannot pass what it did not name.
 
 A throw belongs to the innermost `catch` that holds it. `throw;` and a `throw` of something other than `new` are not checked. Strings, characters
 and comments are skipped, so a `catch` in a message or a comment is not one.
-
-A `catch` that replaces an error on purpose, without the original, is listed in `REVIEWED` with the reason: the file, and a piece of the throw's
-own text that names it, so the entry still holds when lines move. An entry that matches nothing any more fails the check.
 
 The catches found when the check was added are in `scripts/caught_exceptions_baseline.txt`, one `path: count` per line: a file may hold up to that
 many. The baseline only shrinks: a file with more fails the check and lists each of its throws, and a file with fewer fails it too, so the line is
@@ -33,10 +31,6 @@ import os
 import re
 import subprocess
 import sys
-
-# Reviewed replacements: (path relative to the root with '/', a piece of the throw statement's text) -> why the original is left out.
-REVIEWED = {
-}
 
 BASELINE = "scripts/caught_exceptions_baseline.txt"
 
@@ -230,10 +224,34 @@ def catches(code):
     return found
 
 
+def in_a_call(arguments, offset):
+    """Whether `offset` of the argument text (which starts at the `new`'s own `(`) is inside the parentheses of a method call, as opposed to the
+    `new`'s own argument list, a grouping `( ... )` or the argument list of a nested `new`."""
+    stack = []
+    for k in range(offset):
+        c = arguments[k]
+        if c == "(":
+            before = arguments[:k].rstrip()
+            if k == 0:
+                kind = "own"
+            elif re.search(r"\bnew\s+[A-Za-z_@][A-Za-z0-9_.<>,\s]*$", before):
+                kind = "new"
+            elif before and (before[-1].isalnum() or before[-1] in "_>]?@"):
+                kind = "call"
+            else:
+                kind = "group"
+            stack.append(kind)
+        elif c == ")" and stack:
+            stack.pop()
+    return "call" in stack
+
+
 def passes(arguments, var):
-    """Whether the argument text passes the caught exception `var` itself (or its InnerException), not only a member of it."""
+    """Whether the argument text passes the caught exception `var` itself (or its InnerException), not only a member of it or to a call."""
     for m in re.finditer(rf"(?<![A-Za-z0-9_.@]){re.escape(var)}(?![A-Za-z0-9_])", arguments):
         rest = arguments[m.end():].lstrip()
+        if in_a_call(arguments, m.start()) or re.match(r"is\b", rest):
+            continue
         if not rest.startswith(".") and not rest.startswith("?."):
             return True
         member = re.match(r"\??\.\s*(\w+)", rest)
@@ -242,9 +260,8 @@ def passes(arguments, var):
     return False
 
 
-def check_text(path, text, reviewed=None):
+def check_text(path, text):
     """The problems of one C# file's text: `path:line: ...`."""
-    reviewed = REVIEWED if reviewed is None else reviewed
     code = blank(text)
     blocks = catches(code)
     problems = []
@@ -272,10 +289,6 @@ def check_text(path, text, reviewed=None):
             arguments += code[k:end + 1] if end > 0 else ""
         if var is not None and passes(arguments, var):
             continue
-        statement_end = text.find(";", m.start())
-        statement = text[m.start():statement_end if statement_end > 0 else len(text)]
-        if any(p == path and piece in statement for (p, piece) in reviewed):
-            continue
         line = text.count("\n", 0, m.start()) + 1
         if var is None:
             problems.append(f"{path}:{line}: throw new {thrown} inside a catch that names no variable: name the caught exception and pass it as the inner exception")
@@ -302,9 +315,8 @@ def load_baseline(root):
     return result
 
 
-def findings(root, reviewed=None):
-    """{path: [problem, ...]} for every C# file with a catch that does not pass the caught exception, and the problems of `REVIEWED` itself."""
-    reviewed = REVIEWED if reviewed is None else reviewed
+def findings(root):
+    """{path: [problem, ...]} for every C# file with a catch that does not pass the caught exception, and the files that could not be read."""
     found = {}
     own = []
     for path in tracked_cs_files(root):
@@ -315,25 +327,16 @@ def findings(root, reviewed=None):
         except OSError as error:
             own.append(f"{path}: cannot be read ({error})")
             continue
-        problems = check_text(path, text, reviewed)
+        problems = check_text(path, text)
         if problems:
             found[path] = problems
-    for (path, piece) in reviewed:
-        full = os.path.join(root, *path.split("/"))
-        try:
-            with open(full, encoding="utf-8-sig", errors="replace") as f:
-                text = f.read()
-        except OSError:
-            text = ""
-        if piece not in text:
-            own.append(f"{path}: the reviewed entry '{piece}' in scripts/check_caught_exceptions.py (REVIEWED) matches nothing any more: remove it")
     return found, own
 
 
-def check(root, reviewed=None):
+def check(root):
     """Returns (problems, warnings): problems fail the check; warnings are what the baseline still tolerates."""
     baseline = load_baseline(root)
-    found, problems = findings(root, reviewed)
+    found, problems = findings(root)
     warnings = []
     for path, lines in sorted(found.items()):
         allowed = baseline.get(path, 0)

@@ -84,7 +84,7 @@ public sealed class NounRouter
                 if ((verb.EffectiveTraits & implied) != implied)
                     throw new ArgumentException($"'{noun.Name} {verb.Name}' declares traits ({string.Join(", ", verb.EffectiveTraits.Names())}) that leave out what its effect class implies ({string.Join(", ", implied.Names())}); a verb may add traits, never drop one.");
                 try { System.Text.Json.Nodes.JsonNode.Parse(verb.DataSchema); }
-                catch (System.Text.Json.JsonException ex) { throw new ArgumentException($"The data schema of '{noun.Name} {verb.Name}' is not JSON: {ex.Message}"); }
+                catch (System.Text.Json.JsonException ex) { throw new ArgumentException($"The data schema of '{noun.Name} {verb.Name}' is not JSON: {ex.Message}", ex); }
             }
     }
 

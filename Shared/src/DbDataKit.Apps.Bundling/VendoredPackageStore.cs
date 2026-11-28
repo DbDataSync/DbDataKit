@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace DbDataKit.Apps.Bundling;
 
 /// <summary>The store cannot be used: its manifest does not read, or a file differs from it. The message names the file.</summary>
-public sealed class VendoredStoreException(string message) : Exception(message);
+public sealed class VendoredStoreException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// The vendored package store of the app build (plan 22a GP33, QG12): a folder with <c>store.json</c> and <c>node_modules/</c>, made by <c>Shared/web/app-store/build.mjs</c> from packages an administrator installed where a network is. <c>store.json</c> lists
@@ -83,7 +83,7 @@ public sealed partial class VendoredPackageStore
         }
         catch (JsonException e)
         {
-            throw new VendoredStoreException($"{path}: not valid JSON ({e.Message}).");
+            throw new VendoredStoreException($"{path}: not valid JSON ({e.Message}).", e);
         }
     }
 

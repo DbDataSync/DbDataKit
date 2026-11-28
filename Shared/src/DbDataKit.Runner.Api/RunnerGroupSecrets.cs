@@ -84,7 +84,7 @@ public sealed class RunnerGroupSecrets(StateDatabase state, Func<ISecretStore> l
                 {
                     // the group holds it and this instance cannot open it: what the instance held before still serves, else the words name the key
                     var own = await owner.LocalAsync(reference, ct).ConfigureAwait(false);
-                    return own ?? throw new SecretNotFoundException(reference.ToAuditString(), ex.Message);
+                    return own ?? throw new SecretNotFoundException(reference.ToAuditString(), ex.Message, ex);
                 }
             }
 

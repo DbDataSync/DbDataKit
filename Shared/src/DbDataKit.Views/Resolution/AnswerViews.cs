@@ -15,7 +15,7 @@ public static class AnswerViews
     public static async Task<JsonObject> ReadAsync(IServingAnswer answer, long maxRows, CancellationToken cancellationToken)
     {
         try { return (await AnswerRows.ReadAsync(answer, maxRows, cancellationToken).ConfigureAwait(false)).Result; }
-        catch (WidgetProblem problem) { throw new ViewsAnswerException(problem.Code, problem.Message); }
+        catch (WidgetProblem problem) { throw new ViewsAnswerException(problem.Code, problem.Message, problem); }
     }
 
     /// <summary>The first column of the answer a view cannot read (its name and Arrow type), or null (plan 14a D38): a caller that draws checks first and answers the table without a view when this says a column cannot be read.</summary>
@@ -26,7 +26,7 @@ public static class AnswerViews
 }
 
 /// <summary>An answer that cannot be read into a result document (too many rows, a column type a view cannot read), with the code and words of the widget error a dashboard would show.</summary>
-public sealed class ViewsAnswerException(string code, string message) : Exception(message)
+public sealed class ViewsAnswerException(string code, string message, Exception? inner = null) : Exception(message, inner)
 {
     public string Code { get; } = code;
 }

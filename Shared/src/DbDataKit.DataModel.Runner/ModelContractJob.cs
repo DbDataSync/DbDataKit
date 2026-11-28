@@ -62,7 +62,7 @@ public sealed class ModelContractJob : RunnerJob<ModelContractInput, NoProgress,
             catch (Exception ex) when (ex is StorageException or System.Data.Common.DbException)
             {
                 await Step(ModelContractSteps.Report, report).Repeatable().RunAsync(_ => Task.FromResult(report), ct).ConfigureAwait(false);
-                throw new TaskFailureException(TaskFailureKind.Permanent, $"The contract of {model.Name} in {schema} was not run, and nothing was changed: {ex.Message}");
+                throw new TaskFailureException(TaskFailureKind.Permanent, $"The contract of {model.Name} in {schema} was not run, and nothing was changed: {ex.Message}", inner: ex);
             }
             report = report with { Applied = plan.Steps.Count > 0 };
         }

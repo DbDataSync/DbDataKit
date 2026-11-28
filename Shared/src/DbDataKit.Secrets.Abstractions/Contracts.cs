@@ -35,8 +35,8 @@ public interface ISecretAudit
 }
 
 /// <summary>No provider has the secret; <c>detail</c>, when given, says why in words (a group's value this instance has no key for names the key), never a value.</summary>
-public sealed class SecretNotFoundException(string reference, string? detail = null)
-    : Exception($"Secret '{reference}' was not found by any configured provider." + (detail is null ? "" : " " + detail))
+public sealed class SecretNotFoundException(string reference, string? detail = null, Exception? inner = null)
+    : Exception($"Secret '{reference}' was not found by any configured provider." + (detail is null ? "" : " " + detail), inner)
 {
     public string? Detail { get; } = detail;
 

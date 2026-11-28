@@ -50,7 +50,7 @@ public sealed class PathFileStore(string baseFolder) : IFileStore
     private static async Task<T> RunAsync<T>(Func<Task<T>> call, CancellationToken ct)
     {
         try { return await Task.Run(call, ct).ConfigureAwait(false); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ConnectionFailureException(SmbFailures.Classify(e)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ConnectionFailureException(SmbFailures.Classify(e), e); }
     }
 
     private static Task RunAsync(Func<Task> call, CancellationToken ct) => RunAsync(async () => { await call().ConfigureAwait(false); return 0; }, ct);

@@ -85,20 +85,20 @@ public interface IServingHost
 }
 
 /// <summary>A failure a protocol answers in its own words (a Flight status code, a Postgres error code). The message is safe to show the caller.</summary>
-public abstract class ServingException(string message) : Exception(message);
+public abstract class ServingException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>The caller is not allowed to do this (they are known, and the answer is no).</summary>
-public sealed class ServingDeniedException(string message) : ServingException(message);
+public sealed class ServingDeniedException(string message, Exception? inner = null) : ServingException(message, inner);
 
 /// <summary>The caller could not be identified (no credentials, wrong credentials, a session that ended, too many failed attempts). A protocol answers "unauthenticated", not "denied".</summary>
 public sealed class ServingUnauthenticatedException(string message) : ServingException(message);
 
 public sealed class ServingNotFoundException(string message) : ServingException(message);
 
-public sealed class ServingInvalidException(string message) : ServingException(message);
+public sealed class ServingInvalidException(string message, Exception? inner = null) : ServingException(message, inner);
 
 /// <summary>A query reached a limit; the result ends here and says so.</summary>
-public sealed class ServingLimitException(string message, string limit) : ServingException(message)
+public sealed class ServingLimitException(string message, string limit, Exception? inner = null) : ServingException(message, inner)
 {
     /// <summary><c>rows</c> or <c>time</c>.</summary>
     public string Limit { get; } = limit;

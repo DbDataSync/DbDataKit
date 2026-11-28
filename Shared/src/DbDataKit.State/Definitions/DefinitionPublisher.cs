@@ -183,7 +183,7 @@ public sealed partial class DefinitionPublisher
                     transaction.Rollback();
                     using var other = _database.OpenConnection();
                     var actual = Latest(other, null, request.Kind, request.Name);
-                    throw new DefinitionConflictException($"The {request.Kind} '{request.Name}' is at version {actual}, not {request.ExpectedVersion ?? latest}: it was published since you looked. Read it again and publish again.", request.ExpectedVersion ?? latest, actual);
+                    throw new DefinitionConflictException($"The {request.Kind} '{request.Name}' is at version {actual}, not {request.ExpectedVersion ?? latest}: it was published since you looked. Read it again and publish again.", request.ExpectedVersion ?? latest, actual, ex);
                 }
                 stored = _store.ReadVersion(connection, transaction, request.Kind, request.Name, number)!;
             }

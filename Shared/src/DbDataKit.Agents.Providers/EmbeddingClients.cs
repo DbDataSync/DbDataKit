@@ -124,7 +124,7 @@ public sealed class OllamaEmbeddingGenerator(HttpClient http, ProviderClientOpti
         catch (ModelProviderException ex) when (ex.Status == System.Net.HttpStatusCode.NotFound)
         {
             var said = ex.Message.IndexOf(" It said:", StringComparison.Ordinal);
-            throw new ModelProviderException($"{options.Provider} has no embedding model '{model}' (or no /api/embed at this address). Pull the model on the server (`ollama pull {model}`) and check the address.{(said >= 0 ? ex.Message[said..] : "")}", false, ex.Status);
+            throw new ModelProviderException($"{options.Provider} has no embedding model '{model}' (or no /api/embed at this address). Pull the model on the server (`ollama pull {model}`) and check the address.{(said >= 0 ? ex.Message[said..] : "")}", false, ex.Status, ex);
         }
         using (response)
         {
