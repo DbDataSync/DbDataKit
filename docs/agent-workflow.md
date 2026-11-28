@@ -14,6 +14,8 @@ a time). This page is the machine side of a session with several workers: worktr
   (`planning/ROLES.md`).
 - A finished worktree is removed (`git worktree remove -f -f .claude/worktrees/agent-<id>`); its branch stays until the `work/<slug>` pull request that
   carries it merges (`docs/branch-cleanup.md`).
+- `python3 -I scripts/plan_status.py <NAME>` prints the plan `planning/plans/<NAME>.md` with the status of each task: merged, in progress, blocked or not
+  started. It reads the local refs, so run `git fetch origin` first; with `--remote` it asks `origin` for the `backup/*` branches.
 - `check_solution.py` and `check_docs_commands.py` also scan `.claude/worktrees`, so in the main checkout they can fail only because agent worktrees exist:
   run them from a clean path or ignore a complaint that names only a worktree path.
 

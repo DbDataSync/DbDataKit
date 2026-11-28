@@ -164,3 +164,66 @@ class CheckPlans(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+sys.path.insert(0, os.path.dirname(__file__))
+from plan_repo import PlanRepo, git, plan  # noqa: E402
+from gitenv import run_git  # noqa: E402
+
+
+class CheckPlanFiles(PlanRepo, unittest.TestCase):
+    """The plans under planning/plans/ in a git repository (plan_repo.py has its history)."""
+
+    def found(self, root=None, history_optional=False):
+        warnings = []
+        found = check.problems(root or self.work, history_optional, warnings)
+        return found, warnings
+
+    def test_a_plan_of_subject_tasks_and_merged_tasks_passes_and_needs_no_index_row(self):
+        self.add_plan("READY", "ALPHABETA-1", "ALPHABETA-6", "ALPHABETA-3", "ALPHABETA-4")
+        self.assertEqual(([], []), self.found())
+
+    def test_a_plan_naming_an_unknown_id_fails_naming_the_plan_and_the_id(self):
+        self.add_plan("READY", "ALPHABETA-1", "ALPHABETA-9")
+        found, _ = self.found()
+        self.assertEqual(1, len(found), found)
+        self.assertTrue(found[0].startswith("planning/plans/READY.md: names ALPHABETA-9, which is neither a task of a subject nor merged"), found)
+        # with the full history, the flag changes nothing
+        self.assertEqual(found, self.found(history_optional=True)[0])
+
+    def test_a_plan_holds_no_task_rows_or_proposed_decisions(self):
+        text = plan("READY", "ALPHABETA-2") + "\n| ALPHABETA-2 | what | none | S | a test |\n\n### ALPHABETA-P1: a question\n"
+        os.makedirs(os.path.join(self.work, "planning", "plans"))
+        with open(os.path.join(self.work, "planning", "plans", "READY.md"), "w", encoding="utf-8") as f:
+            f.write(text)
+        found, _ = self.found()
+        self.assertTrue(any("a plan holds no task rows" in p for p in found), found)
+        self.assertTrue(any("a plan holds no proposed decisions" in p for p in found), found)
+
+    def test_a_link_to_a_plan_is_not_a_link_to_the_old_plans(self):
+        self.add_plan("READY", "ALPHABETA-2")
+        with open(os.path.join(self.work, "planning", "README.md"), "a", encoding="utf-8") as f:
+            f.write("\nThe plan [READY](plans/READY.md).\n")
+        self.assertEqual(([], []), self.found())
+
+    def test_in_a_shallow_clone_a_merged_id_fails_unless_the_history_is_optional(self):
+        self.add_plan("READY", "ALPHABETA-1", "ALPHABETA-2")
+        shallow = os.path.join(self.tmp.name, "shallow")
+        run_git(self.tmp.name, "clone", "-q", "--depth", "1", "file://" + self.remote, shallow)
+        found, _ = self.found(shallow)
+        self.assertEqual(1, len(found), found)
+        self.assertIn("names ALPHABETA-1", found[0])
+        self.assertIn("--history-optional", found[0])
+        found, warnings = self.found(shallow, history_optional=True)
+        self.assertEqual([], found)
+        self.assertEqual(1, len(warnings), warnings)
+        self.assertIn("names ALPHABETA-1", warnings[0])
+
+    def test_a_plan_of_subject_tasks_needs_no_git_history(self):
+        self.add_plan("READY", "ALPHABETA-2")
+        git(self.work, "push", "origin", "main")
+        files = {}
+        for rel in ("planning/README.md", "planning/ROLES.md", "planning/ALPHABETA.md", "planning/plans/READY.md"):
+            with open(os.path.join(self.work, rel), encoding="utf-8") as f:
+                files[rel] = f.read()
+        self.assertEqual(([], []), self.found(tree(files)))
