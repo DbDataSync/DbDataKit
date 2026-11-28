@@ -1,10 +1,8 @@
-# PLUGINS: one program for every role, and each kind of project as a plugin
+# PLUGINS: each kind of project as a plugin
 
 ## Goal
 
-One program, `dbdatakit`, replaces the four service programs and the command-line tools. It runs one role per process (the console, the Workspace, the
-Runner or the Gateway), chosen before it starts. A developer installs one version for every role, and so does a service install. Each kind of project
-(Sync, Build, the Store, apps and the kinds that come later) becomes a plugin. A plugin brings its parts for each role: authoring in the Workspace,
+Each kind of project (Sync, Build, the Store, apps and the kinds that come later) becomes a plugin. A plugin brings its parts for each role: authoring in the Workspace,
 tasks on the Runner, serving on the Gateway, and its screens in the console. A plugin is a NuGet package, upgraded the way a third-party library is
 upgraded. Every plugin uses one set of standard contracts for secrets, connections, deployment, agents, lineage and dependencies.
 
@@ -16,7 +14,7 @@ are found and loaded, and leaves the plugins themselves unchanged. Breaking chan
 
 - Four service programs (`dbdatakit`, `dbdataworkspace`, `dbdatarunner`, `dbdatagateway`), each its own project with its own startup code. They share
   the startup sequence, hosting, certificates, state and secrets as libraries under `Shared/src` (`DbDataKit.Hosting.*`, `DbDataKit.State.*`,
-  `DbDataKit.Secrets.*`). Three command-line tools (`dbdatabuild`, `dbdatasync`, `dbdatastore`) remain; COMMANDLINES removes them.
+  `DbDataKit.Secrets.*`). Three command-line tools (`dbdatabuild`, `dbdatasync`, `dbdatastore`) remain; CLI removes them.
 - Releases are already in lockstep: the suite release builds every product from one commit with one CalVer version (`docs/releases.md`).
 - Three extension points exist, one per role, with no shared contract between them:
   - The Workspace's project kinds: `IProjectKind` (`Shared/src/DbDataKit.Authoring/ProjectKinds.cs`) gives a kind's template, check, produce step and
@@ -33,27 +31,6 @@ are found and loaded, and leaves the plugins themselves unchanged. Breaking chan
   not as an SDK a plugin builds against.
 
 ## Open designs
-
-### The one program
-
-**What.** `dbdatakit <role> run` starts one role: `console`, `workspace`, `runner` or `gateway`. The role is fixed in the install's settings and on the
-service's registration (the Windows service name, the systemd unit), so a wrong flag cannot start a different role. One process runs one role; the
-program refuses to start a second role in the same process, and refuses a role whose folder or account belongs to another role. Each role keeps its own
-process, OS account, keys, state database and listeners, as `docs/architecture.md` describes for the four services today. A developer install runs the
-four roles as four processes of the same build, which is what CLOUDDEV's development instance starts. The Runner's task host and the Gateway's 32-bit
-ODBC worker stay separate programs: one isolates each task, the other loads 32-bit drivers.
-
-**Why.** One version to install and upgrade, for a developer and for a service install; one startup path to harden; one program in place of seven.
-
-**Open questions.**
-
-- The command layout: which commands stay on the one program besides `<role> run` and the role's configuration (COMMANDLINES-1's list decides what is
-  kept at all).
-- Install folders: one folder per role, so the console can still upgrade one role at a time, or one shared folder that upgrades every role on a
-  machine together.
-- Rules keyed on the program file: Windows Firewall, AppLocker and EDR rules by program path can no longer tell the roles apart; whether the install
-  writes rules by service SID instead.
-- Container images: one image with the role in an environment variable, or one image per role with only that role's plugins.
 
 ### The SDK: the standard contracts
 
@@ -96,7 +73,7 @@ reads the same manifests from installed packages. A repository check fails when 
 ### Each role loads only its own parts
 
 **What.** A role registers only the parts of each plugin that the manifest gives for that role. The Workspace never loads a runtime or serving part,
-because those parts use logins and the Workspace never handles a secret. While plugins are compiled in, every part is inside the one program, so this is
+because those parts use logins and the Workspace never handles a secret. While plugins are compiled in, every part is inside the program, so this is
 enforced by registration: a test per role lists what the role exposes (routes, listeners, background services, project kinds, modules) and fails when
 another role's part appears. At run time, loading a part only in its role adds a second barrier.
 
@@ -147,11 +124,11 @@ stage and is designed after the first.
 
 ## Needs from other subjects
 
-- COMMANDLINES: its list of commands (COMMANDLINES-1) decides what the one program keeps; its removal of the three command-line tools and its task host in
-  the runtime packages (COMMANDLINES-4) are steps toward the runtime part of a plugin. Its target of four programs becomes one.
+- CLI: the list of commands (CLI-1), and whether one program runs every role (its open design "One program for every service, or one per
+  service"); its removal of the three command-line tools and its task host in the runtime packages (CLI-4) are steps toward the runtime part of a plugin.
 - AGENTACCESS: the operation (AGENTACCESS-1), the agent contract of the SDK.
-- INSTALLER: the install, the service registration and the startup failure file, for one program with a role.
-- CLOUDDEV: the development instance, four processes of the one program.
+- INSTALLER: the install, the service registration and the startup failure file, for one program with a role, if CLI makes one program.
+- CLOUDDEV: the development instance, four processes of the one program, if CLI makes one program.
 
 ## Shared areas touched
 

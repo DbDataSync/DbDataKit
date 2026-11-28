@@ -14,7 +14,7 @@ whom" and "Planned architecture changes").
 - The Workspace service never calls a Runner or a Gateway and does not hold a publisher key. The console deploys a build, runs its tasks, tests its
   bindings and reads a Gateway's catalog as the person (`DbDataKit.Deploy`); the Workspace's former routes for these answer 410 naming the console's
   call (`docs/publishing.md`, "Deploying a build from the control service").
-- It starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` as child programs (COMMANDLINES).
+- It starts `dbdatabuild`, `dbdatasync` and `dbdatarunner` as child programs (CLI).
 - A sync draft's script is tested on a Runner (the set's task `script-test`); `POST .../script-test` answers 410. For now: SANDBOX step 2 moves the
   test into the Workspace's sandbox.
 
@@ -98,10 +98,10 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `SyncProjectKind` | a Sync set: template, `SecretFindings`, check and package with `dbdatasync package publish` | **Stays** |
 | `SyncDraftTools`: `ScriptsAsync`, `ProvisioningPlanAsync` | `script list` and `provisioning plan --from-cache` on a copy | **Stays** |
 | `SyncDraftTools`: `ScriptTestAsync` | `script test`: runs the draft's C# | **Removed** from the Workspace service: the Sync set's task `script-test` on a Runner. For now: SANDBOX step 2 moves it into the Workspace's sandbox. |
-| `IntegrationProjectKind`: `CheckAsync`, the `package build` of `BuildCsxAsync`, `BuildCompiledAsync` | an integration's check and build | **Stays** until COMMANDLINES-8 replaces it; `dotnet publish` runs the project's MSBuild targets, and leaves with COMMANDLINES-8 |
-| `IntegrationProjectKind`: the `package test` of `BuildCsxAsync` | runs the author's tests before the package is made | **Removed** from the Workspace service by COMMANDLINES-8, which makes Test a run on a Runner. For now: SANDBOX step 2 runs an integration's tests in the Workspace's sandbox instead. |
+| `IntegrationProjectKind`: `CheckAsync`, the `package build` of `BuildCsxAsync`, `BuildCompiledAsync` | an integration's check and build | **Stays** until CLI-8 replaces it; `dotnet publish` runs the project's MSBuild targets, and leaves with CLI-8 |
+| `IntegrationProjectKind`: the `package test` of `BuildCsxAsync` | runs the author's tests before the package is made | **Removed** from the Workspace service by CLI-8, which makes Test a run on a Runner. For now: SANDBOX step 2 runs an integration's tests in the Workspace's sandbox instead. |
 | `IntegrationTemplates` | the starting points of an integration | **Stays** |
-| `ChildProgram`, `BuildTool`, `SyncTool`, `RunnerTool`, `DotnetTool` | start a program with a cleared environment and a time limit | **Stays** until COMMANDLINES replaces each program (below) |
+| `ChildProgram`, `BuildTool`, `SyncTool`, `RunnerTool`, `DotnetTool` | start a program with a cleared environment and a time limit | **Stays** until CLI replaces each program (below) |
 | `PackageArtifacts` | the package's name, and what the program printed about it | **Stays** |
 | `CatalogCacheCheck`, `DraftCheck` | the cache's reader, and the check of a draft | **Stays** |
 | `WorkspaceBuilds`: `Request`, the app build, `RequestArtifact`, `RunKindAsync`, `Find`, `Readiness`, the folders | the builds of a draft | **Stays** |
@@ -137,7 +137,7 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 | `WorkspaceAdminCommand.Publisher` (`dbdataworkspace publisher pair\|list`) and its line in `WorkspaceCli` | pairs a key with a target from the command line, and lists the keys | **Removed** |
 | `WorkspaceAdminCommand.Project`, `WorkspaceAdminCommand.Workspace`, `WorkspaceCli`, `WorkspaceService`, `WorkspaceState` | the server's command line, its service and its state | **Stays** |
 | `WorkspaceSecrets` | the server's secret store: the state connection's login, and the publisher keys (`dbdatakit:workspace:publisher-key:<name>`) | **Stays** for the state login; the server deletes the publisher keys in it when it starts (`ForgetPublisherKeysAsync`) |
-| `WorkspaceSettings`: `BuildExecutable`, `SyncExecutable`, `SyncPlatform`, `RunnerExecutable`, `DotnetExecutable`, `IntegrationSources`, `IntegrationCache` | where the child programs and the integrations' packages are | **Stays** until COMMANDLINES replaces the programs |
+| `WorkspaceSettings`: `BuildExecutable`, `SyncExecutable`, `SyncPlatform`, `RunnerExecutable`, `DotnetExecutable`, `IntegrationSources`, `IntegrationCache` | where the child programs and the integrations' packages are | **Stays** until CLI replaces the programs |
 | `WorkspaceStore`: `SetPublisherKey`, `PublisherKeys`, `RemovePublisherKey`; the table `publisher_key` of `WorkspaceModule` (`DbDataKit.State`) | the references to the keys | **Removed** (the table goes by the module's second migration) |
 
 ### Callers outside these projects
@@ -157,13 +157,13 @@ The other routes are outside these paths and stay: `GET /api/v1/info`, `GET|POST
 None of them calls another of our services: with `--out`, `project publish` and `package publish` write the package and do not send it. Their NuGet
 restores (`package build`, `package publish --platform`) reach package sources, which the goal allows.
 
-| Program | Started by | Commands the Workspace runs | Runs the author's code | What COMMANDLINES would change |
+| Program | Started by | Commands the Workspace runs | Runs the author's code | What CLI would change |
 | --- | --- | --- | --- | --- |
-| `dbdatabuild` | `BuildTool` (`BuildProjectKind`, `BuildDraftCompiler`) | `project create starter`; `project show metadata`; `project publish --to runner --out` and `--to gateway --out`; `project compile` (on a copy) and `project compile <model> --content`; `project show graph --columns`; `project import --from-cache --write` (on a copy); `project sample` | `project sample` runs the models' SQL in DuckDB on generated rows, with DuckDB's external access off; the others read and write files | COMMANDLINES-2 moves create, check and package into `Shared/src` and replaces `BuildTool`. Compile, lower, lineage, import and sample also start `dbdatabuild`, and its text does not name them: its "Done when" (the build-kind tests pass with no `dbdatabuild`) holds only if they move too, which COMMANDLINES-1's list would say |
-| `dbdatasync` | `SyncTool` (`SyncProjectKind`, `SyncDraftTools`) | `package publish --to runner --check --json`; `package publish --to runner --out --package [--platform]`, which restores the driver libraries; `script list`; `provisioning plan --from-cache` | none |  COMMANDLINES-3 replaces `SyncTool` for check and package. `script list` and `provisioning plan` are offline reads that could move the same way. `script test` runs on a Runner now (the set's task `script-test`), so the Workspace no longer starts it. AUTHORING-2 builds the package for the target Runner's platform, in place of the `SyncPlatform` setting |
-| `dbdatarunner` | `RunnerTool` (`IntegrationProjectKind`) | `package build --out <scratch> --no-lock-write` (the check); `package build --out` (the build); `package test` | `package test` | COMMANDLINES-8 builds in process with the shared package build library, and makes Test a run on a Runner in a non-production channel. For now: SANDBOX step 2 runs the tests in the Workspace's sandbox instead |
-| `dotnet` (the .NET SDK) | `DotnetTool` (`IntegrationProjectKind`) | `--list-sdks`; `publish <project>` of a compiled integration | `publish` runs the project's MSBuild targets; it leaves with COMMANDLINES-8 | COMMANDLINES-8 says the build runs none of the author's code; it does not say how a compiled project is built that way. SANDBOX scenario 1 runs `dotnet` under a policy that reaches only the package sources |
-| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | a Bun macro of the draft would run at bundle time, so a build refuses a draft that has one before Bun starts (`BunMacros`); the Bun of `bun.pin` (1.3.14) accepts `bun build --no-macros` and still runs the macro | not in COMMANDLINES; SANDBOX scenario 1 runs it under the sandbox's policy on every platform |
+| `dbdatabuild` | `BuildTool` (`BuildProjectKind`, `BuildDraftCompiler`) | `project create starter`; `project show metadata`; `project publish --to runner --out` and `--to gateway --out`; `project compile` (on a copy) and `project compile <model> --content`; `project show graph --columns`; `project import --from-cache --write` (on a copy); `project sample` | `project sample` runs the models' SQL in DuckDB on generated rows, with DuckDB's external access off; the others read and write files | CLI-2 moves create, check and package into `Shared/src` and replaces `BuildTool`. Compile, lower, lineage, import and sample also start `dbdatabuild`, and its text does not name them: its "Done when" (the build-kind tests pass with no `dbdatabuild`) holds only if they move too, which CLI-1's list would say |
+| `dbdatasync` | `SyncTool` (`SyncProjectKind`, `SyncDraftTools`) | `package publish --to runner --check --json`; `package publish --to runner --out --package [--platform]`, which restores the driver libraries; `script list`; `provisioning plan --from-cache` | none |  CLI-3 replaces `SyncTool` for check and package. `script list` and `provisioning plan` are offline reads that could move the same way. `script test` runs on a Runner now (the set's task `script-test`), so the Workspace no longer starts it. AUTHORING-2 builds the package for the target Runner's platform, in place of the `SyncPlatform` setting |
+| `dbdatarunner` | `RunnerTool` (`IntegrationProjectKind`) | `package build --out <scratch> --no-lock-write` (the check); `package build --out` (the build); `package test` | `package test` | CLI-8 builds in process with the shared package build library, and makes Test a run on a Runner in a non-production channel. For now: SANDBOX step 2 runs the tests in the Workspace's sandbox instead |
+| `dotnet` (the .NET SDK) | `DotnetTool` (`IntegrationProjectKind`) | `--list-sdks`; `publish <project>` of a compiled integration | `publish` runs the project's MSBuild targets; it leaves with CLI-8 | CLI-8 says the build runs none of the author's code; it does not say how a compiled project is built that way. SANDBOX scenario 1 runs `dotnet` under a policy that reaches only the package sources |
+| `bun` | `BunAppBundler` (`DbDataKit.Apps.Bundling`, through `WorkspaceBuilds`) | `bun install --ignore-scripts` from the vendored store, then `bun build`, in a network namespace with a cleared environment | a Bun macro of the draft would run at bundle time, so a build refuses a draft that has one before Bun starts (`BunMacros`); the Bun of `bun.pin` (1.3.14) accepts `bun build --no-macros` and still runs the macro | not in CLI; SANDBOX scenario 1 runs it under the sandbox's policy on every platform |
 
 ### Counts
 
@@ -172,7 +172,7 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - Classes and members: 36 rows. **Stays** 15, **Moves** 13, **Removed** 8 (counting `ScriptTestAsync` and `package test`, which leave the
   Workspace service for a Runner, for now: SANDBOX step 2 runs them in the Workspace's sandbox).
 - `DbDataWorkspace` and the state module: 6 rows. **Stays** 4, **Removed** 2.
-- Child programs: 5 (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, and the external `dotnet` and `bun`). All stay until COMMANDLINES replaces ours;
+- Child programs: 5 (`dbdatabuild`, `dbdatasync`, `dbdatarunner`, and the external `dotnet` and `bun`). All stay until CLI replaces ours;
   `script test` left the Workspace service for a Runner, and `package test` leaves it; SANDBOX step 2 brings both back into the Workspace's sandbox.
 
 ### What the control service's deploy uses
@@ -214,9 +214,9 @@ restores (`package build`, `package publish --platform`) reach package sources, 
 - PUBLISHING-3: the approver's signature for trusted code, added to what the control service signs.
 - PUBLISHING-1: an app version as a manifest and files by hash on the shared publish API, so the control service signs it over its build record and the
   Gateway keeps the record, as it does for the other kinds.
-- COMMANDLINES-2, COMMANDLINES-3, COMMANDLINES-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
+- CLI-2, CLI-3, CLI-8: the Workspace stops starting `dbdatabuild`, `dbdatasync` and `dbdatarunner`.
 - TRUSTZONES-14: the settings screen that edits the outbound list also edits the Workspace's (`outbound:` in its `server.yaml`, read by
-  `WorkspaceOutbound`); today it is edited by hand. When COMMANDLINES-8 restores an integration's packages in the Workspace's process, its NuGet client
+  `WorkspaceOutbound`); today it is edited by hand. When CLI-8 restores an integration's packages in the Workspace's process, its NuGet client
   takes the gate's handler (`OutboundGate.CreateHttpHandler("nuget.restore")`), so the restore follows the list.
 
 ## Shared areas touched

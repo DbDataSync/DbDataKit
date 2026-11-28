@@ -384,6 +384,6 @@ From SYNCAUTHORING's "Outside a replication, later": the Connections list and a 
   trust.
 - An open design **"Shared ground with PLUGINS, PUBLISHING and the Runner"**: PLUGINS' SDK connection contract as the hosted-connection API; connection
   kinds and the plugin manifest; load contexts and the connection host; one vocabulary of approval.
-- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (its outbound list, -10, -14, -15; a script's Test), COMMANDLINES-8, TRUSTZONES (OS outbound rules,
+- **Other plans touched** (reviewed in conversation): WORKSPACEISOLATION (its outbound list, -10, -14, -15; a script's Test), CLI-8, TRUSTZONES (OS outbound rules,
   -14), TASKENGINE (limits, accounts), PLUGINS, PUBLISHING-3, KNOWLEDGE (-18, -20), APPHOSTING-7, MASTERDATA (extraction), SAMPLEDATA, DATAQUALITY,
   CHANNELS (-3, -7), SYNCAUTHORING, ERRORDETAILS, INSTALLER (labels, Bubblewrap, Windows Server note, testenv), CIPLAN (new).
