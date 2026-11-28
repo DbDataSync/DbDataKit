@@ -1,11 +1,12 @@
 using System.Text;
 using DbDataKit.Apps;
+using DbDataKit.Apps.Bundling;
 using DbDataKit.Authoring;
 using DbDataKit.Config;
 
 namespace DbDataKit.Authoring.Server;
 
-/// <summary>The <c>app</c> kind (plan 22a GP32): a code app on the default library set, started from the app template and checked with the manifest loader the Gateway uses. Built and previewed by <see cref="WorkspaceBuilds"/>, published to a Gateway.</summary>
+/// <summary>The <c>app</c> kind (plan 22a GP32): a code app on the default library set, started from the app template and checked with the manifest loader the Gateway uses and for Bun macros (<see cref="BunMacros"/>), which the build refuses. Built and previewed by <see cref="WorkspaceBuilds"/>, published to a Gateway.</summary>
 public sealed class AppProjectKind : IProjectKind
 {
     public string Name => "app";
@@ -25,6 +26,8 @@ public sealed class AppProjectKind : IProjectKind
         try { text = File.ReadAllText(path, new UTF8Encoding(false, true)); }
         catch (Exception ex) when (ex is IOException or DecoderFallbackException) { return Task.FromResult<IReadOnlyList<ProjectDiagnostic>>([new("error", "DBD-APP-006", $"app.yaml cannot be read: {ex.Message}", "app.yaml")]); }
         var loaded = AppManifestLoader.Load(text);
-        return Task.FromResult<IReadOnlyList<ProjectDiagnostic>>([.. loaded.Diagnostics.Select(d => new ProjectDiagnostic(d.Severity.ToString().ToLowerInvariant() is "note" ? "info" : d.Severity.ToString().ToLowerInvariant(), d.Code, d.Message, "app.yaml", d.Line))]);
+        // a Bun macro would run its code when the draft is built; the build refuses it with the same words
+        var macros = BunMacros.Find(root).Select(m => new ProjectDiagnostic("error", BunMacros.Code, m.Message, m.File, m.Line));
+        return Task.FromResult<IReadOnlyList<ProjectDiagnostic>>([.. loaded.Diagnostics.Select(d => new ProjectDiagnostic(d.Severity.ToString().ToLowerInvariant() is "note" ? "info" : d.Severity.ToString().ToLowerInvariant(), d.Code, d.Message, "app.yaml", d.Line)), .. macros]);
     }
 }
